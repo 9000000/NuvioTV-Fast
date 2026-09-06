@@ -544,11 +544,13 @@ open class MainActivity : ComponentActivity() {
                         fontScale = systemDensity.fontScale.coerceAtMost(MAX_SUPPORTED_FONT_SCALE)
                     )
                 }
+                val highlighterEnabled = BuildConfig.IS_DEBUG_BUILD && mainUiPrefs.composeHighlighterEnabled
+                com.nuvio.tv.ui.util.RecompositionHighlighterFlag.enabled = highlighterEnabled
                 CompositionLocalProvider(
                     LocalDensity provides clampedFontScaleDensity,
                     LocalBringIntoViewSpec provides bringIntoViewSpec,
                     LocalFastHorizontalNavigationEnabled provides mainUiPrefs.fastHorizontalNavigationEnabled,
-                    LocalRecompositionHighlighterEnabled provides (BuildConfig.IS_DEBUG_BUILD && mainUiPrefs.composeHighlighterEnabled),
+                    LocalRecompositionHighlighterEnabled provides highlighterEnabled,
                     LocalCardDepthStyle provides mainUiPrefs.cardDepthStyle,
                     LocalMemberAccess provides mainUiPrefs.memberAccess,
                     com.nuvio.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool
