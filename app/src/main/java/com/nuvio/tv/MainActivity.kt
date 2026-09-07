@@ -154,6 +154,7 @@ import com.nuvio.tv.domain.model.ExperienceMode
 import com.nuvio.tv.domain.model.MemberAccess
 import com.nuvio.tv.domain.model.SettingsUiStyle
 import com.nuvio.tv.domain.model.resolveAppTheme
+import com.nuvio.tv.domain.model.resolveCustomThemeColors
 import com.nuvio.tv.domain.deeplink.AppDeepLink
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.ui.components.NuvioScrollDefaults
@@ -442,7 +443,8 @@ open class MainActivity : ComponentActivity() {
                     memberAccessRepository.access
                 ) { selection, memberAccess ->
                     selection.copy(
-                        theme = resolveAppTheme(selection.theme, memberAccess.entitlements, memberAccess.tier)
+                        theme = resolveAppTheme(selection.theme, memberAccess.entitlements),
+                        customColors = resolveCustomThemeColors(selection.customColors, memberAccess.tier)
                     ) to memberAccess
                 }
                 // Group flows into two batches to reduce intermediate flow allocations.
