@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
@@ -34,6 +36,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -217,6 +220,7 @@ fun ContentCard(
     }
 
     Column(
+        horizontalAlignment = Alignment.Start,
         modifier = modifier
             .width(animatedCardWidth)
             .recompositionHighlighter()
@@ -525,16 +529,22 @@ fun ContentCard(
         // expanded state share a single Column with a fixed minimum height
         // so the row never shifts vertically during the expand transition.
         if (showLabels) {
+            Box(modifier = Modifier.fillMaxWidth().clipToBounds().graphicsLayer {}) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .then(if (isBackdropExpanded) Modifier.requiredWidth(expandedCardWidth) else Modifier.fillMaxWidth())
                     .padding(top = NuvioTheme.spacing.sm)
+                    .then(
+                        if (focusedPosterBackdropExpandEnabled) {
+                            Modifier.defaultMinSize(minHeight = 60.dp)
+                        } else Modifier
+                    )
             ) {
                 if (isBackdropExpanded) {
                     val ageRating = item.ageRating?.trim()?.takeIf { it.isNotBlank() }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (metaTokens.isNotEmpty()) {
@@ -548,9 +558,16 @@ fun ContentCard(
                             )
                         }
                         if (ageRating != null) {
+                            if (metaTokens.isNotEmpty()) {
+                                Text(
+                                    text = "  •  ",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = NuvioTheme.extendedColors.textSecondary
+                                )
+                            }
                             Box(
                                 modifier = Modifier
-                                    .padding(start = NuvioTheme.spacing.sm)
+                                    
                                     .border(
                                         border = BorderStroke(
                                             NuvioTheme.spacing.hairline,
@@ -600,6 +617,10 @@ fun ContentCard(
                     }
                 }
             }
+            } // Box clipToBounds
+        }
+        if (!showLabels && focusedPosterBackdropExpandEnabled) {
+            Spacer(modifier = Modifier.height(9.dp))
         }
     }
 }
