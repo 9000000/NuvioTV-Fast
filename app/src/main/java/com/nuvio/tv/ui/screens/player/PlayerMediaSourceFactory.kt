@@ -178,8 +178,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             progressiveUpstreamFactory
         }
 
-        val baseExtractorsFactory = customExtractorsFactory ?: DefaultExtractorsFactory()
-        val extractorsFactory = baseExtractorsFactory.withNuvioMp4Extractor()
+        val extractorsFactory = customExtractorsFactory ?: DefaultExtractorsFactory()
         val defaultFactory = DefaultMediaSourceFactory(progressiveFactory, extractorsFactory).apply {
             setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
             customSubtitleParserFactory?.let { parserFactory ->
