@@ -148,12 +148,12 @@
     <string name="cw_hours_min_left">%1$dh %2$dm resterend</string>
     <string name="cw_min_left">%1$dm resterend</string>
     <string name="cw_almost_done">Bijna afgelopen</string>
-    <string name="cw_airs_date">Uitgezonden op %1$s</string>
-    <string name="cw_airs_today">Vandaag uitgezonden</string>
-    <string name="cw_airs_tomorrow">Morgen uitgezonden</string>
+    <string name="cw_airs_date">Wordt uitgezonden op %1$s</string>
+    <string name="cw_airs_today">Wordt vandaag uitgezonden</string>
+    <string name="cw_airs_tomorrow">Wordt morgen uitgezonden</string>
     <plurals name="cw_airs_in_days">
-        <item quantity="one">Uitgezonden over %d dag</item>
-        <item quantity="other">Uitgezonden over %d dagen</item>
+        <item quantity="one">Wordt over %d dag uitgezonden</item>
+        <item quantity="other">Wordt over %d dagen uitgezonden</item>
     </plurals>
     <!-- Short versions for compact card styles (wide/poster) -->
     <string name="cw_airs_date_short">%1$s</string>
@@ -326,7 +326,7 @@
     <string name="appearance_color_theme_subtitle">Kies de accentkleur die in de hele app wordt gebruikt</string>
     <string name="theme_color_gold">Goud</string>
     <string name="theme_color_jade">Jade</string>
-    <string name="theme_color_rose_gold">Rosé goud</string>
+    <string name="theme_color_rose_gold">Roségoud</string>
     <string name="theme_color_arctic_blue">Arctisch blauw</string>
     <string name="theme_color_graphite">Grafiet</string>
     <string name="theme_color_crimson">Karmozijn</string>
@@ -371,7 +371,7 @@
     <string name="appearance_app_icon_original">Origineel</string>
     <string name="appearance_app_icon_arctic_blue">Arctisch blauw</string>
     <string name="appearance_app_icon_emerald">Smaragd</string>
-    <string name="appearance_app_icon_rose_gold">Rosé goud</string>
+    <string name="appearance_app_icon_rose_gold">Roségoud</string>
     <string name="appearance_app_icon_copper">Koper</string>
     <string name="appearance_app_icon_graphite">Grafiet</string>
     <string name="settings_style_classic">Standaard</string>
@@ -408,7 +408,7 @@
     <string name="about_licenses_attributions_subtitle">Gegevensbronnen, dankbetuigingen en Android-licenties</string>
     <string name="licenses_attributions_title">Licenties &amp; naamsvermelding</string>
     <string name="licenses_attributions_subtitle">Gegevensleveranciers, service-credits en Android-afspeellicenties die door Nuvio TV worden gebruikt.</string>
-    <string name="licenses_attributions_section_app">APPLICENTIE</string>
+    <string name="licenses_attributions_section_app">APPLICATIE</string>
     <string name="licenses_attributions_section_data">GEGEVENS &amp; SERVICES</string>
     <string name="licenses_attributions_section_playback">ANDROID-AFSPEELLICENTIES</string>
     <string name="licenses_attributions_nuvio_title">Nuvio TV</string>
@@ -853,7 +853,7 @@
     <string name="sub_outline_color">Omtrekkleur</string>
     <string name="sub_advanced_section">Geavanceerde ondertitelweergave</string>
     <string name="sub_libass">Gebruik libass voor ASS/SSA-ondertitels</string>
-    <string name="sub_libass_sub">Tijdelijk uitgeschakeld voor onderhoud</string>
+    <string name="sub_libass_sub">Experimenteel: geavanceerde ASS/SSA-rendering (stijlen, positionering, animaties)</string>
     <string name="sub_libass_mode">Libass-weergavemodus</string>
     <string name="sub_mode_overlay_gl">Overlay OpenGL (aanbevolen)</string>
     <string name="sub_mode_overlay_gl_sub">Beste kwaliteit met HDR-ondersteuning. Rendert ondertitels in een aparte thread.</string>
@@ -961,8 +961,8 @@
     <string name="layout_classic_focus_gradient_sub">Meng de kleuren van de illustratie in de rechterkant van het klassieke startscherm.</string>
     <string name="layout_show_hero">Hero-sectie tonen</string>
     <string name="layout_show_hero_sub">Toon de hero-carrousel bovenaan het startscherm.</string>
-    <string name="layout_show_discover">Ontdekken tonen bij zoeken</string>
-    <string name="layout_show_discover_sub">Toon bladersectie wanneer zoekveld leeg is.</string>
+    <string name="layout_show_discover">Ontdekken tonen/verbergen</string>
+    <string name="layout_show_discover_sub">Voegt een gedeelte Ontdekken toe om door inhoud te bladeren.</string>
     <string name="layout_discover_location_action">Locatie van Ontdekken</string>
     <string name="layout_discover_location_dialog_title">Locatie van Ontdekken</string>
     <string name="layout_discover_location_in_search">Tonen in Zoeken</string>
@@ -1328,7 +1328,7 @@
     <string name="tmdb_trailers_title">Trailers</string>
     <string name="tmdb_trailers_subtitle">Mogelijke trailers uit TMDB-video\'s voor het trailergedeelte op de detailpagina</string>
     <string name="tmdb_more_like_this_title">Vergelijkbare titels</string>
-    <string name="tmdb_more_like_this_subtitle">TMDB-aanbevelingen op detailpagina</string>
+    <string name="tmdb_more_like_this_subtitle">Achtergronden van TMDB-aanbevelingen op detail- en na-afspeelschermen</string>
     <string name="tmdb_collections_title">Collecties</string>
     <string name="tmdb_collections_subtitle">TMDB-filmcollecties in releasevolgorde</string>
 
@@ -1769,7 +1769,7 @@
     <string name="audio_mix_unavailable">Versterking is niet beschikbaar op dit apparaat</string>
     <string name="audio_center_mix_label">Downmix: mixniveau van het middenkanaal</string>
     <string name="audio_center_mix_value_db">%1$d dB</string>
-    <string name="audio_center_mix_help">Mixniveau van het middenkanaal in dB ten opzichte van de metadata of standaard (-3 dB)</string>
+    <string name="audio_center_mix_help">Mixniveau van het middenkanaal in dB ten opzichte van de metadatawaarde of de standaardwaarde (-3 dB)</string>
     <string name="audio_center_mix_unavailable">Middenmix is alleen beschikbaar wanneer de FFmpeg-downmix actief is.</string>
     <string name="audio_maintain_original_audio_on_downmix_title">Oorspronkelijke audio behouden bij downmix</string>
     <string name="audio_maintain_original_audio_on_downmix_subtitle">Als dit uitstaat, kan de downmixnormalisatie het totale volume verlagen.</string>
@@ -1823,7 +1823,7 @@
     <!-- PostPlayOverlay -->
     <string name="next_episode_label">Volgende aflevering</string>
     <string name="next_episode_finding_source">Bron zoeken…</string>
-    <string name="next_episode_playing_via">Wordt afgespeeld via %1$s in %2$ds</string>
+    <string name="next_episode_playing_via">Wordt afgespeeld via %1$s in %2$d s</string>
     <string name="next_episode_play">Afspelen</string>
     <string name="player_next_episode_prompt_title">Verder kijken?</string>
     <string name="player_next_episode_prompt_message">Wil je de volgende aflevering afspelen?</string>
@@ -2088,7 +2088,7 @@
     <string name="auth_qr_finishing">Aanmelden afronden\u2026</string>
     <string name="auth_qr_code_label">Code: %1$s</string>
     <string name="auth_qr_expires">Verloopt over %1$s</string>
-    <string name="auth_qr_scan_instruction">Scan QR, keur goed in browser en keer terug.</string>
+    <string name="auth_qr_scan_instruction">Scan de QR-code of voer de code in je browser in.</string>
     <string name="auth_qr_code_display">Code: %1$s</string>
     <string name="auth_qr_manual_instruction">Of ga naar %1$s en voer in</string>
     <string name="auth_qr_refresh">QR vernieuwen</string>
@@ -2150,7 +2150,7 @@
     <string name="plugin_diagnostics_collapse">Diagnostiek (tik om samen te vouwen)</string>
     <string name="plugin_diagnostics_expand">Diagnostiek (tik om uit te vouwen)</string>
     <string name="plugin_risky_enable_title">Provider inschakelen?</string>
-    <string name="plugin_risky_enable_message">Van %1$s is bekend dat deze bij sommige inhoud crashes veroorzaakt. Toch inschakelen?</string>
+    <string name="plugin_risky_enable_message">Het is bekend dat %1$s bij bepaalde inhoud crashes veroorzaakt. Toch inschakelen?</string>
     <string name="plugin_risky_enable_cancel">Annuleren</string>
     <string name="plugin_risky_enable_confirm">Inschakelen</string>
     <string name="plugin_updated_format">Bijgewerkt: %1$s</string>
@@ -2171,7 +2171,7 @@
 
     <string name="profile_selection_title">Wie kijkt er?</string>
     <string name="profile_selection_subtitle">Selecteer een profiel om verder te gaan</string>
-    <string name="profile_selection_hint">Gebruik D-pad om een profiel te kiezen</string>
+    <string name="profile_selection_hint">Houd ingedrukt om het profiel te beheren</string>
     <string name="profile_selection_empty">Geen profielen gevonden</string>
     <string name="profile_selection_primary_badge">PRIMAIR</string>
     <string name="profile_selection_options_title">Profielopties</string>
@@ -2208,7 +2208,7 @@
     <string name="update_unknown_sources">Sta installaties van onbekende bronnen toe om door te gaan.</string>
     <!-- AccountScreen -->
     <string name="account_title">Account</string>
-    <string name="account_sign_in_description">Meld je aan om je bibliotheek, kijkvoortgang, add-ons en plug-ins te synchroniseren op al je apparaten. Bibliotheek en kijkvoortgang worden alleen gesynchroniseerd wanneer Trakt niet is verbonden.</string>
+    <string name="account_sign_in_description">Meld je aan om je bibliotheek, kijkvoortgang, add-ons en plug-ins op al je apparaten te synchroniseren. Bibliotheeksynchronisatie gebruikt Nuvio Sync wanneer Trakt niet is verbonden. Voor kijkvoortgang kan Trakt of Nuvio Sync worden gebruikt.</string>
     <string name="account_sync_code_title">Sync-code</string>
     <string name="account_sync_code_description">Synchroniseer apparaten zonder account aan te maken.</string>
     <string name="account_linked_devices">Verbonden apparaten (%1$d)</string>
@@ -2276,7 +2276,7 @@
 
     <!-- Profile PIN errors -->
     <string name="profile_pin_save_error">Kon de pincode niet opslaan. Probeer het opnieuw.</string>
-    <string name="profile_pin_locked">Het profiel is vergrendeld. Probeer het over %1$ds opnieuw.</string>
+    <string name="profile_pin_locked">Het profiel is vergrendeld. Probeer het over %1$d s opnieuw.</string>
     <string name="profile_pin_invalid">Ongeldige pincode. Probeer het opnieuw.</string>
     <string name="profile_pin_verify_error">Kon de pincode niet verifiëren. Probeer het opnieuw.</string>
     <string name="profile_pin_incorrect">De huidige pincode is onjuist.</string>
@@ -2648,7 +2648,7 @@
     <string name="collection_editor_choice_both">Beide</string>
     <string name="collection_editor_resolved_trakt_list">Gevonden Trakt-lijst</string>
     <string name="collection_editor_trakt_search_placeholder">Zoek op titel, Trakt-URL of lijst-ID</string>
-    <string name="collection_editor_trakt_name_placeholder">Weekend Watch, Award Winners</string>
+    <string name="collection_editor_trakt_name_placeholder">Weekendselectie, Prijswinnaars</string>
     <string name="collection_editor_folder_count_one">%1$d item</string>
     <string name="collection_editor_folder_count_other">%1$d items</string>
     <string name="collections_editor_delete_folder_title">Map verwijderen?</string>
@@ -2893,7 +2893,7 @@
     <string name="torrent_error_add_failed">Kon de torrent niet toevoegen</string>
     <string name="torrent_error_binary_missing">TorrServer-binary niet gevonden op %1$s</string>
     <string name="torrent_error_process_died">Het TorrServer-proces is bij het opstarten gestopt (afsluitcode %1$d)</string>
-    <string name="torrent_error_start_timeout">TorrServer kon niet binnen %1$ds starten</string>
+    <string name="torrent_error_start_timeout">TorrServer kon niet binnen %1$d s starten</string>
 
     <!-- Player runtime: stream / external link errors -->
     <string name="player_torrent_starting_engine">P2P-engine starten…</string>
@@ -2994,9 +2994,9 @@
         <item quantity="other">%d geselecteerd</item>
     </plurals>
     <string name="debrid_size_range_any">Alle</string>
-    <string name="debrid_size_range_up_to">Tot %1$dGB</string>
-    <string name="debrid_size_range_min_plus">%1$dGB+</string>
-    <string name="debrid_size_range_min_max">%1$d-%2$dGB</string>
+    <string name="debrid_size_range_up_to">Tot %1$d GB</string>
+    <string name="debrid_size_range_min_plus">%1$d GB+</string>
+    <string name="debrid_size_range_min_max">%1$d-%2$d GB</string>
 
     <!-- Subtitle selection: unknown language fallback -->
     <string name="subtitle_language_unknown">Onbekend</string>
@@ -3054,14 +3054,14 @@
     <string name="playback_buffer_min_sub">Minimale hoeveelheid media die wordt gebufferd. De speler probeert altijd ten minste deze hoeveelheid inhoud vooruit te bufferen op de huidige afspeelpositie.</string>
     <string name="playback_buffer_max">Maximale bufferduur</string>
     <string name="playback_buffer_max_sub">Maximale hoeveelheid media die wordt gebufferd. Moet minstens gelijk zijn aan de minimale bufferduur. Hogere waarden gebruiken meer geheugen, maar zorgen voor vloeiender afspelen bij een instabiele verbinding.</string>
-    <string name="playback_buffer_value_same_as_min">%1$ds (gelijk aan min.)</string>
+    <string name="playback_buffer_value_same_as_min">%1$d s (gelijk aan min.)</string>
     <string name="playback_buffer_initial">Beginbuffer</string>
     <string name="playback_buffer_initial_sub">Hoeveel inhoud er gebufferd moet zijn voordat het afspelen begint. Lagere waarden starten sneller, maar kunnen bij trage verbindingen aanvankelijk haperen.</string>
     <string name="playback_buffer_after_rebuffer">Buffer na herbufferen</string>
     <string name="playback_buffer_after_rebuffer_sub">Hoeveel inhoud er wordt gebufferd nadat het afspelen door buffering is gestopt. Hogere waarden verminderen herhaalde bufferonderbrekingen.</string>
     <string name="playback_buffer_back">Duur van terugbuffer</string>
     <string name="playback_buffer_back_sub">Hoeveel al afgespeelde inhoud in het geheugen wordt bewaard. Maakt snel terugspoelen mogelijk zonder opnieuw te downloaden. Zet op 0 om dit uit te schakelen en geheugen te besparen.</string>
-    <string name="playback_buffer_back_reserve">Reserveert ongeveer %1$dMB bovenop de doelbuffer. Door de maximale bufferduur te verhogen wordt dit kleiner zonder terugbuffertijd te verliezen.</string>
+    <string name="playback_buffer_back_reserve">Reserveert ongeveer %1$d MB bovenop de doelbuffer. Door de maximale bufferduur te verhogen wordt dit kleiner zonder terugbuffertijd te verliezen.</string>
     <string name="playback_buffer_managed">Beheerd geheugenbudget</string>
     <string name="playback_buffer_managed_sub">Beperkt de buffer tot een veilig deel van het geheugen van dit apparaat. Zet dit uit om de doelbuffergrootte zelf in te stellen (geavanceerd — grote waarden kunnen apparaten met weinig geheugen laten crashen).</string>
     <string name="playback_buffer_target">Doelbuffergrootte</string>
@@ -3070,7 +3070,7 @@
     <string name="playback_buffer_target_warning">Waarschuwing: boven de veilige limiet van het apparaat (%1$d MB). De app kan tijdens het afspelen crashen.</string>
     <string name="playback_buffer_target_danger_warning">Gevaar: boven de waarschuwingslimiet (%1$d MB). Hoog risico op crashes.</string>
     <string name="playback_buffer_allow_large">Grotere doelbuffer toestaan</string>
-    <string name="playback_buffer_allow_large_sub">Verwijdert de geheugenlimiet van het apparaat op de schuifregelaar voor de doelbuffergrootte, met waarden tot 2GB. Kan crashen op apparaten met minder dan 2GB RAM.</string>
+    <string name="playback_buffer_allow_large_sub">Verwijdert de geheugenlimiet van het apparaat op de schuifregelaar voor de doelbuffergrootte, met waarden tot 2 GB. Kan crashen op apparaten met minder dan 2 GB RAM.</string>
     <string name="playback_cache_header">Schijfcache</string>
     <string name="playback_cache_vod">VOD-schijfcache</string>
     <string name="playback_cache_vod_sub">Bewaar gedownloade bytes op schijf voor de huidige stream. Hiermee kun je verder terug direct terugspoelen dan de terugbuffer in het geheugen toelaat, en korte netwerkonderbrekingen worden opgevangen. Geldt alleen voor progressieve streams (geen HLS/DASH).</string>
@@ -3080,7 +3080,7 @@
     <string name="playback_cache_vod_size_sub">Maximaal schijfgebruik voor de progressieve VOD-cache (LRU-verwijdering).</string>
     <string name="playback_cache_info_range">Bereik: %1$d-%2$d MB.</string>
     <string name="playback_cache_info_auto">De automatische modus streeft naar ongeveer 10% van de vrije ruimte.</string>
-    <string name="playback_cache_info_manual_headroom">De handmatige modus houdt ongeveer %1$dMB speling vrij.</string>
+    <string name="playback_cache_info_manual_headroom">De handmatige modus houdt ongeveer %1$d MB speling vrij.</string>
     <string name="playback_cache_info_free_disk">Beschikbare vrije schijfruimte: %1$s.</string>
     <string name="playback_cache_info_restart">Bij het wisselen tussen modi/groottes geldt de nieuwe cachelimiet pas na het opnieuw starten van de app.</string>
     <string name="playback_reset_to_default">Standaardwaarden herstellen</string>
