@@ -554,23 +554,26 @@ internal fun PlayerRuntimeController.initializePlayer(
                 mediaSourceFactory.vodCacheEnabled = false
             }
 
+            mediaSourceFactory.nuvioPerformanceModeEnabled = playerSettings.nuvioPerformanceModeEnabled
             if (playerSettings.parallelNetworkEnabled) {
                 mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
                 mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount
                 mediaSourceFactory.parallelChunkSizeKb = playerSettings.parallelChunkSizeKb
-                mediaSourceFactory.nuvioPerformanceModeEnabled = playerSettings.nuvioPerformanceModeEnabled
             } else {
                 // Reset each playback so the factory doesn't keep last stream's state.
                 mediaSourceFactory.useParallelConnections = false
-                mediaSourceFactory.nuvioPerformanceModeEnabled = false
             }
 
             // Log the effective state (post-gating), not the raw settings.
+            val engineNative = androidx.media3.common.NuvioEngineConfig.get().isNativeAllocationEnabled()
+            val effectiveNative = mediaSourceFactory.nuvioPerformanceModeEnabled || engineNative
             Log.i(
                 PlayerRuntimeController.TAG,
                 "BUFFER_NETWORK: bufferEngine=${playerSettings.bufferEngineEnabled} " +
                         "parallelNetwork=${playerSettings.parallelNetworkEnabled} " +
                         "useParallel=${mediaSourceFactory.useParallelConnections} " +
+                        "nuvioPerf=${mediaSourceFactory.nuvioPerformanceModeEnabled} " +
+                        "engineNative=$engineNative useNativeEffective=$effectiveNative " +
                         "vodCache=${mediaSourceFactory.vodCacheEnabled} " +
                         "host=${url.safeHost()}"
             )
