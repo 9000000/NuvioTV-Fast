@@ -921,7 +921,8 @@ private fun RecentSearchesSection(
     val searchFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val removeFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     var pendingDownwardFocus by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val firstRemoveFocusRequester = removeFocusRequesters.getOrPut(recentSearches.first()) {
+    // Downward focus enters the query column. The remove buttons are reached with right.
+    val firstSearchFocusRequester = searchFocusRequesters.getOrPut(recentSearches.first()) {
         FocusRequester()
     }
     LaunchedEffect(recentSearches, pendingDownwardFocus) {
@@ -962,7 +963,7 @@ private fun RecentSearchesSection(
                 modifier = Modifier
                     .focusRequester(clearHistoryFocusRequester)
                     .focusProperties {
-                        down = firstRemoveFocusRequester
+                        down = firstSearchFocusRequester
                     },
                 colors = ButtonDefaults.colors(
                     containerColor = NuvioTheme.colors.BackgroundCard,
