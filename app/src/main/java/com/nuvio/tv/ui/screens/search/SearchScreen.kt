@@ -142,6 +142,7 @@ fun SearchScreen(
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     val recentClearHistoryFocusRequester = remember { FocusRequester() }
+    val discoverButtonFocusRequester = remember { FocusRequester() }
     var isSearchFieldFocused by remember { mutableStateOf(false) }
     // Track the whole input row, including voice and Discover.
     var inputRowHasFocus by remember { mutableStateOf(false) }
@@ -463,8 +464,17 @@ fun SearchScreen(
 
     LaunchedEffect(Unit) {
         if (viewModel.hasSavedSearchFocus) return@LaunchedEffect
+        if (pendingDiscoverRestoreOnResume || restoreDiscoverFocus) return@LaunchedEffect
         repeat(2) { withFrameNanos { } }
         runCatching { initialFocusRequester.requestFocus() }
+    }
+
+    // Restore the Discover button after returning.
+    LaunchedEffect(restoreDiscoverFocus) {
+        if (!restoreDiscoverFocus) return@LaunchedEffect
+        repeat(2) { withFrameNanos { } }
+        runCatching { discoverButtonFocusRequester.requestFocus() }
+        restoreDiscoverFocus = false
     }
 
     // Push search suggestions to the native keyboard suggestion bar. Keyed on the query as well
@@ -593,7 +603,13 @@ fun SearchScreen(
                         viewModel.onEvent(SearchEvent.RememberSearchFromTextInput)
                         focusResults = true
                     },
-                    onOpenDiscover = onOpenDiscover,
+                    onOpenDiscover = {
+                        // Arm the restore so coming back lands on this button rather than the
+                        // default entry focus.
+                        pendingDiscoverRestoreOnResume = true
+                        onOpenDiscover()
+                    },
+                    discoverFocusRequester = discoverButtonFocusRequester,
                     showDiscoverButton = uiState.discoverLocation == DiscoverLocation.IN_SEARCH,
                     keyboardController = keyboardController,
                     clearHistoryFocusRequester = if (showRecentSearches) recentClearHistoryFocusRequester else null,
@@ -1111,6 +1127,7 @@ private fun SearchInputField(
     onVoiceSearch: () -> Unit,
     onMoveToResults: () -> Unit,
     onOpenDiscover: () -> Unit,
+    discoverFocusRequester: FocusRequester? = null,
     showDiscoverButton: Boolean,
     keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?,
     clearHistoryFocusRequester: FocusRequester?,
@@ -1131,6 +1148,9 @@ private fun SearchInputField(
             IconButton(
                 onClick = onOpenDiscover,
                 modifier = Modifier
+                    .then(
+                        discoverFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier
+                    )
                     .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
                     .size(NuvioTheme.spacing.huge)
                     .border(
