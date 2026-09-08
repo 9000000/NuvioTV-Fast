@@ -129,12 +129,7 @@ internal fun ModernSidebarBlurPanel(
         modifier = Modifier
             .fillMaxHeight()
             .graphicsLayer {
-                val p = sidebarExpandProgress
-                alpha = p
-                val s = 0.97f + (0.03f * p)
-                scaleX = s
-                scaleY = s
-                transformOrigin = TransformOrigin(0f, 0f)
+                alpha = sidebarExpandProgress
             }
             .clip(panelShape)
             .then(expandedPanelBlurModifier)
@@ -280,20 +275,9 @@ private fun SidebarNavigationItem(
         label = "sidebarItemIconTint"
     )
     val iconTint = if (selected && !isFocused) iconTintTarget else animatedIconTint
-    val itemScale by animateFloatAsState(
-        targetValue = if (isFocused) 1.1f else 1f,
-        animationSpec = tween(durationMillis = NuvioMotion.tokens.durations.fast, easing = NuvioMotion.tokens.easings.standard),
-        label = "sidebarItemScale"
-    )
-
     Card(
         onClick = onClick,
         modifier = modifier
-            .graphicsLayer {
-                scaleX = itemScale
-                scaleY = itemScale
-                transformOrigin = TransformOrigin.Center
-            }
             .onFocusChanged {
                 isFocused = it.hasFocus
                 onFocusChanged(it.hasFocus)
@@ -320,12 +304,7 @@ private fun SidebarNavigationItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
         Box(
-            modifier = Modifier
-                .size(SidebarLeadingVisualSize)
-                .graphicsLayer {
-                    scaleX = iconScale
-                    scaleY = iconScale
-                },
+            modifier = Modifier.size(SidebarLeadingVisualSize),
             contentAlignment = Alignment.Center
         ) {
             val iconModifier = if (iconBrush != null) {

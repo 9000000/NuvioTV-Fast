@@ -1509,21 +1509,10 @@ private fun LegacySidebarButton(
     } else {
         null
     }
-    val itemScale by animateFloatAsState(
-        targetValue = if (isFocused && expanded) 1.1f else 1f,
-        animationSpec = tween(durationMillis = NuvioMotion.tokens.durations.fast, easing = NuvioMotion.tokens.easings.standard),
-        label = "legacySidebarItemScale"
-    )
-
     Card(
         onClick = onClick,
         modifier = modifier
             .height(NuvioComponents.tokens.sidebar.itemHeight)
-            .graphicsLayer {
-                scaleX = itemScale
-                scaleY = itemScale
-                transformOrigin = TransformOrigin.Center
-            }
             .focusProperties { canFocus = expanded }
             .onFocusChanged { isFocused = it.hasFocus },
         colors = CardDefaults.colors(
@@ -1868,12 +1857,7 @@ private fun ModernSidebarScaffold(
                     .width(openSidebarWidth)
                     .padding(start = NuvioTheme.spacing.lg - NuvioTheme.spacing.xxs, top = NuvioTheme.spacing.lg, bottom = NuvioTheme.spacing.md, end = NuvioTheme.spacing.sm)
                     .graphicsLayer {
-                        val progress = sidebarExpandProgress
                         alpha = sidebarSurfaceAlpha
-                        val s = 0.92f + 0.08f * progress
-                        scaleX = s
-                        scaleY = s
-                        transformOrigin = TransformOrigin(0f, 0f)
                     }
                     .selectableGroup()
                     .onPreviewKeyEvent { keyEvent ->
@@ -1983,12 +1967,7 @@ private fun ModernSidebarScaffold(
                             )
                         }
                         .graphicsLayer {
-                            val progress = sidebarExpandProgress
-                            alpha = 1f - progress
-                            val s = 0.9f + (0.1f * (1f - progress))
-                            scaleX = s
-                            scaleY = s
-                            transformOrigin = TransformOrigin(0f, 0f)
+                            alpha = 1f - sidebarExpandProgress
                         },
                     onExpand = {
                         isSidebarExpanded = true
