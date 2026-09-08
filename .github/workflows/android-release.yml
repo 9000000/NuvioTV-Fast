@@ -239,6 +239,23 @@ jobs:
         if: inputs.mode != 'dry-run'
         run: ./gradlew :app:assembleFullRelease -x test --stacktrace
 
+      - name: Rename release APKs
+        if: inputs.mode != 'dry-run'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          apk_dir="app/build/outputs/apk/full/release"
+          for apk in "${apk_dir}"/app-full-*-release.apk; do
+            [[ -f "${apk}" ]] || continue
+            filename="$(basename "${apk}")"
+            abi="${filename#app-full-}"
+            abi="${abi%-release.apk}"
+            new_name="NuvioTV-${VERSION}-${abi}.apk"
+            echo "Renaming ${filename} -> ${new_name}"
+            mv "${apk}" "${apk_dir}/${new_name}"
+          done
+          ls -la "${apk_dir}"
+
       - name: Upload build artifacts
         if: inputs.mode != 'dry-run'
         uses: actions/upload-artifact@v6
