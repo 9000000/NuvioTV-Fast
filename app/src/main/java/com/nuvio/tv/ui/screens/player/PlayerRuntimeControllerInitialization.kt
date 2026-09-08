@@ -253,23 +253,6 @@ internal fun PlayerRuntimeController.initializePlayer(
                 )
             }
 
-            if (effectiveInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER &&
-                !Vc1VideoFormatHeuristics.hasDeviceVc1Decoder() &&
-                Vc1VideoFormatHeuristics.isLikelyVc1Stream(
-                    _uiState.value.currentStreamName,
-                    streamName,
-                    currentFilename,
-                    currentStreamDescription,
-                    url
-                )
-            ) {
-                Log.w(
-                    PlayerRuntimeController.TAG,
-                    "INIT_PLAYER: VC-1 stream detected without device decoder on ExoPlayer engine; aborting startup without initializing player"
-                )
-                handleVc1PlaybackFailure()
-                return@launch
-            }
 
             setLoadingStatus(
                 phase = "detecting_format",
@@ -689,6 +672,32 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                         }
                     }
+                    for (rendererIndex in 0 until mappedTrackInfo.rendererCount) {
+                        if (mappedTrackInfo.getRendererType(rendererIndex) == C.TRACK_TYPE_VIDEO) {
+                            val trackGroups = mappedTrackInfo.getTrackGroups(rendererIndex)
+                            for (groupIndex in 0 until trackGroups.length) {
+                                val group = trackGroups[groupIndex]
+                                for (trackIndex in 0 until group.length) {
+                                    val format = group.getFormat(trackIndex)
+                                    val support = rendererFormatSupports[rendererIndex][groupIndex][trackIndex]
+                                    val formatSupport = RendererCapabilities.getFormatSupport(support)
+                                    if (Vc1VideoFormatHeuristics.isLikelyVc1(format.sampleMimeType, format.codecs, format.label) &&
+                                        (formatSupport == C.FORMAT_UNSUPPORTED_TYPE || formatSupport == C.FORMAT_EXCEEDS_CAPABILITIES)
+                                    ) {
+                                        Log.i("NuvioTrackSelector", "Upgraded VC-1 track support to FORMAT_HANDLED so ExoPlayer attempts decoding: id=${format.id}")
+                                        rendererFormatSupports[rendererIndex][groupIndex][trackIndex] =
+                                            RendererCapabilities.create(
+                                                C.FORMAT_HANDLED,
+                                                RendererCapabilities.ADAPTIVE_SEAMLESS,
+                                                RendererCapabilities.getTunnelingSupport(support),
+                                                RendererCapabilities.getHardwareAccelerationSupport(support),
+                                                RendererCapabilities.getDecoderSupport(support)
+                                            )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     return super.selectAllTracks(
                         mappedTrackInfo,
                         rendererFormatSupports,
@@ -706,7 +715,15 @@ internal fun PlayerRuntimeController.initializePlayer(
                 if (audioDisabledForStream) {
                     setParameters(buildUponParameters().setDisabledTrackTypes(setOf(C.TRACK_TYPE_AUDIO)))
                 }
-                if (vc1TrackSelectionBypassActive) {
+                if (vc1TrackSelectionBypassActive ||
+                    Vc1VideoFormatHeuristics.isLikelyVc1Stream(
+                        _uiState.value.currentStreamName,
+                        streamName,
+                        currentFilename,
+                        currentStreamDescription,
+                        url
+                    )
+                ) {
                     setParameters(
                         buildUponParameters()
                             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
@@ -1348,7 +1365,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                                 currentStreamName = _uiState.value.currentStreamName ?: streamName ?: currentFilename
                             )
                         ) {
-                            handleVc1PlaybackFailure()
+                            handleVc1PlaybackFailure(errorMessage = detailedError)
                             return
                         }
 

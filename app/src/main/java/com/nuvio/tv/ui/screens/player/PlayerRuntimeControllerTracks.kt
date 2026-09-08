@@ -220,14 +220,6 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                         "vc1TrackBypassActive=$isVc1TrackSelectionBypassActiveForCurrentPlayback"
             )
         }
-        if (currentVideoTrackIsLikelyVc1 && (!currentVideoTrackSelected || !Vc1VideoFormatHeuristics.hasDeviceVc1Decoder())) {
-            Log.w(
-                PlayerRuntimeController.TAG,
-                "VIDEO_TRACK: VC-1 track present and unsupported by ExoPlayer; failing immediately with MPV suggestion without retry"
-            )
-            handleVc1PlaybackFailure()
-            return
-        }
     } else {
         currentVideoTrackMimeType = null
         currentVideoTrackCodecs = null

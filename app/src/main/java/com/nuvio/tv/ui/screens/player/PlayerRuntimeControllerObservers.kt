@@ -902,18 +902,26 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
     }
 }
 
-internal fun PlayerRuntimeController.handleVc1PlaybackFailure() {
+internal fun PlayerRuntimeController.handleVc1PlaybackFailure(errorMessage: String? = null) {
     cancelFirstFrameWatchdog()
     cancelStallWatchdog()
     cancelStableProgressReset()
     errorRetryJob?.cancel()
     errorRetryJob = null
-    val vc1Message = context.getString(R.string.player_error_vc1_unsupported)
+    val displayMessage = errorMessage?.takeIf { it.isNotBlank() }
+        ?: _exoPlayer?.playerError?.let { exoErr ->
+            val msg = exoErr.cause?.message ?: exoErr.message
+            if (msg != null) "$msg [${exoErr.errorCodeName}]" else exoErr.errorCodeName
+        }
+        ?: currentVideoTrackMimeType?.let { mime ->
+            "Decoder init failed: none, Format(video, $mime, ${currentVideoTrackWidth}x${currentVideoTrackHeight}) [ERROR_CODE_DECODER_INIT_FAILED]"
+        }
+        ?: "ERROR_CODE_DECODER_INIT_FAILED"
     releasePlayer(flushPlaybackState = false)
     cancelNextEpisodeAutoPlayOnFatalError()
     _uiState.update {
         it.copy(
-            error = vc1Message,
+            error = displayMessage,
             showSwitchToMpvErrorAction = true,
             isPlaying = false,
             showControls = false,

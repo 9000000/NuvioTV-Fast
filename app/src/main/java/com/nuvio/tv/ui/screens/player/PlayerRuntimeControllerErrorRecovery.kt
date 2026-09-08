@@ -179,17 +179,7 @@ internal fun PlaybackException.toDisplayMessage(context: android.content.Context
         return context.getString(com.nuvio.tv.R.string.player_error_source_invalid_content, errorCodeName)
     }
 
-    // Check for codec/renderer errors
-    val isRendererError = errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
-        errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
-    if (isRendererError) {
-        val meaningfulMessage = findMostRelevantCauseMessage()
-        val decoderHeader = meaningfulMessage ?: context.getString(com.nuvio.tv.R.string.player_error_decoder)
-        val unsupported = context.getString(com.nuvio.tv.R.string.player_error_unsupported_format, errorCodeName)
-        return "$decoderHeader\n\n$unsupported"
-    }
-
-    val meaningfulMessage = findMostRelevantCauseMessage()
+    val meaningfulMessage = findMostRelevantCauseMessage() ?: cause?.message ?: message
     return if (meaningfulMessage != null) {
         "$meaningfulMessage [$errorCodeName]"
     } else {
