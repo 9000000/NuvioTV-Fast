@@ -252,6 +252,25 @@ internal fun PlayerRuntimeController.initializePlayer(
                             effectiveInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER
                 )
             }
+
+            if (effectiveInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER &&
+                !Vc1VideoFormatHeuristics.hasDeviceVc1Decoder() &&
+                Vc1VideoFormatHeuristics.isLikelyVc1Stream(
+                    _uiState.value.currentStreamName,
+                    streamName,
+                    currentFilename,
+                    currentStreamDescription,
+                    url
+                )
+            ) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "INIT_PLAYER: VC-1 stream detected without device decoder on ExoPlayer engine; aborting startup without initializing player"
+                )
+                handleVc1PlaybackFailure()
+                return@launch
+            }
+
             setLoadingStatus(
                 phase = "detecting_format",
                 message = context.getString(R.string.player_loading_detecting_format)
@@ -1323,6 +1342,16 @@ internal fun PlayerRuntimeController.initializePlayer(
                         val detailedError = error.toDisplayMessage(context)
                         cancelStableProgressReset()
 
+                        if (Vc1VideoFormatHeuristics.isVc1PlaybackFailure(
+                                error = error,
+                                currentVideoTrackIsLikelyVc1 = currentVideoTrackIsLikelyVc1,
+                                currentStreamName = _uiState.value.currentStreamName ?: streamName ?: currentFilename
+                            )
+                        ) {
+                            handleVc1PlaybackFailure()
+                            return
+                        }
+
                         // If the codec crashed while the app is in the background (e.g. another
                         // app reclaimed the hardware decoder), don't run the retry chain. Each
                         // retry just re-acquires a decoder the foreground app immediately reclaims
@@ -1551,9 +1580,17 @@ internal fun PlayerRuntimeController.initializePlayer(
                         // Fatal error: stop any next-episode auto-play that may have been
                         // armed by a short placeholder ENDED or residual post-play state.
                         cancelNextEpisodeAutoPlayOnFatalError()
+                        val canSwitchToMpvOnFatal = currentInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER &&
+                            (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES ||
+                             error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED)
                         _uiState.update {
                             it.copy(
                                 error = detailedError,
+                                showSwitchToMpvErrorAction = canSwitchToMpvOnFatal,
                                 showLoadingOverlay = false,
                                 showPauseOverlay = false,
                                 loadingIssueReportVisible = false,

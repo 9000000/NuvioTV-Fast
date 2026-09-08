@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.util.Log
+import com.nuvio.tv.R
 import com.nuvio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -891,16 +892,39 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
                 dv7Mode1ForcedStreamUrls.add(currentStreamUrl)
                 retryCurrentStreamWithDv7Mode1Fallback(currentPosition)
             }
-            PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.RetryVc1Software -> {
-                vc1SoftwarePreferredStreamUrls.add(currentStreamUrl)
-                retryCurrentStreamWithVc1SoftwareFallback(currentPosition)
-            }
-            PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.RetryVc1TrackBypass -> {
-                vc1TrackSelectionBypassStreamUrls.add(currentStreamUrl)
-                retryCurrentStreamWithVc1TrackSelectionBypass(currentPosition)
+            PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.RetryVc1Software,
+            PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.RetryVc1TrackBypass,
+            PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.FailVc1Unsupported -> {
+                handleVc1PlaybackFailure()
             }
             PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.None -> Unit
         }
+    }
+}
+
+internal fun PlayerRuntimeController.handleVc1PlaybackFailure() {
+    cancelFirstFrameWatchdog()
+    cancelStallWatchdog()
+    cancelStableProgressReset()
+    errorRetryJob?.cancel()
+    errorRetryJob = null
+    val vc1Message = context.getString(R.string.player_error_vc1_unsupported)
+    releasePlayer(flushPlaybackState = false)
+    cancelNextEpisodeAutoPlayOnFatalError()
+    _uiState.update {
+        it.copy(
+            error = vc1Message,
+            showSwitchToMpvErrorAction = true,
+            isPlaying = false,
+            showControls = false,
+            isBuffering = false,
+            showLoadingOverlay = false,
+            showPauseOverlay = false,
+            loadingIssueReportVisible = false,
+            loadingIssueElapsedMs = 0L,
+            playbackEnded = false,
+            postPlayMode = null
+        )
     }
 }
 

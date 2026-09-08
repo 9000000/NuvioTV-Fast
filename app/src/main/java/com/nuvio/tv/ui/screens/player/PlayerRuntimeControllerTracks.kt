@@ -220,20 +220,12 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                         "vc1TrackBypassActive=$isVc1TrackSelectionBypassActiveForCurrentPlayback"
             )
         }
-        if (currentVideoTrackIsLikelyVc1 &&
-            !currentVideoTrackSelected &&
-            isVc1SoftwareFallbackActiveForCurrentPlayback &&
-            !isVc1TrackSelectionBypassActiveForCurrentPlayback
-        ) {
-            val currentPosition = _exoPlayer?.currentPosition ?: 0L
-            vc1TrackSelectionBypassStreamUrls.add(currentStreamUrl)
+        if (currentVideoTrackIsLikelyVc1 && (!currentVideoTrackSelected || !Vc1VideoFormatHeuristics.hasDeviceVc1Decoder())) {
             Log.w(
                 PlayerRuntimeController.TAG,
-                "VIDEO_TRACK: VC-1 track present but unselected after software-preferred retry, " +
-                        "forcing track-selection bypass support=${Util.getFormatSupportString(currentVideoTrackBestSupport)} " +
-                        "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} positionMs=$currentPosition"
+                "VIDEO_TRACK: VC-1 track present and unsupported by ExoPlayer; failing immediately with MPV suggestion without retry"
             )
-            retryCurrentStreamWithVc1TrackSelectionBypass(currentPosition)
+            handleVc1PlaybackFailure()
             return
         }
     } else {

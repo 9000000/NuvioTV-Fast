@@ -22,6 +22,7 @@ internal object PlayerFirstFrameCodecRecoveryPolicy {
         data object RetryDv7Mode1 : RecoveryAction()
         data object RetryVc1Software : RecoveryAction()
         data object RetryVc1TrackBypass : RecoveryAction()
+        data object FailVc1Unsupported : RecoveryAction()
     }
 
     fun evaluateAfterWatchdogTimeout(input: Input): RecoveryAction {
@@ -30,15 +31,8 @@ internal object PlayerFirstFrameCodecRecoveryPolicy {
         if (input.isManualDv81Mode2Active && !input.dv7Mode1AlreadyForced) {
             return RecoveryAction.RetryDv7Mode1
         }
-        if (input.currentVideoTrackIsLikelyVc1 && !input.isVc1SoftwareFallbackActive) {
-            return RecoveryAction.RetryVc1Software
-        }
-        if (input.currentVideoTrackIsLikelyVc1 &&
-            !input.currentVideoTrackSelected &&
-            input.isVc1SoftwareFallbackActive &&
-            !input.isVc1TrackSelectionBypassActive
-        ) {
-            return RecoveryAction.RetryVc1TrackBypass
+        if (input.currentVideoTrackIsLikelyVc1) {
+            return RecoveryAction.FailVc1Unsupported
         }
         return RecoveryAction.None
     }

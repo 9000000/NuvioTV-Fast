@@ -31,6 +31,11 @@ internal fun PlayerRuntimeController.attemptStartupRecovery(
     error: PlaybackException,
     detailedError: String
 ): Boolean {
+    if (currentVideoTrackIsLikelyVc1 ||
+        Vc1VideoFormatHeuristics.isLikelyVc1(streamName = _uiState.value.currentStreamName ?: streamName)
+    ) {
+        return false
+    }
     if (hasRenderedFirstFrame) return false
     if (!isRetryablePlaybackError(error)) return false
     if (startupRetryCount >= MAX_STARTUP_AUTO_RETRIES) return false
@@ -241,6 +246,11 @@ internal fun PlayerRuntimeController.attemptAutoRetry(
     error: PlaybackException,
     detailedError: String
 ): Boolean {
+    if (currentVideoTrackIsLikelyVc1 ||
+        Vc1VideoFormatHeuristics.isLikelyVc1(streamName = _uiState.value.currentStreamName ?: streamName)
+    ) {
+        return false
+    }
     if (!isRetryablePlaybackError(error)) return false
     if (errorRetryCount >= MAX_AUTO_RETRIES) return false
 
@@ -439,6 +449,11 @@ internal fun PlayerRuntimeController.tryParsingErrorProbeFallback(
     savedPosition: Long = 0L,
     paused: Boolean = userPausedManually
 ): Boolean {
+    if (currentVideoTrackIsLikelyVc1 ||
+        Vc1VideoFormatHeuristics.isLikelyVc1(streamName = _uiState.value.currentStreamName ?: streamName)
+    ) {
+        return false
+    }
     val isSourceOrParsingError = error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
         error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
         error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED ||
