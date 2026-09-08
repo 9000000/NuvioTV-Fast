@@ -63,6 +63,15 @@ internal fun UpdateChannelSettings(
         }
     )
 
+    SettingsActionRow(
+        title = stringResource(R.string.about_force_download_update),
+        subtitle = stringResource(R.string.about_force_download_update_subtitle),
+        trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
+        onClick = {
+            viewModel.forceDownloadLatestRelease()
+        }
+    )
+
     if (showChannelDialog) {
         SettingsSingleChoiceDialog(
             title = stringResource(R.string.about_update_channel_title),

@@ -398,6 +398,9 @@
     <string name="about_update_channel_subtitle">Choose the type of app updates to receive</string>
     <string name="about_check_updates">Check for updates</string>
     <string name="about_check_updates_subtitle">Download latest release</string>
+    <string name="about_force_download_update">Force re-download update</string>
+    <string name="about_force_download_update_subtitle">Re-download and install the latest APK even if version is not bumped</string>
+    <string name="update_force_downloading">Checking and downloading latest release APK…</string>
     <string name="update_channel_stable">Stable</string>
     <string name="update_channel_beta">Beta</string>
     <string name="update_channel_dialog_subtitle">Choose the type of updates you want to receive</string>

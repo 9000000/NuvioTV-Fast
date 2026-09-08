@@ -394,6 +394,9 @@
     <string name="about_update_channel_subtitle">Chọn loại cập nhật ứng dụng bạn muốn nhận</string>
     <string name="about_check_updates">Kiểm tra cập nhật</string>
     <string name="about_check_updates_subtitle">Tải xuống phiên bản mới nhất</string>
+    <string name="about_force_download_update">Ép tải lại bản cập nhật</string>
+    <string name="about_force_download_update_subtitle">Tải lại và cài đặt bản APK mới nhất ngay cả khi chưa nâng số phiên bản</string>
+    <string name="update_force_downloading">Đang kiểm tra và tải bản APK phát hành mới nhất…</string>
     <string name="update_channel_stable">Ổn định</string>
     <string name="update_channel_beta">Thử nghiệm</string>
     <string name="update_channel_dialog_subtitle">Chọn loại cập nhật bạn muốn nhận</string>

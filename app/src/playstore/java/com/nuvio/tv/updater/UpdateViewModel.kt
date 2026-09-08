@@ -28,6 +28,7 @@ class UpdateViewModel @Inject constructor() : ViewModel() {
     val uiState: StateFlow<UpdateUiState> = _uiState.asStateFlow()
 
     fun checkForUpdates(force: Boolean, showNoUpdateFeedback: Boolean) = Unit
+    fun forceDownloadLatestRelease() = Unit
 
     fun dismissBanner() = Unit
 

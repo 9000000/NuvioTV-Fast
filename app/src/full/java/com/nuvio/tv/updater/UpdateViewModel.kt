@@ -149,6 +149,59 @@ class UpdateViewModel @Inject constructor(
             context.getString(R.string.update_latest_version)
         }
 
+    fun forceDownloadLatestRelease() {
+        updateCheckJob?.cancel()
+        updateCheckJob = viewModelScope.launch {
+            val channel = _uiState.value.updateChannel
+            _uiState.update {
+                it.copy(
+                    isChecking = true,
+                    showBanner = false,
+                    showUnknownSourcesDialog = false,
+                    errorMessage = null,
+                    feedbackMessage = context.getString(R.string.update_force_downloading)
+                )
+            }
+
+            val result = updateRepository.getLatestUpdate(channel)
+            updatePreferences.setLastCheckAtMs(System.currentTimeMillis())
+
+            result
+                .onSuccess { update ->
+                    _uiState.update { state ->
+                        state.copy(
+                            isChecking = false,
+                            update = update,
+                            isUpdateAvailable = true,
+                            isDownloading = false,
+                            downloadProgress = null,
+                            downloadedApkPath = null,
+                            showBanner = true,
+                            showUnknownSourcesDialog = false,
+                            errorMessage = null
+                        )
+                    }
+                    downloadUpdate()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isChecking = false,
+                            update = null,
+                            isUpdateAvailable = false,
+                            isDownloading = false,
+                            downloadProgress = null,
+                            downloadedApkPath = null,
+                            showBanner = false,
+                            showUnknownSourcesDialog = false,
+                            errorMessage = error.message ?: context.getString(R.string.update_error_check_failed),
+                            feedbackMessage = error.message ?: context.getString(R.string.update_error_check_failed)
+                        )
+                    }
+                }
+        }
+    }
+
     fun dismissBanner() {
         val state = _uiState.value
         _uiState.update {
