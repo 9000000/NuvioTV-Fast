@@ -16,10 +16,10 @@ class MemoryBudgetTest {
         assertEquals(50, MemoryBudget.totalUsageMb(50, 4, 32, false))
         
         // case 2: parallel enabled
-        // bufferCount(4) = 4 + 2 = 6
-        // overhead = 6 * 32 = 192
-        // total = 50 + 192 = 242
-        assertEquals(242, MemoryBudget.totalUsageMb(50, 4, 32, true))
+        // bufferCount(4) = (4 + 2) * 2 = 12 (active chunks + empty pool)
+        // overhead = 12 * 32 = 384
+        // total = 50 + 384 = 434
+        assertEquals(434, MemoryBudget.totalUsageMb(50, 4, 32, true))
     }
 
     @Test

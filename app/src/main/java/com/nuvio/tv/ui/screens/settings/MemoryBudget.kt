@@ -68,9 +68,13 @@ object MemoryBudget {
     fun effectiveBufferMb(stored: Int): Int =
         if (stored > 0) stored else defaultBufferSizeMb
 
-    /** Number of chunk-sized buffers alive concurrently */
+    /**
+     * Number of chunk-sized buffers alive concurrently in ParallelRangeDataSource.
+     * Accounts for both active session chunks (connectionCount + BUFFER_OVERHEAD)
+     * and idle recycled buffers in the global pool (connectionCount + BUFFER_OVERHEAD).
+     */
     fun bufferCount(connectionCount: Int): Int =
-        connectionCount + BUFFER_OVERHEAD
+        (connectionCount + BUFFER_OVERHEAD) * 2
 
     fun parallelOverheadMb(connectionCount: Int, chunkSizeMb: Int): Int =
         bufferCount(connectionCount) * chunkSizeMb
