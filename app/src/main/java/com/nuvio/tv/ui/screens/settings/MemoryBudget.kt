@@ -70,11 +70,10 @@ object MemoryBudget {
 
     /**
      * Number of chunk-sized buffers alive concurrently in ParallelRangeDataSource.
-     * Accounts for both active session chunks (connectionCount + BUFFER_OVERHEAD)
-     * and idle recycled buffers in the global pool (connectionCount + BUFFER_OVERHEAD).
+     * Accounts for active chunks (connectionCount) and idle recycled buffers in the pool (connectionCount).
      */
     fun bufferCount(connectionCount: Int): Int =
-        (connectionCount + BUFFER_OVERHEAD) * 2
+        connectionCount * 2
 
     fun parallelOverheadMb(connectionCount: Int, chunkSizeMb: Int): Int =
         bufferCount(connectionCount) * chunkSizeMb
