@@ -186,6 +186,8 @@ private data class KeyboardVisibilityState(
 @Composable
 fun ProfileSelectionScreen(
     onProfileSelected: () -> Unit,
+    onProfileClicked: () -> Unit = {},
+    onProfileFocusChanged: ((colorHex: String?, backgroundUrl: String?, memoryCacheKey: String?) -> Unit)? = null,
     screenMode: ProfileSelectionMode = ProfileSelectionMode.Selection,
     onBackPress: (() -> Unit)? = null,
     viewModel: ProfileSelectionViewModel = hiltViewModel()
@@ -225,10 +227,13 @@ fun ProfileSelectionScreen(
     var pinOverlayState by remember { mutableStateOf<ProfilePinOverlayState?>(null) }
     var pinOverlayError by remember { mutableStateOf<String?>(null) }
     var profileActionMessage by remember { mutableStateOf<String?>(null) }
-    val onProfileFocusedChange = remember {
+    val onProfileFocusedChange = remember(onProfileFocusChanged) {
         { profile: UserProfile? ->
             focusedProfileId = profile?.id
             focusedAvatarColor = profile?.avatarColorHex?.let(::parseProfileColor) ?: Color(0xFF555555)
+            // Send empty string as sentinel = "bg not yet resolved, keep previous"
+            onProfileFocusChanged?.invoke(profile?.avatarColorHex, "", null)
+            Unit
         }
     }
     val focusedProfile = profiles.firstOrNull { it.id == focusedProfileId }
@@ -296,6 +301,27 @@ fun ProfileSelectionScreen(
             is ProfileBackgroundSelection.Custom -> ProfileBackgroundArtwork.Custom(backgroundSelection.url)
             null -> null
         }
+
+        // Keep splash background in sync with whichever profile is focused
+        // so the splash matches after the user clicks.
+        LaunchedEffect(profileBackground, focusedProfile) {
+            val bgUrl = when (profileBackground) {
+                is ProfileBackgroundArtwork.Custom -> profileBackground.url
+                is ProfileBackgroundArtwork.Catalog -> profileBackground.background.imageFile?.toURI()?.toString()
+                null -> null
+            }
+            val cacheKey = when (profileBackground) {
+                is ProfileBackgroundArtwork.Catalog -> "profile-background-${profileBackground.background.id}-v${profileBackground.background.assetVersion}"
+                is ProfileBackgroundArtwork.Custom -> "custom-profile-background-${profileBackground.url}"
+                null -> null
+            }
+            onProfileFocusChanged?.invoke(
+                focusedProfile?.avatarColorHex,
+                bgUrl,
+                cacheKey
+            )
+        }
+
         ProfileSelectionBackground(
             focusedAvatarColor = overlayProfileColor ?: focusedAvatarColor,
             profileBackground = profileBackground
@@ -342,6 +368,7 @@ fun ProfileSelectionScreen(
                                 pinOverlayError = null
                                 pinOverlayState = ProfilePinOverlayState.Unlock(profile)
                             } else {
+                                onProfileClicked()
                                 viewModel.selectProfile(profile.id, onComplete = onProfileSelected)
                             }
                         }
@@ -395,6 +422,7 @@ fun ProfileSelectionScreen(
                                         if (verify.unlocked) {
                                             pinOverlayError = null
                                             pinOverlayState = null
+                                            onProfileClicked()
                                             viewModel.selectProfile(
                                                 activePinOverlay.profile.id,
                                                 onComplete = onProfileSelected
@@ -758,8 +786,12 @@ private fun ProfileSelectionBackground(
         animationSpec = tween(durationMillis = 520),
         label = "focusedAvatarColor"
     )
-    val gradientTop = lerp(NuvioTheme.colors.BackgroundElevated, animatedAvatarColor, 0.3f)
-    val gradientMid = lerp(NuvioTheme.colors.Background, animatedAvatarColor, 0.14f)
+    // Use fixed dark colors so the gradient is consistent.
+    // Otherwise, profile selector and splash screen needs to know about user template
+    val baseBg = Color(0xFF121212)
+    val baseBgElevated = Color(0xFF1E1E1E)
+    val gradientTop = lerp(baseBgElevated, animatedAvatarColor, 0.3f)
+    val gradientMid = lerp(baseBg, animatedAvatarColor, 0.14f)
     val halfFadeStrong = animatedAvatarColor.copy(alpha = 0.26f)
     val halfFadeSoft = animatedAvatarColor.copy(alpha = 0.08f)
 
@@ -799,7 +831,7 @@ private fun ProfileSelectionBackground(
                                 colorStops = arrayOf(
                                     0f to gradientTop,
                                     0.42f to gradientMid,
-                                    1f to NuvioTheme.colors.Background
+                                    1f to baseBg
                                 )
                             )
                         )

@@ -1673,6 +1673,8 @@
     <string name="appearance_amoled_mode_subtitle">Użyj czystej czerni jako tła aplikacji</string>
     <string name="appearance_amoled_surfaces_mode">Czysto czarne powierzchnie</string>
     <string name="appearance_amoled_surfaces_mode_subtitle">Karty, panele i kontenery również będą czysto czarne</string>
+    <string name="appearance_startup_splash">Ekran startowy</string>
+    <string name="appearance_startup_splash_subtitle">Pokaż logo i wskaźnik ładowania po wyborze profilu</string>
     <string name="appearance_app_icon_and_banner">Ikona i baner aplikacji</string>
     <string name="appearance_app_icon_and_banner_subtitle">Zmień ikonę i baner aplikacji</string>
     <string name="appearance_app_icon_arctic_blue">Arctic Blue</string>

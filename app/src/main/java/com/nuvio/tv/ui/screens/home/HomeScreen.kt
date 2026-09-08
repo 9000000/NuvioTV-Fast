@@ -239,6 +239,13 @@ fun HomeScreen(
     // Reports the home screen as fully drawn once it leaves the loading state so startup timing is measurable and post-launch work can be deferred.
     ReportDrawnWhen { !showStartupLoader }
 
+    // Signal to the startup splash overlay that home content is ready.
+    LaunchedEffect(showStartupLoader) {
+        if (!showStartupLoader) {
+            viewModel.setHomeContentReady()
+        }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {

@@ -57,6 +57,12 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
+/** Process-level signal so MainActivity can observe when Home content is ready. */
+object HomeContentReadySignal {
+    val ready = MutableStateFlow(false)
+    fun reset() { ready.value = false }
+}
+
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -112,6 +118,15 @@ class HomeViewModel @Inject constructor(
 
     internal val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    private val _homeContentReady = MutableStateFlow(false)
+    /** True once home has enough content to dismiss the startup splash. */
+    val homeContentReady: StateFlow<Boolean> = _homeContentReady.asStateFlow()
+
+    fun setHomeContentReady() {
+        _homeContentReady.value = true
+        HomeContentReadySignal.ready.value = true
+    }
 
     internal val _modernHomePresentation = MutableStateFlow(ModernHomePresentationState())
     val modernHomePresentation: StateFlow<ModernHomePresentationState> = _modernHomePresentation.asStateFlow()
