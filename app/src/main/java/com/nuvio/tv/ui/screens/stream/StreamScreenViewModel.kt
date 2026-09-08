@@ -90,6 +90,8 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val torrentService: TorrentService,
+    private val torrServerRemoteApi: com.nuvio.tv.core.torrent.TorrServerRemoteApi,
+    private val torrServerAddonConfig: com.nuvio.tv.core.torrent.TorrServerAddonConfig,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -264,6 +266,12 @@ class StreamScreenViewModel @Inject constructor(
             is StreamScreenEvent.OnAddonFilterSelected -> filterByAddon(event.addonName)
             is StreamScreenEvent.OnStreamSelected -> {
                 cancelStreamsLoad()
+            }
+            is StreamScreenEvent.OnTorrentFileSelected -> {
+                // Handled via resolveTorrServerPlayback
+            }
+            StreamScreenEvent.OnDismissTorrentFilePicker -> {
+                dismissTorrentFilePicker()
             }
             StreamScreenEvent.OnAutoPlayConsumed -> {
                 if (autoPlayHandledForSession &&
@@ -1373,6 +1381,167 @@ class StreamScreenViewModel @Inject constructor(
         bingeGroupCacheDataStore.replace(cid, playbackInfo.bingeGroup)
     }
 
+    fun isTorrServerStream(stream: Stream): Boolean {
+        return stream.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
+    }
+
+    private var torrentFilePickerJob: Job? = null
+
+    fun prepareTorrServerFilePicker(stream: Stream) {
+        torrentFilePickerJob?.cancel()
+        updateUiStateIfChanged {
+            it.copy(
+                showTorrentFilePicker = true,
+                torrentFilePickerLoading = true,
+                torrentFilePickerError = null,
+                torrentFilePickerTitle = stream.title ?: stream.name ?: "",
+                torrentFilePickerFiles = emptyList(),
+                torrentFilePickerPendingStream = stream,
+                torrentFilePickerPendingHash = null
+            )
+        }
+
+        torrentFilePickerJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val magnet = stream.torrentMagnetUri()
+                    ?: stream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
+                    ?: stream.getEffectiveInfoHash()?.let { hash ->
+                        val trackers = stream.sources
+                            ?.filter { it.startsWith("tracker:") }
+                            ?.map { it.removePrefix("tracker:") }
+                            ?: emptyList()
+                        val tr = trackers.joinToString("") { "&tr=$it" }
+                        "magnet:?xt=urn:btih:$hash$tr"
+                    }
+
+                if (magnet.isNullOrBlank()) {
+                    updateUiStateIfChanged {
+                        it.copy(
+                            torrentFilePickerLoading = false,
+                            torrentFilePickerError = "Không tìm thấy thông tin magnet/hash cho torrent này"
+                        )
+                    }
+                    return@launch
+                }
+
+                val config = torrServerAddonConfig.config.first()
+                val serverUrl = config.serverUrl.trim().trimEnd('/')
+
+                // Add torrent to remote TorrServer
+                val hash = torrServerRemoteApi.addTorrent(
+                    magnetLink = magnet,
+                    title = stream.title ?: stream.name,
+                    serverUrlOverride = serverUrl
+                ) ?: stream.getEffectiveInfoHash()
+
+                if (hash == null) {
+                    updateUiStateIfChanged {
+                        it.copy(
+                            torrentFilePickerLoading = false,
+                            torrentFilePickerError = "Không thể thêm torrent vào TorrServer"
+                        )
+                    }
+                    return@launch
+                }
+
+                updateUiStateIfChanged {
+                    it.copy(torrentFilePickerPendingHash = hash)
+                }
+
+                // Adaptive polling for metadata and files (up to 15 seconds)
+                val deadline = System.currentTimeMillis() + 15_000L
+                var files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList()
+                var pollDelay = 250L
+
+                while (isActive && System.currentTimeMillis() < deadline) {
+                    val details = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
+                    if (details != null && details.files.isNotEmpty()) {
+                        files = details.files
+                        break
+                    }
+                    delay(pollDelay)
+                    pollDelay = (pollDelay * 2).coerceAtMost(1000L)
+                }
+
+                if (files.isEmpty()) {
+                    updateUiStateIfChanged {
+                        it.copy(
+                            torrentFilePickerLoading = false,
+                            torrentFilePickerError = "Quá thời gian tải danh sách file từ torrent"
+                        )
+                    }
+                } else {
+                    updateUiStateIfChanged {
+                        it.copy(
+                            torrentFilePickerLoading = false,
+                            torrentFilePickerFiles = files
+                        )
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "prepareTorrServerFilePicker error", e)
+                updateUiStateIfChanged {
+                    it.copy(
+                        torrentFilePickerLoading = false,
+                        torrentFilePickerError = e.message ?: "Lỗi tải danh sách file"
+                    )
+                }
+            }
+        }
+    }
+
+    suspend fun resolveTorrServerPlayback(fileId: Int): StreamPlaybackInfo? {
+        val pendingStream = _uiState.value.torrentFilePickerPendingStream ?: return null
+        val hash = _uiState.value.torrentFilePickerPendingHash ?: pendingStream.getEffectiveInfoHash() ?: return null
+        val config = torrServerAddonConfig.config.first()
+        val serverUrl = config.serverUrl.trim().trimEnd('/')
+
+        val magnet = pendingStream.torrentMagnetUri()
+            ?: pendingStream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
+            ?: "magnet:?xt=urn:btih:$hash"
+
+        val streamUrl = torrServerRemoteApi.buildStreamUrl(
+            serverUrl = serverUrl,
+            magnetLink = magnet,
+            fileIdx = fileId,
+            preload = config.preload,
+            save = config.saveToDb,
+            gst = config.gst,
+            hash = hash
+        )
+        val selectedFile = _uiState.value.torrentFilePickerFiles.firstOrNull { it.id == fileId }
+
+        dismissTorrentFilePicker()
+
+        val baseInfo = getStreamForPlayback(pendingStream)
+        return baseInfo.copy(
+            url = streamUrl,
+            isTorrent = true,
+            infoHash = hash,
+            fileIdx = fileId,
+            filename = selectedFile?.path?.substringAfterLast('/') ?: baseInfo.filename,
+            videoSize = selectedFile?.length ?: baseInfo.videoSize,
+            addonName = com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
+        )
+    }
+
+    fun dismissTorrentFilePicker() {
+        torrentFilePickerJob?.cancel()
+        torrentFilePickerJob = null
+        updateUiStateIfChanged {
+            it.copy(
+                showTorrentFilePicker = false,
+                torrentFilePickerLoading = false,
+                torrentFilePickerError = null,
+                torrentFilePickerFiles = emptyList(),
+                torrentFilePickerPendingStream = null,
+                torrentFilePickerPendingHash = null
+            )
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         if (isTorrentStreamStarted) {
@@ -1875,10 +2044,11 @@ private fun Stream.isReadyForDebridPreparation(): Boolean =
         (isDirectDebrid() || (needsLocalDebridResolve() && debridCacheStatus?.state == StreamDebridCacheState.CACHED))
 
 private fun formatSpeed(context: android.content.Context, bytesPerSec: Long): String {
+    val bitsPerSec = bytesPerSec * 8.0
     return when {
-        bytesPerSec >= 1_048_576 -> context.getString(R.string.unit_speed_mb_s, String.format("%.1f", bytesPerSec / 1_048_576.0))
-        bytesPerSec >= 1_024 -> context.getString(R.string.unit_speed_kb_s, String.format("%.0f", bytesPerSec / 1_024.0))
-        else -> context.getString(R.string.unit_speed_b_s, bytesPerSec)
+        bitsPerSec >= 1_000_000.0 -> context.getString(R.string.unit_speed_mb_s, String.format(java.util.Locale.US, "%.1f", bitsPerSec / 1_000_000.0))
+        bitsPerSec >= 1_000.0 -> context.getString(R.string.unit_speed_kb_s, String.format(java.util.Locale.US, "%.0f", bitsPerSec / 1_000.0))
+        else -> context.getString(R.string.unit_speed_b_s, bitsPerSec.toLong())
     }
 }
 

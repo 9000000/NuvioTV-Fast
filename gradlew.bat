@@ -44,6 +44,16 @@ if defined JAVA_HOME goto findJavaFromJavaHome
 set JAVA_EXE=java.exe
 %JAVA_EXE% -version >NUL 2>&1
 if %ERRORLEVEL% equ 0 goto execute
+if exist "%USERPROFILE%\.jdks\jbr-21.0.11\bin\java.exe" (
+    set "JAVA_HOME=%USERPROFILE%\.jdks\jbr-21.0.11"
+    set "JAVA_EXE=%USERPROFILE%\.jdks\jbr-21.0.11\bin\java.exe"
+    goto execute
+)
+if exist "%PROGRAMFILES%\Android\Android Studio\jbr\bin\java.exe" (
+    set "JAVA_HOME=%PROGRAMFILES%\Android\Android Studio\jbr"
+    set "JAVA_EXE=%PROGRAMFILES%\Android\Android Studio\jbr\bin\java.exe"
+    goto execute
+)
 
 echo. 1>&2
 echo ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH. 1>&2
@@ -58,6 +68,17 @@ set JAVA_HOME=%JAVA_HOME:"=%
 set JAVA_EXE=%JAVA_HOME%/bin/java.exe
 
 if exist "%JAVA_EXE%" goto execute
+
+if exist "%USERPROFILE%\.jdks\jbr-21.0.11\bin\java.exe" (
+    set "JAVA_HOME=%USERPROFILE%\.jdks\jbr-21.0.11"
+    set "JAVA_EXE=%USERPROFILE%\.jdks\jbr-21.0.11\bin\java.exe"
+    goto execute
+)
+if exist "%PROGRAMFILES%\Android\Android Studio\jbr\bin\java.exe" (
+    set "JAVA_HOME=%PROGRAMFILES%\Android\Android Studio\jbr"
+    set "JAVA_EXE=%PROGRAMFILES%\Android\Android Studio\jbr\bin\java.exe"
+    goto execute
+)
 
 echo. 1>&2
 echo ERROR: JAVA_HOME is set to an invalid directory: %JAVA_HOME% 1>&2

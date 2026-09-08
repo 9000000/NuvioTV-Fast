@@ -193,11 +193,6 @@ fun StreamScreen(
             return
         }
         val preference = playerPreference ?: return
-        if (playbackInfo.isTorrent && !p2pEnabled) {
-            pendingTorrentPlaybackInfo = playbackInfo
-            showP2pConsentDialog = true
-            return
-        }
         when (preference) {
             PlayerPreference.INTERNAL -> {
                 launchInternalPlayer(playbackInfo)
@@ -217,12 +212,6 @@ fun StreamScreen(
     fun routeAutoPlay(playbackInfo: StreamPlaybackInfo) {
         if (openExternalInBrowser(playbackInfo)) {
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
-            return
-        }
-        // Always check P2P consent for torrents, even in direct auto-play flow
-        if (playbackInfo.isTorrent && !p2pEnabled) {
-            pendingTorrentPlaybackInfo = playbackInfo
-            showP2pConsentDialog = true
             return
         }
         val preference = playerPreference ?: return
@@ -316,12 +305,6 @@ fun StreamScreen(
             return@LaunchedEffect
         }
         if (playbackInfo.url != null || (playbackInfo.isTorrent && playbackInfo.infoHash != null)) {
-            // Torrent cached links still need P2P consent
-            if (playbackInfo.isTorrent && !p2pEnabled) {
-                pendingTorrentPlaybackInfo = playbackInfo
-                showP2pConsentDialog = true
-                return@LaunchedEffect
-            }
             // Respect player preference for cached links too
             when (playerPreference ?: return@LaunchedEffect) {
                 PlayerPreference.EXTERNAL -> {
@@ -457,12 +440,16 @@ fun StreamScreen(
                         if (currentIndex >= 0) {
                             focusedStreamIndex = currentIndex
                         }
-                        scope.coroutineLaunch {
-                            val playbackInfo = viewModel.resolveStreamForPlayback(stream)
-                            if (playbackInfo != null) {
-                                pendingRestoreOnResume = true
-                                routePlayback(playbackInfo)
-                                viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                        if (viewModel.isTorrServerStream(stream)) {
+                            viewModel.prepareTorrServerFilePicker(stream)
+                        } else {
+                            scope.coroutineLaunch {
+                                val playbackInfo = viewModel.resolveStreamForPlayback(stream)
+                                if (playbackInfo != null) {
+                                    pendingRestoreOnResume = true
+                                    routePlayback(playbackInfo)
+                                    viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                                }
                             }
                         }
                     },
@@ -503,6 +490,30 @@ fun StreamScreen(
                 onDismiss = {
                     showPlayerChoiceDialog = false
                     pendingPlaybackInfo = null
+                }
+            )
+        }
+
+        if (uiState.showTorrentFilePicker) {
+            com.nuvio.tv.ui.components.TorrentFilePickerDialog(
+                title = uiState.torrentFilePickerTitle,
+                isLoading = uiState.torrentFilePickerLoading,
+                error = uiState.torrentFilePickerError,
+                files = uiState.torrentFilePickerFiles,
+                targetSeason = uiState.season,
+                targetEpisode = uiState.episode,
+                onFileSelected = { fileId ->
+                    scope.coroutineLaunch {
+                        val playbackInfo = viewModel.resolveTorrServerPlayback(fileId)
+                        if (playbackInfo != null) {
+                            pendingRestoreOnResume = true
+                            routePlayback(playbackInfo)
+                            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                        }
+                    }
+                },
+                onDismiss = {
+                    viewModel.dismissTorrentFilePicker()
                 }
             )
         }

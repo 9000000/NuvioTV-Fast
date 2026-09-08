@@ -87,6 +87,7 @@ class PlayerRuntimeController(
     internal val audioDelayRouteDataStore: AudioDelayRouteDataStore,
     internal val torrentService: TorrentService,
     internal val torrentSettings: com.nuvio.tv.core.torrent.TorrentSettings,
+    internal val torrServerRemoteApi: com.nuvio.tv.core.torrent.TorrServerRemoteApi,
     internal val tmdbService: com.nuvio.tv.core.tmdb.TmdbService,
     internal val tmdbMetadataService: com.nuvio.tv.core.tmdb.TmdbMetadataService,
     internal val tmdbSettingsDataStore: com.nuvio.tv.data.local.TmdbSettingsDataStore,

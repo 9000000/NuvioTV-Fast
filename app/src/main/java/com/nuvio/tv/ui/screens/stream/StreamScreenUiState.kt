@@ -36,7 +36,14 @@ data class StreamScreenUiState(
     val autoPlayStream: Stream? = null,
     val autoPlayPlaybackInfo: StreamPlaybackInfo? = null,
     val error: String? = null,
-    val playbackErrorMessage: String? = null
+    val playbackErrorMessage: String? = null,
+    val showTorrentFilePicker: Boolean = false,
+    val torrentFilePickerLoading: Boolean = false,
+    val torrentFilePickerError: String? = null,
+    val torrentFilePickerTitle: String = "",
+    val torrentFilePickerFiles: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList(),
+    val torrentFilePickerPendingStream: Stream? = null,
+    val torrentFilePickerPendingHash: String? = null
 ) {
     val isEpisode: Boolean get() = season != null && episode != null
 }
@@ -44,6 +51,8 @@ data class StreamScreenUiState(
 sealed class StreamScreenEvent {
     data class OnAddonFilterSelected(val addonName: String?) : StreamScreenEvent()
     data class OnStreamSelected(val stream: Stream) : StreamScreenEvent()
+    data class OnTorrentFileSelected(val fileId: Int) : StreamScreenEvent()
+    data object OnDismissTorrentFilePicker : StreamScreenEvent()
     data object OnAutoPlayConsumed : StreamScreenEvent()
     data object OnRefresh : StreamScreenEvent()
     data object OnRetry : StreamScreenEvent()

@@ -79,9 +79,10 @@ fun TorrentOverlay(
 
 @Composable
 private fun formatSpeed(bytesPerSec: Long): String {
+    val bitsPerSec = bytesPerSec * 8.0
     return when {
-        bytesPerSec >= 1_048_576 -> stringResource(R.string.unit_speed_mb_s, String.format("%.1f", bytesPerSec / 1_048_576.0))
-        bytesPerSec >= 1_024 -> stringResource(R.string.unit_speed_kb_s, String.format("%.0f", bytesPerSec / 1_024.0))
-        else -> stringResource(R.string.unit_speed_b_s, bytesPerSec)
+        bitsPerSec >= 1_000_000.0 -> stringResource(R.string.unit_speed_mb_s, String.format(java.util.Locale.US, "%.1f", bitsPerSec / 1_000_000.0))
+        bitsPerSec >= 1_000.0 -> stringResource(R.string.unit_speed_kb_s, String.format(java.util.Locale.US, "%.0f", bitsPerSec / 1_000.0))
+        else -> stringResource(R.string.unit_speed_b_s, bitsPerSec.toLong())
     }
 }

@@ -213,6 +213,7 @@ android {
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "true")
             buildConfigField("String", "SENTRY_ENVIRONMENT", buildConfigString("debug"))
+            resValue("string", "app_name", "Nuvio Debug")
 
             // Dev environment (from local.dev.properties)
             val devSupabaseUrl = resolveProperty(devProperties, localProperties, "NUVIO_SUPABASE_URL", resolveProperty(devProperties, localProperties, "SUPABASE_URL", officialSupabaseUrl))

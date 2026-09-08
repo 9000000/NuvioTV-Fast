@@ -122,6 +122,7 @@ class NuvioColorScheme(
 
     val Primary = NuvioPrimitives.neutral500
     val PrimaryVariant = NuvioPrimitives.neutral650
+    val PrimaryLight = palette.focusRing
     val OnPrimary = NuvioPrimitives.white
     val Secondary = palette.secondary
     val SecondaryVariant = palette.secondaryVariant
@@ -133,6 +134,7 @@ class NuvioColorScheme(
     val TextTertiary = NuvioPrimitives.neutral600
     val TextDisabled = NuvioPrimitives.neutral700
     val TextInverse = NuvioPrimitives.neutral925
+    val TextMuted = TextSecondary
 
     val FocusRing = palette.focusRing
     val FocusBackground = palette.focusBackground

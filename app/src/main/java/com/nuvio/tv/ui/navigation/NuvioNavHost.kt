@@ -1197,6 +1197,12 @@ fun NuvioNavHost(
             )
         }
 
+        composable(Screen.TorrServerSettings.route) {
+            com.nuvio.tv.ui.screens.settings.TorrServerSettingsScreen(
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.ThemeSettings.route) {
             ThemeSettingsScreen(
                 onBackPress = { navController.popBackStack() }

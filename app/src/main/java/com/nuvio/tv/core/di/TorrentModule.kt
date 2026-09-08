@@ -41,4 +41,27 @@ object TorrentModule {
         binary: TorrServerBinary,
         api: TorrServerApi
     ): TorrentService = TorrentService(appContext, binary, api)
+
+    @Provides
+    @Singleton
+    fun provideTorrServerAddonConfig(
+        @ApplicationContext context: Context
+    ): com.nuvio.tv.core.torrent.TorrServerAddonConfig =
+        com.nuvio.tv.core.torrent.TorrServerAddonConfig(context)
+
+    @Provides
+    @Singleton
+    fun provideTorrServerRemoteApi(
+        addonConfig: com.nuvio.tv.core.torrent.TorrServerAddonConfig
+    ): com.nuvio.tv.core.torrent.TorrServerRemoteApi =
+        com.nuvio.tv.core.torrent.TorrServerRemoteApi(addonConfig)
+
+    @Provides
+    @Singleton
+    fun provideTorrServerStreamProvider(
+        @ApplicationContext context: Context,
+        addonConfig: com.nuvio.tv.core.torrent.TorrServerAddonConfig,
+        addonApi: com.nuvio.tv.data.remote.api.AddonApi
+    ): com.nuvio.tv.core.torrent.TorrServerStreamProvider =
+        com.nuvio.tv.core.torrent.TorrServerStreamProvider(context, addonConfig, addonApi)
 }

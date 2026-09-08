@@ -42,6 +42,28 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
         "startInitialPlayback: infoHash=$infoHash host=${currentStreamUrl.safeStartupHost()} " +
             "urlHash=${currentStreamUrl.hashCode().toUInt().toString(16)}"
     )
+    val isTorrServer = navigationArgs.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME ||
+        currentStreamUrl.contains("/stream?link=") || currentStreamUrl.contains("/play/") || currentStreamUrl.contains("/gst/")
+
+    if (infoHash != null && isTorrServer) {
+        Log.d("PlayerStartup", "Starting remote TorrServer stream for $infoHash: $currentStreamUrl")
+        isTorrentStream = true
+        _uiState.update {
+            it.copy(
+                isTorrentStream = true,
+                showLoadingOverlay = true,
+                hideTorrentStats = false
+            )
+        }
+        startRemoteTorrServerStatsPolling(infoHash, currentStreamUrl)
+        preparePlaybackBeforeStart(
+            url = currentStreamUrl,
+            headers = currentHeaders,
+            loadSavedProgress = !navigationArgs.startFromBeginning
+        )
+        return
+    }
+
     if (infoHash != null && !initialStreamUrl.startsWith("http")) {
         torrentStreamJob = scope.launch {
             try {

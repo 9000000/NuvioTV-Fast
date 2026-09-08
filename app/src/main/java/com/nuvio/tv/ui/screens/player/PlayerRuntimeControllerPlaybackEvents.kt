@@ -292,18 +292,8 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         null
                     } else {
                         val speed = formatTorrentSpeed(context, _uiState.value.torrentDownloadSpeed)
-                        val peerInfo = context.getString(
-                            R.string.player_torrent_peer_info,
-                            _uiState.value.torrentSeeds,
-                            _uiState.value.torrentPeers
-                        )
                         val bufLabel = String.format("%.0fs", bufferedSec)
-                        context.getString(
-                            R.string.player_torrent_buffered_status,
-                            bufLabel,
-                            peerInfo,
-                            speed
-                        )
+                        if (speed.isNotBlank()) "$bufLabel · $speed" else bufLabel
                     }
                     val progress = (bufferedSec / 10f).coerceIn(0f, 1f)
                     _uiState.update {
@@ -1832,9 +1822,10 @@ private fun String.safePlaybackEventsHost(): String {
 }
 
 private fun formatTorrentSpeed(context: android.content.Context, bytesPerSec: Long): String {
+    val bitsPerSec = bytesPerSec * 8.0
     return when {
-        bytesPerSec >= 1_048_576 -> context.getString(R.string.unit_speed_mb_s, String.format("%.1f", bytesPerSec / 1_048_576.0))
-        bytesPerSec >= 1_024 -> context.getString(R.string.unit_speed_kb_s, String.format("%.0f", bytesPerSec / 1_024.0))
-        else -> context.getString(R.string.unit_speed_b_s, bytesPerSec)
+        bitsPerSec >= 1_000_000.0 -> context.getString(R.string.unit_speed_mb_s, String.format(java.util.Locale.US, "%.1f", bitsPerSec / 1_000_000.0))
+        bitsPerSec >= 1_000.0 -> context.getString(R.string.unit_speed_kb_s, String.format(java.util.Locale.US, "%.0f", bitsPerSec / 1_000.0))
+        else -> context.getString(R.string.unit_speed_b_s, bitsPerSec.toLong())
     }
 }

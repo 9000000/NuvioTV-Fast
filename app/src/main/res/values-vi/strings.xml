@@ -3157,9 +3157,9 @@
     <string name="unit_size_kb">%1$s KB</string>
     <string name="unit_size_mb">%1$s MB</string>
     <string name="unit_size_gb">%1$s GB</string>
-    <string name="unit_speed_b_s">%1$d B/s</string>
-    <string name="unit_speed_kb_s">%1$s KB/s</string>
-    <string name="unit_speed_mb_s">%1$s MB/s</string>
+    <string name="unit_speed_b_s">%1$d bps</string>
+    <string name="unit_speed_kb_s">%1$s Kbps</string>
+    <string name="unit_speed_mb_s">%1$s Mbps</string>
 
     <!-- Misc fallbacks -->
     <string name="playback_estimated_memory_usage">Mức sử dụng bộ nhớ ước tính: %1$d / %2$d MB</string>
@@ -3188,5 +3188,38 @@
     <string name="stream_test_error_prefix">Lỗi: %1$s</string>
     <string name="stream_test_video_bitrate">Bitrate video trung bình: %1$s</string>
     <string name="stream_test_error_connection">Kết nối không thành công. Liên kết luồng đã phát gần nhất có thể đã hết hạn hoặc không thể truy cập. Vui lòng phát lại video rồi thử lại.</string>
+
+    <!-- TorrServer Addon Integration -->
+    <string name="settings_torrserver_title">TorrServer</string>
+    <string name="settings_torrserver_subtitle">Cấu hình máy chủ TorrServer và Addon tìm kiếm torrent</string>
+    <string name="torrserver_enable_title">Bật TorrServer</string>
+    <string name="torrserver_enable_subtitle">Tìm kiếm luồng torrent và phát qua máy chủ TorrServer</string>
+    <string name="torrserver_server_url_title">Địa chỉ máy chủ TorrServer</string>
+    <string name="torrserver_server_url_hint">http://192.168.1.100:8090</string>
+    <string name="torrserver_test_connection">Kiểm tra kết nối</string>
+    <string name="torrserver_addon_url_title">URL Addon tìm kiếm Torrent</string>
+    <string name="torrserver_addon_url_hint">https://torrentio.strem.fun/manifest.json</string>
+    <string name="torrserver_test_addon">Kiểm tra Addon</string>
+    <string name="torrserver_auth_title">Xác thực HTTP Basic (Tùy chọn)</string>
+    <string name="torrserver_username_hint">Tên đăng nhập</string>
+    <string name="torrserver_password_hint">Mật khẩu</string>
+    <string name="torrserver_btn_save">Lưu thay đổi</string>
+    <string name="torrserver_connected">Đã kết nối: %1$s</string>
+    <string name="torrserver_addon_valid">Hợp lệ: %1$s</string>
+    <string name="torrserver_error_connect">Kết nối thất bại: %1$s</string>
+    <string name="torrserver_error_addon">Kiểm tra addon thất bại: %1$s</string>
+    <string name="torrserver_preload_title">Tải trước bộ đệm (Preload)</string>
+    <string name="torrserver_preload_subtitle">Tải trước đệm dữ liệu torrent trước khi bắt đầu phát video</string>
+    <string name="torrserver_save_title">Lưu torrent vào máy chủ (Save)</string>
+    <string name="torrserver_save_subtitle">Lưu torrent vào cơ sở dữ liệu của TorrServer</string>
+    <string name="torrserver_gst_title">Chuyển mã GStreamer (GST)</string>
+    <string name="torrserver_gst_subtitle">Phát qua chuyển mã HLS của GStreamer (yêu cầu bản build TorrServer-gst)</string>
+
+    <!-- Torrent File Picker Dialog -->
+    <string name="torrent_file_picker_title">Chọn tệp phát trong Torrent</string>
+    <string name="torrent_file_picker_loading">Đang tải danh sách tệp từ TorrServer...</string>
+    <string name="torrent_file_picker_empty">Không tìm thấy tệp video có thể phát</string>
+    <string name="torrent_file_picker_hint">Tìm thấy %1$d tệp. Chọn một tệp để phát:</string>
+    <string name="torrent_file_matched_badge">Khớp</string>
 
 </resources>

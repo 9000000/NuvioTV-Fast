@@ -3161,9 +3161,9 @@
     <string name="unit_size_kb">%1$s KB</string>
     <string name="unit_size_mb">%1$s MB</string>
     <string name="unit_size_gb">%1$s GB</string>
-    <string name="unit_speed_b_s">%1$d B/s</string>
-    <string name="unit_speed_kb_s">%1$s KB/s</string>
-    <string name="unit_speed_mb_s">%1$s MB/s</string>
+    <string name="unit_speed_b_s">%1$d bps</string>
+    <string name="unit_speed_kb_s">%1$s Kbps</string>
+    <string name="unit_speed_mb_s">%1$s Mbps</string>
 
     <!-- Misc fallbacks -->
     <string name="playback_estimated_memory_usage">Estimated memory usage: %1$d / %2$d MB</string>
@@ -3190,7 +3190,39 @@
     <string name="stream_test_label_parallel8">Parallel Connect (8 MB Chunks)</string>
     <string name="stream_test_label_parallel16">Parallel Connect (16 MB Chunks)</string>
     <string name="stream_test_error_prefix">Error: %1$s</string>
-    <string name="stream_test_video_bitrate">Average Video Bitrate: %1$s</string>
     <string name="stream_test_error_connection">Connection failed. The last played stream link may have expired or is unreachable. Please play the video again and retry.</string>
+    <string name="stream_test_video_bitrate">Average Video Bitrate: %1$s</string>
+    <!-- TorrServer Addon Integration -->
+    <string name="settings_torrserver_title">TorrServer</string>
+    <string name="settings_torrserver_subtitle">Configure TorrServer URL and Torrent scraper addon</string>
+    <string name="torrserver_enable_title">Enable TorrServer</string>
+    <string name="torrserver_enable_subtitle">Query torrent streams and stream via TorrServer</string>
+    <string name="torrserver_server_url_title">TorrServer URL</string>
+    <string name="torrserver_server_url_hint">http://192.168.1.100:8090</string>
+    <string name="torrserver_test_connection">Test Connection</string>
+    <string name="torrserver_addon_url_title">Torrent Scraper Addon URL</string>
+    <string name="torrserver_addon_url_hint">https://torrentio.strem.fun/manifest.json</string>
+    <string name="torrserver_test_addon">Test Addon</string>
+    <string name="torrserver_auth_title">HTTP Basic Auth (Optional)</string>
+    <string name="torrserver_username_hint">Username</string>
+    <string name="torrserver_password_hint">Password</string>
+    <string name="torrserver_btn_save">Save Changes</string>
+    <string name="torrserver_connected">Connected: %1$s</string>
+    <string name="torrserver_addon_valid">Valid: %1$s</string>
+    <string name="torrserver_error_connect">Connection failed: %1$s</string>
+    <string name="torrserver_error_addon">Addon check failed: %1$s</string>
+    <string name="torrserver_preload_title">Preload buffer</string>
+    <string name="torrserver_preload_subtitle">Pre-buffer torrent stream data before playback starts</string>
+    <string name="torrserver_save_title">Save torrent to server</string>
+    <string name="torrserver_save_subtitle">Save downloaded torrents to TorrServer database</string>
+    <string name="torrserver_gst_title">GStreamer transcoding (GST)</string>
+    <string name="torrserver_gst_subtitle">Stream via GStreamer HLS transcoding (requires -gst TorrServer build)</string>
+
+    <!-- Torrent File Picker Dialog -->
+    <string name="torrent_file_picker_title">Select Torrent File</string>
+    <string name="torrent_file_picker_loading">Loading files from TorrServer...</string>
+    <string name="torrent_file_picker_empty">No playable files found in torrent</string>
+    <string name="torrent_file_picker_hint">%1$d files found. Select a file to play:</string>
+    <string name="torrent_file_matched_badge">Matched</string>
 
 </resources>
