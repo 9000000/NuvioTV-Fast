@@ -94,9 +94,14 @@ internal fun ModernHeroScene(
         requestWidthPx = requestWidthPx,
         requestHeightPx = requestHeightPx
     )
+    val isTrailerPlayingFullScreen = {
+        val s = state()
+        s.fullScreenBackdrop && s.shouldPlayTrailer && s.trailerFirstFrameRendered
+    }
     ModernHeroGradientLayer(
         bgColor = bgColor,
         isFullScreen = isFullScreen,
+        isTrailerPlayingFullScreen = isTrailerPlayingFullScreen,
         modifier = modifier
     )
 }
@@ -190,11 +195,16 @@ internal fun ModernHeroMediaLayer(
 internal fun ModernHeroGradientLayer(
     bgColor: Color,
     isFullScreen: () -> Boolean,
+    isTrailerPlayingFullScreen: () -> Boolean = { false },
     modifier: Modifier
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Box(
         modifier = modifier
+            .graphicsLayer {
+                compositingStrategy = CompositingStrategy.Offscreen
+                alpha = if (isTrailerPlayingFullScreen()) 0f else 1f
+            }
             .drawWithCache {
                 val fullScreen = isFullScreen()
                 val horizontalFadeEndX = size.width * if (fullScreen) 0.65f else 0.45f
