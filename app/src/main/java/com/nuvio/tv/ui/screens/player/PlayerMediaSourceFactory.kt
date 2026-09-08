@@ -260,7 +260,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 "requestedCap=${vodCacheMaxBytes / (1024L * 1024L)}MB stats=${vodCacheStatsSnapshot()}"
         )
 
-        val extractorsFactory = customExtractorsFactory ?: DefaultExtractorsFactory()
+        val baseExtractorsFactory = customExtractorsFactory ?: DefaultExtractorsFactory()
+        val extractorsFactory = baseExtractorsFactory.withNuvioMp4Extractor()
         val defaultFactory = DefaultMediaSourceFactory(progressiveFactory, extractorsFactory).apply {
             setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
             customSubtitleParserFactory?.let { parserFactory ->
