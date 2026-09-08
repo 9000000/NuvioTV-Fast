@@ -333,9 +333,9 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val episodeOptionsOverlayStyle: Flow<EpisodeOptionsOverlayStyle> = profileFlow { prefs ->
-        val stored = prefs[episodeOptionsOverlayStyleKey] ?: EpisodeOptionsOverlayStyle.ARTWORK.name
+        val stored = prefs[episodeOptionsOverlayStyleKey] ?: EpisodeOptionsOverlayStyle.BLUR.name
         runCatching { EpisodeOptionsOverlayStyle.valueOf(stored) }
-            .getOrDefault(EpisodeOptionsOverlayStyle.ARTWORK)
+            .getOrDefault(EpisodeOptionsOverlayStyle.BLUR)
     }
 
     val homeImdbRatingsVisibility: Flow<HomeImdbRatingsVisibility> = profileFlow { prefs ->
