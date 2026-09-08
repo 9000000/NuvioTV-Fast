@@ -194,7 +194,11 @@ android {
     }
 
     signingConfigs {
-        val releaseKeystore = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
+        val releaseKeystore = releaseStoreFilePath?.let { path ->
+            val direct = file(path)
+            if (direct.exists()) direct else rootProject.file(path)
+        } ?: rootProject.file("keystore/release.jks")
+
         if (releaseKeystore.exists()) {
             create("release") {
                 keyAlias = releaseKeyAliasValue
