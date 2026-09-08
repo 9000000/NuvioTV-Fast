@@ -86,6 +86,7 @@ fun TorrServerSettingsContent(
     val listState = rememberLazyListState()
 
     var showServerUrlDialog by remember { mutableStateOf(false) }
+    var showSelectAddonDialog by remember { mutableStateOf(false) }
     var showAddonUrlDialog by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
 
@@ -151,7 +152,28 @@ fun TorrServerSettingsContent(
                         )
                     }
 
-                    // Addon URL (Scraper like Torrentio)
+                    // Select from Installed Addons
+                    item(key = "torrserver_select_addon") {
+                        val selectedAddonName = uiState.installedAddons.firstOrNull { addon ->
+                            val manifest = if (addon.baseUrl.endsWith("/manifest.json")) addon.baseUrl else "${addon.baseUrl}/manifest.json"
+                            manifest.equals(uiState.addonUrl, ignoreCase = true) || addon.baseUrl.equals(uiState.addonUrl, ignoreCase = true)
+                        }?.displayName
+
+                        val currentDisplayValue = when {
+                            uiState.addonUrl.isBlank() -> stringResource(R.string.torrserver_addon_url_hint)
+                            selectedAddonName != null -> selectedAddonName
+                            else -> uiState.addonUrl
+                        }
+
+                        SettingsActionRow(
+                            title = stringResource(R.string.torrserver_select_installed_addon),
+                            subtitle = stringResource(R.string.torrserver_select_installed_addon_subtitle),
+                            value = currentDisplayValue,
+                            onClick = { showSelectAddonDialog = true }
+                        )
+                    }
+
+                    // Addon URL (Custom Scraper URL like Torrentio)
                     item(key = "torrserver_addon_url") {
                         SettingsActionRow(
                             title = stringResource(R.string.torrserver_addon_url_title),
@@ -244,6 +266,40 @@ fun TorrServerSettingsContent(
                 showServerUrlDialog = false
             },
             onDismiss = { showServerUrlDialog = false }
+        )
+    }
+
+    if (showSelectAddonDialog) {
+        val options = buildList {
+            add(
+                SettingsPickerOption(
+                    value = "",
+                    title = stringResource(R.string.torrserver_addon_url_hint),
+                    description = stringResource(R.string.torrserver_auto_detect_addons_desc)
+                )
+            )
+            uiState.installedAddons.forEach { addon ->
+                val manifest = if (addon.baseUrl.endsWith("/manifest.json")) addon.baseUrl else "${addon.baseUrl}/manifest.json"
+                add(
+                    SettingsPickerOption(
+                        value = manifest,
+                        title = addon.displayName,
+                        description = manifest
+                    )
+                )
+            }
+        }
+
+        SettingsSingleChoiceDialog(
+            title = stringResource(R.string.torrserver_select_installed_addon),
+            options = options,
+            selectedValue = uiState.addonUrl,
+            onOptionSelected = { selectedUrl ->
+                viewModel.onEvent(TorrServerSettingsEvent.SelectInstalledAddon(selectedUrl))
+                showSelectAddonDialog = false
+            },
+            onDismiss = { showSelectAddonDialog = false },
+            width = 620.dp
         )
     }
 

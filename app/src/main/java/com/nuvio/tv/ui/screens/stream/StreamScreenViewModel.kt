@@ -108,6 +108,7 @@ class StreamScreenViewModel @Inject constructor(
     private var streamBadgePresentationRequestId = 0L
     private var badgedAddonNames: Set<String> = emptySet()
     private var playbackMetaVideos: List<Video>? = null
+    private var torrServerConfigData = com.nuvio.tv.core.torrent.TorrServerAddonConfigData()
 
     private val embeddedStreamGroupName: String by lazy {
         context.getString(R.string.stream_embedded_group)
@@ -229,6 +230,11 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     init {
+        viewModelScope.launch {
+            torrServerAddonConfig.config.collectLatest { config ->
+                torrServerConfigData = config
+            }
+        }
         viewModelScope.launch {
             _uiState
                 .map { state -> state.directAutoPlayMessage to state.directAutoPlayProgress }
@@ -1130,6 +1136,13 @@ class StreamScreenViewModel @Inject constructor(
     suspend fun resolveStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
         if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
             Log.d(TAG, "resolveStreamForPlayback: no debrid resolve needed, using direct URL")
+            if (isTorrServerStream(stream)) {
+                Log.d(TAG, "resolveStreamForPlayback: routing torrent via TorrServer")
+                val torrPlayback = resolveTorrServerPlaybackDirect(stream)
+                if (torrPlayback != null) {
+                    return torrPlayback
+                }
+            }
             return getStreamForPlayback(stream)
         }
 
@@ -1382,7 +1395,98 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     fun isTorrServerStream(stream: Stream): Boolean {
-        return stream.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
+        val isExplicitTorrServer = stream.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
+        return isExplicitTorrServer || (torrServerConfigData.enabled && stream.isTorrent())
+    }
+
+    suspend fun resolveTorrServerPlaybackDirect(stream: Stream): StreamPlaybackInfo? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val magnet = stream.torrentMagnetUri()
+            ?: stream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
+            ?: stream.getEffectiveInfoHash()?.let { hash ->
+                val trackers = stream.sources
+                    ?.filter { it.startsWith("tracker:") }
+                    ?.map { it.removePrefix("tracker:") }
+                    ?: emptyList()
+                val tr = trackers.joinToString("") { "&tr=$it" }
+                "magnet:?xt=urn:btih:$hash$tr"
+            } ?: return@withContext null
+
+        val config = torrServerAddonConfig.config.first()
+        val serverUrl = config.serverUrl.trim().trimEnd('/')
+
+        val hash = torrServerRemoteApi.addTorrent(
+            magnetLink = magnet,
+            title = stream.title ?: stream.name,
+            serverUrlOverride = serverUrl
+        ) ?: stream.getEffectiveInfoHash() ?: return@withContext null
+
+        val deadline = System.currentTimeMillis() + 15_000L
+        var files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList()
+        var pollDelay = 250L
+
+        while (isActive && System.currentTimeMillis() < deadline) {
+            val details = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
+            if (details != null && details.files.isNotEmpty()) {
+                files = details.files
+                break
+            }
+            delay(pollDelay)
+            pollDelay = (pollDelay * 2).coerceAtMost(1000L)
+        }
+
+        val fileId = selectBestMatchingFileId(files, stream.getEffectiveFileIdx(), season, episode) ?: 1
+        val selectedFile = files.firstOrNull { it.id == fileId }
+
+        val streamUrl = torrServerRemoteApi.buildStreamUrl(
+            serverUrl = serverUrl,
+            magnetLink = magnet,
+            fileIdx = fileId,
+            preload = config.preload,
+            save = config.saveToDb,
+            gst = config.gst,
+            hash = hash
+        )
+
+        val baseInfo = getStreamForPlayback(stream)
+        baseInfo.copy(
+            url = streamUrl,
+            isTorrent = true,
+            infoHash = hash,
+            fileIdx = fileId,
+            filename = selectedFile?.path?.substringAfterLast('/') ?: baseInfo.filename,
+            videoSize = selectedFile?.length ?: baseInfo.videoSize,
+            addonName = com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
+        )
+    }
+
+    private fun selectBestMatchingFileId(
+        files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile>,
+        requestedIdx: Int?,
+        targetSeason: Int?,
+        targetEpisode: Int?
+    ): Int? {
+        if (files.isEmpty()) return requestedIdx
+        if (requestedIdx != null && files.any { it.id == requestedIdx }) {
+            return requestedIdx
+        }
+        val videoExtensions = setOf("mkv", "mp4", "avi", "webm", "ts", "m4v", "mov", "wmv", "flv")
+        val videoFiles = files.filter { f ->
+            val ext = f.path.substringAfterLast('.', "").lowercase()
+            ext in videoExtensions
+        }
+        val candidatePool = videoFiles.ifEmpty { files }
+
+        if (targetSeason != null && targetEpisode != null) {
+            val pattern = Regex("(?i)s0*${targetSeason}[ex]0*${targetEpisode}(?:[^0-9]|$)")
+            val match = candidatePool.firstOrNull { pattern.containsMatchIn(it.path) }
+            if (match != null) return match.id
+        } else if (targetEpisode != null) {
+            val epPattern = Regex("(?i)(?:ep|e|episode)\\s*0*${targetEpisode}(?:[^0-9]|$)")
+            val match = candidatePool.firstOrNull { epPattern.containsMatchIn(it.path) }
+            if (match != null) return match.id
+        }
+
+        return candidatePool.maxByOrNull { it.length }?.id ?: candidatePool.firstOrNull()?.id
     }
 
     private var torrentFilePickerJob: Job? = null
