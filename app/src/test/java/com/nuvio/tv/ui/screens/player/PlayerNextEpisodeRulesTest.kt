@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.data.local.NextEpisodeThresholdMode
+import com.nuvio.tv.data.repository.SkipInterval
 import com.nuvio.tv.domain.model.Video
 import java.time.Clock
 import java.time.Instant
@@ -81,5 +83,86 @@ class PlayerNextEpisodeRulesTest {
 
         assertFalse(PlayerNextEpisodeRules.hasEpisodeAired("2026-07-15T15:00:00Z", before))
         assertTrue(PlayerNextEpisodeRules.hasEpisodeAired("2026-07-15T15:00:00Z", exact))
+    }
+
+    private fun shouldShow(
+        positionMs: Long,
+        durationMs: Long,
+        skipIntervals: List<SkipInterval> = emptyList(),
+        mode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+        percent: Float = 97f,
+        minutesBeforeEnd: Float = 2f
+    ) = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
+        positionMs = positionMs,
+        durationMs = durationMs,
+        skipIntervals = skipIntervals,
+        thresholdMode = mode,
+        thresholdPercent = percent,
+        thresholdMinutesBeforeEnd = minutesBeforeEnd
+    )
+
+    private fun outro(startSec: Double, endSec: Double) =
+        SkipInterval(startTime = startSec, endTime = endSec, type = "outro", provider = "introdb")
+
+    @Test
+    fun `percentage mode fires past the threshold`() {
+        assertTrue(shouldShow(positionMs = 44 * 60_000L, durationMs = 45 * 60_000L))
+    }
+
+    @Test
+    fun `a duration below the position does not fire in percentage mode`() {
+        // 25 minutes into a 45 minute episode, player transiently reports 20 minutes.
+        assertFalse(shouldShow(positionMs = 25 * 60_000L, durationMs = 20 * 60_000L))
+    }
+
+    @Test
+    fun `a duration below the position does not fire in minutes mode`() {
+        assertFalse(
+            shouldShow(
+                positionMs = 25 * 60_000L,
+                durationMs = 20 * 60_000L,
+                mode = NextEpisodeThresholdMode.MINUTES_BEFORE_END
+            )
+        )
+    }
+
+    @Test
+    fun `a duration below the position does not fire with outro segments`() {
+        assertFalse(
+            shouldShow(
+                positionMs = 25 * 60_000L,
+                durationMs = 20 * 60_000L,
+                skipIntervals = listOf(outro(startSec = 1_180.0, endSec = 1_200.0))
+            )
+        )
+    }
+
+    @Test
+    fun `the end of the episode still fires within the epsilon`() {
+        val durationMs = 45 * 60_000L
+        assertTrue(shouldShow(positionMs = durationMs, durationMs = durationMs))
+        assertTrue(shouldShow(positionMs = durationMs + 500L, durationMs = durationMs))
+    }
+
+    @Test
+    fun `position beyond the epsilon does not fire`() {
+        val durationMs = 45 * 60_000L
+        assertFalse(shouldShow(positionMs = durationMs + 1_001L, durationMs = durationMs))
+    }
+
+    @Test
+    fun `minutes mode fires inside the window`() {
+        assertTrue(
+            shouldShow(
+                positionMs = 44 * 60_000L,
+                durationMs = 45 * 60_000L,
+                mode = NextEpisodeThresholdMode.MINUTES_BEFORE_END
+            )
+        )
+    }
+
+    @Test
+    fun `an unknown duration never fires`() {
+        assertFalse(shouldShow(positionMs = 25 * 60_000L, durationMs = 0L))
     }
 }

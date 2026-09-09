@@ -44,6 +44,9 @@ object PlayerNextEpisodeRules {
         thresholdPercent: Float,
         thresholdMinutesBeforeEnd: Float
     ): Boolean {
+        // A duration below the current position is not a valid end-of-video signal.
+        if (durationMs > 0L && positionMs > durationMs + END_OF_VIDEO_EPSILON_MS) return false
+
         val outroSegments = skipIntervals.filter { it.type in OUTRO_SEGMENT_TYPES }
 
         if (outroSegments.isNotEmpty()) {
