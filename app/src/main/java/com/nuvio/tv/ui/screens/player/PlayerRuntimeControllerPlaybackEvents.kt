@@ -337,13 +337,17 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                             val defaultAllocator = _loadControl?.allocator as? androidx.media3.exoplayer.upstream.DefaultAllocator
                             val totalFootprintBytes = defaultAllocator?.let { allocator ->
                                 try {
-                                    val method = allocator.javaClass.getMethod("getMemoryFootprint")
-                                    method.invoke(allocator) as? Int ?: 0
-                                } catch (e: Exception) {
-                                    0
+                                    allocator.memoryFootprint.toLong()
+                                } catch (_: Throwable) {
+                                    try {
+                                        val method = allocator.javaClass.getMethod("getMemoryFootprint")
+                                        (method.invoke(allocator) as? Number)?.toLong() ?: 0L
+                                    } catch (_: Throwable) {
+                                        0L
+                                    }
                                 }
-                            } ?: 0
-                            val totalActiveBytes = defaultAllocator?.totalBytesAllocated ?: 0
+                            } ?: 0L
+                            val totalActiveBytes = defaultAllocator?.totalBytesAllocated?.toLong() ?: 0L
                             val footprintMb = totalFootprintBytes / (1024 * 1024)
                             val activeMb = totalActiveBytes / (1024 * 1024)
                             Log.d("ExoMemory", "Off-heap OS ahead: $footprintMb MB, active: $activeMb MB")
