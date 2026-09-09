@@ -32,6 +32,7 @@ fun StartupSplashScreen(
     profileBackgroundUrl: String?,
     backgroundCacheKey: String? = null,
     skipGradient: Boolean = false,
+    brandWordmarkRes: Int? = null,
     modifier: Modifier = Modifier
 ) {
     val avatarColor = remember(profileColorHex) {
@@ -101,7 +102,8 @@ fun StartupSplashScreen(
         ) {
             BrandWordmark(
                 modifier = Modifier.height(48.dp),
-                contentDescription = stringResource(R.string.cd_nuvio_logo)
+                contentDescription = stringResource(R.string.cd_nuvio_logo),
+                drawableOverride = brandWordmarkRes
             )
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.xxl))
             LoadingIndicator(modifier = Modifier.size(NuvioTheme.spacing.xxxl))

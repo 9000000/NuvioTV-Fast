@@ -3,6 +3,9 @@ package com.nuvio.tv.ui.screens.profile
 import com.nuvio.tv.ui.theme.NuvioMotion
 
 import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.ThemeColors
+import com.nuvio.tv.ui.theme.brandWordmarkResource
+import com.nuvio.tv.ui.theme.createFocusRingStyle
 
 import android.graphics.Rect
 import android.view.KeyEvent as AndroidKeyEvent
@@ -189,6 +192,7 @@ fun ProfileSelectionScreen(
     onProfileClicked: () -> Unit = {},
     onProfileSelectionFailed: () -> Unit = {},
     onProfileFocusChanged: ((colorHex: String?, backgroundUrl: String?, memoryCacheKey: String?) -> Unit)? = null,
+    onProfileThemeFocused: ((com.nuvio.tv.domain.model.AppTheme?) -> Unit)? = null,
     screenMode: ProfileSelectionMode = ProfileSelectionMode.Selection,
     onBackPress: (() -> Unit)? = null,
     viewModel: ProfileSelectionViewModel = hiltViewModel()
@@ -228,7 +232,7 @@ fun ProfileSelectionScreen(
     var pinOverlayState by remember { mutableStateOf<ProfilePinOverlayState?>(null) }
     var pinOverlayError by remember { mutableStateOf<String?>(null) }
     var profileActionMessage by remember { mutableStateOf<String?>(null) }
-    val onProfileFocusedChange = remember(onProfileFocusChanged) {
+    val onProfileFocusedChange = remember(onProfileFocusChanged, onProfileThemeFocused) {
         { profile: UserProfile? ->
             focusedProfileId = profile?.id
             focusedAvatarColor = profile?.avatarColorHex?.let(::parseProfileColor) ?: Color(0xFF555555)
@@ -236,6 +240,13 @@ fun ProfileSelectionScreen(
         }
     }
     val focusedProfile = profiles.firstOrNull { it.id == focusedProfileId }
+    val profileThemes by viewModel.profileThemes.collectAsState()
+    val focusedBrandWordmarkRes = remember(focusedProfileId, profileThemes) {
+        val pid = focusedProfileId ?: return@remember null
+        val theme = profileThemes[pid]
+        android.util.Log.d("ProfileWordmark", "focusedPid=$pid themes=${profileThemes.mapValues { it.value.name }} resolvedTheme=${theme?.name} res=${theme?.brandWordmarkResource}")
+        theme?.brandWordmarkResource
+    }
     val selectProfile: (Int) -> Unit = { profileId ->
         if (!viewModel.isSelectingProfile) {
             onProfileClicked()
@@ -334,6 +345,12 @@ fun ProfileSelectionScreen(
             )
         }
 
+        LaunchedEffect(focusedProfileId, profileThemes) {
+            val theme = focusedProfileId?.let { profileThemes[it] }
+            android.util.Log.d("ProfileWordmark", "LaunchedEffect -> focusedPid=$focusedProfileId theme=${theme?.name} callback=${onProfileThemeFocused != null}")
+            onProfileThemeFocused?.invoke(theme)
+        }
+
         ProfileSelectionBackground(
             focusedAvatarColor = overlayProfileColor ?: focusedAvatarColor,
             profileBackground = profileBackground
@@ -370,6 +387,8 @@ fun ProfileSelectionScreen(
                     canAddProfile = viewModel.canAddProfile,
                     profilePinEnabled = profilePinEnabled,
                     avatarImageUrlsById = avatarImageUrlsById,
+                    brandWordmarkRes = focusedBrandWordmarkRes,
+                    profileThemes = profileThemes,
                     onProfileFocused = onProfileFocusedChange,
                     onProfileSelected = { profile ->
                         if (isManagementMode) {
@@ -869,6 +888,8 @@ private fun ProfileSelectionMainContent(
     canAddProfile: Boolean,
     profilePinEnabled: Map<Int, Boolean>,
     avatarImageUrlsById: Map<String, String>,
+    brandWordmarkRes: Int? = null,
+    profileThemes: Map<Int, com.nuvio.tv.domain.model.AppTheme> = emptyMap(),
     onProfileFocused: (UserProfile?) -> Unit,
     onProfileSelected: (UserProfile) -> Unit,
     onProfileLongPress: (UserProfile) -> Unit,
@@ -885,7 +906,8 @@ private fun ProfileSelectionMainContent(
     ) {
         MemberBrandWordmark(
             height = ProfileSelectionSpacing.LogoHeight,
-            contentDescription = stringResource(R.string.cd_nuvio_logo)
+            contentDescription = stringResource(R.string.cd_nuvio_logo),
+            drawableOverride = brandWordmarkRes
         )
 
         Spacer(modifier = Modifier.height(ProfileSelectionSpacing.LogoToHeading))
@@ -916,6 +938,7 @@ private fun ProfileSelectionMainContent(
             canAddProfile = canAddProfile,
             profilePinEnabled = profilePinEnabled,
             avatarImageUrlsById = avatarImageUrlsById,
+            profileThemes = profileThemes,
             onProfileFocused = onProfileFocused,
             onProfileSelected = onProfileSelected,
             onProfileLongPress = onProfileLongPress,
@@ -941,6 +964,7 @@ private fun ProfileGrid(
     canAddProfile: Boolean,
     profilePinEnabled: Map<Int, Boolean>,
     avatarImageUrlsById: Map<String, String>,
+    profileThemes: Map<Int, com.nuvio.tv.domain.model.AppTheme> = emptyMap(),
     onProfileFocused: (UserProfile?) -> Unit,
     onProfileSelected: (UserProfile) -> Unit,
     onProfileLongPress: (UserProfile) -> Unit,
@@ -1003,6 +1027,7 @@ private fun ProfileGrid(
                             ?: profile.avatarId?.let(avatarImageUrlsById::get),
                         focusRequester = focusRequesters[index],
                         compact = useCompactCards,
+                        profileTheme = profileThemes[profile.id],
                         onFocused = { onProfileFocused(profile) },
                         onClick = { onProfileSelected(profile) },
                         onLongPress = { onProfileLongPress(profile) }
@@ -1037,6 +1062,7 @@ private fun ProfileCard(
     avatarImageUrl: String?,
     focusRequester: FocusRequester,
     compact: Boolean,
+    profileTheme: com.nuvio.tv.domain.model.AppTheme? = null,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onLongPress: () -> Unit
@@ -1050,6 +1076,11 @@ private fun ProfileCard(
         animationSpec = tween(durationMillis = 210, easing = ProfileCardFocusEasing),
         label = "profileFocusProgress"
     )
+    val profileFocusRing = remember(profileTheme) {
+        profileTheme?.let {
+            createFocusRingStyle(ThemeColors.getColorPalette(it))
+        }
+    }
     val itemScale = 1f + (0.04f * focusProgress)
     val avatarSize = androidx.compose.ui.unit.lerp(
         if (compact) ProfileSelectionSpacing.CompactAvatarSize else 96.dp,
@@ -1140,7 +1171,7 @@ private fun ProfileCard(
                         shape = CircleShape
                     )
                     .border(
-                        border = NuvioTheme.focusRing.border(ringWidth, focusProgress),
+                        border = (profileFocusRing ?: NuvioTheme.focusRing).border(ringWidth, focusProgress),
                         shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
