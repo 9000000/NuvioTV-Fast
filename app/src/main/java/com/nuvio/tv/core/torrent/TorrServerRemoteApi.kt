@@ -280,7 +280,7 @@ class TorrServerRemoteApi @Inject constructor(
         serverUrl: String,
         magnetLink: String,
         fileIdx: Int,
-        preload: Boolean = true,
+        preload: Boolean = false,
         save: Boolean = false,
         gst: Boolean = false,
         hash: String? = null

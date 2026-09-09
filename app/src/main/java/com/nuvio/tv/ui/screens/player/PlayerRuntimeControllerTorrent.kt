@@ -214,9 +214,18 @@ internal fun PlayerRuntimeController.observeTorrentState() {
                     val statsHidden = _uiState.value.hideTorrentStats
 
                     if (!hasRenderedFirstFrame) {
-                        val preloadTarget = 5_242_880L // 5MB
-                        val progress = (torrentState.preloadedBytes.toFloat() / preloadTarget).coerceIn(0f, 1f)
-                        val message = if (statsHidden) null else listOfNotNull("${(progress * 100).toInt()}%", speed).joinToString(" · ")
+                        val progress = torrentState.preloadProgress
+                        val percentStr = when {
+                            progress > 0f -> "${(progress * 100).toInt()}%"
+                            torrentState.stat == 2 -> "0%"
+                            torrentState.stat == 1 -> torrentState.statString
+                            else -> null
+                        }
+                        val statusParts = listOfNotNull(
+                            percentStr,
+                            speed.takeIf { torrentState.downloadSpeed > 0 } ?: speed
+                        )
+                        val message = if (statsHidden) null else statusParts.joinToString(" · ")
                         recordLoadingDiagnosticEvent(
                             phase = "torrent_preloading",
                             message = message,

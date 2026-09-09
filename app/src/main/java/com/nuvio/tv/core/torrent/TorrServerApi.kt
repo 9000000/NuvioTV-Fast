@@ -27,10 +27,23 @@ data class TorrServerStats(
     val peers: Int,
     val seeds: Int,
     val preloadedBytes: Long,
+    val preloadSize: Long = 0L,
     val loadedSize: Long,
     val torrentSize: Long,
+    val stat: Int = 0,
+    val statString: String? = null,
     val files: List<TorrServerFile>
-)
+) {
+    val isPreloadReady: Boolean
+        get() = stat == 3 || (preloadSize > 0 && preloadedBytes >= preloadSize)
+
+    val preloadProgress: Float
+        get() {
+            if (stat == 3) return 1f
+            val target = if (preloadSize > 0) preloadSize else if (stat == 2 && preloadedBytes > 0) 33_554_432L else 0L
+            return if (target > 0) (preloadedBytes.toFloat() / target).coerceIn(0f, 1f) else 0f
+        }
+}
 
 @Singleton
 class TorrServerApi @Inject constructor(
@@ -112,8 +125,11 @@ class TorrServerApi @Inject constructor(
                     peers = json.optInt("active_peers", 0),
                     seeds = json.optInt("connected_seeders", 0),
                     preloadedBytes = json.optLong("preloaded_bytes", 0),
+                    preloadSize = json.optLong("preload_size", 0),
                     loadedSize = json.optLong("loaded_size", 0),
                     torrentSize = json.optLong("torrent_size", 0),
+                    stat = json.optInt("stat", 0),
+                    statString = json.optString("stat_string", "").ifBlank { null },
                     files = files
                 )
             }

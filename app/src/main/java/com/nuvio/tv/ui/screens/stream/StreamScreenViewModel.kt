@@ -1441,7 +1441,7 @@ class StreamScreenViewModel @Inject constructor(
             serverUrl = serverUrl,
             magnetLink = magnet,
             fileIdx = fileId,
-            preload = config.preload,
+            preload = false,
             save = config.saveToDb,
             gst = config.gst,
             hash = hash
@@ -1610,7 +1610,7 @@ class StreamScreenViewModel @Inject constructor(
             serverUrl = serverUrl,
             magnetLink = magnet,
             fileIdx = fileId,
-            preload = config.preload,
+            preload = false,
             save = config.saveToDb,
             gst = config.gst,
             hash = hash
@@ -1723,9 +1723,6 @@ class StreamScreenViewModel @Inject constructor(
                 )
             }
             
-            val fileLimit = playbackInfo.videoSize ?: Long.MAX_VALUE
-            val preloadTarget = minOf(5_242_880L, fileLimit)
-
             val preloadCompleted = kotlinx.coroutines.CompletableDeferred<Unit>()
             val statsJob = viewModelScope.launch {
                 torrentService.state.collectLatest { torrentState ->
@@ -1749,7 +1746,7 @@ class StreamScreenViewModel @Inject constructor(
                                 context.getString(R.string.player_torrent_buffered_status, mbLoaded, peerInfo, speed)
                             }
                             
-                            val progress = (torrentState.preloadedBytes.toFloat() / preloadTarget).coerceIn(0f, 1f)
+                            val progress = torrentState.preloadProgress
                             
                             updateUiStateIfChanged {
                                 it.copy(
@@ -1758,7 +1755,7 @@ class StreamScreenViewModel @Inject constructor(
                                 )
                             }
                             
-                            if (torrentState.preloadedBytes >= preloadTarget) {
+                            if (torrentState.isPreloadReady) {
                                 preloadCompleted.complete(Unit)
                             }
                         }

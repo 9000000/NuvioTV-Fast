@@ -199,7 +199,12 @@ class TorrentService @Inject constructor(
                             uploadSpeed = stats.uploadSpeed,
                             peers = stats.peers,
                             seeds = stats.seeds,
-                            preloadedBytes = stats.preloadedBytes
+                            preloadedBytes = stats.preloadedBytes,
+                            preloadSize = stats.preloadSize,
+                            stat = stats.stat,
+                            statString = stats.statString,
+                            bufferProgress = stats.preloadProgress,
+                            totalProgress = stats.preloadProgress
                         )
                     }
                 } catch (e: CancellationException) {
