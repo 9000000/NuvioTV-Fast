@@ -157,7 +157,7 @@ android {
 
         // In-app updater (GitHub Releases)
         val updaterOwner = resolveProperty(devProperties, localProperties, "GITHUB_OWNER", "9000000")
-        val updaterRepo = resolveProperty(devProperties, localProperties, "GITHUB_REPO", "NuvioTV")
+        val updaterRepo = resolveProperty(devProperties, localProperties, "GITHUB_REPO", "NuvioTV-Fast")
         buildConfigField("String", "GITHUB_OWNER", buildConfigString(updaterOwner))
         buildConfigField("String", "GITHUB_REPO", buildConfigString(updaterRepo))
     }
