@@ -113,9 +113,17 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
         val mediaItem = mediaItemBuilder.build()
 
-        val mp4SessionMode = !useParallelConnections && !isHls && !isDash &&
+        val isTorrServerStream = isTorrServerUrl(url)
+        if (isTorrServerStream) {
+            Log.i(
+                "PlayerMediaSourceFactory",
+                "TorrServer stream detected: bypassing ParallelRangeDataSource and VOD Cache for single sequential HTTP stream"
+            )
+        }
+
+        val mp4SessionMode = !isTorrServerStream && !useParallelConnections && !isHls && !isDash &&
             resolvedMimeType == MimeTypes.VIDEO_MP4
-        val useChunkSessionSource = (useParallelConnections || mp4SessionMode) && !isHls && !isDash
+        val useChunkSessionSource = !isTorrServerStream && (useParallelConnections || mp4SessionMode) && !isHls && !isDash
         parallelStartupPrefetchUnlocked.set(!useChunkSessionSource)
         val progressiveUpstreamFactory: DataSource.Factory = if (useChunkSessionSource) {
             if (mp4SessionMode) {
@@ -152,7 +160,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         // 2. VOD disk cache (opt-in).
-        val useVodCache = ENABLE_VOD_CACHE && vodCacheEnabled && !isHls && !isDash && shouldUseVodCache(url)
+        val useVodCache = !isTorrServerStream && ENABLE_VOD_CACHE && vodCacheEnabled && !isHls && !isDash && shouldUseVodCache(url)
         val previousVodCacheActive = currentVodCacheActive
         currentVodCacheUrl = url
         currentVodCacheResolvedUrl = null
@@ -223,6 +231,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     }
 
     private fun shouldUseVodCache(url: String): Boolean {
+        if (isTorrServerUrl(url)) return false
         val scheme = Uri.parse(url).scheme?.lowercase()
         return scheme == "https" || scheme == "http"
     }
@@ -404,6 +413,67 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 "ism", "isml" -> MimeTypes.APPLICATION_SS
                 else -> null
             }
+        }
+
+        internal fun isTorrServerUrl(url: String): Boolean {
+            if (url.isBlank()) return false
+
+            // Fast path for typical TorrServer ports and paths
+            if (url.contains(":8091") || url.contains(":8090")) {
+                if (url.contains("/stream") || url.contains("/play/") || url.contains("/gst/")) {
+                    return true
+                }
+            }
+
+            if (url.contains("/stream?link=") || (url.contains("/stream?") && url.contains("link="))) {
+                return true
+            }
+
+            if (url.contains("/stream?") && url.contains("play")) {
+                return true
+            }
+
+            val uri = runCatching { java.net.URI(url) }.getOrNull()
+            if (uri != null) {
+                val host = uri.host?.lowercase(Locale.ROOT) ?: ""
+                val port = uri.port
+                val path = uri.path ?: ""
+                val query = uri.query ?: ""
+
+                if ((host == "127.0.0.1" || host == "localhost") && (port == 8091 || port == 8090)) {
+                    return true
+                }
+                if (path == "/stream" || path.startsWith("/stream/")) {
+                    if (query.contains("link=") || query.contains("play") || port == 8091 || port == 8090) {
+                        return true
+                    }
+                }
+                if (path.startsWith("/play/") || path.startsWith("/gst/")) {
+                    return true
+                }
+            } else {
+                val androidUri = runCatching { Uri.parse(url) }.getOrNull()
+                if (androidUri != null) {
+                    val host = androidUri.host?.lowercase(Locale.ROOT) ?: ""
+                    val port = androidUri.port
+                    val path = androidUri.path ?: ""
+                    val query = androidUri.query ?: ""
+
+                    if ((host == "127.0.0.1" || host == "localhost") && (port == 8091 || port == 8090)) {
+                        return true
+                    }
+                    if (path == "/stream" || path.startsWith("/stream/")) {
+                        if (query.contains("link=") || query.contains("play") || port == 8091 || port == 8090) {
+                            return true
+                        }
+                    }
+                    if (path.startsWith("/play/") || path.startsWith("/gst/")) {
+                        return true
+                    }
+                }
+            }
+
+            return false
         }
 
         internal fun inferMimeType(

@@ -199,6 +199,25 @@ class PlayerMediaSourceFactoryTest {
         assertEquals(userInfo.basicAuthHeader(), request.headers["Authorization"])
     }
 
+    @Test
+    fun `isTorrServerUrl correctly identifies TorrServer streams and rejects standard streams`() {
+        // Local TorrServer URL
+        assertTrue(PlayerMediaSourceFactory.isTorrServerUrl("http://127.0.0.1:8091/stream?link=abcd1234ef56&index=1&play"))
+        assertTrue(PlayerMediaSourceFactory.isTorrServerUrl("http://localhost:8091/stream?link=abcd1234ef56&index=1&play&preload"))
+        assertTrue(PlayerMediaSourceFactory.isTorrServerUrl("http://127.0.0.1:8091/play/abcd1234ef56/1"))
+        assertTrue(PlayerMediaSourceFactory.isTorrServerUrl("http://localhost:8090/stream?link=abcd1234ef56"))
+
+        // Remote TorrServer URL
+        assertTrue(PlayerMediaSourceFactory.isTorrServerUrl("http://192.168.1.50:8090/stream?link=abcd1234ef56&index=0&play"))
+        assertTrue(PlayerMediaSourceFactory.isTorrServerUrl("http://my-torrserver.local:8090/play/abcd/1"))
+        assertTrue(PlayerMediaSourceFactory.isTorrServerUrl("http://torr.example.com/stream?link=magnet%3A%3Fxt%3Durn%3Abtih%3Aabcd&play"))
+
+        // Standard direct or debrid streams (must NOT be flagged as TorrServer)
+        assertFalse(PlayerMediaSourceFactory.isTorrServerUrl("https://debrid.example.com/d/xyz123/movie.mkv"))
+        assertFalse(PlayerMediaSourceFactory.isTorrServerUrl("https://example.com/video/movie.mp4"))
+        assertFalse(PlayerMediaSourceFactory.isTorrServerUrl("https://stream.provider.org/live/playlist.m3u8"))
+    }
+
     private fun String.basicAuthHeader(): String =
         "Basic " + Base64.getEncoder().encodeToString(toByteArray(Charsets.UTF_8))
 }
