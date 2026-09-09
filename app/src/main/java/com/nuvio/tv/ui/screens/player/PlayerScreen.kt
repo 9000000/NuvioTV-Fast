@@ -874,6 +874,7 @@ fun PlayerScreen(
                     android.view.View.VISIBLE
                 }
                 playerView?.subtitleView?.visibility = vis
+                playerView?.setAssOverlayVisibility(vis)
             }
 
             Box(modifier = playerSurfaceModifier) {
@@ -1987,6 +1988,20 @@ private fun android.widget.FrameLayout.removeAssOverlayChildren() {
         if (getChildAt(index) is AssSubtitleView) {
             removeViewAt(index)
         }
+    }
+}
+
+/**
+ * Remove ASS overlay views when hiding so the libass render thread stops.
+ * [syncLibassOverlay] re-creates them on the next Compose update cycle.
+ */
+private fun PlayerView.setAssOverlayVisibility(visibility: Int) {
+    if (visibility == android.view.View.GONE) {
+        for (containerId in intArrayOf(R.id.libass_overlay_container, R.id.libass_overlay_container_gl)) {
+            val container = findViewById<android.widget.FrameLayout>(containerId) ?: continue
+            container.removeAssOverlayChildren()
+        }
+        setTag(R.id.libass_overlay_bound_player, null)
     }
 }
 
