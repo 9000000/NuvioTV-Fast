@@ -1441,7 +1441,7 @@ class StreamScreenViewModel @Inject constructor(
             serverUrl = serverUrl,
             magnetLink = magnet,
             fileIdx = fileId,
-            preload = false,
+            preload = config.preload,
             save = config.saveToDb,
             gst = config.gst,
             hash = hash
@@ -1610,7 +1610,7 @@ class StreamScreenViewModel @Inject constructor(
             serverUrl = serverUrl,
             magnetLink = magnet,
             fileIdx = fileId,
-            preload = false,
+            preload = config.preload,
             save = config.saveToDb,
             gst = config.gst,
             hash = hash

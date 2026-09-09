@@ -39,8 +39,9 @@ object TorrentModule {
     fun provideTorrentService(
         @dagger.hilt.android.qualifiers.ApplicationContext appContext: android.content.Context,
         binary: TorrServerBinary,
-        api: TorrServerApi
-    ): TorrentService = TorrentService(appContext, binary, api)
+        api: TorrServerApi,
+        addonConfig: com.nuvio.tv.core.torrent.TorrServerAddonConfig
+    ): TorrentService = TorrentService(appContext, binary, api, addonConfig)
 
     @Provides
     @Singleton

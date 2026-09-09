@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -23,7 +24,8 @@ private val VIDEO_EXTENSIONS = setOf("mkv", "mp4", "avi", "webm", "ts", "m4v", "
 class TorrentService @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val binary: TorrServerBinary,
-    private val api: TorrServerApi
+    private val api: TorrServerApi,
+    private val addonConfig: TorrServerAddonConfig
 ) {
     companion object {
         private const val TAG = "TorrentService"
@@ -70,7 +72,8 @@ class TorrentService @Inject constructor(
         val resolvedIdx = resolveFileIndex(hash, fileIdx, filename)
 
         // Get stream URL — TorrServer handles all buffering/piece management
-        val streamUrl = api.getStreamUrl(magnetLink, resolvedIdx)
+        val isPreload = runCatching { addonConfig.config.first().preload }.getOrDefault(false)
+        val streamUrl = api.getStreamUrl(magnetLink, resolvedIdx, preload = isPreload)
         Log.d(TAG, "Stream URL: $streamUrl")
 
         // Start stats polling

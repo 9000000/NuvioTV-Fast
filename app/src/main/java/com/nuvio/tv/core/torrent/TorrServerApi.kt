@@ -158,8 +158,12 @@ class TorrServerApi @Inject constructor(
         }
     }
 
-    fun getStreamUrl(magnetLink: String, fileIdx: Int): String {
+    fun getStreamUrl(magnetLink: String, fileIdx: Int, preload: Boolean = false): String {
         val encodedLink = URLEncoder.encode(magnetLink, "UTF-8")
-        return "$baseUrl/stream?link=$encodedLink&index=$fileIdx&play"
+        val sb = StringBuilder("$baseUrl/stream?link=$encodedLink&index=$fileIdx&play")
+        if (preload) {
+            sb.append("&preload")
+        }
+        return sb.toString()
     }
 }
