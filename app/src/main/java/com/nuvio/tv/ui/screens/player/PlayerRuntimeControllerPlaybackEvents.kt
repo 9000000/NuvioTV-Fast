@@ -13,6 +13,7 @@ import com.nuvio.tv.core.tracking.TrackingScrobbleAction
 import com.nuvio.tv.core.tracking.TrackingScrobbleEvent
 import com.nuvio.tv.core.tracking.buildTrackingMediaReference
 import com.nuvio.tv.core.tracking.scrobbleDiagnosticIdentity
+import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.PlaybackIssueErrorInput
 import com.nuvio.tv.data.repository.PlaybackIssuePlaybackSettingsInput
@@ -1742,6 +1743,13 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 message = "requestedByUser=true"
             )
             switchInternalPlayerEngineManually()
+        }
+        PlayerEvent.OnSwitchToMpvPlayer -> {
+            logSwitchTrace(
+                stage = "event-switch-to-mpv",
+                message = "requestedByUser=true"
+            )
+            switchToInternalPlayerEngine(InternalPlayerEngine.MVP_PLAYER, reason = "user-error-dialog-switch-to-mpv")
         }
         PlayerEvent.OnShowStreamInfo -> {
             val info = buildStreamInfoData()

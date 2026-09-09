@@ -252,6 +252,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                             effectiveInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER
                 )
             }
+
+
             setLoadingStatus(
                 phase = "detecting_format",
                 message = context.getString(R.string.player_loading_detecting_format)
@@ -701,11 +703,50 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                         }
                     }
+                    var forceVc1VideoSelection = false
+                    for (rendererIndex in 0 until mappedTrackInfo.rendererCount) {
+                        if (mappedTrackInfo.getRendererType(rendererIndex) == C.TRACK_TYPE_VIDEO) {
+                            val trackGroups = mappedTrackInfo.getTrackGroups(rendererIndex)
+                            for (groupIndex in 0 until trackGroups.length) {
+                                val group = trackGroups[groupIndex]
+                                for (trackIndex in 0 until group.length) {
+                                    val format = group.getFormat(trackIndex)
+                                    val support = rendererFormatSupports[rendererIndex][groupIndex][trackIndex]
+                                    val formatSupport = RendererCapabilities.getFormatSupport(support)
+                                    if (Vc1VideoFormatHeuristics.isLikelyVc1(format.sampleMimeType, format.codecs, format.label) &&
+                                        formatSupport != C.FORMAT_HANDLED &&
+                                        formatSupport != C.FORMAT_UNSUPPORTED_DRM
+                                    ) {
+                                        forceVc1VideoSelection = true
+                                        Log.i("NuvioTrackSelector", "Upgraded VC-1 track support to FORMAT_HANDLED so ExoPlayer attempts decoding: id=${format.id}")
+                                        rendererFormatSupports[rendererIndex][groupIndex][trackIndex] =
+                                            RendererCapabilities.create(
+                                                C.FORMAT_HANDLED,
+                                                RendererCapabilities.ADAPTIVE_SEAMLESS,
+                                                RendererCapabilities.getTunnelingSupport(support),
+                                                RendererCapabilities.getHardwareAccelerationSupport(support),
+                                                RendererCapabilities.getDecoderSupport(support)
+                                            )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    val selectionParams = if (forceVc1VideoSelection) {
+                        params.buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                            .setExceedVideoConstraintsIfNecessary(true)
+                            .setExceedRendererCapabilitiesIfNecessary(true)
+                            .setTunnelingEnabled(false)
+                            .build()
+                    } else {
+                        params
+                    }
                     return super.selectAllTracks(
                         mappedTrackInfo,
                         rendererFormatSupports,
                         rendererMixedMimeTypeAdaptationSupports,
-                        params
+                        selectionParams
                     )
                 }
             }.apply {
@@ -718,7 +759,15 @@ internal fun PlayerRuntimeController.initializePlayer(
                 if (audioDisabledForStream) {
                     setParameters(buildUponParameters().setDisabledTrackTypes(setOf(C.TRACK_TYPE_AUDIO)))
                 }
-                if (vc1TrackSelectionBypassActive) {
+                if (vc1TrackSelectionBypassActive ||
+                    Vc1VideoFormatHeuristics.isLikelyVc1Stream(
+                        _uiState.value.currentStreamName,
+                        streamName,
+                        currentFilename,
+                        currentStreamDescription,
+                        url
+                    )
+                ) {
                     setParameters(
                         buildUponParameters()
                             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
@@ -798,8 +847,6 @@ internal fun PlayerRuntimeController.initializePlayer(
             val codecSelector = createDolbyVisionFallbackCodecSelector(
                 convertToDv81Active = convertToDv81Active
             )
-            val vc1SoftwareFallbackActive = vc1SoftwarePreferredStreamUrls.contains(url)
-            isVc1SoftwareFallbackActiveForCurrentPlayback = vc1SoftwareFallbackActive
             // Bluetooth media sink (A2DP / LE Audio): Media3 only advertises PCM. Do not attempt
             // optical/HDMI passthrough — decode to PCM and let the BT stack encode SBC/AAC/aptX/LDAC.
             val isBluetoothAudioOutput = currentAudioOutputRoute?.isBluetooth == true ||
@@ -811,7 +858,6 @@ internal fun PlayerRuntimeController.initializePlayer(
             // Prefer FFmpeg/extension audio decoder on BT so multi-channel TrueHD/DTS always
             // decode to stereo PCM even when the platform MediaCodec path is flaky.
             val effectiveDecoderPriority = if (
-                vc1SoftwareFallbackActive ||
                 hasTriedAudioPcmFallback ||
                 isForcePassthroughActive ||
                 isBluetoothAudioOutput
@@ -863,7 +909,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                 bluetoothForcePcm = isBluetoothAudioOutput,
                 playbackSpeedProvider = { _uiState.value.playbackSpeed },
                 initialForcePcm = hasTriedAudioPcmFallback || isBluetoothAudioOutput,
-                preferSoftwareAudioOnly = isBluetoothAudioOutput && !vc1SoftwareFallbackActive,
+                preferSoftwareAudioOnly = isBluetoothAudioOutput,
                 onPlaybackSpeedAwareAudioSinkCreated = { playbackSpeedAwareAudioSink = it },
                 onFfmpegAudioRendererChanged = { renderer ->
                     ffmpegAudioRenderer = renderer
@@ -1355,6 +1401,16 @@ internal fun PlayerRuntimeController.initializePlayer(
                         val detailedError = error.toDisplayMessage(context)
                         cancelStableProgressReset()
 
+                        if (Vc1VideoFormatHeuristics.isVc1PlaybackFailure(
+                                error = error,
+                                currentVideoTrackIsLikelyVc1 = currentVideoTrackIsLikelyVc1,
+                                currentStreamName = _uiState.value.currentStreamName ?: streamName ?: currentFilename
+                            )
+                        ) {
+                            handleVc1PlaybackFailure(errorMessage = detailedError)
+                            return
+                        }
+
                         // If the codec crashed while the app is in the background (e.g. another
                         // app reclaimed the hardware decoder), don't run the retry chain. Each
                         // retry just re-acquires a decoder the foreground app immediately reclaims
@@ -1583,9 +1639,17 @@ internal fun PlayerRuntimeController.initializePlayer(
                         // Fatal error: stop any next-episode auto-play that may have been
                         // armed by a short placeholder ENDED or residual post-play state.
                         cancelNextEpisodeAutoPlayOnFatalError()
+                        val canSwitchToMpvOnFatal = currentInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER &&
+                            (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES ||
+                             error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED)
                         _uiState.update {
                             it.copy(
                                 error = detailedError,
+                                showSwitchToMpvErrorAction = canSwitchToMpvOnFatal,
                                 showLoadingOverlay = false,
                                 showPauseOverlay = false,
                                 loadingIssueReportVisible = false,
@@ -2002,7 +2066,6 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     hasRetriedCurrentStreamAfter416 = false
     hasAttemptedDv7ToDv81ForCurrentPlayback = false
     isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
-    isVc1SoftwareFallbackActiveForCurrentPlayback = false
     isVc1TrackSelectionBypassActiveForCurrentPlayback = false
     isSafeAudioModeActiveForCurrentPlayback = false
     isAudioDisabledForCurrentPlayback = false

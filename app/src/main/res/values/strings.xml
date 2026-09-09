@@ -1712,6 +1712,7 @@
     <string name="player_subtitle_delay">Subtitles Delay</string>
     <string name="player_error_title">Playback Error</string>
     <string name="player_go_back">Go Back</string>
+    <string name="player_switch_to_mpv">Switch to MPV Player</string>
     <string name="player_report_issue">Report Issue</string>
     <string name="player_report_issue_sending">Sending playback report...</string>
     <string name="player_report_issue_sending_button">Sending...</string>
