@@ -5,6 +5,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer
 import com.nuvio.tv.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
@@ -150,6 +151,7 @@ internal fun PlaybackException.findInvalidResponseCodeException(): HttpDataSourc
     return null
 }
 
+@androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlaybackException.toDisplayMessage(context: android.content.Context): String {
     val responseException = findInvalidResponseCodeException()
     if (responseException != null) {
@@ -177,6 +179,17 @@ internal fun PlaybackException.toDisplayMessage(context: android.content.Context
     val isUnrecognizedFormat = findCauseOfType<androidx.media3.exoplayer.source.UnrecognizedInputFormatException>() != null
     if (isUnrecognizedFormat) {
         return context.getString(com.nuvio.tv.R.string.player_error_source_invalid_content, errorCodeName)
+    }
+
+    val decoderInit = findCauseOfType<MediaCodecRenderer.DecoderInitializationException>()
+    if (decoderInit != null) {
+        val decoderMessage = decoderInit.message?.trim()?.takeIf { it.isNotBlank() }
+            ?: decoderInit.diagnosticInfo?.trim()?.takeIf { it.isNotBlank() }
+        return if (decoderMessage != null) {
+            "$decoderMessage [$errorCodeName]"
+        } else {
+            errorCodeName
+        }
     }
 
     val meaningfulMessage = findMostRelevantCauseMessage() ?: cause?.message ?: message

@@ -23,13 +23,14 @@ internal object Vc1VideoFormatHeuristics {
         streamName: String? = null,
     ): Boolean {
         if (sampleMimeType?.equals(MimeTypes.VIDEO_VC1, ignoreCase = true) == true ||
+            sampleMimeType?.equals("video/vc1", ignoreCase = true) == true ||
             sampleMimeType?.contains("wvc1", ignoreCase = true) == true ||
             sampleMimeType?.contains("wmv", ignoreCase = true) == true
         ) {
             return true
         }
 
-        val haystack = listOfNotNull(codecs, label, streamName)
+        val haystack = listOfNotNull(sampleMimeType, codecs, label, streamName)
             .joinToString(" ")
             .lowercase(Locale.ROOT)
 
@@ -58,6 +59,7 @@ internal object Vc1VideoFormatHeuristics {
                 !info.isEncoder && info.supportedTypes.any { type ->
                     type.equals(MimeTypes.VIDEO_VC1, ignoreCase = true) ||
                         type.equals("video/wvc1", ignoreCase = true) ||
+                        type.equals("video/vc1", ignoreCase = true) ||
                         type.equals("video/x-ms-wmv", ignoreCase = true)
                 }
             }

@@ -21,6 +21,8 @@ class Vc1VideoFormatHeuristicsTest {
     fun isLikelyVc1_detectsMimeTypes() {
         assertTrue(Vc1VideoFormatHeuristics.isLikelyVc1(sampleMimeType = MimeTypes.VIDEO_VC1))
         assertTrue(Vc1VideoFormatHeuristics.isLikelyVc1(sampleMimeType = "video/wvc1"))
+        assertTrue(Vc1VideoFormatHeuristics.isLikelyVc1(sampleMimeType = "video/vc1"))
+        assertTrue(Vc1VideoFormatHeuristics.isLikelyVc1(sampleMimeType = "video/VC1"))
         assertTrue(Vc1VideoFormatHeuristics.isLikelyVc1(sampleMimeType = "video/x-ms-wmv"))
         assertFalse(Vc1VideoFormatHeuristics.isLikelyVc1(sampleMimeType = MimeTypes.VIDEO_H264))
         assertFalse(Vc1VideoFormatHeuristics.isLikelyVc1(sampleMimeType = MimeTypes.VIDEO_H265))

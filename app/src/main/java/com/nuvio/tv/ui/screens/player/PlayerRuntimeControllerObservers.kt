@@ -1,7 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.util.Log
-import com.nuvio.tv.R
 import com.nuvio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -895,7 +894,8 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
             PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.RetryVc1Software,
             PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.RetryVc1TrackBypass,
             PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.FailVc1Unsupported -> {
-                handleVc1PlaybackFailure()
+                val exoError = livePlayer.playerError ?: return@launch
+                handleVc1PlaybackFailure(errorMessage = exoError.toDisplayMessage(context))
             }
             PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.None -> Unit
         }
@@ -903,20 +903,14 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
 }
 
 internal fun PlayerRuntimeController.handleVc1PlaybackFailure(errorMessage: String? = null) {
+    val displayMessage = errorMessage?.takeIf { it.isNotBlank() }
+        ?: _exoPlayer?.playerError?.toDisplayMessage(context)
+        ?: return
     cancelFirstFrameWatchdog()
     cancelStallWatchdog()
     cancelStableProgressReset()
     errorRetryJob?.cancel()
     errorRetryJob = null
-    val displayMessage = errorMessage?.takeIf { it.isNotBlank() }
-        ?: _exoPlayer?.playerError?.let { exoErr ->
-            val msg = exoErr.cause?.message ?: exoErr.message
-            if (msg != null) "$msg [${exoErr.errorCodeName}]" else exoErr.errorCodeName
-        }
-        ?: currentVideoTrackMimeType?.let { mime ->
-            "Decoder init failed: none, Format(video, $mime, ${currentVideoTrackWidth}x${currentVideoTrackHeight}) [ERROR_CODE_DECODER_INIT_FAILED]"
-        }
-        ?: "ERROR_CODE_DECODER_INIT_FAILED"
     releasePlayer(flushPlaybackState = false)
     cancelNextEpisodeAutoPlayOnFatalError()
     _uiState.update {

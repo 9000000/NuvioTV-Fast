@@ -672,6 +672,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                         }
                     }
+                    var forceVc1VideoSelection = false
                     for (rendererIndex in 0 until mappedTrackInfo.rendererCount) {
                         if (mappedTrackInfo.getRendererType(rendererIndex) == C.TRACK_TYPE_VIDEO) {
                             val trackGroups = mappedTrackInfo.getTrackGroups(rendererIndex)
@@ -682,8 +683,10 @@ internal fun PlayerRuntimeController.initializePlayer(
                                     val support = rendererFormatSupports[rendererIndex][groupIndex][trackIndex]
                                     val formatSupport = RendererCapabilities.getFormatSupport(support)
                                     if (Vc1VideoFormatHeuristics.isLikelyVc1(format.sampleMimeType, format.codecs, format.label) &&
-                                        (formatSupport == C.FORMAT_UNSUPPORTED_TYPE || formatSupport == C.FORMAT_EXCEEDS_CAPABILITIES)
+                                        formatSupport != C.FORMAT_HANDLED &&
+                                        formatSupport != C.FORMAT_UNSUPPORTED_DRM
                                     ) {
+                                        forceVc1VideoSelection = true
                                         Log.i("NuvioTrackSelector", "Upgraded VC-1 track support to FORMAT_HANDLED so ExoPlayer attempts decoding: id=${format.id}")
                                         rendererFormatSupports[rendererIndex][groupIndex][trackIndex] =
                                             RendererCapabilities.create(
@@ -698,11 +701,21 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                         }
                     }
+                    val selectionParams = if (forceVc1VideoSelection) {
+                        params.buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                            .setExceedVideoConstraintsIfNecessary(true)
+                            .setExceedRendererCapabilitiesIfNecessary(true)
+                            .setTunnelingEnabled(false)
+                            .build()
+                    } else {
+                        params
+                    }
                     return super.selectAllTracks(
                         mappedTrackInfo,
                         rendererFormatSupports,
                         rendererMixedMimeTypeAdaptationSupports,
-                        params
+                        selectionParams
                     )
                 }
             }.apply {

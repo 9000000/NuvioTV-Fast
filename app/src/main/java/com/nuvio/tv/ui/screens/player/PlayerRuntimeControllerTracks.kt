@@ -220,6 +220,20 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                         "vc1TrackBypassActive=$isVc1TrackSelectionBypassActiveForCurrentPlayback"
             )
         }
+        if (currentVideoTrackIsLikelyVc1 &&
+            !currentVideoTrackSelected &&
+            !isVc1TrackSelectionBypassActiveForCurrentPlayback
+        ) {
+            val currentPosition = _exoPlayer?.currentPosition ?: 0L
+            vc1TrackSelectionBypassStreamUrls.add(currentStreamUrl)
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "VIDEO_TRACK: VC-1 present but unselected (audio-only); forcing video selection so the decoder can fail visibly " +
+                    "support=${Util.getFormatSupportString(currentVideoTrackBestSupport)} positionMs=$currentPosition"
+            )
+            retryCurrentStreamWithVc1TrackSelectionBypass(currentPosition)
+            return
+        }
     } else {
         currentVideoTrackMimeType = null
         currentVideoTrackCodecs = null
