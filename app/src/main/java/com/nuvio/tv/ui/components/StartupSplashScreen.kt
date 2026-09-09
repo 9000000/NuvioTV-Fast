@@ -1,7 +1,5 @@
 package com.nuvio.tv.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -12,11 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -32,7 +26,6 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.theme.NuvioTheme
-import kotlinx.coroutines.delay
 
 @Composable
 fun StartupSplashScreen(
@@ -48,17 +41,6 @@ fun StartupSplashScreen(
         } ?: Color(0xFF1E88E5)
     }
 
-    var visible by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        delay(200)
-        visible = true
-    }
-    val contentAlpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = 400),
-        label = "splashContentAlpha"
-    )
-
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
         if (!profileBackgroundUrl.isNullOrBlank()) {
             val imageData: Any = if (profileBackgroundUrl.startsWith("file:")) {
@@ -68,9 +50,10 @@ fun StartupSplashScreen(
             }
             val request = ImageRequest.Builder(LocalContext.current)
                 .data(imageData)
-                .crossfade(300)
+                .crossfade(false)
             if (backgroundCacheKey != null) {
                 request.memoryCacheKey(backgroundCacheKey)
+                    .diskCacheKey(backgroundCacheKey)
                     .placeholderMemoryCacheKey(backgroundCacheKey)
             }
             AsyncImage(
@@ -113,9 +96,7 @@ fun StartupSplashScreen(
         }
 
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = contentAlpha },
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {

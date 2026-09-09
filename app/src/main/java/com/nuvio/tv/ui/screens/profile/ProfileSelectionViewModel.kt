@@ -137,10 +137,24 @@ class ProfileSelectionViewModel @Inject constructor(
         if (hasProfileBackgroundAccess.value) profileBackgroundRepository.preloadImages()
     }
 
-    fun selectProfile(id: Int, onComplete: () -> Unit) {
+    var isSelectingProfile = false
+        private set
+
+    fun selectProfile(id: Int, onComplete: () -> Unit, onFailure: () -> Unit) {
+        if (isSelectingProfile) return
+        isSelectingProfile = true
         viewModelScope.launch {
-            profileManager.setActiveProfile(id)
-            onComplete()
+            try {
+                profileManager.setActiveProfile(id)
+                onComplete()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e("ProfileSelectionVM", "Failed to select profile", error)
+                onFailure()
+            } finally {
+                isSelectingProfile = false
+            }
         }
     }
 

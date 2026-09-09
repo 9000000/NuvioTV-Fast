@@ -187,6 +187,7 @@ private data class KeyboardVisibilityState(
 fun ProfileSelectionScreen(
     onProfileSelected: () -> Unit,
     onProfileClicked: () -> Unit = {},
+    onProfileSelectionFailed: () -> Unit = {},
     onProfileFocusChanged: ((colorHex: String?, backgroundUrl: String?, memoryCacheKey: String?) -> Unit)? = null,
     screenMode: ProfileSelectionMode = ProfileSelectionMode.Selection,
     onBackPress: (() -> Unit)? = null,
@@ -231,12 +232,23 @@ fun ProfileSelectionScreen(
         { profile: UserProfile? ->
             focusedProfileId = profile?.id
             focusedAvatarColor = profile?.avatarColorHex?.let(::parseProfileColor) ?: Color(0xFF555555)
-            // Send empty string as sentinel = "bg not yet resolved, keep previous"
-            onProfileFocusChanged?.invoke(profile?.avatarColorHex, "", null)
             Unit
         }
     }
     val focusedProfile = profiles.firstOrNull { it.id == focusedProfileId }
+    val selectProfile: (Int) -> Unit = { profileId ->
+        if (!viewModel.isSelectingProfile) {
+            onProfileClicked()
+            viewModel.selectProfile(
+                id = profileId,
+                onComplete = onProfileSelected,
+                onFailure = {
+                    onProfileSelectionFailed()
+                    profileActionMessage = context.getString(R.string.account_error_generic_retry)
+                }
+            )
+        }
+    }
     val isManagementMode = screenMode == ProfileSelectionMode.Management
     val screenTitle = if (isManagementMode) {
         stringResource(R.string.profile_manage_title)
@@ -304,7 +316,7 @@ fun ProfileSelectionScreen(
 
         // Keep splash background in sync with whichever profile is focused
         // so the splash matches after the user clicks.
-        LaunchedEffect(profileBackground, focusedProfile) {
+        LaunchedEffect(profileBackground, backgroundProfile) {
             val bgUrl = when (profileBackground) {
                 is ProfileBackgroundArtwork.Custom -> profileBackground.url
                 is ProfileBackgroundArtwork.Catalog -> profileBackground.background.imageFile?.toURI()?.toString()
@@ -316,7 +328,7 @@ fun ProfileSelectionScreen(
                 null -> null
             }
             onProfileFocusChanged?.invoke(
-                focusedProfile?.avatarColorHex,
+                backgroundProfile?.avatarColorHex,
                 bgUrl,
                 cacheKey
             )
@@ -368,8 +380,7 @@ fun ProfileSelectionScreen(
                                 pinOverlayError = null
                                 pinOverlayState = ProfilePinOverlayState.Unlock(profile)
                             } else {
-                                onProfileClicked()
-                                viewModel.selectProfile(profile.id, onComplete = onProfileSelected)
+                                selectProfile(profile.id)
                             }
                         }
                     },
@@ -422,11 +433,7 @@ fun ProfileSelectionScreen(
                                         if (verify.unlocked) {
                                             pinOverlayError = null
                                             pinOverlayState = null
-                                            onProfileClicked()
-                                            viewModel.selectProfile(
-                                                activePinOverlay.profile.id,
-                                                onComplete = onProfileSelected
-                                            )
+                                            selectProfile(activePinOverlay.profile.id)
                                         } else {
                                             pinOverlayError = if (verify.retryAfterSeconds > 0) {
                                                 context.getString(R.string.profile_pin_locked, verify.retryAfterSeconds)
