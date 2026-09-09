@@ -201,8 +201,6 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             append(currentVideoTrackSelected)
             append("|support=")
             append(Util.getFormatSupportString(currentVideoTrackBestSupport))
-            append("|vc1Fallback=")
-            append(isVc1SoftwareFallbackActiveForCurrentPlayback)
             append("|vc1TrackBypass=")
             append(isVc1TrackSelectionBypassActiveForCurrentPlayback)
         }
@@ -216,7 +214,6 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                         "vc1=$currentVideoTrackIsLikelyVc1 " +
                         "selected=$currentVideoTrackSelected " +
                         "support=${Util.getFormatSupportString(currentVideoTrackBestSupport)} " +
-                        "vc1FallbackActive=$isVc1SoftwareFallbackActiveForCurrentPlayback " +
                         "vc1TrackBypassActive=$isVc1TrackSelectionBypassActiveForCurrentPlayback"
             )
         }

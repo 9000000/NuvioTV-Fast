@@ -5,17 +5,11 @@ import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlaybackException
-import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class Vc1VideoFormatHeuristicsTest {
-
-    @After
-    fun tearDown() {
-        Vc1VideoFormatHeuristics.hasDeviceVc1DecoderOverride = null
-    }
 
     @Test
     fun isLikelyVc1_detectsMimeTypes() {
@@ -79,15 +73,6 @@ class Vc1VideoFormatHeuristicsTest {
         assertFalse(
             Vc1VideoFormatHeuristics.isLikelyVc1Stream(null, null)
         )
-    }
-
-    @Test
-    fun hasDeviceVc1Decoder_respectsOverride() {
-        Vc1VideoFormatHeuristics.hasDeviceVc1DecoderOverride = true
-        assertTrue(Vc1VideoFormatHeuristics.hasDeviceVc1Decoder())
-
-        Vc1VideoFormatHeuristics.hasDeviceVc1DecoderOverride = false
-        assertFalse(Vc1VideoFormatHeuristics.hasDeviceVc1Decoder())
     }
 
     @Test

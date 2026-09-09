@@ -546,14 +546,12 @@ class PlayerRuntimeController(
     // Streams where manual Convert-to-DV8.1 mode 2 failed to play, so the next
     // attempt is forced to libdovi mode 1 before falling back to HDR10 base layer.
     internal val dv7Mode1ForcedStreamUrls: MutableSet<String> = mutableSetOf()
-    internal val vc1SoftwarePreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1TrackSelectionBypassStreamUrls: MutableSet<String> = mutableSetOf()
     internal val safeAudioForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal val audioDisabledForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal var isMapDv7ToHevcActiveForCurrentPlayback: Boolean = false
     internal var isManualDv81Mode2ActiveForCurrentPlayback: Boolean = false
     internal var isExperimentalDv7ToDv81ActiveForCurrentPlayback: Boolean = false
-    internal var isVc1SoftwareFallbackActiveForCurrentPlayback: Boolean = false
     internal var isVc1TrackSelectionBypassActiveForCurrentPlayback: Boolean = false
     internal var isSafeAudioModeActiveForCurrentPlayback: Boolean = false
     internal var isAudioDisabledForCurrentPlayback: Boolean = false

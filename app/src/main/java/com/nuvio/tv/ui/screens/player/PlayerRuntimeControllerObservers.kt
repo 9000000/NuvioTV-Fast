@@ -742,10 +742,6 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithDv7Mode1Fallback(from
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs, clearResumeProgress = true)
 }
 
-internal fun PlayerRuntimeController.retryCurrentStreamWithVc1SoftwareFallback(fromPositionMs: Long) {
-    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
-}
-
 internal fun PlayerRuntimeController.retryCurrentStreamWithVc1TrackSelectionBypass(fromPositionMs: Long) {
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
@@ -881,9 +877,6 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
                     isManualDv81Mode2Active = isManualDv81Mode2ActiveForCurrentPlayback,
                     dv7Mode1AlreadyForced = dv7Mode1ForcedStreamUrls.contains(currentStreamUrl),
                     currentVideoTrackIsLikelyVc1 = currentVideoTrackIsLikelyVc1,
-                    isVc1SoftwareFallbackActive = isVc1SoftwareFallbackActiveForCurrentPlayback,
-                    currentVideoTrackSelected = currentVideoTrackSelected,
-                    isVc1TrackSelectionBypassActive = isVc1TrackSelectionBypassActiveForCurrentPlayback,
                 )
             )
         ) {
@@ -891,8 +884,6 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
                 dv7Mode1ForcedStreamUrls.add(currentStreamUrl)
                 retryCurrentStreamWithDv7Mode1Fallback(currentPosition)
             }
-            PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.RetryVc1Software,
-            PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.RetryVc1TrackBypass,
             PlayerFirstFrameCodecRecoveryPolicy.RecoveryAction.FailVc1Unsupported -> {
                 val exoError = livePlayer.playerError ?: return@launch
                 handleVc1PlaybackFailure(errorMessage = exoError.toDisplayMessage(context))

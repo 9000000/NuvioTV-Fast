@@ -816,8 +816,6 @@ internal fun PlayerRuntimeController.initializePlayer(
             val codecSelector = createDolbyVisionFallbackCodecSelector(
                 convertToDv81Active = convertToDv81Active
             )
-            val vc1SoftwareFallbackActive = vc1SoftwarePreferredStreamUrls.contains(url)
-            isVc1SoftwareFallbackActiveForCurrentPlayback = vc1SoftwareFallbackActive
             // Bluetooth media sink (A2DP / LE Audio): Media3 only advertises PCM. Do not attempt
             // optical/HDMI passthrough — decode to PCM and let the BT stack encode SBC/AAC/aptX/LDAC.
             val isBluetoothAudioOutput = currentAudioOutputRoute?.isBluetooth == true ||
@@ -829,7 +827,6 @@ internal fun PlayerRuntimeController.initializePlayer(
             // Prefer FFmpeg/extension audio decoder on BT so multi-channel TrueHD/DTS always
             // decode to stereo PCM even when the platform MediaCodec path is flaky.
             val effectiveDecoderPriority = if (
-                vc1SoftwareFallbackActive ||
                 hasTriedAudioPcmFallback ||
                 isForcePassthroughActive ||
                 isBluetoothAudioOutput
@@ -881,7 +878,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                 bluetoothForcePcm = isBluetoothAudioOutput,
                 playbackSpeedProvider = { _uiState.value.playbackSpeed },
                 initialForcePcm = hasTriedAudioPcmFallback || isBluetoothAudioOutput,
-                preferSoftwareAudioOnly = isBluetoothAudioOutput && !vc1SoftwareFallbackActive,
+                preferSoftwareAudioOnly = isBluetoothAudioOutput,
                 onPlaybackSpeedAwareAudioSinkCreated = { playbackSpeedAwareAudioSink = it },
                 onFfmpegAudioRendererChanged = { renderer ->
                     ffmpegAudioRenderer = renderer
@@ -2037,7 +2034,6 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     hasRetriedCurrentStreamAfter416 = false
     hasAttemptedDv7ToDv81ForCurrentPlayback = false
     isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
-    isVc1SoftwareFallbackActiveForCurrentPlayback = false
     isVc1TrackSelectionBypassActiveForCurrentPlayback = false
     isSafeAudioModeActiveForCurrentPlayback = false
     isAudioDisabledForCurrentPlayback = false

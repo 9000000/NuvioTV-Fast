@@ -1,6 +1,5 @@
 package com.nuvio.tv.ui.screens.player
 
-import android.media.MediaCodecList
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlaybackException
@@ -9,12 +8,6 @@ import java.util.Locale
 
 /** VC-1 / WMV detection shared by track selection, playback error handling, and first-frame recovery. */
 internal object Vc1VideoFormatHeuristics {
-
-    @Volatile
-    private var cachedHasVc1Decoder: Boolean? = null
-
-    // For testing overrides
-    internal var hasDeviceVc1DecoderOverride: Boolean? = null
 
     fun isLikelyVc1(
         sampleMimeType: String? = null,
@@ -46,26 +39,6 @@ internal object Vc1VideoFormatHeuristics {
         val combined = hints.filterNotNull().joinToString(" ")
         if (combined.isBlank()) return false
         return isLikelyVc1(streamName = combined)
-    }
-
-    /** Checks whether the current device provides any hardware or software decoder for VC-1. */
-    fun hasDeviceVc1Decoder(): Boolean {
-        hasDeviceVc1DecoderOverride?.let { return it }
-        cachedHasVc1Decoder?.let { return it }
-
-        return runCatching {
-            val codecList = MediaCodecList(MediaCodecList.ALL_CODECS)
-            codecList.codecInfos.any { info ->
-                !info.isEncoder && info.supportedTypes.any { type ->
-                    type.equals(MimeTypes.VIDEO_VC1, ignoreCase = true) ||
-                        type.equals("video/wvc1", ignoreCase = true) ||
-                        type.equals("video/vc1", ignoreCase = true) ||
-                        type.equals("video/x-ms-wmv", ignoreCase = true)
-                }
-            }
-        }.getOrDefault(false).also {
-            cachedHasVc1Decoder = it
-        }
     }
 
     /**
