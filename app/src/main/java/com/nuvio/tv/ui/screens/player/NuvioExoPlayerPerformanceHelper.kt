@@ -64,6 +64,8 @@ object NuvioExoPlayerPerformanceHelper {
     // Parallel chunk fetching keeps more sockets alive than the old cap of 8, which was evicting
     // live chunk connections mid playback and forcing cold reopens.
     const val NUVIO_SHARED_POOL_MAX_IDLE = 32
+    private const val BACK_BUFFER_TARGET_SHARE_NUM = 1L
+    private const val BACK_BUFFER_TARGET_SHARE_DEN = 2L
 
     // ─── Customization Variables ──────────────────────────────────────────────
     @Volatile
@@ -274,6 +276,15 @@ object NuvioExoPlayerPerformanceHelper {
      * Builds a [DefaultLoadControl] tuned for Nuvio performance when enabled,
      * or a standard ExoPlayer [DefaultLoadControl] when disabled.
      */
+    // Both buffers hold bitrate times duration, so their share of the byte target is their share
+    // of the duration whatever the stream. Half of minBufferMs leaves the back buffer a third of
+    // the two and the forward side the rest.
+    private fun effectiveBackBufferMs(): Int {
+        if (backBufferMs <= 0) return 0
+        val ceiling = (minBufferMs.toLong() * BACK_BUFFER_TARGET_SHARE_NUM / BACK_BUFFER_TARGET_SHARE_DEN).toInt()
+        return backBufferMs.coerceAtMost(ceiling)
+    }
+
     fun buildLoadControl(context: Context? = null): DefaultLoadControl {
         return if (enabled) {
             val targetBufferBytes = (targetBufferSizeMb.toLong() * 1024L * 1024L)
@@ -299,10 +310,12 @@ object NuvioExoPlayerPerformanceHelper {
                     bufferForPlaybackMs,
                     bufferForPlaybackAfterRebufferMs
                 )
-                // Without this the byte target also applies below the minimum duration, so a
-                // high bitrate remux exhausts it in seconds and never reaches minBufferMs.
-                .setPrioritizeTimeOverSizeThresholds(true)
-                .setBackBuffer(backBufferMs, true)
+                // The byte target has to gate everything the allocator holds, or the back buffer
+                // is charged on top of it and the configured size is not a limit at all.
+                .setPrioritizeTimeOverSizeThresholds(false)
+                // Forward buffer protects playback and the back buffer only protects a seek back,
+                // so the back buffer is the side that gives way when both cannot fit the target.
+                .setBackBuffer(effectiveBackBufferMs(), true)
                 .build()
         } else {
             DefaultLoadControl.Builder()
