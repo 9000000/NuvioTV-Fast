@@ -285,9 +285,11 @@ object NuvioExoPlayerPerformanceHelper {
         return backBufferMs.coerceAtMost(ceiling)
     }
 
-    fun buildLoadControl(context: Context? = null): DefaultLoadControl {
+    fun buildLoadControl(context: Context? = null, chunkOverheadMb: Int = 0): DefaultLoadControl {
         return if (enabled) {
-            val targetBufferBytes = (targetBufferSizeMb.toLong() * 1024L * 1024L)
+            val effectiveTargetBufferMb = (targetBufferSizeMb - chunkOverheadMb)
+                .coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
+            val targetBufferBytes = (effectiveTargetBufferMb.toLong() * 1024L * 1024L)
                 .coerceAtMost(Int.MAX_VALUE.toLong())
                 .toInt()
             // A segment size other than the arena chunk size drops every allocation to a JNI path
@@ -301,6 +303,10 @@ object NuvioExoPlayerPerformanceHelper {
             }
             val allocator = DefaultAllocator(true, DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE, 64, enabled)
             liveAllocator = allocator
+            android.util.Log.i(
+                "ExoPerformance",
+                "buildLoadControl: targetBufferSizeMb=$targetBufferSizeMb, chunkOverheadMb=$chunkOverheadMb, effectiveTargetBufferMb=$effectiveTargetBufferMb, targetBytes=$targetBufferBytes, backBufferMs=${effectiveBackBufferMs()} (set=$backBufferMs)"
+            )
             DefaultLoadControl.Builder()
                 .setAllocator(allocator)
                 .setTargetBufferBytes(targetBufferBytes)
