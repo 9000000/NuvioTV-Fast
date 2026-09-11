@@ -8,7 +8,6 @@ import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.resolveContentLanguage
-import com.nuvio.tv.domain.model.countryToLanguageCode
 import com.nuvio.tv.domain.model.normalizeLanguageCode
 import com.nuvio.tv.data.local.AudioLanguageOption
 import kotlinx.coroutines.delay
@@ -183,7 +182,6 @@ private suspend fun PlayerRuntimeController.enrichDescriptionFromTmdb(id: String
     // audio" can resolve correctly even when the addon meta lacks it.
     if (contentLanguage == null) {
         val tmdbLang = normalizeLanguageCode(enrichment.language)
-            ?: enrichment.countries?.firstNotNullOfOrNull { countryToLanguageCode(it) }
         if (tmdbLang != null) {
             contentLanguage = tmdbLang
             val hasUserAudioSelection = persistedTrackPreference?.audio != null
