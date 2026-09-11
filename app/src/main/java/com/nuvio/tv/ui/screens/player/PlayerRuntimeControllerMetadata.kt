@@ -8,6 +8,8 @@ import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.resolveContentLanguage
+import com.nuvio.tv.domain.model.normalizeLanguageCode
+import com.nuvio.tv.data.local.AudioLanguageOption
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -173,6 +175,39 @@ private suspend fun PlayerRuntimeController.enrichDescriptionFromTmdb(id: String
         _uiState.update { state ->
             if (state.castMembers.isEmpty()) state.copy(castMembers = enrichment.castMembers)
             else state
+        }
+    }
+
+    // Fill in content language from TMDB if still unknown, so "original
+    // audio" can resolve correctly even when the addon meta lacks it.
+    if (contentLanguage == null) {
+        val tmdbLang = normalizeLanguageCode(enrichment.language)
+        if (tmdbLang != null) {
+            contentLanguage = tmdbLang
+            val hasUserAudioSelection = persistedTrackPreference?.audio != null
+            if (!hasUserAudioSelection) {
+                val playerSettings = playerSettingsDataStore.playerSettings.first()
+                if (playerSettings.preferredAudioLanguage == AudioLanguageOption.ORIGINAL) {
+                    val resolved = resolvePreferredAudioLanguages(
+                        preferredAudioLanguage = playerSettings.preferredAudioLanguage,
+                        secondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage,
+                        deviceLanguages = resolveDeviceAudioLanguages(),
+                        contentOriginalLanguage = tmdbLang
+                    )
+                    if (resolved.isNotEmpty()) {
+                        _exoPlayer?.let { player ->
+                            player.trackSelectionParameters = player.trackSelectionParameters
+                                .buildUpon()
+                                .setPreferredAudioLanguages(*resolved.toTypedArray())
+                                .build()
+                        }
+                        if (isUsingMpvEngine()) {
+                            mpvPreferredAudioLanguages = resolved
+                            mpvView?.applyAudioLanguagePreferences(resolved)
+                        }
+                    }
+                }
+            }
         }
     }
 

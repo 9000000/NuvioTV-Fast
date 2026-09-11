@@ -413,7 +413,7 @@ fun SearchScreen(
     val submitRecentSearch: (String) -> Unit = { recentQuery ->
         val trimmedRecentQuery = recentQuery.trim()
         if (trimmedRecentQuery.isNotEmpty()) {
-            runCatching { topInputFocusRequester.requestFocus() }
+            runCatching { searchFocusRequester.requestFocus() }
             viewModel.onEvent(SearchEvent.QueryChanged(trimmedRecentQuery))
             submitCurrentQuery(trimmedRecentQuery)
         }
