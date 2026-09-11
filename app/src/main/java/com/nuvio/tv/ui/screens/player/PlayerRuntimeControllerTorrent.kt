@@ -105,6 +105,10 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
     }
 
     torrentStateObserverJob = scope.launch {
+        var lastLoadingMessage: String? = null
+        var lastLoadingProgress = -1f
+        var lastDownloadSpeed = Long.MIN_VALUE
+        var lastBufferingMessage: String? = null
         while (isActive) {
             try {
                 val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
@@ -134,21 +138,29 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                             message = message,
                             progress = preloadProgress
                         )
-                        _uiState.update {
-                            it.copy(
-                                isTorrentStream = true,
-                                showLoadingOverlay = true,
-                                showTorrentStats = false,
-                                loadingMessage = message,
-                                loadingProgress = preloadProgress,
-                                torrentDownloadSpeed = stats.downloadSpeed,
-                                torrentUploadSpeed = 0L,
-                                torrentPeers = 0,
-                                torrentSeeds = 0,
-                                torrentBufferProgress = preloadProgress,
-                                torrentTotalProgress = preloadProgress,
-                                torrentBufferingMessage = null
-                            )
+                        val changed = message != lastLoadingMessage ||
+                            preloadProgress != lastLoadingProgress ||
+                            stats.downloadSpeed != lastDownloadSpeed
+                        if (changed) {
+                            _uiState.update {
+                                it.copy(
+                                    isTorrentStream = true,
+                                    showLoadingOverlay = true,
+                                    showTorrentStats = false,
+                                    loadingMessage = message,
+                                    loadingProgress = preloadProgress,
+                                    torrentDownloadSpeed = stats.downloadSpeed,
+                                    torrentUploadSpeed = 0L,
+                                    torrentPeers = 0,
+                                    torrentSeeds = 0,
+                                    torrentBufferProgress = preloadProgress,
+                                    torrentTotalProgress = preloadProgress,
+                                    torrentBufferingMessage = null
+                                )
+                            }
+                            lastLoadingMessage = message
+                            lastLoadingProgress = preloadProgress
+                            lastDownloadSpeed = stats.downloadSpeed
                         }
                     } else {
                         // When video is playing: turn off loading stats!
@@ -158,20 +170,26 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
 
                         // Avoid redundant state updates during smooth playback
                         if (isBuffering || _uiState.value.torrentBufferingMessage != null) {
-                            _uiState.update {
-                                it.copy(
-                                    isTorrentStream = true,
-                                    showTorrentStats = false,
-                                    loadingProgress = null,
-                                    torrentDownloadSpeed = stats.downloadSpeed,
-                                    torrentUploadSpeed = 0L,
-                                    torrentPeers = 0,
-                                    torrentSeeds = 0,
-                                    torrentBufferProgress = 0f,
-                                    torrentTotalProgress = 0f,
-                                    torrentBufferingMessage = rebufferingMessage,
-                                    torrentBufferingProgress = 0f
-                                )
+                            val changed = rebufferingMessage != lastBufferingMessage ||
+                                stats.downloadSpeed != lastDownloadSpeed
+                            if (changed) {
+                                _uiState.update {
+                                    it.copy(
+                                        isTorrentStream = true,
+                                        showTorrentStats = false,
+                                        loadingProgress = null,
+                                        torrentDownloadSpeed = stats.downloadSpeed,
+                                        torrentUploadSpeed = 0L,
+                                        torrentPeers = 0,
+                                        torrentSeeds = 0,
+                                        torrentBufferProgress = 0f,
+                                        torrentTotalProgress = 0f,
+                                        torrentBufferingMessage = rebufferingMessage,
+                                        torrentBufferingProgress = 0f
+                                    )
+                                }
+                                lastBufferingMessage = rebufferingMessage
+                                lastDownloadSpeed = stats.downloadSpeed
                             }
                         }
                     }
@@ -182,7 +200,7 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                 Log.w(TAG, "Remote TorrServer stats polling error: ${e.message}")
             }
             val pollDelay = if (!hasRenderedFirstFrame) {
-                750L
+                1000L
             } else if (_uiState.value.isBuffering) {
                 1000L
             } else {
@@ -227,7 +245,7 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
                     Log.d(TAG, "Remote TorrServer preload is active; handing stream to player")
                     return@withTimeoutOrNull uri.withoutPreloadParameter()
                 }
-                delay(250L)
+                delay(1_000L)
             }
             null
         }
