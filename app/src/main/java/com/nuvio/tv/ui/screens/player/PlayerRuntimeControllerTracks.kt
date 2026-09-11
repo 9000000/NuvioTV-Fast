@@ -1888,6 +1888,7 @@ internal fun PlayerRuntimeController.startFrameRateProbe(
 }
 
 internal fun PlayerRuntimeController.applySubtitlePreferences(preferred: String, secondary: String?) {
+    if (isUserExplicitSubtitleSelection) return
     if (isUsingMpvEngine()) {
         mpvView?.applySubtitleLanguagePreferences(preferred, secondary)
         if (preferred == "none") {
