@@ -219,6 +219,8 @@
     <string name="detail_marked_episodes_unwatched">Episodes marked as unwatched: %1$d</string>
     <string name="detail_marked_previous_watched">Previous episodes marked as watched: %1$d</string>
 
+    <string name="playback_unavailable">Playback unavailable</string>
+    <string name="playback_unavailable_message">Playback isn’t available for this title with your current setup.</string>
     <string name="detail_btn_play">Play</string>
     <string name="detail_btn_resume">Resume</string>
     <string name="detail_btn_play_episode">Play S%1$d E%2$d</string>
