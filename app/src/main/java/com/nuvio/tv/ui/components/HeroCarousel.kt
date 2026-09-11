@@ -86,6 +86,7 @@ fun HeroCarousel(
     showImdbRatings: Boolean = true,
     showBackdrop: Boolean = true,
     fullWidth: Dp = Dp.Unspecified,
+    initialActiveIndex: Int = 0,
     modifier: Modifier = Modifier
 ) {
     if (items.isEmpty()) return
@@ -93,7 +94,7 @@ fun HeroCarousel(
     val currentOnItemClick by rememberUpdatedState(onItemClick)
     val currentOnItemFocus by rememberUpdatedState(onItemFocus)
     val currentOnActiveItemChanged by rememberUpdatedState(onActiveItemChanged)
-    var activeIndex by remember { mutableIntStateOf(0) }
+    var activeIndex by remember { mutableIntStateOf(initialActiveIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))) }
     var isFocused by remember { mutableStateOf(false) }
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 

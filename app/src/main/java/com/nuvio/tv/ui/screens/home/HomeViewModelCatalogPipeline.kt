@@ -670,6 +670,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         val computedHeroItems = when {
             heroItemsFromSelectedCatalogs.isNotEmpty() -> heroItemsFromSelectedCatalogs
             fallbackHeroItemsFromSelectedCatalogs.isNotEmpty() -> fallbackHeroItemsFromSelectedCatalogs
+            selectedHeroCatalogSet.isNotEmpty() -> emptyList()
             fallbackHeroItemsWithArtwork.isNotEmpty() -> fallbackHeroItemsWithArtwork
             else -> emptyList()
         }
