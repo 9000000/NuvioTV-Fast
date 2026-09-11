@@ -99,6 +99,26 @@ object PlayerNextEpisodeRules {
         }
     }
 
+    /** True when a reading is clearly before the end and outside the next-episode window. */
+    fun isAwayFromEnd(
+        positionMs: Long,
+        durationMs: Long,
+        skipIntervals: List<SkipInterval>,
+        thresholdMode: NextEpisodeThresholdMode,
+        thresholdPercent: Float,
+        thresholdMinutesBeforeEnd: Float
+    ): Boolean =
+        durationMs > 0L &&
+            positionMs < durationMs - NEAR_END_MS &&
+            !shouldShowNextEpisodeCard(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                skipIntervals = skipIntervals,
+                thresholdMode = thresholdMode,
+                thresholdPercent = thresholdPercent,
+                thresholdMinutesBeforeEnd = thresholdMinutesBeforeEnd
+            )
+
     fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
         return parseEpisodeReleaseLocalDate(raw)
     }
@@ -112,4 +132,7 @@ object PlayerNextEpisodeRules {
     const val POST_OUTRO_AUTOPLAY_GAP_MS = 5_000L
 
     const val END_OF_VIDEO_EPSILON_MS = 1_000L
+
+    /** How close to the duration MPV treats as the end of the file. */
+    const val NEAR_END_MS = 500L
 }

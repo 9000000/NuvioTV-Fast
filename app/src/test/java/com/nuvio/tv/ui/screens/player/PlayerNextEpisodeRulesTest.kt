@@ -165,4 +165,57 @@ class PlayerNextEpisodeRulesTest {
     fun `an unknown duration never fires`() {
         assertFalse(shouldShow(positionMs = 25 * 60_000L, durationMs = 0L))
     }
+
+    private fun awayFromEnd(positionMs: Long, durationMs: Long) =
+        PlayerNextEpisodeRules.isAwayFromEnd(
+            positionMs = positionMs,
+            durationMs = durationMs,
+            skipIntervals = emptyList(),
+            thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+            thresholdPercent = 97f,
+            thresholdMinutesBeforeEnd = 2f
+        )
+
+    @Test
+    fun `the start of a stream is away from the end`() {
+        assertTrue(awayFromEnd(positionMs = 0L, durationMs = 22 * 60_000L))
+    }
+
+    @Test
+    fun `mid-episode is away from the end`() {
+        assertTrue(awayFromEnd(positionMs = 11 * 60_000L, durationMs = 22 * 60_000L))
+    }
+
+    @Test
+    fun `the previous file's end position is not away from the end`() {
+        // Stale reading after a switch: previous episode's end against a similar duration.
+        assertFalse(awayFromEnd(positionMs = 22 * 60_000L, durationMs = 22 * 60_000L))
+    }
+
+    @Test
+    fun `a stale position inside the card threshold is not away from the end`() {
+        // Previous episode ended at 22:00; the new one reports 22:20. Before the file end, but
+        // past 97%, so it must not arm.
+        assertFalse(awayFromEnd(positionMs = 22 * 60_000L, durationMs = 22 * 60_000L + 20_000L))
+    }
+
+    @Test
+    fun `a resume inside the card window but below completion is not away from the end`() {
+        // 17:30 of a 20 minute episode is 87.5%, so it resumes, but it is inside a 3 minute window.
+        assertFalse(
+            PlayerNextEpisodeRules.isAwayFromEnd(
+                positionMs = 17 * 60_000L + 30_000L,
+                durationMs = 20 * 60_000L,
+                skipIntervals = emptyList(),
+                thresholdMode = NextEpisodeThresholdMode.MINUTES_BEFORE_END,
+                thresholdPercent = 97f,
+                thresholdMinutesBeforeEnd = 3f
+            )
+        )
+    }
+
+    @Test
+    fun `an unknown duration is not away from the end`() {
+        assertFalse(awayFromEnd(positionMs = 0L, durationMs = 0L))
+    }
 }
