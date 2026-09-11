@@ -52,14 +52,18 @@ class DebridStreamPresentation @Inject constructor(
             val visibleStreams = group.streams
                 .filterNot { stream -> stream.isInactiveResolverStream(settings) }
                 .filterNot { stream -> stream.isUncachedDebridStream() }
-            val debridStreams = visibleStreams.filter { stream -> stream.isManagedDebridStream() }
-            if (debridStreams.isEmpty()) return@map group.copy(streams = visibleStreams)
+            val managedStreams = visibleStreams.filter { stream -> stream.isManagedDebridStream() }
+            if (managedStreams.isEmpty()) return@map group.copy(streams = visibleStreams)
 
-            val presentedDebridStreams = DirectDebridStreamFilter.applyPreferences(debridStreams, settings)
-                .map { stream -> formatter.format(stream, settings, badgeFilters) }
-            val passthroughStreams = visibleStreams.filterNot { stream -> stream.isManagedDebridStream() }
-
-            group.copy(streams = presentedDebridStreams + passthroughStreams)
+            val presentedByKey = DirectDebridStreamFilter.applyPreferences(managedStreams, settings)
+                .associateBy { it.dedupKeyForPresentation() }
+            group.copy(
+                streams = visibleStreams.map { stream ->
+                    presentedByKey[stream.dedupKeyForPresentation()]?.let {
+                        formatter.format(it, settings, badgeFilters)
+                    } ?: stream
+                }
+            )
         }
     }
 
@@ -85,6 +89,13 @@ class DebridStreamPresentation @Inject constructor(
         needsLocalDebridResolve() &&
             DebridProviders.byId(debridCacheStatus?.providerId)?.supports(DebridProviderCapability.LocalTorrentCacheCheck) == true &&
             debridCacheStatus?.state == StreamDebridCacheState.NOT_CACHED
+
+    private fun Stream.dedupKeyForPresentation(): String =
+        infoHash?.lowercase()?.let { "$it:${fileIdx ?: ""}" }
+            ?: clientResolve?.infoHash?.lowercase()?.let { "$it:${clientResolve.fileIdx ?: ""}" }
+            ?: url
+            ?: externalUrl
+            ?: stableKey()
 
     private fun Stream.isInactiveResolverStream(settings: DebridSettings): Boolean {
         val streamProviderId = DebridProviders.byId(clientResolve?.service)?.id ?: return false
