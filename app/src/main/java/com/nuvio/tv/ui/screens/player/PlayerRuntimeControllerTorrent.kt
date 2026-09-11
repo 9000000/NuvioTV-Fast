@@ -5,10 +5,12 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.torrent.TorrentState
 import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val TAG = "PlayerTorrent"
 
@@ -20,6 +22,8 @@ internal suspend fun PlayerRuntimeController.startTorrentStream(
     infoHash: String,
     fileIdx: Int?,
     filename: String? = null,
+    title: String? = null,
+    poster: String? = null,
     trackers: List<String> = emptyList()
 ): String {
     isTorrentStream = true
@@ -41,7 +45,14 @@ internal suspend fun PlayerRuntimeController.startTorrentStream(
     }
 
     val effectiveFilename = filename ?: currentFilename
-    return torrentService.startStream(infoHash, fileIdx, effectiveFilename, trackers)
+    return torrentService.startStream(
+        infoHash = infoHash,
+        fileIdx = fileIdx,
+        filename = effectiveFilename,
+        title = title,
+        poster = poster,
+        trackers = trackers
+    )
 }
 
 /**
@@ -182,6 +193,67 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
     }
 }
 
+internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
+    hash: String,
+    streamUrl: String
+): String {
+    val uri = runCatching { android.net.Uri.parse(streamUrl) }.getOrNull()
+        ?: return streamUrl
+    if (!uri.queryParameterNames.any { it.equals("preload", ignoreCase = true) }) {
+        return streamUrl
+    }
+
+    val serverUrl = "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}"
+    val preloadCall = torrServerRemoteApi.newStreamCall(streamUrl)
+    val preloadJob = scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            preloadCall.execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Remote TorrServer preload request failed: ${response.code}")
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Remote TorrServer preload request ended: ${e.message}")
+        }
+    }
+
+    return try {
+        val playbackUrl = withTimeoutOrNull(60_000L) {
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
+                if (stats?.isPreloadReady == true) {
+                    Log.d(TAG, "Remote TorrServer preload is active; handing stream to player")
+                    return@withTimeoutOrNull uri.withoutPreloadParameter()
+                }
+                delay(250L)
+            }
+            null
+        }
+
+        if (playbackUrl == null) {
+            Log.w(TAG, "Remote TorrServer preload status timeout; handing stream to player anyway")
+        }
+        playbackUrl ?: uri.withoutPreloadParameter()
+    } finally {
+        preloadCall.cancel()
+        preloadJob.cancel()
+    }
+}
+
+private fun android.net.Uri.withoutPreloadParameter(): String {
+    val builder = buildUpon().clearQuery()
+    queryParameterNames
+        .filterNot { it.equals("preload", ignoreCase = true) }
+        .forEach { name ->
+            getQueryParameters(name).forEach { value ->
+                builder.appendQueryParameter(name, value)
+            }
+        }
+    return builder.build().toString()
+}
+
 /**
  * Collects TorrentService state and maps it to PlayerUiState fields.
  */
@@ -301,6 +373,8 @@ internal fun PlayerRuntimeController.launchTorrentSourceStream(
                 infoHash = infoHash,
                 fileIdx = stream.getEffectiveFileIdx(),
                 filename = stream.behaviorHints?.filename,
+                title = contentName ?: title,
+                poster = poster,
                 trackers = trackers
             )
 

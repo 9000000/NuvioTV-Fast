@@ -20,6 +20,9 @@ import javax.inject.Singleton
 
 private val VIDEO_EXTENSIONS = setOf("mkv", "mp4", "avi", "webm", "ts", "m4v", "mov", "wmv", "flv")
 
+internal fun torrServerDisplayTitle(title: String?): String? =
+    title?.trim()?.takeIf { it.isNotBlank() }?.let { "[NuvioF] $it" }
+
 @Singleton
 class TorrentService @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
@@ -43,6 +46,7 @@ class TorrentService @Inject constructor(
     val state: StateFlow<TorrentState> = _state.asStateFlow()
 
     private var statsJob: Job? = null
+    private var preloadJob: Job? = null
     private var currentHash: String? = null
 
     /**
@@ -52,6 +56,8 @@ class TorrentService @Inject constructor(
         infoHash: String,
         fileIdx: Int?,
         filename: String? = null,
+        title: String? = null,
+        poster: String? = null,
         trackers: List<String> = emptyList()
     ): String = withContext(Dispatchers.IO) {
         stopStream()
@@ -64,17 +70,23 @@ class TorrentService @Inject constructor(
         Log.d(TAG, "Starting stream: $magnetLink")
 
         // Add torrent
-        val hash = api.addTorrent(magnetLink)
+        val hash = api.addTorrent(
+            magnetLink = magnetLink,
+            title = torrServerDisplayTitle(title),
+            poster = poster
+        )
             ?: throw TorrentException(appContext.getString(com.nuvio.tv.R.string.torrent_error_add_failed))
         currentHash = hash
 
         // Resolve file index
         val resolvedIdx = resolveFileIndex(hash, fileIdx, filename)
 
-        // Get stream URL — TorrServer handles all buffering/piece management
+        // Keep preload and playback requests separate. TorrServer blocks a
+        // /stream request with &preload until its preload operation completes.
+        // The player must receive a plain &play URL once the status is active.
         val isPreload = runCatching { addonConfig.config.first().preload }.getOrDefault(false)
-        val streamUrl = api.getStreamUrl(magnetLink, resolvedIdx, preload = isPreload)
-        Log.d(TAG, "Stream URL: $streamUrl")
+        val streamUrl = api.getStreamUrl(magnetLink, resolvedIdx, preload = false)
+        Log.d(TAG, "Playback stream URL: $streamUrl")
 
         // Start stats polling
         startStatsPolling(hash)
@@ -89,12 +101,34 @@ class TorrentService @Inject constructor(
             totalProgress = 0f
         )
 
+        if (isPreload) {
+            val preloadUrl = api.getStreamUrl(magnetLink, resolvedIdx, preload = true)
+            preloadJob = scope.launch {
+                try {
+                    api.newStreamCall(preloadUrl).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Log.w(TAG, "TorrServer preload request failed: ${response.code}")
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "TorrServer preload request ended: ${e.message}")
+                }
+            }
+            awaitPreloadReady(hash)
+            preloadJob?.cancel()
+            preloadJob = null
+        }
+
         streamUrl
     }
 
     fun stopStream() {
         statsJob?.cancel()
         statsJob = null
+        preloadJob?.cancel()
+        preloadJob = null
 
         currentHash?.let { hash ->
             try {
@@ -107,6 +141,36 @@ class TorrentService @Inject constructor(
         }
         currentHash = null
         _state.value = TorrentState.Idle
+    }
+
+    private suspend fun awaitPreloadReady(hash: String) {
+        val deadline = System.currentTimeMillis() + 60_000L
+        while (System.currentTimeMillis() < deadline) {
+            val stats = api.getTorrentStats(hash)
+            if (stats != null) {
+                val currentState = _state.value
+                if (currentState is TorrentState.Streaming) {
+                    _state.value = currentState.copy(
+                        downloadSpeed = stats.downloadSpeed,
+                        uploadSpeed = stats.uploadSpeed,
+                        peers = stats.peers,
+                        seeds = stats.seeds,
+                        preloadedBytes = stats.preloadedBytes,
+                        preloadSize = stats.preloadSize,
+                        stat = stats.stat,
+                        statString = stats.statString,
+                        bufferProgress = stats.preloadProgress,
+                        totalProgress = stats.preloadProgress
+                    )
+                }
+                if (stats.isPreloadReady) {
+                    Log.d(TAG, "TorrServer preload is active; handing stream to player")
+                    return
+                }
+            }
+            delay(250L)
+        }
+        Log.w(TAG, "TorrServer preload status timeout; handing stream to player anyway")
     }
 
     fun shutdown() {

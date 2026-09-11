@@ -56,11 +56,14 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
             )
         }
         startRemoteTorrServerStatsPolling(infoHash, currentStreamUrl)
-        preparePlaybackBeforeStart(
-            url = currentStreamUrl,
-            headers = currentHeaders,
-            loadSavedProgress = !navigationArgs.startFromBeginning
-        )
+        scope.launch {
+            currentStreamUrl = awaitRemoteTorrServerPreload(infoHash, currentStreamUrl)
+            preparePlaybackBeforeStart(
+                url = currentStreamUrl,
+                headers = currentHeaders,
+                loadSavedProgress = !navigationArgs.startFromBeginning
+            )
+        }
         return
     }
 
@@ -73,6 +76,8 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
                     infoHash = infoHash,
                     fileIdx = navigationArgs.fileIdx,
                     filename = navigationArgs.filename,
+                    title = contentName ?: title,
+                    poster = poster,
                     trackers = navigationArgs.torrentTrackers
                 )
                 Log.d("PlayerStartup", "Torrent stream ready: $localUrl")

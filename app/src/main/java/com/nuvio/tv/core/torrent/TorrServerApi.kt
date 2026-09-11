@@ -35,7 +35,8 @@ data class TorrServerStats(
     val files: List<TorrServerFile>
 ) {
     val isPreloadReady: Boolean
-        get() = stat == 3 || (preloadSize > 0 && preloadedBytes >= preloadSize)
+        get() = stat == 3 || statString.equals("active", ignoreCase = true) ||
+            (preloadSize > 0 && preloadedBytes >= preloadSize * 95 / 100)
 
     val preloadProgress: Float
         get() {
@@ -62,12 +63,17 @@ class TorrServerApi @Inject constructor(
 
     private val baseUrl: String get() = binary.baseUrl
 
-    suspend fun addTorrent(magnetLink: String, title: String? = null): String? = withContext(Dispatchers.IO) {
+    suspend fun addTorrent(
+        magnetLink: String,
+        title: String? = null,
+        poster: String? = null
+    ): String? = withContext(Dispatchers.IO) {
         val body = JSONObject().apply {
             put("action", "add")
             put("link", magnetLink)
             put("save_to_db", false)
             if (title != null) put("title", title)
+            if (!poster.isNullOrBlank()) put("poster", poster)
         }
 
         val request = Request.Builder()
@@ -166,4 +172,7 @@ class TorrServerApi @Inject constructor(
         }
         return sb.toString()
     }
+
+    fun newStreamCall(streamUrl: String): okhttp3.Call =
+        client.newCall(Request.Builder().url(streamUrl).build())
 }

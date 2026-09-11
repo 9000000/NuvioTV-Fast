@@ -1416,7 +1416,8 @@ class StreamScreenViewModel @Inject constructor(
 
         val hash = torrServerRemoteApi.addTorrent(
             magnetLink = magnet,
-            title = stream.title ?: stream.name,
+            title = com.nuvio.tv.core.torrent.torrServerDisplayTitle(contentName ?: title),
+            poster = poster,
             serverUrlOverride = serverUrl
         ) ?: stream.getEffectiveInfoHash() ?: return@withContext null
 
@@ -1534,7 +1535,8 @@ class StreamScreenViewModel @Inject constructor(
                 // Add torrent to remote TorrServer
                 val hash = torrServerRemoteApi.addTorrent(
                     magnetLink = magnet,
-                    title = stream.title ?: stream.name,
+                    title = com.nuvio.tv.core.torrent.torrServerDisplayTitle(contentName ?: title),
+                    poster = poster,
                     serverUrlOverride = serverUrl
                 ) ?: stream.getEffectiveInfoHash()
 

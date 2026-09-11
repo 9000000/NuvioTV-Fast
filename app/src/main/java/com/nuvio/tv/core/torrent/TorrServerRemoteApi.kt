@@ -48,7 +48,8 @@ data class TorrServerRemoteStatus(
         }
 
     val isPreloadReady: Boolean
-        get() = stat == 3 || (preloadSize > 0 && preloadedBytes >= preloadSize)
+        get() = stat == 3 || statString.equals("active", ignoreCase = true) ||
+            (preloadSize > 0 && preloadedBytes >= preloadSize * 95 / 100)
 }
 
 @Singleton
@@ -73,6 +74,13 @@ class TorrServerRemoteApi @Inject constructor(
             val encoded = Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)
             builder.addHeader("Authorization", "Basic $encoded")
         }
+    }
+
+    suspend fun newStreamCall(streamUrl: String): okhttp3.Call = withContext(Dispatchers.IO) {
+        val config = addonConfig.config.first()
+        val requestBuilder = Request.Builder().url(streamUrl).get()
+        addAuthHeader(requestBuilder, config.authUsername, config.authPassword)
+        client.newCall(requestBuilder.build())
     }
 
     suspend fun healthCheck(
@@ -148,6 +156,7 @@ class TorrServerRemoteApi @Inject constructor(
     suspend fun addTorrent(
         magnetLink: String,
         title: String? = null,
+        poster: String? = null,
         serverUrlOverride: String? = null,
         saveToDbOverride: Boolean? = null
     ): String? = withContext(Dispatchers.IO) {
@@ -162,6 +171,9 @@ class TorrServerRemoteApi @Inject constructor(
             put("save_to_db", saveToDb)
             if (!title.isNullOrBlank()) {
                 put("title", title)
+            }
+            if (!poster.isNullOrBlank()) {
+                put("poster", poster)
             }
         }
 
