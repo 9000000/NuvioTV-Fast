@@ -82,6 +82,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.TraktCommentReview
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.ui.components.NuvioDialog
+import com.nuvio.tv.ui.util.contentTextDirection
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -345,7 +346,9 @@ fun CommentsSection(
                 ) {
                     Text(
                         text = error,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            textDirection = error.contentTextDirection()
+                        ),
                         color = NuvioTheme.colors.TextSecondary
                     )
                     Button(
@@ -535,7 +538,10 @@ private fun CommentCard(
 
             Text(
                 text = bodyText,
-                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineHeight = 20.sp,
+                    textDirection = bodyText.contentTextDirection()
+                ),
                 color = if (review.hasSpoilerContent) {
                     NuvioTheme.colors.Warning
                 } else {
@@ -958,7 +964,7 @@ private fun CommentOverlayContent(
             ) {
                 Text(
                     text = commentText,
-                    style = commentStyle,
+                    style = commentStyle.copy(textDirection = commentText.contentTextDirection()),
                     color = Color.White,
                     modifier = Modifier.fillMaxWidth()
                 )
