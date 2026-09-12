@@ -57,6 +57,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -613,20 +614,12 @@ fun ContinueWatchingCard(
     val bgCardColor = NuvioTheme.colors.BackgroundCard
     val backgroundPainter = remember(bgCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(bgCardColor) }
     val focusRingBorderWidth = 3.dp
-    val focusPulseAlpha = if (isFocused) {
-        val transition = rememberInfiniteTransition(label = "cwCardPulse")
-        val alpha by transition.animateFloat(
-            initialValue = 0.25f,
-            targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "pulseAlpha"
+    val focusRingStyle = NuvioTheme.focusRing
+    val focusedBorder = remember(focusRingStyle, focusRingBorderWidth, cwCardShape) {
+        Border(
+            border = focusRingStyle.border(focusRingBorderWidth, alpha = 1.0f),
+            shape = cwCardShape
         )
-        alpha
-    } else {
-        1.0f
     }
 
     Card(
@@ -639,6 +632,7 @@ fun ContinueWatchingCard(
         },
         modifier = modifier
             .width(cardWidth)
+            .then(if (isFocused) Modifier.zIndex(1f) else Modifier)
             .recompositionHighlighter()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
@@ -677,14 +671,9 @@ fun ContinueWatchingCard(
         border = if (textBelowArtwork) {
             CardDefaults.border(focusedBorder = Border.None)
         } else {
-            CardDefaults.border(
-                focusedBorder = Border(
-                    border = NuvioTheme.focusRing.border(focusRingBorderWidth, alpha = focusPulseAlpha),
-                    shape = cwCardShape
-                )
-            )
+            CardDefaults.border(focusedBorder = focusedBorder)
         },
-        scale = CardDefaults.scale(focusedScale = 1f)
+        scale = CardDefaults.scale(focusedScale = 1.06f)
     ) {
         if (isWideStyle) {
             WideCardContent(

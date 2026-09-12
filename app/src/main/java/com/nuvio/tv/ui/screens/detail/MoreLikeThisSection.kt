@@ -81,7 +81,7 @@ fun MoreLikeThisSection(
             height = 146.dp,
             cornerRadius = posterCardCornerRadius,
             focusedBorderWidth = NuvioTheme.spacing.xxs,
-            focusedScale = 1.02f
+            focusedScale = 1.06f
         )
     }
 

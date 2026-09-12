@@ -215,6 +215,7 @@ fun ContentCard(
         horizontalAlignment = Alignment.Start,
         modifier = modifier
             .width(animatedCardWidth)
+            .then(if (isFocused) Modifier.zIndex(1f) else Modifier)
             .recompositionHighlighter()
     ) {
         val context = LocalContext.current
@@ -267,6 +268,13 @@ fun ContentCard(
 
         val bgCardColor = NuvioTheme.colors.BackgroundCard
         val backgroundPainter = remember(bgCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(bgCardColor) }
+        val focusRingStyle = NuvioTheme.focusRing
+        val focusedBorder = remember(focusRingStyle, posterCardStyle.focusedBorderWidth, cardShape) {
+            Border(
+                border = focusRingStyle.border(posterCardStyle.focusedBorderWidth, alpha = 1.0f),
+                shape = cardShape
+            )
+        }
 
         Card(
             onClick = {
@@ -347,30 +355,10 @@ fun ContentCard(
                 containerColor = Color.Transparent,
                 focusedContainerColor = Color.Transparent
             ),
-            border = CardDefaults.border(
-                focusedBorder = run {
-                    val focusPulseAlpha = if (isFocused) {
-                        val transition = rememberInfiniteTransition(label = "contentCardPulse")
-                        val alpha by transition.animateFloat(
-                            initialValue = 0.25f,
-                            targetValue = 1.0f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-                                repeatMode = RepeatMode.Reverse
-                            ),
-                            label = "pulseAlpha"
-                        )
-                        alpha
-                    } else {
-                        1.0f
-                    }
-                    Border(
-                        border = NuvioTheme.focusRing.border(posterCardStyle.focusedBorderWidth, alpha = focusPulseAlpha),
-                        shape = cardShape
-                    )
-                }
-            ),
-            scale = CardDefaults.scale(focusedScale = 1f)
+            border = CardDefaults.border(focusedBorder = focusedBorder),
+            scale = CardDefaults.scale(
+                focusedScale = if (isBackdropExpanded) 1f else posterCardStyle.focusedScale
+            )
         ) {
             Box(
                 modifier = Modifier

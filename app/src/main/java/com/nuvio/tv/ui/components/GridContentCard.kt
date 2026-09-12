@@ -98,6 +98,7 @@ fun GridContentCard(
     Column(
         modifier = modifier
             .width(posterCardStyle.width)
+            .then(if (isFocused) Modifier.zIndex(1f) else Modifier)
             .recompositionHighlighter()
     ) {
         Card(

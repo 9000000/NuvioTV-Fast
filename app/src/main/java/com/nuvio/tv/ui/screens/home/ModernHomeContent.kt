@@ -146,7 +146,7 @@ fun ModernHomeContent(
     val onRowItemFocusedPassedDown = rememberUpdatedState(onRowItemFocusedCallback)
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
     val sidebarExpanded = LocalSidebarExpanded.current
-    val isSidebarExpanded = remember(sidebarExpanded) { derivedStateOf { sidebarExpanded } }
+    val isSidebarExpanded = rememberUpdatedState(sidebarExpanded)
     val lifecycleOwner = LocalLifecycleOwner.current
     val useLandscapePosters = uiState.modernLandscapePostersEnabled
     val fullScreenBackdrop = uiState.modernHeroFullScreenBackdropEnabled

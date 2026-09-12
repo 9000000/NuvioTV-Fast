@@ -157,99 +157,143 @@ private sealed interface ExperienceModeLoadState {
 }
 
 @Composable
-private fun rememberSettingsSectionSpecs() = listOf(
-    SettingsSectionSpec(
-        category = SettingsCategory.EXPERIENCE,
-        title = stringResource(R.string.settings_experience),
-        icon = Icons.Default.Tune,
-        subtitle = stringResource(R.string.settings_experience_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.ACCOUNT,
-        title = stringResource(R.string.settings_account),
-        icon = Icons.Default.Person,
-        subtitle = stringResource(R.string.settings_account_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.PROFILES,
-        title = stringResource(R.string.settings_profiles),
-        icon = Icons.Default.People,
-        subtitle = stringResource(R.string.settings_profiles_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.APPEARANCE,
-        title = stringResource(R.string.appearance_title),
-        icon = Icons.Default.Palette,
-        subtitle = stringResource(R.string.appearance_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.LAYOUT,
-        title = stringResource(R.string.settings_layout),
-        icon = Icons.Default.GridView,
-        subtitle = stringResource(R.string.settings_layout_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.CONTENT_DISCOVERY,
-        title = stringResource(R.string.settings_content_discovery),
-        icon = Icons.Default.Explore,
-        subtitle = stringResource(R.string.settings_content_discovery_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.INTEGRATION,
-        title = stringResource(R.string.settings_integration),
-        icon = Icons.Default.Link,
-        subtitle = "",
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.TORRSERVER,
-        title = stringResource(R.string.settings_torrserver_title),
-        icon = Icons.Default.Storage,
-        subtitle = stringResource(R.string.settings_torrserver_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.PLAYBACK,
-        title = stringResource(R.string.settings_playback),
-        icon = Icons.Rounded.PlayArrow,
-        subtitle = stringResource(R.string.settings_playback_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.TRACKING,
-        title = stringResource(R.string.settings_tracking_title),
-        icon = Icons.Default.Sync,
-        subtitle = stringResource(R.string.settings_tracking_subtitle),
-        destination = SettingsSectionDestination.External
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.ABOUT,
-        title = stringResource(R.string.about_title),
-        icon = Icons.Default.Info,
-        subtitle = stringResource(R.string.settings_about_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.ADVANCED,
-        title = stringResource(R.string.settings_advanced),
-        icon = Icons.Default.Build,
-        subtitle = stringResource(R.string.settings_advanced_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.DEBUG,
-        title = stringResource(R.string.settings_debug),
-        icon = Icons.Default.BugReport,
-        subtitle = stringResource(R.string.settings_debug_subtitle),
-        destination = SettingsSectionDestination.Inline
-    )
-)
+private fun rememberSettingsSectionSpecs(): List<SettingsSectionSpec> {
+    val experienceTitle = stringResource(R.string.settings_experience)
+    val experienceSubtitle = stringResource(R.string.settings_experience_subtitle)
+    val accountTitle = stringResource(R.string.settings_account)
+    val accountSubtitle = stringResource(R.string.settings_account_subtitle)
+    val profilesTitle = stringResource(R.string.settings_profiles)
+    val profilesSubtitle = stringResource(R.string.settings_profiles_subtitle)
+    val appearanceTitle = stringResource(R.string.appearance_title)
+    val appearanceSubtitle = stringResource(R.string.appearance_subtitle)
+    val layoutTitle = stringResource(R.string.settings_layout)
+    val layoutSubtitle = stringResource(R.string.settings_layout_subtitle)
+    val contentDiscoveryTitle = stringResource(R.string.settings_content_discovery)
+    val contentDiscoverySubtitle = stringResource(R.string.settings_content_discovery_subtitle)
+    val integrationTitle = stringResource(R.string.settings_integration)
+    val torrserverTitle = stringResource(R.string.settings_torrserver_title)
+    val torrserverSubtitle = stringResource(R.string.settings_torrserver_subtitle)
+    val playbackTitle = stringResource(R.string.settings_playback)
+    val playbackSubtitle = stringResource(R.string.settings_playback_subtitle)
+    val trackingTitle = stringResource(R.string.settings_tracking_title)
+    val trackingSubtitle = stringResource(R.string.settings_tracking_subtitle)
+    val aboutTitle = stringResource(R.string.about_title)
+    val aboutSubtitle = stringResource(R.string.settings_about_subtitle)
+    val advancedTitle = stringResource(R.string.settings_advanced)
+    val advancedSubtitle = stringResource(R.string.settings_advanced_subtitle)
+    val debugTitle = stringResource(R.string.settings_debug)
+    val debugSubtitle = stringResource(R.string.settings_debug_subtitle)
+
+    return remember(
+        experienceTitle, experienceSubtitle,
+        accountTitle, accountSubtitle,
+        profilesTitle, profilesSubtitle,
+        appearanceTitle, appearanceSubtitle,
+        layoutTitle, layoutSubtitle,
+        contentDiscoveryTitle, contentDiscoverySubtitle,
+        integrationTitle,
+        torrserverTitle, torrserverSubtitle,
+        playbackTitle, playbackSubtitle,
+        trackingTitle, trackingSubtitle,
+        aboutTitle, aboutSubtitle,
+        advancedTitle, advancedSubtitle,
+        debugTitle, debugSubtitle
+    ) {
+        listOf(
+            SettingsSectionSpec(
+                category = SettingsCategory.EXPERIENCE,
+                title = experienceTitle,
+                icon = Icons.Default.Tune,
+                subtitle = experienceSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.ACCOUNT,
+                title = accountTitle,
+                icon = Icons.Default.Person,
+                subtitle = accountSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.PROFILES,
+                title = profilesTitle,
+                icon = Icons.Default.People,
+                subtitle = profilesSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.APPEARANCE,
+                title = appearanceTitle,
+                icon = Icons.Default.Palette,
+                subtitle = appearanceSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.LAYOUT,
+                title = layoutTitle,
+                icon = Icons.Default.GridView,
+                subtitle = layoutSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.CONTENT_DISCOVERY,
+                title = contentDiscoveryTitle,
+                icon = Icons.Default.Explore,
+                subtitle = contentDiscoverySubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.INTEGRATION,
+                title = integrationTitle,
+                icon = Icons.Default.Link,
+                subtitle = "",
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.TORRSERVER,
+                title = torrserverTitle,
+                icon = Icons.Default.Storage,
+                subtitle = torrserverSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.PLAYBACK,
+                title = playbackTitle,
+                icon = Icons.Rounded.PlayArrow,
+                subtitle = playbackSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.TRACKING,
+                title = trackingTitle,
+                icon = Icons.Default.Sync,
+                subtitle = trackingSubtitle,
+                destination = SettingsSectionDestination.External
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.ABOUT,
+                title = aboutTitle,
+                icon = Icons.Default.Info,
+                subtitle = aboutSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.ADVANCED,
+                title = advancedTitle,
+                icon = Icons.Default.Build,
+                subtitle = advancedSubtitle,
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.DEBUG,
+                title = debugTitle,
+                icon = Icons.Default.BugReport,
+                subtitle = debugSubtitle,
+                destination = SettingsSectionDestination.Inline
+            )
+        )
+    }
+}
 
 @Composable
 fun SettingsScreen(

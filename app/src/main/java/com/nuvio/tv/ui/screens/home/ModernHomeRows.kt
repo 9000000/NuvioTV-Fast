@@ -1219,39 +1219,26 @@ private fun ModernCarouselCard(
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
     val backgroundCardColor = NuvioTheme.colors.BackgroundCard
+    val backgroundPainter = remember(backgroundCardColor) { ColorPainter(backgroundCardColor) }
     val isFastScrollingState = LocalFastScrollActive.current
     val isFastScrolling = isFastScrollingState.value
     val focusRingBorderWidth = 3.dp
-    val focusPulseAlpha = if (isFocused && !isFastScrolling) {
-        val transition = rememberInfiniteTransition(label = "modernCardPulse")
-        val alpha by transition.animateFloat(
-            initialValue = 0.25f,
-            targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "pulseAlpha"
+    val focusRingStyle = NuvioTheme.focusRing
+    val focusRingBorder = remember(focusRingStyle, focusRingBorderWidth, cardShape) {
+        Border(
+            border = focusRingStyle.border(focusRingBorderWidth, alpha = 1.0f),
+            shape = cardShape
         )
-        alpha
-    } else {
-        1.0f
     }
-    val focusRingBorder = NuvioTheme.focusRing.border(focusRingBorderWidth, alpha = focusPulseAlpha)
-    val titleMedium = MaterialTheme.typography.titleMedium
-    val backgroundPainter = remember(backgroundCardColor) { ColorPainter(backgroundCardColor) }
-    val focusedBorder = Border(
-        border = focusRingBorder,
-        shape = cardShape
-    )
     val transparentFocusBorder = remember(cardShape) {
         Border(
             border = BorderStroke(NuvioTheme.spacing.none, Color.Transparent),
             shape = cardShape
         )
     }
-    val effectiveFocusedBorder = if (isFastScrolling) transparentFocusBorder else focusedBorder
+    val effectiveFocusedBorder = if (isFastScrolling) transparentFocusBorder else focusRingBorder
     val effectiveCardGlow = remember { CardDefaults.glow(focusedGlow = Glow.None) }
+    val titleMedium = MaterialTheme.typography.titleMedium
     val titleStyle = remember(titleMedium) {
         titleMedium.copy(fontWeight = FontWeight.Medium)
     }
@@ -1259,6 +1246,7 @@ private fun ModernCarouselCard(
     Column(
         modifier = modifier
             .width(animatedCardWidth)
+            .then(if (isFocused) Modifier.zIndex(1f) else Modifier)
             .recompositionHighlighter(),
         verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
     ) {
@@ -1318,7 +1306,9 @@ private fun ModernCarouselCard(
                 focusedContainerColor = backgroundCardColor
             ),
             border = CardDefaults.border(focusedBorder = effectiveFocusedBorder),
-            scale = CardDefaults.scale(focusedScale = 1f),
+            scale = CardDefaults.scale(
+                focusedScale = if (isBackdropExpanded) 1f else 1.08f
+            ),
             glow = effectiveCardGlow
         ) {
             Box(
