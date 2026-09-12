@@ -366,17 +366,6 @@ class StreamScreenViewModel @Inject constructor(
                     playerPreference = playerSettings.playerPreference,
                     streamAutoPlayMode = playerSettings.streamAutoPlayMode
                 )
-                // In MANUAL mode, still enable direct auto-play if a persisted
-                // binge group exists - same behavior as playNextEpisode in the player.
-                if (!directAutoPlayFlowEnabledForSession &&
-                    playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode &&
-                    playerSettings.streamAutoPlayReuseBingeGroup
-                ) {
-                    val hasBingeGroup = contentId?.let { bingeGroupCacheDataStore.get(it) } != null
-                    if (hasBingeGroup) {
-                        directAutoPlayFlowEnabledForSession = true
-                    }
-                }
                 directAutoPlayModeInitializedForSession = true
             }
 
@@ -509,8 +498,11 @@ class StreamScreenViewModel @Inject constructor(
                 // Auto-select only after all addons have responded or the
                 // configured timeout has elapsed. This gives slower addons a
                 // chance to return higher-quality streams before the selector
-                // picks from whatever is available.
-                val shouldAutoSelect = !autoPlayHandledForSession && !resolvedAutoPlayTarget && isAllLoaded
+                // picks from whatever is available. Never auto-select in MANUAL mode.
+                val shouldAutoSelect = !autoPlayHandledForSession &&
+                    !resolvedAutoPlayTarget &&
+                    isAllLoaded &&
+                    playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL
                 val selectedAutoPlayStream = if (!shouldAutoSelect) {
                     null
                 } else {
@@ -695,23 +687,25 @@ class StreamScreenViewModel @Inject constructor(
                                 // Before timeout: eagerly check binge group only
                                 // (no fallback to FIRST_STREAM/REGEX yet). If a
                                 // match is found we can start playback immediately
-                                // without waiting for the full timeout.
-                                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
-                                    result.data, installedAddonOrder
-                                )
-                                val allStreams = orderedStreams.flatMap { it.streams }
-                                val earlyMatch = StreamAutoPlaySelector.selectAutoPlayStream(
-                                    streams = allStreams,
-                                    mode = playerSettings.streamAutoPlayMode,
-                                    regexPattern = playerSettings.streamAutoPlayRegex,
-                                    source = playerSettings.streamAutoPlaySource,
-                                    installedAddonNames = installedAddonOrder.toSet(),
-                                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
-                                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
-                                    preferredBingeGroup = persistedBingeGroup,
-                                    preferBingeGroupInSelection = true,
-                                    bingeGroupOnly = true
-                                )
+                                // without waiting for the full timeout. Never in MANUAL mode.
+                                val earlyMatch = if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
+                                    val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
+                                        result.data, installedAddonOrder
+                                    )
+                                    val allStreams = orderedStreams.flatMap { it.streams }
+                                    StreamAutoPlaySelector.selectAutoPlayStream(
+                                        streams = allStreams,
+                                        mode = playerSettings.streamAutoPlayMode,
+                                        regexPattern = playerSettings.streamAutoPlayRegex,
+                                        source = playerSettings.streamAutoPlaySource,
+                                        installedAddonNames = installedAddonOrder.toSet(),
+                                        selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                                        selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                                        preferredBingeGroup = persistedBingeGroup,
+                                        preferBingeGroupInSelection = true,
+                                        bingeGroupOnly = false
+                                    )
+                                } else null
                                 if (earlyMatch != null) {
                                     resolvedAutoPlayTarget = true
                                     autoSelectTriggered = true

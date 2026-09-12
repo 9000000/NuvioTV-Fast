@@ -178,9 +178,9 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `manual mode auto-selects matching bingeGroup when prefer enabled`() {
-        // Binge-group continuity is intentionally allowed in MANUAL mode so
-        // next-episode / resume can skip the picker when a group was locked in.
+    fun `manual mode auto-selects matching bingeGroup when bingeGroupOnly is true`() {
+        // Binge-group continuity is intentionally allowed in MANUAL mode only when bingeGroupOnly is true
+        // (so player next-episode fallback can skip the picker when a group was locked in).
         val matched = stream(
             addonName = "AddonA",
             url = "https://example.com/match.m3u8",
@@ -196,10 +196,37 @@ class StreamAutoPlaySelectorTest {
             selectedAddons = emptySet(),
             selectedPlugins = emptySet(),
             preferredBingeGroup = "same-group",
-            preferBingeGroupInSelection = true
+            preferBingeGroupInSelection = true,
+            bingeGroupOnly = true
         )
 
         assertEquals(matched, selected)
+    }
+
+    @Test
+    fun `manual mode returns null when bingeGroupOnly is false`() {
+        // When not in player next-episode fallback (bingeGroupOnly = false),
+        // MANUAL mode must strictly return null so the stream picker is always displayed.
+        val matched = stream(
+            addonName = "AddonA",
+            url = "https://example.com/match.m3u8",
+            bingeGroup = "same-group"
+        )
+
+        val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+            streams = listOf(matched),
+            mode = StreamAutoPlayMode.MANUAL,
+            regexPattern = "",
+            source = StreamAutoPlaySource.ALL_SOURCES,
+            installedAddonNames = setOf("AddonA"),
+            selectedAddons = emptySet(),
+            selectedPlugins = emptySet(),
+            preferredBingeGroup = "same-group",
+            preferBingeGroupInSelection = true,
+            bingeGroupOnly = false
+        )
+
+        assertNull(selected)
     }
 
     @Test
