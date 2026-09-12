@@ -897,6 +897,9 @@ class StreamScreenViewModel @Inject constructor(
     private fun shouldAttemptEmbeddedMetaStreamLookup(): Boolean {
         val metaId = contentId?.takeIf { it.isNotBlank() } ?: return false
         if (contentType.isBlank()) return false
+        if (metaRepository.getCachedMeta(contentType, metaId)?.videos?.any {
+                it.id == videoId && it.streams.isNotEmpty()
+            } == true) return true
         if (contentType.equals("other", ignoreCase = true)) return true
 
         val canonicalVideoMetaId = videoId.substringBefore(":")
@@ -1039,9 +1042,13 @@ class StreamScreenViewModel @Inject constructor(
 
     private suspend fun getEmbeddedStreamsFromMeta(): AddonStreams? {
         val metaId = contentId?.takeIf { it.isNotBlank() } ?: return null
-        val result = metaRepository.getMetaFromAllAddons(type = contentType, id = metaId)
-            .first { it !is NetworkResult.Loading }
-        val meta = (result as? NetworkResult.Success)?.data ?: return null
+        val cached = metaRepository.getCachedMeta(contentType, metaId)
+            ?.takeIf { meta -> meta.videos.any { it.id == videoId && it.streams.isNotEmpty() } }
+        val meta = cached ?: run {
+            val result = metaRepository.getMetaFromAllAddons(type = contentType, id = metaId)
+                .first { it !is NetworkResult.Loading }
+            (result as? NetworkResult.Success)?.data
+        } ?: return null
         val video = meta.videos.firstOrNull { it.id == videoId } ?: return null
         if (video.streams.isEmpty()) return null
 
