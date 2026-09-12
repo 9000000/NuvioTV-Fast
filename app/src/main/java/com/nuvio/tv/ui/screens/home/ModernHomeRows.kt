@@ -122,6 +122,7 @@ import com.nuvio.tv.ui.components.nuvioCardDepth
 import com.nuvio.tv.ui.components.rememberArtworkBackedCardGlow
 import com.nuvio.tv.ui.components.rememberPlaceholderShimmerOffsetState
 import com.nuvio.tv.LocalSidebarExpanded
+import com.nuvio.tv.ui.theme.NuvioComponents
 import kotlin.math.abs
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -1299,6 +1300,11 @@ private fun ModernCarouselCard(
                         return@onPreviewKeyEvent true
                     }
                     false
+                }
+                .graphicsLayer {
+                    val targetScale = if (isFocused && !isBackdropExpanded) NuvioComponents.tokens.posterCard.focusedScale else 1f
+                    scaleX = targetScale
+                    scaleY = targetScale
                 },
             shape = CardDefaults.shape(cardShape),
             colors = CardDefaults.colors(
@@ -1306,9 +1312,7 @@ private fun ModernCarouselCard(
                 focusedContainerColor = backgroundCardColor
             ),
             border = CardDefaults.border(focusedBorder = effectiveFocusedBorder),
-            scale = CardDefaults.scale(
-                focusedScale = if (isBackdropExpanded) 1f else 1.08f
-            ),
+            scale = CardDefaults.scale(focusedScale = 1f),
             glow = effectiveCardGlow
         ) {
             Box(

@@ -90,7 +90,7 @@ object NuvioComponents {
             cornerRadius = 12.dp,
             contentPadding = 8.dp,
             focusedBorderWidth = 3.5.dp,
-            focusedScale = 1.08f
+            focusedScale = 1.10f
         ),
         backdropCard = NuvioCardComponentTokens(
             width = 320.dp,
@@ -98,7 +98,7 @@ object NuvioComponents {
             cornerRadius = 16.dp,
             contentPadding = 16.dp,
             focusedBorderWidth = 3.5.dp,
-            focusedScale = 1.05f
+            focusedScale = 1.0f
         ),
         collectionCard = NuvioCardComponentTokens(
             width = 320.dp,
@@ -106,7 +106,7 @@ object NuvioComponents {
             cornerRadius = 16.dp,
             contentPadding = 16.dp,
             focusedBorderWidth = 3.5.dp,
-            focusedScale = 1.05f
+            focusedScale = 1.0f
         ),
         continueWatchingCard = NuvioCardComponentTokens(
             width = 260.dp,
@@ -114,7 +114,7 @@ object NuvioComponents {
             cornerRadius = 12.dp,
             contentPadding = 12.dp,
             focusedBorderWidth = 3.5.dp,
-            focusedScale = 1.06f
+            focusedScale = 1.0f
         ),
         episodeCard = NuvioCardComponentTokens(
             width = 320.dp,
@@ -122,7 +122,7 @@ object NuvioComponents {
             cornerRadius = 16.dp,
             contentPadding = 16.dp,
             focusedBorderWidth = 3.5.dp,
-            focusedScale = 1.05f
+            focusedScale = 1.0f
         ),
         row = NuvioRowComponentTokens(
             horizontalPadding = 48.dp,

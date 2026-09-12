@@ -347,6 +347,11 @@ fun ContentCard(
                         }
                     } else Modifier
                 )
+                .graphicsLayer {
+                    val targetScale = if (isFocused && !isBackdropExpanded) posterCardStyle.focusedScale else 1f
+                    scaleX = targetScale
+                    scaleY = targetScale
+                }
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
                 ),
@@ -356,9 +361,7 @@ fun ContentCard(
                 focusedContainerColor = Color.Transparent
             ),
             border = CardDefaults.border(focusedBorder = focusedBorder),
-            scale = CardDefaults.scale(
-                focusedScale = if (isBackdropExpanded) 1f else posterCardStyle.focusedScale
-            )
+            scale = CardDefaults.scale(focusedScale = 1f)
         ) {
             Box(
                 modifier = Modifier

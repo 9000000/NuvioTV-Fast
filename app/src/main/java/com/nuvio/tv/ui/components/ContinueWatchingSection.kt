@@ -673,7 +673,7 @@ fun ContinueWatchingCard(
         } else {
             CardDefaults.border(focusedBorder = focusedBorder)
         },
-        scale = CardDefaults.scale(focusedScale = 1.06f)
+        scale = CardDefaults.scale(focusedScale = 1f)
     ) {
         if (isWideStyle) {
             WideCardContent(

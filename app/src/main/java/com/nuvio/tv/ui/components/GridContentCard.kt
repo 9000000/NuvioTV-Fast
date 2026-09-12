@@ -162,6 +162,11 @@ fun GridContentCard(
                         return@onPreviewKeyEvent true
                     }
                     false
+                }
+                .graphicsLayer {
+                    val targetScale = if (isFocused) posterCardStyle.focusedScale else 1f
+                    scaleX = targetScale
+                    scaleY = targetScale
                 },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
@@ -174,7 +179,7 @@ fun GridContentCard(
                     shape = cardShape
                 )
             ),
-            scale = CardDefaults.scale(focusedScale = posterCardStyle.focusedScale)
+            scale = CardDefaults.scale(focusedScale = 1f)
         ) {
             Box(
                 modifier = Modifier
