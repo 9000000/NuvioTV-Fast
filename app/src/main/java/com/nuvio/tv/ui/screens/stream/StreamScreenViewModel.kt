@@ -459,7 +459,8 @@ class StreamScreenViewModel @Inject constructor(
             val installedAddonOrder = installedAddons.map { it.displayName }
             val directDebridSourceNames = emptyList<String>()
             val directDebridAvailable = false
-            val persistedBingeGroup = if (playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode &&
+            val persistedBingeGroup = if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL &&
+                playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode &&
                 playerSettings.streamAutoPlayReuseBingeGroup) {
                 contentId?.let { bingeGroupCacheDataStore.get(it) }
             } else null
@@ -799,11 +800,11 @@ class StreamScreenViewModel @Inject constructor(
             if (directFlowActive && !resolvedAutoPlayTarget && lastSuccessData != null && !isUnlimitedTimeout) {
                 // If torrents are still pending cache check, the next emission
                 // will carry the result — don't tear down yet.
-                val hasCheckingTorrents = lastSuccessData?.any { group ->
+                val hasCheckingTorrents = lastSuccessData.any { group ->
                     group.streams.any { s ->
                         s.isTorrent() && s.debridCacheStatus?.state == com.nuvio.tv.domain.model.StreamDebridCacheState.CHECKING
                     }
-                } == true
+                }
                 if (!hasCheckingTorrents) {
                     autoPlayHandledForSession = true
                     directAutoPlayFlowEnabledForSession = false

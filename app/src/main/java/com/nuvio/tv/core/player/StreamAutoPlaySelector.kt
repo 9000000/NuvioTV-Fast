@@ -43,8 +43,6 @@ object StreamAutoPlaySelector {
         return stream.getStreamUrl() != null || stream.isTorrent() || stream.isDirectDebrid()
     }
 
-
-
     fun selectAutoPlayStream(
         streams: List<Stream>,
         mode: StreamAutoPlayMode,
@@ -101,8 +99,6 @@ object StreamAutoPlaySelector {
         }
 
         if (bingeGroupOnly) return null
-
-        if (mode == StreamAutoPlayMode.MANUAL) return null
 
         return when (mode) {
             StreamAutoPlayMode.MANUAL -> null
