@@ -78,7 +78,7 @@ class StreamScreenViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val streamBadgePresentation: StreamBadgePresentation,
-    streamBadgeSettingsDataStore: StreamBadgeSettingsDataStore,
+    private val streamBadgeSettingsDataStore: StreamBadgeSettingsDataStore,
     private val bingeGroupCacheDataStore: BingeGroupCacheDataStore,
     private val torrentSettings: TorrentSettings,
     private val watchProgressRepository: WatchProgressRepository,
@@ -187,43 +187,38 @@ class StreamScreenViewModel @Inject constructor(
         if (streamBadgePresentationJob?.isActive == true) return
 
         streamBadgePresentationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val rules = streamBadgeSettingsDataStore.settings.first().rules
+            if (!rules.hasImport) {
+                // If badges are disabled or rules empty, preserve addon streams 100% as returned
+                badgedAddonNames = badgedAddonNames + newGroups.map { it.addonName }.toSet()
+                return@launch
+            }
+
             var pending = newGroups
             while (pending.isNotEmpty()) {
-                val allNewStreams = pending.flatMap { it.streams }
-                val chunks = allNewStreams.chunked(5)
-                val badgedByKey = HashMap<String, Stream>(allNewStreams.size)
-                for (chunk in chunks) {
+                for (group in pending) {
                     ensureActive()
-                    val chunkGroup = AddonStreams(addonName = "", addonLogo = null, streams = chunk)
-                    val badgedChunk = streamBadgePresentation.apply(listOf(chunkGroup))
-                        .firstOrNull()?.streams ?: chunk
+                    val badgedGroup = streamBadgePresentation.apply(listOf(group)).firstOrNull() ?: group
                     ensureActive()
-                    badgedChunk.forEach { stream -> badgedByKey[stream.badgeMergeKey()] = stream }
-                }
-                ensureActive()
-                updateUiStateIfChanged { state ->
-                    val updatedAddonStreams = state.addonStreams.map { group ->
-                        group.copy(
-                            streams = group.streams.map { stream ->
-                                badgedByKey[stream.badgeMergeKey()] ?: stream
-                            }
+                    updateUiStateIfChanged { state ->
+                        val updatedAddonStreams = state.addonStreams.map { existingGroup ->
+                            if (existingGroup.addonName == group.addonName) badgedGroup else existingGroup
+                        }
+                        val updatedAllStreams = updatedAddonStreams.flatMap { it.streams }
+                        val currentFilter = state.selectedAddonFilter
+                        val filteredStreams = if (currentFilter == null) {
+                            updatedAllStreams
+                        } else {
+                            updatedAllStreams.filter { it.addonName == currentFilter }
+                        }
+                        state.copy(
+                            addonStreams = updatedAddonStreams,
+                            allStreams = updatedAllStreams,
+                            filteredStreams = filteredStreams
                         )
                     }
-                    val updatedAllStreams = updatedAddonStreams.flatMap { it.streams }
-                    val currentFilter = state.selectedAddonFilter
-                    val filteredStreams = if (currentFilter == null) {
-                        updatedAllStreams
-                    } else {
-                        updatedAllStreams.filter { it.addonName == currentFilter }
-                    }
-                    state.copy(
-                        addonStreams = updatedAddonStreams,
-                        allStreams = updatedAllStreams,
-                        filteredStreams = filteredStreams
-                    )
+                    badgedAddonNames = badgedAddonNames + group.addonName
                 }
-                // Mark processed addons as done
-                badgedAddonNames = badgedAddonNames + pending.map { it.addonName }.toSet()
                 // Check if new addons arrived while we were processing
                 val currentAddons = _uiState.value.addonStreams
                 pending = currentAddons.filter { it.addonName !in badgedAddonNames }
@@ -488,19 +483,19 @@ class StreamScreenViewModel @Inject constructor(
 
                 // Preserve badges already computed by prior badge jobs so they
                 // don't vanish when repository emits fresh (badge-less) streams.
-                val existingBadgedStreams = _uiState.value.allStreams
+                val existingBadgesByKey = _uiState.value.allStreams
                     .filter { it.badges.isNotEmpty() }
-                    .associateBy { it.badgeMergeKey() }
+                    .associate { it.uniqueIdentityKey() to it.badges }
 
-                val mergedAddonStreams = if (existingBadgedStreams.isEmpty()) {
+                val mergedAddonStreams = if (existingBadgesByKey.isEmpty()) {
                     orderedAddonStreams
                 } else {
                     orderedAddonStreams.map { group ->
                         group.copy(
                             streams = group.streams.map { stream ->
-                                val existing = existingBadgedStreams[stream.badgeMergeKey()]
-                                if (existing != null && stream.badges.isEmpty()) {
-                                    stream.copy(badges = existing.badges)
+                                val existingBadges = existingBadgesByKey[stream.uniqueIdentityKey()]
+                                if (!existingBadges.isNullOrEmpty() && stream.badges.isEmpty()) {
+                                    stream.copy(badges = existingBadges)
                                 } else {
                                     stream
                                 }
@@ -2101,19 +2096,18 @@ class StreamScreenViewModel @Inject constructor(
 
 }
 
-private fun Stream.badgeMergeKey(): String {
-    infoHash?.lowercase()?.let { hash -> return "$addonName|$hash:${fileIdx ?: ""}" }
-    // Use the playable URL as primary key - but for streams without a playable URL
-    // (e.g. statistic/informational entries that only have externalUrl), fall back
-    // to name+title+description to avoid all such streams collapsing to one key.
-    val playableUrl = url ?: clientResolve?.let { resolve ->
-        resolve.stream?.raw?.filename ?: resolve.infoHash
-    }
-    if (playableUrl != null) {
-        val nameSuffix = name?.takeIf { it.isNotBlank() }?.let { "|$it" } ?: ""
-        return "$addonName|$playableUrl$nameSuffix"
-    }
-    return "$addonName|${name}:${title}:${description?.hashCode() ?: 0}"
+private fun Stream.uniqueIdentityKey(): String = buildString {
+    append(addonName)
+    append('|')
+    append(url ?: "")
+    append('|')
+    append(infoHash?.lowercase() ?: "")
+    append('|')
+    append(getEffectiveFileIdx() ?: "")
+    append('|')
+    append(name ?: "")
+    append('|')
+    append(title ?: "")
 }
 
 data class StreamPlaybackInfo(

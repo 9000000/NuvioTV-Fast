@@ -805,19 +805,9 @@ private fun RightStreamSection(
             firstStreamFocusRequestId += 1
         }
     }
-    // When on "All" tab and new results arrive above the focused stream, move focus to the new first item.
+    // Track first stream key without stealing focus or jumping scroll position when late addons arrive.
     var trackedFirstStreamKey by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(firstStreamKey, selectedAddonFilter, listHasFocus) {
-        if (selectedAddonFilter != null) {
-            trackedFirstStreamKey = firstStreamKey
-            return@LaunchedEffect
-        }
-        if (firstStreamKey != null && trackedFirstStreamKey != null &&
-            firstStreamKey != trackedFirstStreamKey &&
-            listHasFocus && !userMovedFromFirstResult
-        ) {
-            firstStreamFocusRequestId += 1
-        }
+    LaunchedEffect(firstStreamKey, selectedAddonFilter) {
         trackedFirstStreamKey = firstStreamKey
     }
     fun requestChipFocus(index: Int) {

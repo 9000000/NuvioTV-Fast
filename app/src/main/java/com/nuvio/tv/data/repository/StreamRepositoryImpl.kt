@@ -39,11 +39,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.URLEncoder
 import java.security.MessageDigest
 import javax.inject.Inject
 
 private const val TAG = "StreamRepositoryImpl"
+private const val PER_ADDON_TIMEOUT_MS = 15_000L
 
 class StreamRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -199,43 +201,56 @@ class StreamRepositoryImpl @Inject constructor(
                 streamAddons.forEach { addon ->
                     launch {
                         try {
-                            val streamsResult = getStreamsFromAddon(addon, type, videoId)
-                            when (streamsResult) {
-                                is NetworkResult.Success -> {
-                                    if (streamsResult.data.isNotEmpty()) {
-                                        val namedStreams = streamsResult.data.map {
-                                            it.copy(addonName = addon.displayName, addonLogo = addon.logo)
-                                        }
-                                        resultChannel.send(
-                                            AddonStreams(
-                                                addonName = addon.displayName,
-                                                addonLogo = addon.logo,
-                                                streams = namedStreams
-                                            )
-                                        )
-                                    } else {
-                                        // Stream endpoint returned empty - try inline
-                                        // streams from meta response as fallback.
-                                        val inlineStreams = fetchInlineStreamsFromMeta(
-                                            addon, type, videoId
-                                        )
-                                        if (inlineStreams.isNotEmpty()) {
+                            val streamsResult = withTimeoutOrNull(PER_ADDON_TIMEOUT_MS) {
+                                getStreamsFromAddon(addon, type, videoId)
+                            }
+                            if (streamsResult == null) {
+                                Log.w(TAG, "Addon ${addon.name} timed out after ${PER_ADDON_TIMEOUT_MS}ms")
+                                attemptedFailures += StreamAttemptFailure(
+                                    addonName = addon.displayName,
+                                    kind = StreamFailureKind.REQUEST_FAILED,
+                                    detail = context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_timeout)
+                                )
+                            } else {
+                                when (streamsResult) {
+                                    is NetworkResult.Success -> {
+                                        if (streamsResult.data.isNotEmpty()) {
+                                            val namedStreams = streamsResult.data.map {
+                                                it.copy(addonName = addon.displayName, addonLogo = addon.logo)
+                                            }
                                             resultChannel.send(
                                                 AddonStreams(
                                                     addonName = addon.displayName,
                                                     addonLogo = addon.logo,
-                                                    streams = inlineStreams
+                                                    streams = namedStreams
                                                 )
                                             )
                                         } else {
-                                            attemptedFailures += buildMissingStreamFailure(addon)
+                                            // Stream endpoint returned empty - try inline
+                                            // streams from meta response as fallback.
+                                            val inlineStreams = withTimeoutOrNull(PER_ADDON_TIMEOUT_MS) {
+                                                fetchInlineStreamsFromMeta(
+                                                    addon, type, videoId
+                                                )
+                                            } ?: emptyList()
+                                            if (inlineStreams.isNotEmpty()) {
+                                                resultChannel.send(
+                                                    AddonStreams(
+                                                        addonName = addon.displayName,
+                                                        addonLogo = addon.logo,
+                                                        streams = inlineStreams
+                                                    )
+                                                )
+                                            } else {
+                                                attemptedFailures += buildMissingStreamFailure(addon)
+                                            }
                                         }
                                     }
+                                    is NetworkResult.Error -> {
+                                        attemptedFailures += buildAddonFailure(addon, streamsResult)
+                                    }
+                                    NetworkResult.Loading -> Unit
                                 }
-                                is NetworkResult.Error -> {
-                                    attemptedFailures += buildAddonFailure(addon, streamsResult)
-                                }
-                                NetworkResult.Loading -> Unit
                             }
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
@@ -569,11 +584,11 @@ class StreamRepositoryImpl @Inject constructor(
             ?: externalUrl
             ?: ytId
             ?: "${addonName}:${name}:${title}"
-        val nameSuffix = if (base == url) {
-            val discriminator = name?.takeIf { it.isNotBlank() }
-            if (discriminator != null) "|$discriminator" else ""
-        } else ""
-        return "$base$nameSuffix"
+        val discriminator = buildString {
+            name?.takeIf { it.isNotBlank() }?.let { append("|$it") }
+            title?.takeIf { it.isNotBlank() }?.let { append("|$it") }
+        }
+        return "$base$discriminator"
     }
 
     /**

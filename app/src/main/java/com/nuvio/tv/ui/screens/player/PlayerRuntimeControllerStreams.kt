@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
@@ -42,22 +43,28 @@ internal fun PlayerRuntimeController.scheduleSourceBadgeApplication() {
     if (newAddons.isEmpty()) return
 
     sourceBadgeJob = scope.launch(kotlinx.coroutines.Dispatchers.Default) {
-        val allNewStreams = newAddons.flatMap { addonName ->
-            _uiState.value.sourceAllStreams.filter { it.addonName == addonName }
-        }
-        if (allNewStreams.isEmpty()) {
+        val currentRules = streamBadgeSettingsDataStore.settings.first().rules
+        if (!currentRules.hasImport) {
             sourceBadgedAddonNames = sourceBadgedAddonNames + newAddons.toSet()
             return@launch
         }
-        val chunks = allNewStreams.chunked(5)
-        for (chunk in chunks) {
-            val chunkGroup = com.nuvio.tv.domain.model.AddonStreams(addonName = "", addonLogo = null, streams = chunk)
-            val badgedChunk = streamBadgePresentation.apply(listOf(chunkGroup))
-                .firstOrNull()?.streams ?: chunk
-            val badgedByKey = badgedChunk.associateBy { it.sourceBadgeMergeKey() }
+        for (addonName in newAddons) {
+            ensureActive()
+            val streamsForAddon = _uiState.value.sourceAllStreams.filter { it.addonName == addonName }
+            if (streamsForAddon.isEmpty()) {
+                sourceBadgedAddonNames = sourceBadgedAddonNames + addonName
+                continue
+            }
+            val group = com.nuvio.tv.domain.model.AddonStreams(addonName = addonName, addonLogo = null, streams = streamsForAddon)
+            val badgedGroup = streamBadgePresentation.apply(listOf(group)).firstOrNull() ?: group
+            ensureActive()
+            val badgedStreamsByKey = badgedGroup.streams.associate { it.uniqueIdentityKey() to it.badges }
             _uiState.update { current ->
                 val updatedAll = current.sourceAllStreams.map { s ->
-                    badgedByKey[s.sourceBadgeMergeKey()] ?: s
+                    if (s.addonName == addonName) {
+                        val badges = badgedStreamsByKey[s.uniqueIdentityKey()]
+                        if (!badges.isNullOrEmpty()) s.copy(badges = badges) else s
+                    } else s
                 }
                 val selectedAddon = current.sourceSelectedAddonFilter
                 current.copy(
@@ -65,8 +72,7 @@ internal fun PlayerRuntimeController.scheduleSourceBadgeApplication() {
                     sourceFilteredStreams = updatedAll.filterByAddon(selectedAddon)
                 )
             }
-            val coveredAddons = chunk.map { it.addonName }.toSet()
-            sourceBadgedAddonNames = sourceBadgedAddonNames + coveredAddons
+            sourceBadgedAddonNames = sourceBadgedAddonNames + addonName
         }
     }
 }
@@ -93,13 +99,18 @@ internal fun PlayerRuntimeController.scheduleEpisodeBadgeApplication() {
     }
 }
 
-private fun Stream.sourceBadgeMergeKey(): String {
-    infoHash?.lowercase()?.let { return "$addonName|$it:${fileIdx ?: ""}" }
-    val playableUrl = url ?: clientResolve?.let { resolve ->
-        resolve.stream?.raw?.filename ?: resolve.infoHash
-    }
-    if (playableUrl != null) return "$addonName|$playableUrl"
-    return "$addonName|${name}:${title}:${description?.hashCode() ?: 0}"
+private fun Stream.uniqueIdentityKey(): String = buildString {
+    append(addonName)
+    append('|')
+    append(url ?: "")
+    append('|')
+    append(infoHash?.lowercase() ?: "")
+    append('|')
+    append(getEffectiveFileIdx() ?: "")
+    append('|')
+    append(name ?: "")
+    append('|')
+    append(title ?: "")
 }
 
 internal fun PlayerRuntimeController.showEpisodesPanel() {
@@ -235,15 +246,15 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                             allStreams
                         }
                         // Preserve badges already computed by prior badge jobs
-                        val existingBadged = it.sourceAllStreams
+                        val existingBadgesByKey = it.sourceAllStreams
                             .filter { s -> s.badges.isNotEmpty() }
-                            .associateBy { s -> s.sourceBadgeMergeKey() }
-                        val badgePreserved = if (existingBadged.isEmpty()) {
+                            .associate { s -> s.uniqueIdentityKey() to s.badges }
+                        val badgePreserved = if (existingBadgesByKey.isEmpty()) {
                             mergedAllStreams
                         } else {
                             mergedAllStreams.map { s ->
-                                val existing = existingBadged[s.sourceBadgeMergeKey()]
-                                if (existing != null && s.badges.isEmpty()) s.copy(badges = existing.badges) else s
+                                val badges = existingBadgesByKey[s.uniqueIdentityKey()]
+                                if (!badges.isNullOrEmpty() && s.badges.isEmpty()) s.copy(badges = badges) else s
                             }
                         }
                         val mergedAvailableAddons = if (isResume && it.sourceAvailableAddons.isNotEmpty()) {
@@ -304,14 +315,10 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
  */
 private fun mergeSourceStreams(cached: List<Stream>, fresh: List<Stream>): List<Stream> {
     val merged = LinkedHashMap<String, Stream>()
-    cached.forEach { stream -> merged[stream.mergeKey()] = stream }
-    fresh.forEach { stream -> merged[stream.mergeKey()] = stream }
+    cached.forEach { stream -> merged[stream.uniqueIdentityKey()] = stream }
+    fresh.forEach { stream -> merged[stream.uniqueIdentityKey()] = stream }
     return merged.values.toList()
 }
-
-private fun Stream.mergeKey(): String =
-    infoHash?.lowercase()?.let { hash -> "$addonName|$hash:${fileIdx ?: ""}" }
-        ?: "$addonName|${getStreamUrl() ?: externalUrl ?: ytId ?: "${name}:${title}"}"
 
 private fun PlayerRuntimeController.launchSourceDebridPreparationIfNeeded(
     launched: Boolean,
