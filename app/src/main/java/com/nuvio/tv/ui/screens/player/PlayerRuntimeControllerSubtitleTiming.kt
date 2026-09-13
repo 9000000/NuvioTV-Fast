@@ -241,8 +241,8 @@ internal suspend fun PlayerRuntimeController.downloadSubtitleBody(
         throw lastError ?: IllegalStateException("Subtitle download failed")
     }
 
-// Stream request control headers, never copied.
-private val SUBTITLE_EXCLUDED_STREAM_HEADERS = setOf("range", "host", "connection", "transfer-encoding")
+// Request control headers, never copied to a subtitle request from the stream or the subtitle.
+private val SUBTITLE_REQUEST_EXCLUDED_HEADERS = setOf("range", "host", "connection", "transfer-encoding")
 
 // Stream headers allowed on other hosts (#3328).
 private val SUBTITLE_CROSS_HOST_HEADERS = setOf("referer", "origin", "user-agent", "accept-language")
@@ -250,14 +250,14 @@ private val SUBTITLE_CROSS_HOST_HEADERS = setOf("referer", "origin", "user-agent
 // Not forwarded on an HTTPS to HTTP downgrade.
 private val SUBTITLE_DOWNGRADE_EXCLUDED_HEADERS = setOf("referer", "origin")
 
-private fun isDowngrade(requestUrl: HttpUrl, streamUrl: HttpUrl?): Boolean =
-    streamUrl != null && streamUrl.isHttps && !requestUrl.isHttps
+private fun isDowngrade(requestUrl: HttpUrl, scopeUrl: HttpUrl?): Boolean =
+    scopeUrl != null && scopeUrl.isHttps && !requestUrl.isHttps
 
-/** Same host as the stream and no HTTPS to HTTP downgrade. Sibling subdomains are out of scope. */
-internal fun mayCarryStreamCredentials(requestUrl: HttpUrl, streamUrl: HttpUrl?): Boolean {
-    if (streamUrl == null) return false
-    if (isDowngrade(requestUrl, streamUrl)) return false
-    return requestUrl.host == streamUrl.host
+/** Same host as [scopeUrl] and no HTTPS to HTTP downgrade. Sibling subdomains are out of scope. */
+internal fun isInHeaderScope(requestUrl: HttpUrl, scopeUrl: HttpUrl?): Boolean {
+    if (scopeUrl == null) return false
+    if (isDowngrade(requestUrl, scopeUrl)) return false
+    return requestUrl.host == scopeUrl.host
 }
 
 /**
@@ -269,12 +269,12 @@ internal fun subtitleStreamHeaders(
     subtitleUrl: HttpUrl,
     streamUrl: HttpUrl?
 ): Map<String, String> {
-    val inScope = mayCarryStreamCredentials(subtitleUrl, streamUrl)
+    val inScope = isInHeaderScope(subtitleUrl, streamUrl)
     val downgrade = isDowngrade(subtitleUrl, streamUrl)
     return streamHeaders.filterKeys { name ->
         val lower = name.lowercase()
         when {
-            lower in SUBTITLE_EXCLUDED_STREAM_HEADERS -> false
+            lower in SUBTITLE_REQUEST_EXCLUDED_HEADERS -> false
             inScope -> true
             downgrade && lower in SUBTITLE_DOWNGRADE_EXCLUDED_HEADERS -> false
             else -> lower in SUBTITLE_CROSS_HOST_HEADERS
@@ -283,8 +283,8 @@ internal fun subtitleStreamHeaders(
 }
 
 /**
- * [names] are removed on a hop outside the stream's scope, [downgradeNames] on an HTTPS to HTTP hop.
- * Subtitle-owned headers are never listed, so they survive redirects and the TLS retry.
+ * Stream headers scoped to the stream URL: [names] are removed on a hop outside it, [downgradeNames] on an
+ * HTTPS to HTTP hop. Subtitle-owned headers are tracked by [SubtitleOwnHeaders].
  */
 internal class ForwardedStreamHeaders(
     val streamUrl: HttpUrl,
@@ -293,29 +293,46 @@ internal class ForwardedStreamHeaders(
 )
 
 /**
- * Applies [ForwardedStreamHeaders] per redirect hop; OkHttp itself only strips Authorization. It never
- * adds headers back, so an HTTP URL redirecting to HTTPS doesn't regain stream credentials.
+ * The subtitle's own headers, scoped to the subtitle URL's host the same way: [names] are removed on a hop
+ * to another host, [downgradeNames] on an HTTPS to HTTP hop.
+ */
+internal class SubtitleOwnHeaders(
+    val subtitleUrl: HttpUrl,
+    val names: Set<String>,
+    val downgradeNames: Set<String>
+)
+
+/**
+ * Applies [ForwardedStreamHeaders] and [SubtitleOwnHeaders] per redirect hop; OkHttp itself only strips
+ * Authorization. Relies on OkHttp carrying request tags into redirects. It never adds headers back, so an
+ * HTTP URL redirecting to HTTPS doesn't regain them.
  */
 internal object ForwardedStreamHeaderGuard : Interceptor {
     override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
         val request = chain.request()
-        val forwarded = request.tag(ForwardedStreamHeaders::class.java)
-        if (forwarded == null || mayCarryStreamCredentials(request.url, forwarded.streamUrl)) {
-            return chain.proceed(request)
+        val url = request.url
+        val removed = mutableSetOf<String>()
+        request.tag(ForwardedStreamHeaders::class.java)?.let { stream ->
+            if (!isInHeaderScope(url, stream.streamUrl)) removed += stream.names
+            if (isDowngrade(url, stream.streamUrl)) removed += stream.downgradeNames
         }
-        var outgoing = request.withoutForwardedStreamHeaders()
-        if (isDowngrade(request.url, forwarded.streamUrl) && forwarded.downgradeNames.isNotEmpty()) {
-            outgoing = outgoing.newBuilder().apply { forwarded.downgradeNames.forEach { removeHeader(it) } }.build()
+        request.tag(SubtitleOwnHeaders::class.java)?.let { own ->
+            if (!isInHeaderScope(url, own.subtitleUrl)) removed += own.names
+            if (isDowngrade(url, own.subtitleUrl)) removed += own.downgradeNames
         }
-        return chain.proceed(outgoing)
+        return chain.proceed(request.withoutHeaders(removed))
     }
 }
 
-/** The request without the headers its [ForwardedStreamHeaders] tag lists. */
-internal fun Request.withoutForwardedStreamHeaders(): Request {
-    val names = tag(ForwardedStreamHeaders::class.java)?.names ?: return this
-    return newBuilder().apply { names.forEach { removeHeader(it) } }.build()
-}
+/** Removes the host-scoped stream and subtitle headers, for the permissive TLS retry. */
+internal fun Request.withoutCredentialHeaders(): Request =
+    withoutHeaders(
+        tag(ForwardedStreamHeaders::class.java)?.names.orEmpty() +
+            tag(SubtitleOwnHeaders::class.java)?.names.orEmpty()
+    )
+
+private fun Request.withoutHeaders(names: Set<String>): Request =
+    if (names.isEmpty()) this else newBuilder().apply { names.forEach { removeHeader(it) } }.build()
 
 /** Scoped stream headers, then the subtitle's own headers, then defaults, tagged for the guard. */
 internal fun buildSubtitleRequest(
@@ -331,7 +348,7 @@ internal fun buildSubtitleRequest(
 
     // Explicit subtitle headers override stream headers.
     explicitHeaders?.forEach { (key, value) ->
-        if (key.lowercase() !in SUBTITLE_EXCLUDED_STREAM_HEADERS) {
+        if (key.lowercase() !in SUBTITLE_REQUEST_EXCLUDED_HEADERS) {
             requestBuilder.header(key, value)
         }
     }
@@ -362,12 +379,22 @@ internal fun buildSubtitleRequest(
             ForwardedStreamHeaders(streamUrl, forwardedNames, downgradeNames)
         )
     }
+    val sentOwnNames = explicitHeaders?.keys.orEmpty()
+        .filter { it.lowercase() !in SUBTITLE_REQUEST_EXCLUDED_HEADERS }
+    val ownNames = sentOwnNames.filter { it.lowercase() !in SUBTITLE_CROSS_HOST_HEADERS }.toSet()
+    val ownDowngradeNames = sentOwnNames.filter { it.lowercase() in SUBTITLE_DOWNGRADE_EXCLUDED_HEADERS }.toSet()
+    if (ownNames.isNotEmpty() || ownDowngradeNames.isNotEmpty()) {
+        requestBuilder.tag(
+            SubtitleOwnHeaders::class.java,
+            SubtitleOwnHeaders(subtitleUrl, ownNames, ownDowngradeNames)
+        )
+    }
     return requestBuilder.build()
 }
 
 /**
  * Tries [validated] first. On any SSLException, reruns the whole redirect chain on [permissive] without
- * the forwarded stream headers, so self-signed hosts still work.
+ * host-scoped stream or subtitle headers, so self-signed hosts still work.
  */
 internal fun executeSubtitleRequest(
     request: Request,
@@ -377,7 +404,7 @@ internal fun executeSubtitleRequest(
     try {
         validated.newCall(request).execute()
     } catch (e: SSLException) {
-        permissive.newCall(request.withoutForwardedStreamHeaders()).execute()
+        permissive.newCall(request.withoutCredentialHeaders()).execute()
     }
 
 private fun PlayerRuntimeController.executeSubtitleDownload(
