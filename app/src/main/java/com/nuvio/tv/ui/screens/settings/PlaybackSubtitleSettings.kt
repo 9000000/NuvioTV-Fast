@@ -266,10 +266,11 @@ internal fun LazyListScope.subtitleSettingsItems(
             SliderSettingsItem(
                 icon = Icons.Default.LineWeight,
                 title = stringResource(R.string.sub_outline_width),
+                subtitle = stringResource(R.string.sub_outline_width_sub),
                 value = playerSettings.subtitleStyle.outlineWidth,
                 valueText = "${playerSettings.subtitleStyle.outlineWidth}px",
                 minValue = 1,
-                maxValue = 20,
+                maxValue = 50,
                 step = 1,
                 onValueChange = onSetSubtitleOutlineWidth,
                 onFocused = onItemFocused,

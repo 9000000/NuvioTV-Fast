@@ -876,9 +876,10 @@
     <string name="sub_outline_sub">Thêm viền chữ quanh phụ đề để dễ đọc hơn</string>
     <string name="sub_outline_color">Màu viền</string>
     <string name="sub_outline_width">Độ dày viền</string>
+    <string name="sub_outline_width_sub">Độ dày nét viền chữ (1-50px)</string>
     <string name="sub_font">Phông chữ phụ đề</string>
     <string name="sub_font_sub">Chọn phông chữ hiển thị cho phụ đề</string>
-    <string name="sub_font_default">Mặc định (Roboto / Hệ thống)</string>
+    <string name="sub_font_default">Roboto</string>
     <string name="sub_font_phimmoi">PhimMoi</string>
     <string name="sub_font_inter">Inter</string>
     <string name="sub_font_opensans">Open Sans</string>

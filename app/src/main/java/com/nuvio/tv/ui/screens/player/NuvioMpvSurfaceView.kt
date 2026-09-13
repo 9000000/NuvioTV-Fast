@@ -396,7 +396,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             val subMarginY = (MPV_SUB_MARGIN_Y_MIN +
                 (normalizedOffset * (MPV_SUB_MARGIN_Y_MAX - MPV_SUB_MARGIN_Y_MIN))).toInt()
             val outlineSize = if (style.outlineEnabled) {
-                style.outlineWidth.coerceIn(1, 20).toDouble()
+                style.outlineWidth.coerceIn(1, 50).toDouble()
             } else {
                 0.0
             }

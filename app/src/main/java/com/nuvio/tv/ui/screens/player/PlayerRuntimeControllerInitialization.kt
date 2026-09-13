@@ -897,6 +897,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                 isSidecarAddonSubtitleActiveProvider = {
                     isSidecarAddonSubtitleActive()
                 },
+                subtitleStyleProvider = {
+                    currentPlayerSettingsForReport.subtitleStyle
+                },
                 videoBoundsFractionProvider = {
                     val pv = exoPlayerView
                     if (pv != null) pv.videoBoundsFraction(videoAspectRatio) else null
@@ -2114,6 +2117,7 @@ private class SubtitleOffsetRenderersFactory(
     private val shouldStripSdhProvider: () -> Boolean,
     private val isBuiltInSubtitleProvider: () -> Boolean,
     private val isSidecarAddonSubtitleActiveProvider: () -> Boolean = { false },
+    private val subtitleStyleProvider: () -> com.nuvio.tv.data.local.SubtitleStyleSettings = { com.nuvio.tv.data.local.SubtitleStyleSettings() },
     private val videoBoundsFractionProvider: () -> RectF?,
     private val gainAudioProcessor: GainAudioProcessor,
     private val downmixEnabled: Boolean,
@@ -2244,6 +2248,7 @@ private class SubtitleOffsetRenderersFactory(
             shouldNormalizeCuePositionProvider = shouldNormalizeCuePositionProvider,
             isBuiltInSubtitleProvider = isBuiltInSubtitleProvider,
             isSidecarAddonSubtitleActiveProvider = isSidecarAddonSubtitleActiveProvider,
+            subtitleStyleProvider = subtitleStyleProvider,
             videoBoundsFractionProvider = videoBoundsFractionProvider
         )
         val startIndex = out.size
@@ -2294,6 +2299,7 @@ private class CueNormalizingTextOutput(
     private val shouldNormalizeCuePositionProvider: () -> Boolean,
     private val isBuiltInSubtitleProvider: () -> Boolean,
     private val isSidecarAddonSubtitleActiveProvider: () -> Boolean,
+    private val subtitleStyleProvider: () -> com.nuvio.tv.data.local.SubtitleStyleSettings,
     private val videoBoundsFractionProvider: () -> RectF?
 ) : TextOutput {
 
@@ -2365,6 +2371,8 @@ private class CueNormalizingTextOutput(
         if (shouldNormalizeCuePositionProvider()) {
             processed = normalizeCuePosition(processed)
         }
+        val currentStyle = subtitleStyleProvider()
+        processed = processed.applyOutlineWidth(currentStyle.outlineEnabled, currentStyle.outlineWidth)
         if (processed.bitmap != null) {
             val bounds = videoBoundsFractionProvider()
             if (bounds != null && bounds.width() > 0f && bounds.height() > 0f) {

@@ -299,7 +299,7 @@ internal fun SubtitleStyleSidePanel(
                                 SubtitleStyleStepperButton(
                                     icon = Icons.Default.Add,
                                     onClick = {
-                                        onEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth + 1).coerceAtMost(20)))
+                                        onEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth + 1).coerceAtMost(50)))
                                     }
                                 )
                             }

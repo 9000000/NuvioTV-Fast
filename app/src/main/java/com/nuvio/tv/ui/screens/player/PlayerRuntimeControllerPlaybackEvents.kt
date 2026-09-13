@@ -1679,13 +1679,19 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             scope.launch { playerSettingsDataStore.setSubtitleBold(event.bold) }
         }
         is PlayerEvent.OnSetSubtitleOutlineEnabled -> {
-            scope.launch { playerSettingsDataStore.setSubtitleOutlineEnabled(event.enabled) }
+            scope.launch {
+                playerSettingsDataStore.setSubtitleOutlineEnabled(event.enabled)
+                renderSidecarCuesAtCurrentPosition()
+            }
         }
         is PlayerEvent.OnSetSubtitleOutlineColor -> {
             scope.launch { playerSettingsDataStore.setSubtitleOutlineColor(event.color) }
         }
         is PlayerEvent.OnSetSubtitleOutlineWidth -> {
-            scope.launch { playerSettingsDataStore.setSubtitleOutlineWidth(event.width) }
+            scope.launch {
+                playerSettingsDataStore.setSubtitleOutlineWidth(event.width)
+                renderSidecarCuesAtCurrentPosition()
+            }
         }
         is PlayerEvent.OnSetSubtitleFont -> {
             scope.launch { playerSettingsDataStore.setSubtitleFont(event.font) }
