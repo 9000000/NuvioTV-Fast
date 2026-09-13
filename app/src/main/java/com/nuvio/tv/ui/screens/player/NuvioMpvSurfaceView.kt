@@ -8,9 +8,12 @@ import com.nuvio.tv.data.local.MpvHardwareDecodeMode
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import `is`.xyz.mpv.BaseMPVView
 import `is`.xyz.mpv.Utils
+import java.io.File
 import java.util.Locale
 import kotlin.math.pow
 import kotlin.math.roundToLong
+import com.nuvio.tv.R
+import com.nuvio.tv.data.local.SubtitleFontOption
 
 class NuvioMpvSurfaceView @JvmOverloads constructor(
     context: Context,
@@ -402,6 +405,15 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             // In background-box mode, sub-shadow-offset controls the box padding/margin
             val shadowOffset = if (backgroundAlpha > 0) 5.0 else 0.0
 
+            val fontName = when (style.font) {
+                SubtitleFontOption.PHIMMOI -> "PhimMoi"
+                SubtitleFontOption.INTER -> "Inter"
+                SubtitleFontOption.OPENSANS -> "Open Sans"
+                SubtitleFontOption.DMSANS -> "DM Sans 9pt"
+                SubtitleFontOption.OSWALD -> "Oswald"
+                else -> "Roboto"
+            }
+
             mpv.setPropertyDouble("sub-scale", scale)
             mpv.setPropertyBoolean("sub-bold", style.bold)
             mpv.setPropertyDouble("sub-outline-size", outlineSize)
@@ -412,6 +424,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             mpv.setPropertyString("sub-color", toMpvColor(style.textColor))
             mpv.setPropertyString("sub-back-color", toMpvColor(style.backgroundColor))
             mpv.setPropertyString("sub-outline-color", toMpvColor(style.outlineColor))
+            mpv.setPropertyString("sub-font", fontName)
             mpv.setPropertyBoolean("sub-filter-sdh", style.stripSdh)
             mpv.setPropertyBoolean("sub-filter-sdh-harder", style.stripSdh)
         }.onFailure {
@@ -622,6 +635,8 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         mpv.setOptionString("gpu-context", "android")
         mpv.setOptionString("opengl-es", "yes")
         mpv.setOptionString("user-agent", PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
+        val fontsDir = ensureCustomFontsExtracted(context)
+        mpv.setOptionString("sub-fonts-dir", fontsDir.absolutePath)
         // Preserve native ASS/SSA styling behavior on MPV.
         mpv.setOptionString("sub-ass-override", "no")
         mpv.setOptionString("sub-codepage", "auto:utf-8")
@@ -758,6 +773,30 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         private const val MPV_SUB_POS_AT_TOP = 72.4
         private const val MPV_SUB_MARGIN_Y_MIN = 0
         private const val MPV_SUB_MARGIN_Y_MAX = 60
+
+        fun ensureCustomFontsExtracted(context: Context): File {
+            val fontsDir = File(context.filesDir, "fonts").apply { mkdirs() }
+            val fontResources = listOf(
+                "fontphimmoi.ttf" to R.font.fontphimmoi,
+                "inter_variable.ttf" to R.font.inter_variable,
+                "opensans_variable.ttf" to R.font.opensans_variable,
+                "dm_sans_variable.ttf" to R.font.dm_sans_variable,
+                "oswald.ttf" to R.font.oswald
+            )
+            for ((fileName, resId) in fontResources) {
+                val target = File(fontsDir, fileName)
+                if (!target.exists() || target.length() == 0L) {
+                    runCatching {
+                        context.resources.openRawResource(resId).use { input ->
+                            target.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+                }
+            }
+            return fontsDir
+        }
     }
 }
 

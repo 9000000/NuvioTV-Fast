@@ -124,6 +124,7 @@ fun PlaybackSettingsContent(
     // Dialog states
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showSecondaryLanguageDialog by remember { mutableStateOf(false) }
+    var showFontDialog by remember { mutableStateOf(false) }
     var showTextColorDialog by remember { mutableStateOf(false) }
     var showBackgroundColorDialog by remember { mutableStateOf(false) }
     var showOutlineColorDialog by remember { mutableStateOf(false) }
@@ -147,6 +148,7 @@ fun PlaybackSettingsContent(
     fun dismissAllDialogs() {
         showLanguageDialog = false
         showSecondaryLanguageDialog = false
+        showFontDialog = false
         showTextColorDialog = false
         showBackgroundColorDialog = false
         showOutlineColorDialog = false
@@ -206,6 +208,7 @@ fun PlaybackSettingsContent(
                 onShowMpvHardwareDecodeModeDialog = { openDialog { showMpvHardwareDecodeModeDialog = true } },
                 onShowLanguageDialog = { openDialog { showLanguageDialog = true } },
                 onShowSecondaryLanguageDialog = { openDialog { showSecondaryLanguageDialog = true } },
+                onShowFontDialog = { openDialog { showFontDialog = true } },
                 onShowTextColorDialog = { openDialog { showTextColorDialog = true } },
                 onShowBackgroundColorDialog = { openDialog { showBackgroundColorDialog = true } },
                 onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
@@ -337,6 +340,7 @@ fun PlaybackSettingsContent(
                 },
                 onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
                 onSetSubtitleOutlineWidth = { width -> coroutineScope.launch { viewModel.setSubtitleOutlineWidth(width) } },
+                onSetSubtitleFont = { font -> coroutineScope.launch { viewModel.setSubtitleFont(font) } },
                 onSetUseLibass = { enabled -> coroutineScope.launch { viewModel.setUseLibass(enabled) } },
                 onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } },
                 p2pEnabled = torrentSettings.p2pEnabled,
@@ -506,6 +510,7 @@ fun PlaybackSettingsContent(
         showInternalPlayerEngineDialog = showInternalPlayerEngineDialog,
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
+        showFontDialog = showFontDialog,
         showTextColorDialog = showTextColorDialog,
         showBackgroundColorDialog = showBackgroundColorDialog,
         showOutlineColorDialog = showOutlineColorDialog,
@@ -535,6 +540,9 @@ fun PlaybackSettingsContent(
         },
         onSetSubtitleSecondaryLanguage = { language ->
             coroutineScope.launch { viewModel.setSubtitleSecondaryLanguage(language) }
+        },
+        onSetSubtitleFont = { font ->
+            coroutineScope.launch { viewModel.setSubtitleFont(font) }
         },
         onSetSubtitleTextColor = { color ->
             coroutineScope.launch { viewModel.setSubtitleTextColor(color.toArgb()) }
@@ -586,6 +594,7 @@ fun PlaybackSettingsContent(
         },
         onDismissLanguageDialog = ::dismissAllDialogs,
         onDismissSecondaryLanguageDialog = ::dismissAllDialogs,
+        onDismissFontDialog = ::dismissAllDialogs,
         onDismissTextColorDialog = ::dismissAllDialogs,
         onDismissBackgroundColorDialog = ::dismissAllDialogs,
         onDismissOutlineColorDialog = ::dismissAllDialogs,

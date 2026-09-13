@@ -15,7 +15,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ClosedCaption
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FontDownload
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Language
@@ -37,6 +37,7 @@ import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.displayName
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.SubtitleFontOption
 import com.nuvio.tv.data.local.SubtitleLanguageOption
 import com.nuvio.tv.ui.components.NuvioDialog
 
@@ -71,6 +72,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     playerSettings: PlayerSettings,
     onShowLanguageDialog: () -> Unit,
     onShowSecondaryLanguageDialog: () -> Unit,
+    onShowFontDialog: () -> Unit,
     onShowTextColorDialog: () -> Unit,
     onShowBackgroundColorDialog: () -> Unit,
     onShowOutlineColorDialog: () -> Unit,
@@ -170,6 +172,17 @@ internal fun LazyListScope.subtitleSettingsItems(
             maxValue = 200,
             step = 10,
             onValueChange = onSetSubtitleSize,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "subtitle_font") {
+        NavigationSettingsItem(
+            icon = Icons.Default.FontDownload,
+            title = stringResource(R.string.sub_font),
+            subtitle = getSubtitleFontDisplayName(playerSettings.subtitleStyle.font),
+            onClick = onShowFontDialog,
             onFocused = onItemFocused,
             enabled = enabled
         )
@@ -353,21 +366,34 @@ internal fun LazyListScope.subtitleSettingsItems(
 internal fun SubtitleSettingsDialogs(
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
+    showFontDialog: Boolean,
     showTextColorDialog: Boolean,
     showBackgroundColorDialog: Boolean,
     showOutlineColorDialog: Boolean,
     playerSettings: PlayerSettings,
     onSetPreferredLanguage: (String?) -> Unit,
     onSetSecondaryLanguage: (String?) -> Unit,
+    onSetSubtitleFont: (String) -> Unit,
     onSetTextColor: (Color) -> Unit,
     onSetBackgroundColor: (Color) -> Unit,
     onSetOutlineColor: (Color) -> Unit,
     onDismissLanguageDialog: () -> Unit,
     onDismissSecondaryLanguageDialog: () -> Unit,
+    onDismissFontDialog: () -> Unit,
     onDismissTextColorDialog: () -> Unit,
     onDismissBackgroundColorDialog: () -> Unit,
     onDismissOutlineColorDialog: () -> Unit
 ) {
+    if (showFontDialog) {
+        SubtitleFontDialog(
+            selectedFont = playerSettings.subtitleStyle.font,
+            onFontSelected = {
+                onSetSubtitleFont(it)
+                onDismissFontDialog()
+            },
+            onDismiss = onDismissFontDialog
+        )
+    }
     if (showLanguageDialog) {
         LanguageSelectionDialog(
             title = stringResource(R.string.sub_preferred_lang),
@@ -438,4 +464,60 @@ internal fun SubtitleSettingsDialogs(
             onDismiss = onDismissOutlineColorDialog
         )
     }
+}
+
+@Composable
+internal fun getSubtitleFontDisplayName(font: String): String {
+    return when (font) {
+        SubtitleFontOption.PHIMMOI -> stringResource(R.string.sub_font_phimmoi)
+        SubtitleFontOption.INTER -> stringResource(R.string.sub_font_inter)
+        SubtitleFontOption.OPENSANS -> stringResource(R.string.sub_font_opensans)
+        SubtitleFontOption.DMSANS -> stringResource(R.string.sub_font_dmsans)
+        SubtitleFontOption.OSWALD -> stringResource(R.string.sub_font_oswald)
+        else -> stringResource(R.string.sub_font_default)
+    }
+}
+
+@Composable
+internal fun SubtitleFontDialog(
+    selectedFont: String,
+    onFontSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf(
+        SettingsPickerOption(
+            value = SubtitleFontOption.DEFAULT,
+            title = stringResource(R.string.sub_font_default)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.PHIMMOI,
+            title = stringResource(R.string.sub_font_phimmoi)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.INTER,
+            title = stringResource(R.string.sub_font_inter)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.OPENSANS,
+            title = stringResource(R.string.sub_font_opensans)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.DMSANS,
+            title = stringResource(R.string.sub_font_dmsans)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.OSWALD,
+            title = stringResource(R.string.sub_font_oswald)
+        )
+    )
+
+    SettingsSingleChoiceDialog(
+        title = stringResource(R.string.sub_font),
+        options = options,
+        selectedValue = selectedFont,
+        onOptionSelected = onFontSelected,
+        onDismiss = onDismiss,
+        width = 400.dp,
+        maxHeight = 320.dp
+    )
 }

@@ -1687,6 +1687,9 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         is PlayerEvent.OnSetSubtitleOutlineWidth -> {
             scope.launch { playerSettingsDataStore.setSubtitleOutlineWidth(event.width) }
         }
+        is PlayerEvent.OnSetSubtitleFont -> {
+            scope.launch { playerSettingsDataStore.setSubtitleFont(event.font) }
+        }
         is PlayerEvent.OnSetSubtitleVerticalOffset -> {
             scope.launch { playerSettingsDataStore.setSubtitleVerticalOffset(event.offset) }
         }
@@ -1699,6 +1702,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 playerSettingsDataStore.setSubtitleOutlineEnabled(defaults.outlineEnabled)
                 playerSettingsDataStore.setSubtitleOutlineColor(defaults.outlineColor)
                 playerSettingsDataStore.setSubtitleOutlineWidth(defaults.outlineWidth)
+                playerSettingsDataStore.setSubtitleFont(defaults.font)
                 playerSettingsDataStore.setSubtitleVerticalOffset(defaults.verticalOffset)
                 playerSettingsDataStore.setSubtitleBackgroundColor(defaults.backgroundColor)
             }

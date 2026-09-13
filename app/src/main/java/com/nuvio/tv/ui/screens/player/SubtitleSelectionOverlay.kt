@@ -900,6 +900,40 @@ private fun SubtitleStyleRail(
             }
             item {
                 OverlaySectionCard(
+                    title = stringResource(R.string.subtitle_style_font),
+                    modifier = styleCardModifier
+                ) {
+                    val fontList = listOf(
+                        com.nuvio.tv.data.local.SubtitleFontOption.DEFAULT to stringResource(R.string.sub_font_default),
+                        com.nuvio.tv.data.local.SubtitleFontOption.PHIMMOI to stringResource(R.string.sub_font_phimmoi),
+                        com.nuvio.tv.data.local.SubtitleFontOption.INTER to stringResource(R.string.sub_font_inter),
+                        com.nuvio.tv.data.local.SubtitleFontOption.OPENSANS to stringResource(R.string.sub_font_opensans),
+                        com.nuvio.tv.data.local.SubtitleFontOption.DMSANS to stringResource(R.string.sub_font_dmsans),
+                        com.nuvio.tv.data.local.SubtitleFontOption.OSWALD to stringResource(R.string.sub_font_oswald)
+                    )
+                    val currentFontIndex = fontList.indexOfFirst { it.first == subtitleStyle.font }.coerceAtLeast(0)
+                    val currentFontName = fontList[currentFontIndex].second
+                    StepperRow(
+                        value = currentFontName,
+                        onDecrease = {
+                            val prevIndex = if (currentFontIndex > 0) currentFontIndex - 1 else fontList.size - 1
+                            dispatchStyleEvent(PlayerEvent.OnSetSubtitleFont(fontList[prevIndex].first))
+                        },
+                        onIncrease = {
+                            val nextIndex = if (currentFontIndex < fontList.size - 1) currentFontIndex + 1 else 0
+                            dispatchStyleEvent(PlayerEvent.OnSetSubtitleFont(fontList[nextIndex].first))
+                        },
+                        onMoveLeft = onMoveLeft,
+                        decrementFocusRequester = focusRequesters[StyleFocusKey.FontDecrease],
+                        incrementFocusRequester = focusRequesters[StyleFocusKey.FontIncrease],
+                        decrementFocusKey = StyleFocusKey.FontDecrease,
+                        incrementFocusKey = StyleFocusKey.FontIncrease,
+                        onFocusChanged = onStyleFocused
+                    )
+                }
+            }
+            item {
+                OverlaySectionCard(
                     title = stringResource(R.string.subtitle_style_bold),
                     modifier = styleCardModifier
                 ) {
@@ -1677,6 +1711,8 @@ private fun overlayCardBorder() = CardDefaults.border(
 private object StyleFocusKey {
     const val FontSizeDecrease = "font_size_decrease"
     const val FontSizeIncrease = "font_size_increase"
+    const val FontDecrease = "font_decrease"
+    const val FontIncrease = "font_increase"
     const val Bold = "bold"
     const val OutlineToggle = "outline_toggle"
     const val OutlineWidthDecrease = "outline_width_decrease"
@@ -1701,12 +1737,13 @@ private fun styleListIndexForFocusKey(focusKey: String): Int {
     return when {
         focusKey == StyleFocusKey.DelaySet -> 0
         focusKey == StyleFocusKey.FontSizeDecrease || focusKey == StyleFocusKey.FontSizeIncrease -> 1
-        focusKey == StyleFocusKey.Bold -> 2
-        focusKey.startsWith("${StyleFocusKey.TextColorPrefix}:") -> 3
-        focusKey == StyleFocusKey.OpacityDecrease || focusKey == StyleFocusKey.OpacityIncrease -> 4
-        focusKey == StyleFocusKey.OutlineToggle || focusKey.startsWith("${StyleFocusKey.OutlineColorPrefix}:") || focusKey == StyleFocusKey.OutlineWidthDecrease || focusKey == StyleFocusKey.OutlineWidthIncrease -> 5
-        focusKey == StyleFocusKey.OffsetDecrease || focusKey == StyleFocusKey.OffsetIncrease -> 6
-        focusKey == StyleFocusKey.Reset -> 7
+        focusKey == StyleFocusKey.FontDecrease || focusKey == StyleFocusKey.FontIncrease -> 2
+        focusKey == StyleFocusKey.Bold -> 3
+        focusKey.startsWith("${StyleFocusKey.TextColorPrefix}:") -> 4
+        focusKey == StyleFocusKey.OpacityDecrease || focusKey == StyleFocusKey.OpacityIncrease -> 5
+        focusKey == StyleFocusKey.OutlineToggle || focusKey.startsWith("${StyleFocusKey.OutlineColorPrefix}:") || focusKey == StyleFocusKey.OutlineWidthDecrease || focusKey == StyleFocusKey.OutlineWidthIncrease -> 6
+        focusKey == StyleFocusKey.OffsetDecrease || focusKey == StyleFocusKey.OffsetIncrease -> 7
+        focusKey == StyleFocusKey.Reset -> 8
         else -> 0
     }
 }
@@ -1722,6 +1759,8 @@ private fun rememberStyleFocusRequesters(): Map<String, FocusRequester> {
         listOf(
             StyleFocusKey.FontSizeDecrease,
             StyleFocusKey.FontSizeIncrease,
+            StyleFocusKey.FontDecrease,
+            StyleFocusKey.FontIncrease,
             StyleFocusKey.Bold,
             StyleFocusKey.OpacityDecrease,
             StyleFocusKey.OpacityIncrease,

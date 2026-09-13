@@ -114,7 +114,7 @@ object NuvioComponents {
             cornerRadius = 12.dp,
             contentPadding = 12.dp,
             focusedBorderWidth = 3.5.dp,
-            focusedScale = 1.0f
+            focusedScale = 1.10f
         ),
         episodeCard = NuvioCardComponentTokens(
             width = 320.dp,

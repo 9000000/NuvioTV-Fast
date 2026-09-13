@@ -876,6 +876,14 @@
     <string name="sub_outline_sub">Thêm viền chữ quanh phụ đề để dễ đọc hơn</string>
     <string name="sub_outline_color">Màu viền</string>
     <string name="sub_outline_width">Độ dày viền</string>
+    <string name="sub_font">Phông chữ phụ đề</string>
+    <string name="sub_font_sub">Chọn phông chữ hiển thị cho phụ đề</string>
+    <string name="sub_font_default">Mặc định (Roboto / Hệ thống)</string>
+    <string name="sub_font_phimmoi">PhimMoi</string>
+    <string name="sub_font_inter">Inter</string>
+    <string name="sub_font_opensans">Open Sans</string>
+    <string name="sub_font_dmsans">DM Sans</string>
+    <string name="sub_font_oswald">Oswald</string>
     <string name="sub_advanced_section">Hiển thị phụ đề nâng cao</string>
     <string name="sub_libass">Dùng libass cho phụ đề ASS/SSA</string>
     <string name="sub_libass_sub">Thử nghiệm: kết xuất ASS/SSA nâng cao (kiểu chữ, định vị, hoạt ảnh)</string>
@@ -1839,6 +1847,7 @@
     <string name="subtitle_style_on">Bật</string>
     <string name="subtitle_style_off">Tắt</string>
     <string name="subtitle_style_weight">Độ đậm</string>
+    <string name="subtitle_style_font">Phông chữ</string>
     <string name="panel_failed_load_streams">Không thể tải các luồng phát</string>
     <string name="panel_failed_load_episodes">Không thể tải các tập phim</string>
 

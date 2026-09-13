@@ -134,6 +134,15 @@ val AVAILABLE_TMDB_LANGUAGES = AVAILABLE_SUBTITLE_LANGUAGES + listOf(
     SubtitleLanguage("en-GB", "English (United Kingdom)"),
 )
 
+object SubtitleFontOption {
+    const val DEFAULT = "default"
+    const val PHIMMOI = "phimmoi"
+    const val INTER = "inter"
+    const val OPENSANS = "opensans"
+    const val DMSANS = "dmsans"
+    const val OSWALD = "oswald"
+}
+
 /**
  * Data class representing subtitle style settings
  */
@@ -151,7 +160,8 @@ data class SubtitleStyleSettings(
     val backgroundColor: Int = Color.Transparent.toArgb(),
     val outlineEnabled: Boolean = true,
     val outlineColor: Int = Color.Black.toArgb(),
-    val outlineWidth: Int = 2 // 1-20
+    val outlineWidth: Int = 2, // 1-20
+    val font: String = SubtitleFontOption.DEFAULT
 )
 
 /**
@@ -585,6 +595,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val subtitleOutlineEnabledKey = booleanPreferencesKey("subtitle_outline_enabled")
     private val subtitleOutlineColorKey = intPreferencesKey("subtitle_outline_color")
     private val subtitleOutlineWidthKey = intPreferencesKey("subtitle_outline_width")
+    private val subtitleFontKey = stringPreferencesKey("subtitle_font")
 
     // Buffer settings keys
     private val minBufferMsKey = intPreferencesKey("min_buffer_ms")
@@ -989,7 +1000,8 @@ class PlayerSettingsDataStore @Inject constructor(
                         backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
                         outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
                         outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
-                        outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
+                        outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2,
+                        font = prefs[subtitleFontKey] ?: SubtitleFontOption.DEFAULT
                     )
                 },
                 bufferSettings = BufferSettings(
@@ -1528,6 +1540,7 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setSubtitleOutlineEnabled(enabled: Boolean) { store().edit { it[subtitleOutlineEnabledKey] = enabled } }
     suspend fun setSubtitleOutlineColor(color: Int) { store().edit { it[subtitleOutlineColorKey] = color } }
     suspend fun setSubtitleOutlineWidth(width: Int) { store().edit { it[subtitleOutlineWidthKey] = width.coerceIn(1, 20) } }
+    suspend fun setSubtitleFont(font: String) { store().edit { it[subtitleFontKey] = font } }
 
     suspend fun setUseForcedSubtitles(enabled: Boolean) {
         store().edit { prefs ->

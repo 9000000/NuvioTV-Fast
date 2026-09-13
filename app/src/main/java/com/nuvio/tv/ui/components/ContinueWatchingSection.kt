@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -451,6 +452,25 @@ fun ContinueWatchingCard(
 ) {
     val isPosterStyle = cardStyle == ContinueWatchingCardStyle.POSTER
     val isWideStyle = cardStyle == ContinueWatchingCardStyle.WIDE
+
+    var internalFocused by remember { mutableStateOf(false) }
+    val effectivelyFocused = isFocused || internalFocused
+
+    val targetScale = if (effectivelyFocused) {
+        when (cardStyle) {
+            ContinueWatchingCardStyle.POSTER -> 1.14f
+            ContinueWatchingCardStyle.CARD -> 1.10f
+            ContinueWatchingCardStyle.WIDE -> 1.08f
+        }
+    } else {
+        1f
+    }
+    val animatedScale by animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec = tween(durationMillis = 150),
+        label = "cwCardScale"
+    )
+
     val effectiveEpisodeThumbnails =
         continueWatchingUsesEpisodeThumbnails(cardStyle, useEpisodeThumbnails)
     // The wide card shows its art in a poster shaped strip, so it resolves artwork the same way a poster card does.
@@ -579,9 +599,9 @@ fun ContinueWatchingCard(
 
     // Hold the title still until focus has settled, then let it scroll if it overflows.
     var titleMarqueeActive by remember { mutableStateOf(false) }
-    LaunchedEffect(isFocused, titleText) {
+    LaunchedEffect(effectivelyFocused, titleText) {
         titleMarqueeActive = false
-        if (isFocused) {
+        if (effectivelyFocused) {
             delay(TITLE_MARQUEE_DELAY_MS)
             titleMarqueeActive = true
         }
@@ -632,7 +652,12 @@ fun ContinueWatchingCard(
         },
         modifier = modifier
             .width(cardWidth)
-            .then(if (isFocused) Modifier.zIndex(1f) else Modifier)
+            .then(if (effectivelyFocused) Modifier.zIndex(1f) else Modifier)
+            .graphicsLayer {
+                scaleX = animatedScale
+                scaleY = animatedScale
+            }
+            .onFocusChanged { internalFocused = it.isFocused }
             .recompositionHighlighter()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
@@ -735,7 +760,7 @@ fun ContinueWatchingCard(
                     )
                     .clip(cwClipShape)
                     .then(
-                        if (textBelowArtwork && isFocused) {
+                        if (textBelowArtwork && effectivelyFocused) {
                             Modifier.border(
                                 border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
                                 shape = cwClipShape

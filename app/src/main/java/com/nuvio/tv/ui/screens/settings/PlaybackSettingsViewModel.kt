@@ -285,6 +285,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSubtitleOutlineWidth(width)
     }
 
+    suspend fun setSubtitleFont(font: String) {
+        playerSettingsDataStore.setSubtitleFont(font)
+    }
+
     suspend fun setSubtitleOrganizationMode(mode: SubtitleOrganizationMode) {
         playerSettingsDataStore.setSubtitleOrganizationMode(mode)
     }

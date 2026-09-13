@@ -878,6 +878,14 @@
     <string name="sub_outline_sub">Add outline around subtitle text for better visibility</string>
     <string name="sub_outline_color">Outline Color</string>
     <string name="sub_outline_width">Outline Width</string>
+    <string name="sub_font">Subtitle Font</string>
+    <string name="sub_font_sub">Choose font family for subtitles</string>
+    <string name="sub_font_default">Default (Roboto / System)</string>
+    <string name="sub_font_phimmoi">PhimMoi</string>
+    <string name="sub_font_inter">Inter</string>
+    <string name="sub_font_opensans">Open Sans</string>
+    <string name="sub_font_dmsans">DM Sans</string>
+    <string name="sub_font_oswald">Oswald</string>
     <string name="sub_advanced_section">Advanced Subtitle Rendering</string>
     <string name="sub_libass">Use libass for ASS/SSA subtitles</string>
     <string name="sub_libass_sub">Experimental: advanced ASS/SSA rendering (styles, positioning, animations)</string>
@@ -1841,6 +1849,7 @@
     <string name="subtitle_style_on">On</string>
     <string name="subtitle_style_off">Off</string>
     <string name="subtitle_style_weight">Weight</string>
+    <string name="subtitle_style_font">Font</string>
     <string name="panel_failed_load_streams">Failed to load streams</string>
     <string name="panel_failed_load_episodes">Failed to load episodes</string>
 

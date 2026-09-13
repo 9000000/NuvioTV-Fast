@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import kotlin.math.roundToInt
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -51,6 +52,7 @@ import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.SubtitleStyleSettings
+import com.nuvio.tv.data.local.SubtitleFontOption
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -152,6 +154,40 @@ internal fun SubtitleStyleSidePanel(
                         SubtitleStyleStepperButton(
                             icon = Icons.Default.Add,
                             onClick = { onEvent(PlayerEvent.OnSetSubtitleSize(subtitleStyle.size + 10)) }
+                        )
+                    }
+                }
+                SubtitleStyleSection(
+                    title = stringResource(R.string.subtitle_style_font),
+                    modifier = Modifier
+                        .width(StyleCardWidth)
+                        .height(StyleCardHeight)
+                ) {
+                    val fontList = listOf(
+                        SubtitleFontOption.DEFAULT to stringResource(R.string.sub_font_default),
+                        SubtitleFontOption.PHIMMOI to stringResource(R.string.sub_font_phimmoi),
+                        SubtitleFontOption.INTER to stringResource(R.string.sub_font_inter),
+                        SubtitleFontOption.OPENSANS to stringResource(R.string.sub_font_opensans),
+                        SubtitleFontOption.DMSANS to stringResource(R.string.sub_font_dmsans),
+                        SubtitleFontOption.OSWALD to stringResource(R.string.sub_font_oswald)
+                    )
+                    val currentFontIndex = fontList.indexOfFirst { it.first == subtitleStyle.font }.coerceAtLeast(0)
+                    val currentFontName = fontList[currentFontIndex].second
+                    SubtitleStyleSettingRow {
+                        SubtitleStyleStepperButton(
+                            icon = Icons.Default.Remove,
+                            onClick = {
+                                val prevIndex = if (currentFontIndex > 0) currentFontIndex - 1 else fontList.size - 1
+                                onEvent(PlayerEvent.OnSetSubtitleFont(fontList[prevIndex].first))
+                            }
+                        )
+                        SubtitleStyleValueDisplay(text = currentFontName)
+                        SubtitleStyleStepperButton(
+                            icon = Icons.Default.Add,
+                            onClick = {
+                                val nextIndex = if (currentFontIndex < fontList.size - 1) currentFontIndex + 1 else 0
+                                onEvent(PlayerEvent.OnSetSubtitleFont(fontList[nextIndex].first))
+                            }
                         )
                     }
                 }
@@ -403,13 +439,13 @@ private fun SubtitleStyleStepperButton(
 }
 
 @Composable
-private fun SubtitleStyleValueDisplay(text: String) {
+private fun SubtitleStyleValueDisplay(text: String, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
-            .widthIn(min = 52.dp)
+        modifier = modifier
+            .widthIn(min = 52.dp, max = 130.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Color.White.copy(alpha = 0.12f))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(horizontal = 8.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -417,6 +453,7 @@ private fun SubtitleStyleValueDisplay(text: String) {
             style = MaterialTheme.typography.bodySmall,
             color = Color.White,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             softWrap = false
         )
     }

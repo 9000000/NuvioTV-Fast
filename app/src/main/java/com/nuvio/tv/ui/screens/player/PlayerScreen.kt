@@ -1903,10 +1903,37 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
         setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, scaledFontSize)
         setApplyEmbeddedFontSizes(false)
 
-        val typeface = if (subtitleStyle.bold) {
-            android.graphics.Typeface.DEFAULT_BOLD
+        val baseTypeface = when (subtitleStyle.font) {
+            com.nuvio.tv.data.local.SubtitleFontOption.PHIMMOI -> runCatching {
+                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.fontphimmoi)
+            }.getOrNull()
+            com.nuvio.tv.data.local.SubtitleFontOption.INTER -> runCatching {
+                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_variable)
+            }.getOrNull()
+            com.nuvio.tv.data.local.SubtitleFontOption.OPENSANS -> runCatching {
+                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.opensans_variable)
+            }.getOrNull()
+            com.nuvio.tv.data.local.SubtitleFontOption.DMSANS -> runCatching {
+                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.dm_sans_variable)
+            }.getOrNull()
+            com.nuvio.tv.data.local.SubtitleFontOption.OSWALD -> runCatching {
+                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.oswald)
+            }.getOrNull()
+            else -> null
+        }
+
+        val typeface = if (baseTypeface != null) {
+            if (subtitleStyle.bold) {
+                android.graphics.Typeface.create(baseTypeface, android.graphics.Typeface.BOLD)
+            } else {
+                baseTypeface
+            }
         } else {
-            android.graphics.Typeface.DEFAULT
+            if (subtitleStyle.bold) {
+                android.graphics.Typeface.DEFAULT_BOLD
+            } else {
+                android.graphics.Typeface.DEFAULT
+            }
         }
 
         val edgeType = if (subtitleStyle.outlineEnabled) {
