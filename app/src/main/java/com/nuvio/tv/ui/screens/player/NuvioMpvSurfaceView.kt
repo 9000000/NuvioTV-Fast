@@ -406,7 +406,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             val shadowOffset = if (backgroundAlpha > 0) 5.0 else 0.0
 
             val fontName = when (style.font) {
-                SubtitleFontOption.PHIMMOI -> "PhimMoi"
+                SubtitleFontOption.PHIMMOI -> "UVN Hong Ha Hep, PhimMoi"
                 SubtitleFontOption.INTER -> "Inter"
                 SubtitleFontOption.OPENSANS -> "Open Sans"
                 SubtitleFontOption.DMSANS -> "DM Sans 9pt"
@@ -785,7 +785,11 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             )
             for ((fileName, resId) in fontResources) {
                 val target = File(fontsDir, fileName)
-                if (!target.exists() || target.length() == 0L) {
+                val resourceLength = runCatching {
+                    context.resources.openRawResourceFd(resId)?.use { it.length } ?: -1L
+                }.getOrDefault(-1L)
+                val needsExtract = !target.exists() || target.length() == 0L || (resourceLength > 0L && target.length() != resourceLength)
+                if (needsExtract) {
                     runCatching {
                         context.resources.openRawResource(resId).use { input ->
                             target.outputStream().use { output ->
