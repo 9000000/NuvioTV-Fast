@@ -190,6 +190,9 @@ fun SearchScreen(
         }
     }
     val isVoiceSearchAvailable = remember(context) { SpeechRecognizer.isRecognitionAvailable(context) }
+    val topInputFocusRequester = remember(isVoiceSearchAvailable) {
+        if (isVoiceSearchAvailable) voiceFocusRequester else searchFocusRequester
+    }
     val speechRecognizer = remember(context, isVoiceSearchAvailable) {
         if (isVoiceSearchAvailable) {
             runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
@@ -484,7 +487,7 @@ fun SearchScreen(
         pendingFocusMoveHadExistingSearchRows = false
     }
 
-    val initialFocusRequester = if (isVoiceSearchAvailable) voiceFocusRequester else searchFocusRequester
+    val initialFocusRequester = topInputFocusRequester
 
     LaunchedEffect(Unit) {
         if (viewModel.hasSavedSearchFocus) return@LaunchedEffect
