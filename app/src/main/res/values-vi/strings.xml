@@ -875,6 +875,7 @@
     <string name="sub_outline">Viền chữ</string>
     <string name="sub_outline_sub">Thêm viền chữ quanh phụ đề để dễ đọc hơn</string>
     <string name="sub_outline_color">Màu viền</string>
+    <string name="sub_outline_width">Độ dày viền</string>
     <string name="sub_advanced_section">Hiển thị phụ đề nâng cao</string>
     <string name="sub_libass">Dùng libass cho phụ đề ASS/SSA</string>
     <string name="sub_libass_sub">Thử nghiệm: kết xuất ASS/SSA nâng cao (kiểu chữ, định vị, hoạt ảnh)</string>
@@ -1832,6 +1833,7 @@
     <string name="subtitle_style_text_color">Màu chữ</string>
     <string name="subtitle_style_text_opacity">Độ mờ chữ</string>
     <string name="subtitle_style_outline">Viền chữ</string>
+    <string name="subtitle_style_outline_width">Độ dày viền</string>
     <string name="subtitle_style_bottom_offset">Khoảng cách lề dưới</string>
     <string name="subtitle_style_defaults">Mặc định</string>
     <string name="subtitle_style_on">Bật</string>

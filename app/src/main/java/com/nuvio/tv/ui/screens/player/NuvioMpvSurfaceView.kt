@@ -392,10 +392,10 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                 (normalizedOffset * (MPV_SUB_POS_AT_BOTTOM - MPV_SUB_POS_AT_TOP))
             val subMarginY = (MPV_SUB_MARGIN_Y_MIN +
                 (normalizedOffset * (MPV_SUB_MARGIN_Y_MAX - MPV_SUB_MARGIN_Y_MIN))).toInt()
-            val outlineSize = when {
-                !style.outlineEnabled -> 0.0
-                isAssOrSsaSubtitleSelectedNow() -> style.outlineWidth.coerceIn(1, 6).toDouble()
-                else -> 1.0
+            val outlineSize = if (style.outlineEnabled) {
+                style.outlineWidth.coerceIn(1, 20).toDouble()
+            } else {
+                0.0
             }
             val backgroundAlpha = (style.backgroundColor ushr 24) and 0xFF
             val borderStyle = if (backgroundAlpha > 0) "background-box" else "outline-and-shadow"

@@ -222,7 +222,7 @@ internal fun SubtitleStyleSidePanel(
                     centerContent = false,
                     modifier = Modifier
                         .width(StyleCardWidth)
-                        .height(StyleCardHeight)
+                        .height(if (subtitleStyle.outlineEnabled) 140.dp else StyleCardHeight)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(
@@ -233,22 +233,37 @@ internal fun SubtitleStyleSidePanel(
                                 isEnabled = subtitleStyle.outlineEnabled,
                                 onClick = { onEvent(PlayerEvent.OnSetSubtitleOutlineEnabled(!subtitleStyle.outlineEnabled)) }
                             )
-                            Text(
-                                text = stringResource(R.string.subtitle_style_color),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
-                            PANEL_OUTLINE_COLORS.forEach { color ->
-                                SubtitleStyleColorChip(
-                                    color = color.copy(alpha = if (subtitleStyle.outlineEnabled) 1f else 0.35f),
-                                    isSelected = subtitleStyle.outlineColor == color.toArgb(),
-                                    onClick = {
-                                        if (!subtitleStyle.outlineEnabled) {
-                                            onEvent(PlayerEvent.OnSetSubtitleOutlineEnabled(true))
+                            Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)) {
+                                PANEL_OUTLINE_COLORS.forEach { color ->
+                                    SubtitleStyleColorChip(
+                                        color = color.copy(alpha = if (subtitleStyle.outlineEnabled) 1f else 0.35f),
+                                        isSelected = subtitleStyle.outlineColor == color.toArgb(),
+                                        onClick = {
+                                            if (!subtitleStyle.outlineEnabled) {
+                                                onEvent(PlayerEvent.OnSetSubtitleOutlineEnabled(true))
+                                            }
+                                            onEvent(PlayerEvent.OnSetSubtitleOutlineColor(color.toArgb()))
                                         }
-                                        onEvent(PlayerEvent.OnSetSubtitleOutlineColor(color.toArgb()))
+                                    )
+                                }
+                            }
+                        }
+                        if (subtitleStyle.outlineEnabled) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SubtitleStyleStepperButton(
+                                    icon = Icons.Default.Remove,
+                                    onClick = {
+                                        onEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth - 1).coerceAtLeast(1)))
+                                    }
+                                )
+                                SubtitleStyleValueDisplay(text = "${subtitleStyle.outlineWidth}px")
+                                SubtitleStyleStepperButton(
+                                    icon = Icons.Default.Add,
+                                    onClick = {
+                                        onEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth + 1).coerceAtMost(20)))
                                     }
                                 )
                             }

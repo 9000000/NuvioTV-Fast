@@ -336,6 +336,7 @@ fun PlaybackSettingsContent(
                     coroutineScope.launch { viewModel.setSubtitleStripSdh(enabled) }
                 },
                 onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
+                onSetSubtitleOutlineWidth = { width -> coroutineScope.launch { viewModel.setSubtitleOutlineWidth(width) } },
                 onSetUseLibass = { enabled -> coroutineScope.launch { viewModel.setUseLibass(enabled) } },
                 onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } },
                 p2pEnabled = torrentSettings.p2pEnabled,

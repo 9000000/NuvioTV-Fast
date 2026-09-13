@@ -1684,6 +1684,9 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         is PlayerEvent.OnSetSubtitleOutlineColor -> {
             scope.launch { playerSettingsDataStore.setSubtitleOutlineColor(event.color) }
         }
+        is PlayerEvent.OnSetSubtitleOutlineWidth -> {
+            scope.launch { playerSettingsDataStore.setSubtitleOutlineWidth(event.width) }
+        }
         is PlayerEvent.OnSetSubtitleVerticalOffset -> {
             scope.launch { playerSettingsDataStore.setSubtitleVerticalOffset(event.offset) }
         }

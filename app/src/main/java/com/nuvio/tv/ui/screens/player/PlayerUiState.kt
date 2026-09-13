@@ -335,6 +335,7 @@ sealed class PlayerEvent {
     data class OnSetSubtitleBold(val bold: Boolean) : PlayerEvent()
     data class OnSetSubtitleOutlineEnabled(val enabled: Boolean) : PlayerEvent()
     data class OnSetSubtitleOutlineColor(val color: Int) : PlayerEvent()
+    data class OnSetSubtitleOutlineWidth(val width: Int) : PlayerEvent()
     data class OnSetSubtitleVerticalOffset(val offset: Int) : PlayerEvent()
     data object OnResetSubtitleDefaults : PlayerEvent()
     data object OnToggleAspectRatio : PlayerEvent()

@@ -877,6 +877,7 @@
     <string name="sub_outline">Outline</string>
     <string name="sub_outline_sub">Add outline around subtitle text for better visibility</string>
     <string name="sub_outline_color">Outline Color</string>
+    <string name="sub_outline_width">Outline Width</string>
     <string name="sub_advanced_section">Advanced Subtitle Rendering</string>
     <string name="sub_libass">Use libass for ASS/SSA subtitles</string>
     <string name="sub_libass_sub">Experimental: advanced ASS/SSA rendering (styles, positioning, animations)</string>
@@ -1834,6 +1835,7 @@
     <string name="subtitle_style_text_color">Text Color</string>
     <string name="subtitle_style_text_opacity">Text Opacity</string>
     <string name="subtitle_style_outline">Outline</string>
+    <string name="subtitle_style_outline_width">Outline Width</string>
     <string name="subtitle_style_bottom_offset">Bottom Offset</string>
     <string name="subtitle_style_defaults">Defaults</string>
     <string name="subtitle_style_on">On</string>

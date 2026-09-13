@@ -343,7 +343,9 @@ internal fun SubtitleSelectionOverlay(
         if (isStyleDisabledByLibass) return
         val requestedKey = targetKey ?: StyleFocusKey.DelaySet
         val resolvedKey = when {
-            requestedKey.startsWith("${StyleFocusKey.OutlineColorPrefix}:") && !subtitleStyle.outlineEnabled -> {
+            (requestedKey.startsWith("${StyleFocusKey.OutlineColorPrefix}:") ||
+                requestedKey == StyleFocusKey.OutlineWidthDecrease ||
+                requestedKey == StyleFocusKey.OutlineWidthIncrease) && !subtitleStyle.outlineEnabled -> {
                 StyleFocusKey.OutlineToggle
             }
             else -> requestedKey
@@ -984,6 +986,24 @@ private fun SubtitleStyleRail(
                                 dispatchStyleEvent(PlayerEvent.OnSetSubtitleOutlineColor(color))
                             }
                         )
+                        if (subtitleStyle.outlineEnabled) {
+                            Text(
+                                text = stringResource(R.string.subtitle_style_outline_width),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                            StepperRow(
+                                value = "${subtitleStyle.outlineWidth}px",
+                                onDecrease = { dispatchStyleEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth - 1).coerceAtLeast(1))) },
+                                onIncrease = { dispatchStyleEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth + 1).coerceAtMost(20))) },
+                                onMoveLeft = onMoveLeft,
+                                decrementFocusRequester = focusRequesters[StyleFocusKey.OutlineWidthDecrease],
+                                incrementFocusRequester = focusRequesters[StyleFocusKey.OutlineWidthIncrease],
+                                decrementFocusKey = StyleFocusKey.OutlineWidthDecrease,
+                                incrementFocusKey = StyleFocusKey.OutlineWidthIncrease,
+                                onFocusChanged = onStyleFocused
+                            )
+                        }
                     }
                 }
             }
@@ -1659,6 +1679,8 @@ private object StyleFocusKey {
     const val FontSizeIncrease = "font_size_increase"
     const val Bold = "bold"
     const val OutlineToggle = "outline_toggle"
+    const val OutlineWidthDecrease = "outline_width_decrease"
+    const val OutlineWidthIncrease = "outline_width_increase"
     const val OffsetDecrease = "offset_decrease"
     const val OffsetIncrease = "offset_increase"
     const val DelaySet = "delay_set"
@@ -1682,7 +1704,7 @@ private fun styleListIndexForFocusKey(focusKey: String): Int {
         focusKey == StyleFocusKey.Bold -> 2
         focusKey.startsWith("${StyleFocusKey.TextColorPrefix}:") -> 3
         focusKey == StyleFocusKey.OpacityDecrease || focusKey == StyleFocusKey.OpacityIncrease -> 4
-        focusKey == StyleFocusKey.OutlineToggle || focusKey.startsWith("${StyleFocusKey.OutlineColorPrefix}:") -> 5
+        focusKey == StyleFocusKey.OutlineToggle || focusKey.startsWith("${StyleFocusKey.OutlineColorPrefix}:") || focusKey == StyleFocusKey.OutlineWidthDecrease || focusKey == StyleFocusKey.OutlineWidthIncrease -> 5
         focusKey == StyleFocusKey.OffsetDecrease || focusKey == StyleFocusKey.OffsetIncrease -> 6
         focusKey == StyleFocusKey.Reset -> 7
         else -> 0
@@ -1704,6 +1726,8 @@ private fun rememberStyleFocusRequesters(): Map<String, FocusRequester> {
             StyleFocusKey.OpacityDecrease,
             StyleFocusKey.OpacityIncrease,
             StyleFocusKey.OutlineToggle,
+            StyleFocusKey.OutlineWidthDecrease,
+            StyleFocusKey.OutlineWidthIncrease,
             StyleFocusKey.OffsetDecrease,
             StyleFocusKey.OffsetIncrease,
             StyleFocusKey.DelaySet,

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LineWeight
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VerticalAlignBottom
@@ -80,6 +81,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     onSetSubtitleShowOnlyPreferredLanguages: (Boolean) -> Unit,
     onSetSubtitleStripSdh: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
+    onSetSubtitleOutlineWidth: (Int) -> Unit,
     onSetUseLibass: (Boolean) -> Unit,
     onSetLibassRenderType: (LibassRenderType) -> Unit,
     onItemFocused: () -> Unit = {},
@@ -242,6 +244,21 @@ internal fun LazyListScope.subtitleSettingsItems(
                 title = stringResource(R.string.sub_outline_color),
                 currentColor = Color(playerSettings.subtitleStyle.outlineColor),
                 onClick = onShowOutlineColorDialog,
+                onFocused = onItemFocused,
+                enabled = enabled
+            )
+        }
+
+        item(key = "subtitle_outline_width") {
+            SliderSettingsItem(
+                icon = Icons.Default.LineWeight,
+                title = stringResource(R.string.sub_outline_width),
+                value = playerSettings.subtitleStyle.outlineWidth,
+                valueText = "${playerSettings.subtitleStyle.outlineWidth}px",
+                minValue = 1,
+                maxValue = 20,
+                step = 1,
+                onValueChange = onSetSubtitleOutlineWidth,
                 onFocused = onItemFocused,
                 enabled = enabled
             )
