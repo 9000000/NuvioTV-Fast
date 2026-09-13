@@ -181,7 +181,10 @@ internal fun SubtitleStyleSidePanel(
                                 onEvent(PlayerEvent.OnSetSubtitleFont(fontList[prevIndex].first))
                             }
                         )
-                        SubtitleStyleValueDisplay(text = currentFontName)
+                        SubtitleStyleValueDisplay(
+                            text = currentFontName,
+                            modifier = Modifier.widthIn(min = 90.dp, max = 150.dp)
+                        )
                         SubtitleStyleStepperButton(
                             icon = Icons.Default.Add,
                             onClick = {

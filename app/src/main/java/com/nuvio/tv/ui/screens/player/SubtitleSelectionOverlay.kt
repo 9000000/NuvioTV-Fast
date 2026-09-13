@@ -915,6 +915,7 @@ private fun SubtitleStyleRail(
                     val currentFontName = fontList[currentFontIndex].second
                     StepperRow(
                         value = currentFontName,
+                        valueWidth = 140.dp,
                         onDecrease = {
                             val prevIndex = if (currentFontIndex > 0) currentFontIndex - 1 else fontList.size - 1
                             dispatchStyleEvent(PlayerEvent.OnSetSubtitleFont(fontList[prevIndex].first))
@@ -1442,13 +1443,15 @@ private fun StepperRow(
             modifier = Modifier
                 .width(valueWidth)
                 .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(NuvioTheme.radii.md))
-                .padding(horizontal = NuvioTheme.spacing.md, vertical = NuvioTheme.spacing.sm),
+                .padding(horizontal = 8.dp, vertical = NuvioTheme.spacing.sm),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White
+                color = Color.White,
+                maxLines = 1,
+                softWrap = false
             )
         }
         StepperButton(
