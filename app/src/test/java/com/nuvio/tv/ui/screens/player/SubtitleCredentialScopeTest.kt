@@ -54,7 +54,7 @@ class SubtitleCredentialScopeTest {
         assertFalse(mayCarryStreamCredentials("https://subs.example.com/a.srt".toHttpUrl(), stream))
         assertFalse(mayCarryStreamCredentials("https://example.com/a.srt".toHttpUrl(), stream))
         assertFalse(mayCarryStreamCredentials("https://video.example.com/a.srt".toHttpUrl(), null))
-        // The last-two-label match this replaces treated these as the same site.
+        // Matched by the old last-two-label check.
         assertFalse(
             mayCarryStreamCredentials(
                 "https://evil.example.co.uk/a.srt".toHttpUrl(),
@@ -91,13 +91,25 @@ class SubtitleCredentialScopeTest {
             explicitHeaders = null
         )
 
-        // A credential under a custom name is dropped too, not only Authorization and Cookie.
+        // Custom credential names are dropped too.
         crossHostHeaders.forEach { (name, value) -> assertEquals(name, value, request.header(name)) }
         assertNull(request.header("Authorization"))
         assertNull(request.header("Cookie"))
         assertNull(request.header("X-Api-Key"))
 
-        // Without a parseable stream URL nothing is in scope, but the subtitle's own headers still go out.
+        // HTTPS stream, HTTP subtitle: no Referer or Origin either.
+        val downgraded = buildSubtitleRequest(
+            "http://subs.example.com/a.srt".toHttpUrl(),
+            "https://video.example.com/v.mkv".toHttpUrl(),
+            streamHeaders,
+            explicitHeaders = null
+        )
+        assertNull(downgraded.header("Referer"))
+        assertNull(downgraded.header("Origin"))
+        assertEquals("Player", downgraded.header("User-Agent"))
+        assertNull(downgraded.header("X-Api-Key"))
+
+        // No stream URL: nothing in scope, subtitle headers still sent.
         val noStream = buildSubtitleRequest(
             "https://subs.example.com/a.srt".toHttpUrl(),
             streamUrl = null,
@@ -116,10 +128,10 @@ class SubtitleCredentialScopeTest {
             streamHeaders,
             explicitHeaders = mapOf("x-api-key" to "subtitle-own")
         )
-        // The subtitle's header replaces the stream's of the same name in different case.
+        // Subtitle header wins, even with different casing.
         assertEquals("subtitle-own", request.header("X-Api-Key"))
 
-        // What the TLS retry and an out-of-scope redirect hop send.
+        // What the TLS retry and an out-of-scope hop send.
         val stripped = request.withoutForwardedStreamHeaders()
 
         assertEquals("subtitle-own", stripped.header("X-Api-Key"))
@@ -130,7 +142,7 @@ class SubtitleCredentialScopeTest {
 
     @Test
     fun `a redirect to another host drops the forwarded stream headers on that hop`() {
-        // 127.0.0.1 and localhost reach the same server but are different hosts.
+        // Same server, different hosts.
         HeaderRecordingServer().use { server ->
             val base = "http://127.0.0.1:${server.port}"
             server.redirects["/redirect.srt"] = "http://localhost:${server.port}/landed.srt"
@@ -172,7 +184,7 @@ class SubtitleCredentialScopeTest {
                     streamHeaders,
                     explicitHeaders = null
                 )
-                // The real subtitle client and its guard, trusting the test certificate only.
+                // Real subtitle client, trusting the test certificate.
                 val client = subtitleHttpClient.newBuilder()
                     .sslSocketFactory(tls.socketFactory, tls.trustManager)
                     .build()
@@ -186,14 +198,17 @@ class SubtitleCredentialScopeTest {
                 httpServer.assertEvery("/middle.srt") {
                     assertNull(it["x-api-key"])
                     assertNull(it["cookie"])
-                    assertEquals("https://addon.example/", it["referer"])
+                    // Downgraded hop drops Referer and Origin too.
+                    assertNull(it["referer"])
+                    assertNull(it["origin"])
+                    assertEquals("Player", it["user-agent"])
                 }
-                // Back on the stream's HTTPS host the guard lets them through again: OkHttp builds each
-                // redirect from the request before network interceptors ran. Authorization stays gone,
-                // because OkHttp itself drops it for good once a redirect changes scheme or port.
+                // Back on the stream's HTTPS host, so they are allowed again. Authorization isn't: OkHttp
+                // drops it after a scheme change.
                 httpsServer.assertEvery("/landed.srt") {
                     assertEquals("secret", it["x-api-key"])
                     assertEquals("session=1", it["cookie"])
+                    assertEquals("https://addon.example/", it["referer"])
                     assertNull(it["authorization"])
                 }
             }
@@ -231,9 +246,8 @@ class SubtitleCredentialScopeTest {
     @Test
     fun `a redirect to a host failing hostname verification is retried without the forwarded headers`() {
         val tls = testTls()
-        // The certificate covers 127.0.0.1 only, so the redirect to localhost fails hostname verification
-        // before a request is sent there. Both clients resolve localhost to 127.0.0.1 only: with ::1 in the
-        // mix, the refused IPv6 route is reported instead of the verification failure.
+        // Cert only covers 127.0.0.1, so localhost fails verification. DNS is pinned to IPv4, otherwise
+        // OkHttp reports the refused ::1 route instead.
         val loopbackOnly = object : Dns {
             override fun lookup(hostname: String): List<InetAddress> = listOf(InetAddress.getByName("127.0.0.1"))
         }
@@ -246,7 +260,7 @@ class SubtitleCredentialScopeTest {
                 streamHeaders,
                 explicitHeaders = null
             )
-            // Without connection retries, each attempt reaches the server exactly once per hop.
+            // No connection retries, so request counts are exact.
             val validated = subtitleHttpClient.newBuilder()
                 .dns(loopbackOnly)
                 .retryOnConnectionFailure(false)
@@ -259,11 +273,11 @@ class SubtitleCredentialScopeTest {
 
             executeSubtitleRequest(request, validated, permissive).use { assertEquals(200, it.code) }
 
-            // The validated attempt reaches the stream's host with the credentials and fails verifying localhost.
+            // Validated attempt, with credentials.
             val redirectHops = server.requestsTo("/redirect.srt")
             assertEquals(2, redirectHops.size)
             assertEquals("secret", redirectHops[0]["x-api-key"])
-            // The retry starts over without them and reaches localhost without them.
+            // Retry, without them.
             assertNull(redirectHops[1]["x-api-key"])
             assertNull(redirectHops[1]["cookie"])
             val landed = server.requestsTo("/landed.srt").single()
@@ -280,7 +294,7 @@ class SubtitleCredentialScopeTest {
             .socketFactory
     }
 
-    /** A self-signed certificate for IP 127.0.0.1, valid until 2126, from the test resources. */
+    /** Self-signed cert for 127.0.0.1, valid until 2126. */
     private fun testTls(): TestTls {
         val password = "changeit".toCharArray()
         val resource = requireNotNull(
@@ -297,7 +311,7 @@ class SubtitleCredentialScopeTest {
 
     private class RecordedRequest(val path: String, val headers: Map<String, String>)
 
-    /** Records each request's headers, answers [redirects] with a 302 and anything else with a subtitle. */
+    /** Records request headers; 302 for [redirects], a subtitle otherwise. */
     private class HeaderRecordingServer(tls: TestTls? = null) : AutoCloseable {
         private val socket: ServerSocket = tls?.serverContext?.serverSocketFactory
             ?.createServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
@@ -336,11 +350,11 @@ class SubtitleCredentialScopeTest {
         fun requestsTo(path: String): List<Map<String, String>> =
             synchronized(requests) { requests.filter { it.path == path }.map { it.headers } }
 
-        /** Runs [check] on the headers of every request to [path], of which there must be at least one. */
+        /** Runs [check] on every request to [path]; at least one is required. */
         fun assertEvery(path: String, check: (Map<String, String>) -> Unit) {
             val matching = synchronized(requests) { requests.filter { it.path == path } }
             assertTrue("no request to $path", matching.isNotEmpty())
-            // Every request per path, in case OkHttp retries one.
+            // OkHttp may retry, so check them all.
             matching.forEach { check(it.headers) }
         }
 
