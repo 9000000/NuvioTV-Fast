@@ -201,6 +201,16 @@ fun TorrServerSettingsContent(
                             onToggle = { viewModel.onEvent(TorrServerSettingsEvent.ToggleGst(!uiState.gst)) }
                         )
                     }
+
+                    // Parallel Connections Toggle
+                    item(key = "torrserver_parallel") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.torrserver_parallel_title),
+                            subtitle = stringResource(R.string.torrserver_parallel_subtitle),
+                            checked = uiState.parallelConnections,
+                            onToggle = { viewModel.onEvent(TorrServerSettingsEvent.ToggleParallelConnections(!uiState.parallelConnections)) }
+                        )
+                    }
                 }
 
                 SettingsVerticalScrollIndicators(state = listState)

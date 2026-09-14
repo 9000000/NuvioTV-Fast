@@ -271,6 +271,7 @@ class PlayerRuntimeController(
         scope.launch {
             torrServerAddonConfig.config.collect { config ->
                 torrServerConfigData = config
+                mediaSourceFactory.torrServerParallelEnabled = config.parallelConnections
             }
         }
     }

@@ -218,6 +218,12 @@ class PlayerMediaSourceFactoryTest {
         assertFalse(PlayerMediaSourceFactory.isTorrServerUrl("https://stream.provider.org/live/playlist.m3u8"))
     }
 
+    @Test
+    fun `TorrServer parallel stream constants are correctly configured for micro-chunking`() {
+        assertEquals(2L * 1024L * 1024L, PlayerMediaSourceFactory.TORRSERVER_PARALLEL_CHUNK_BYTES)
+        assertEquals(3, PlayerMediaSourceFactory.TORRSERVER_MAX_PARALLEL_CONNECTIONS)
+    }
+
     private fun String.basicAuthHeader(): String =
         "Basic " + Base64.getEncoder().encodeToString(toByteArray(Charsets.UTF_8))
 }
