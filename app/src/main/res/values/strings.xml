@@ -2399,6 +2399,23 @@
     <string name="cd_stream_info">Stream info</string>
     <string name="cd_more_actions">More actions</string>
     <string name="cd_close_more_actions">Close more actions</string>
+
+    <!-- Player Control Button Labels -->
+    <string name="player_btn_play">Play</string>
+    <string name="player_btn_pause">Pause</string>
+    <string name="player_btn_next">Next</string>
+    <string name="player_btn_subtitles">Subtitles</string>
+    <string name="player_btn_audio">Audio</string>
+    <string name="player_btn_sources">Sources</string>
+    <string name="player_btn_engine">Player</string>
+    <string name="player_btn_episodes">Episodes</string>
+    <string name="player_btn_info">Info</string>
+    <string name="player_btn_more">More</string>
+    <string name="player_btn_less">Less</string>
+    <string name="player_btn_speed">Speed</string>
+    <string name="player_btn_aspect">Aspect</string>
+    <string name="player_btn_external">External</string>
+    <string name="player_btn_report">Report</string>
     <string name="cd_back">Back</string>
     <string name="cd_next_episode_thumbnail">Next episode thumbnail</string>
     <string name="cd_current">Current</string>

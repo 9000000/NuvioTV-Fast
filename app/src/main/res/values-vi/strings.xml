@@ -2399,6 +2399,23 @@
     <string name="cd_stream_info">Thông tin luồng</string>
     <string name="cd_more_actions">Thao tác khác</string>
     <string name="cd_close_more_actions">Đóng phần thao tác khác</string>
+
+    <!-- Player Control Button Labels -->
+    <string name="player_btn_play">Phát</string>
+    <string name="player_btn_pause">Tạm dừng</string>
+    <string name="player_btn_next">Tập tiếp</string>
+    <string name="player_btn_subtitles">Phụ đề</string>
+    <string name="player_btn_audio">Âm thanh</string>
+    <string name="player_btn_sources">Nguồn</string>
+    <string name="player_btn_engine">Player</string>
+    <string name="player_btn_episodes">Tập phim</string>
+    <string name="player_btn_info">Thông tin</string>
+    <string name="player_btn_more">Thêm</string>
+    <string name="player_btn_less">Thu gọn</string>
+    <string name="player_btn_speed">Tốc độ</string>
+    <string name="player_btn_aspect">Tỷ lệ</string>
+    <string name="player_btn_external">App ngoài</string>
+    <string name="player_btn_report">Báo lỗi</string>
     <string name="cd_back">Quay lại</string>
     <string name="cd_next_episode_thumbnail">Ảnh thu nhỏ tập tiếp theo</string>
     <string name="cd_current">Hiện tại</string>

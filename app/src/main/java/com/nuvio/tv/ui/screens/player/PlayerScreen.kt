@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -68,6 +69,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -2255,7 +2257,7 @@ private fun PlayerControlsOverlay(
             ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     val hasEpisodeContext = uiState.currentSeason != null && uiState.currentEpisode != null
                     val hasSubtitleControl = uiState.subtitleTracks.isNotEmpty() || uiState.addonSubtitles.isNotEmpty()
@@ -2269,6 +2271,7 @@ private fun PlayerControlsOverlay(
                         icon = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         iconPainter = if (uiState.isPlaying) customPausePainter else customPlayPainter,
                         contentDescription = if (uiState.isPlaying) stringResource(R.string.cd_pause) else stringResource(R.string.cd_play),
+                        label = if (uiState.isPlaying) stringResource(R.string.player_btn_pause) else stringResource(R.string.player_btn_play),
                         onClick = onPlayPause,
                         focusRequester = playPauseFocusRequester,
                         upFocusRequester = progressUpTarget,
@@ -2280,6 +2283,7 @@ private fun PlayerControlsOverlay(
                         ControlButton(
                             icon = Icons.Default.SkipNext,
                             contentDescription = stringResource(R.string.next_episode_label),
+                            label = stringResource(R.string.player_btn_next),
                             onClick = onPlayNextEpisode,
                             upFocusRequester = progressUpTarget,
                             onDownKey = onHideControls,
@@ -2292,6 +2296,7 @@ private fun PlayerControlsOverlay(
                             icon = Icons.Default.ClosedCaption,
                             iconPainter = customSubtitlePainter,
                             contentDescription = stringResource(R.string.cd_subtitles),
+                            label = stringResource(R.string.player_btn_subtitles),
                             onClick = onShowSubtitleDialog,
                             upFocusRequester = progressUpTarget,
                             onDownKey = onHideControls,
@@ -2304,6 +2309,7 @@ private fun PlayerControlsOverlay(
                             icon = Icons.AutoMirrored.Filled.VolumeUp,
                             iconPainter = customAudioPainter,
                             contentDescription = stringResource(R.string.cd_audio_tracks),
+                            label = stringResource(R.string.player_btn_audio),
                             onClick = onShowAudioDialog,
                             upFocusRequester = progressUpTarget,
                             onDownKey = onHideControls,
@@ -2315,6 +2321,7 @@ private fun PlayerControlsOverlay(
                         icon = Icons.Default.SwapHoriz,
                         iconPainter = customSourcePainter,
                         contentDescription = stringResource(R.string.cd_sources),
+                        label = stringResource(R.string.player_btn_sources),
                         onClick = onShowSourcesPanel,
                         upFocusRequester = progressUpTarget,
                         onDownKey = onHideControls,
@@ -2322,8 +2329,9 @@ private fun PlayerControlsOverlay(
                     )
 
                     ControlButton(
-                        icon = Icons.Default.SwapHoriz,
+                        icon = Icons.Default.Tune,
                         contentDescription = stringResource(R.string.cd_switch_player_engine),
+                        label = stringResource(R.string.player_btn_engine),
                         onClick = onSwitchPlayerEngine,
                         upFocusRequester = progressUpTarget,
                         onDownKey = onHideControls,
@@ -2335,12 +2343,27 @@ private fun PlayerControlsOverlay(
                             icon = Icons.AutoMirrored.Filled.List,
                             iconPainter = customEpisodesPainter,
                             contentDescription = stringResource(R.string.cd_episodes),
+                            label = stringResource(R.string.player_btn_episodes),
                             onClick = onShowEpisodesPanel,
                             upFocusRequester = progressUpTarget,
                             onDownKey = onHideControls,
                             onFocused = onResetHideTimer
                         )
                     }
+
+                    // Info button - Luôn hiển thị trực tiếp trên thanh điều khiển
+                    ControlButton(
+                        icon = Icons.Default.Info,
+                        contentDescription = stringResource(R.string.cd_stream_info),
+                        label = stringResource(R.string.player_btn_info),
+                        onClick = {
+                            onShowStreamInfo()
+                        },
+                        focusRequester = streamInfoFocusRequester,
+                        upFocusRequester = progressUpTarget,
+                        onDownKey = onHideControls,
+                        onFocused = onResetHideTimer
+                    )
 
                     AnimatedVisibility(
                         visible = uiState.showMoreDialog,
@@ -2355,11 +2378,12 @@ private fun PlayerControlsOverlay(
                     ) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Top
                         ) {
                             ControlButton(
                                 icon = Icons.Default.Speed,
                                 contentDescription = stringResource(R.string.cd_playback_speed),
+                                label = stringResource(R.string.player_btn_speed),
                                 onClick = {
                                     onShowSpeedDialog()
                                 },
@@ -2371,6 +2395,7 @@ private fun PlayerControlsOverlay(
                                 icon = Icons.Default.AspectRatio,
                                 iconPainter = customAspectPainter,
                                 contentDescription = stringResource(R.string.cd_aspect_ratio),
+                                label = stringResource(R.string.player_btn_aspect),
                                 onClick = {
                                     onToggleAspectRatio()
                                 },
@@ -2381,20 +2406,10 @@ private fun PlayerControlsOverlay(
                             ControlButton(
                                 icon = Icons.AutoMirrored.Filled.OpenInNew,
                                 contentDescription = stringResource(R.string.cd_open_external_player),
+                                label = stringResource(R.string.player_btn_external),
                                 onClick = {
                                     onOpenInExternalPlayer()
                                 },
-                                upFocusRequester = progressUpTarget,
-                                onDownKey = onHideControls,
-                                onFocused = onResetHideTimer
-                            )
-                            ControlButton(
-                                icon = Icons.Default.Info,
-                                contentDescription = stringResource(R.string.cd_stream_info),
-                                onClick = {
-                                    onShowStreamInfo()
-                                },
-                                focusRequester = streamInfoFocusRequester,
                                 upFocusRequester = progressUpTarget,
                                 onDownKey = onHideControls,
                                 onFocused = onResetHideTimer
@@ -2421,6 +2436,7 @@ private fun PlayerControlsOverlay(
                             Icons.AutoMirrored.Filled.KeyboardArrowRight
                         },
                         contentDescription = if (uiState.showMoreDialog) stringResource(R.string.cd_close_more_actions) else stringResource(R.string.cd_more_actions),
+                        label = if (uiState.showMoreDialog) stringResource(R.string.player_btn_less) else stringResource(R.string.player_btn_more),
                         onClick = onToggleMoreActions,
                         upFocusRequester = progressUpTarget,
                         onDownKey = onHideControls,
@@ -2495,6 +2511,7 @@ private fun ReportControlButton(
         ControlButton(
             icon = Icons.Default.BugReport,
             contentDescription = stringResource(R.string.player_report_issue),
+            label = stringResource(R.string.player_btn_report),
             onClick = onClick,
             enabled = enabled,
             upFocusRequester = upFocusRequester,
@@ -2527,6 +2544,7 @@ private fun ControlButton(
     icon: ImageVector,
     iconPainter: Painter? = null,
     contentDescription: String,
+    label: String? = null,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
@@ -2536,66 +2554,86 @@ private fun ControlButton(
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier
-            .size(NuvioTheme.spacing.xxxl)
-            .then(
-                if (focusRequester != null) Modifier.focusRequester(focusRequester)
-                else Modifier
-            )
-            .then(
-                if (upFocusRequester != null) {
-                    Modifier.focusProperties { up = upFocusRequester }
-                } else {
-                    Modifier
-                }
-            )
-            .onPreviewKeyEvent { keyEvent ->
-                if (
-                    upFocusRequester != null &&
-                    keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
-                    keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP
-                ) {
-                    try {
-                        upFocusRequester.requestFocus()
-                    } catch (_: Exception) {}
-                    true
-                } else if (
-                    onDownKey != null &&
-                    keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
-                    keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                ) {
-                    onDownKey.invoke()
-                    true
-                } else {
-                    false
-                }
-            }
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused?.invoke()
-            },
-        colors = IconButtonDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.White,
-            contentColor = Color.White,
-            focusedContentColor = Color.Black
-        ),
-        shape = IconButtonDefaults.shape(shape = CircleShape)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.widthIn(min = 46.dp, max = 68.dp)
     ) {
-        if (iconPainter != null) {
-            Icon(
-                painter = iconPainter,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(NuvioTheme.spacing.xl)
-            )
-        } else {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(28.dp)
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier
+                .size(NuvioTheme.spacing.xxxl)
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                    else Modifier
+                )
+                .then(
+                    if (upFocusRequester != null) {
+                        Modifier.focusProperties { up = upFocusRequester }
+                    } else {
+                        Modifier
+                    }
+                )
+                .onPreviewKeyEvent { keyEvent ->
+                    if (
+                        upFocusRequester != null &&
+                        keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
+                        keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP
+                    ) {
+                        try {
+                            upFocusRequester.requestFocus()
+                        } catch (_: Exception) {}
+                        true
+                    } else if (
+                        onDownKey != null &&
+                        keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
+                        keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                    ) {
+                        onDownKey.invoke()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .onFocusChanged {
+                    isFocused = it.isFocused
+                    if (it.isFocused) onFocused?.invoke()
+                },
+            colors = IconButtonDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.White,
+                contentColor = Color.White,
+                focusedContentColor = Color.Black
+            ),
+            shape = IconButtonDefaults.shape(shape = CircleShape)
+        ) {
+            if (iconPainter != null) {
+                Icon(
+                    painter = iconPainter,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(NuvioTheme.spacing.xl)
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+
+        if (!label.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.sp,
+                    fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium
+                ),
+                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.72f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
         }
     }
