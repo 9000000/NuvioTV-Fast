@@ -7,9 +7,6 @@ import com.nuvio.tv.core.torrent.TorrServerAddonConfigData
 import com.nuvio.tv.core.torrent.TorrServerRemoteApi
 import com.nuvio.tv.core.torrent.TorrentService
 import com.nuvio.tv.core.torrent.TorrentSettings
-import com.nuvio.tv.domain.model.Addon
-import com.nuvio.tv.domain.model.enabledAddons
-import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +19,6 @@ import javax.inject.Inject
 data class TorrServerSettingsUiState(
     val enabled: Boolean = false,
     val serverUrl: String = "http://127.0.0.1:8090",
-    val addonUrl: String = "",
     val authUsername: String = "",
     val authPassword: String = "",
     val preload: Boolean = true,
@@ -31,26 +27,19 @@ data class TorrServerSettingsUiState(
     val isTestingServer: Boolean = false,
     val serverStatusMessage: String? = null,
     val serverStatusSuccess: Boolean? = null,
-    val isTestingAddon: Boolean = false,
-    val addonStatusMessage: String? = null,
-    val addonStatusSuccess: Boolean? = null,
     val isCheckingGst: Boolean = false,
     val gstStatusMessage: String? = null,
-    val gstStatusSuccess: Boolean? = null,
-    val installedAddons: List<Addon> = emptyList()
+    val gstStatusSuccess: Boolean? = null
 )
 
 sealed class TorrServerSettingsEvent {
     data class ToggleEnabled(val enabled: Boolean) : TorrServerSettingsEvent()
     data class UpdateServerUrl(val url: String) : TorrServerSettingsEvent()
-    data class UpdateAddonUrl(val url: String) : TorrServerSettingsEvent()
-    data class SelectInstalledAddon(val manifestUrl: String) : TorrServerSettingsEvent()
     data class UpdateCredentials(val user: String, val pass: String) : TorrServerSettingsEvent()
     data class TogglePreload(val enabled: Boolean) : TorrServerSettingsEvent()
     data class ToggleSaveToDb(val enabled: Boolean) : TorrServerSettingsEvent()
     data class ToggleGst(val enabled: Boolean) : TorrServerSettingsEvent()
     data object TestServerConnection : TorrServerSettingsEvent()
-    data object TestAddon : TorrServerSettingsEvent()
     data object CheckGstSupport : TorrServerSettingsEvent()
 }
 
@@ -59,8 +48,7 @@ class TorrServerSettingsViewModel @Inject constructor(
     private val addonConfig: TorrServerAddonConfig,
     private val remoteApi: TorrServerRemoteApi,
     private val torrentSettings: TorrentSettings,
-    private val torrentService: TorrentService,
-    private val addonRepository: AddonRepository
+    private val torrentService: TorrentService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TorrServerSettingsUiState())
@@ -73,7 +61,6 @@ class TorrServerSettingsViewModel @Inject constructor(
                     it.copy(
                         enabled = config.enabled,
                         serverUrl = config.serverUrl,
-                        addonUrl = config.addonUrl,
                         authUsername = config.authUsername,
                         authPassword = config.authPassword,
                         preload = config.preload,
@@ -81,15 +68,6 @@ class TorrServerSettingsViewModel @Inject constructor(
                         gst = config.gst
                     )
                 }
-            }
-        }
-
-        viewModelScope.launch {
-            addonRepository.getInstalledAddons().collectLatest { addons ->
-                val streamAddons = addons.enabledAddons().filter { addon ->
-                    addon.resources.any { it.name.equals("stream", ignoreCase = true) }
-                }
-                _uiState.update { it.copy(installedAddons = streamAddons) }
             }
         }
     }
@@ -106,14 +84,6 @@ class TorrServerSettingsViewModel @Inject constructor(
             is TorrServerSettingsEvent.UpdateServerUrl -> {
                 addonConfig.setServerUrl(event.url)
                 _uiState.update { it.copy(serverStatusMessage = null, serverStatusSuccess = null) }
-            }
-            is TorrServerSettingsEvent.UpdateAddonUrl -> {
-                addonConfig.setAddonUrl(event.url)
-                _uiState.update { it.copy(addonStatusMessage = null, addonStatusSuccess = null) }
-            }
-            is TorrServerSettingsEvent.SelectInstalledAddon -> {
-                addonConfig.setAddonUrl(event.manifestUrl)
-                _uiState.update { it.copy(addonStatusMessage = null, addonStatusSuccess = null) }
             }
             is TorrServerSettingsEvent.UpdateCredentials -> {
                 addonConfig.setCredentials(event.user, event.pass)
@@ -134,7 +104,6 @@ class TorrServerSettingsViewModel @Inject constructor(
                 }
             }
             TorrServerSettingsEvent.TestServerConnection -> testServerConnection()
-            TorrServerSettingsEvent.TestAddon -> testAddon()
             TorrServerSettingsEvent.CheckGstSupport -> checkGstSupport()
         }
     }
@@ -196,34 +165,6 @@ class TorrServerSettingsViewModel @Inject constructor(
                             isTestingServer = false,
                             serverStatusMessage = error.message ?: "Unknown error",
                             serverStatusSuccess = false
-                        )
-                    }
-                }
-            )
-        }
-    }
-
-    fun testAddon() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isTestingAddon = true, addonStatusMessage = null, addonStatusSuccess = null) }
-            val current = _uiState.value
-            val result = remoteApi.testAddonUrl(current.addonUrl)
-            result.fold(
-                onSuccess = { info ->
-                    _uiState.update {
-                        it.copy(
-                            isTestingAddon = false,
-                            addonStatusMessage = info,
-                            addonStatusSuccess = true
-                        )
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(
-                            isTestingAddon = false,
-                            addonStatusMessage = error.message ?: "Invalid addon URL",
-                            addonStatusSuccess = false
                         )
                     }
                 }

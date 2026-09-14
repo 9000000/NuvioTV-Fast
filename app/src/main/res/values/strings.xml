@@ -3214,7 +3214,7 @@
     <string name="stream_test_video_bitrate">Average Video Bitrate: %1$s</string>
     <!-- TorrServer Addon Integration -->
     <string name="settings_torrserver_title">TorrServer</string>
-    <string name="settings_torrserver_subtitle">Configure TorrServer URL and Torrent scraper addon</string>
+    <string name="settings_torrserver_subtitle">Configure TorrServer URL and streaming options</string>
     <string name="torrserver_enable_title">Enable TorrServer</string>
     <string name="torrserver_enable_subtitle">Stream torrents via TorrServer (automatically disables native P2P to free TV CPU/RAM)</string>
     <string name="torrserver_server_url_title">TorrServer URL</string>

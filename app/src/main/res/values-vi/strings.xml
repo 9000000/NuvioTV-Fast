@@ -3215,7 +3215,7 @@
 
     <!-- TorrServer Addon Integration -->
     <string name="settings_torrserver_title">TorrServer</string>
-    <string name="settings_torrserver_subtitle">Cấu hình máy chủ TorrServer và Addon tìm kiếm torrent</string>
+    <string name="settings_torrserver_subtitle">Cấu hình máy chủ TorrServer và tùy chọn phát luồng</string>
     <string name="torrserver_enable_title">Bật TorrServer</string>
     <string name="torrserver_enable_subtitle">Phát torrent qua máy chủ TorrServer (tự động tắt P2P gốc để giải phóng CPU/RAM TV)</string>
     <string name="torrserver_server_url_title">Địa chỉ máy chủ TorrServer</string>
