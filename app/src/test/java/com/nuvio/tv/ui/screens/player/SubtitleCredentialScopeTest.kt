@@ -41,28 +41,28 @@ class SubtitleCredentialScopeTest {
     fun `the scope is the stream's own host, without a downgrade to http`() {
         val stream = "https://video.example.com/v.mkv".toHttpUrl()
 
-        assertTrue(mayCarryStreamCredentials("https://video.example.com/a.srt".toHttpUrl(), stream))
-        assertTrue(mayCarryStreamCredentials("https://VIDEO.example.com/a.srt".toHttpUrl(), stream))
-        assertFalse(mayCarryStreamCredentials("http://video.example.com/a.srt".toHttpUrl(), stream))
+        assertTrue(isInHeaderScope("https://video.example.com/a.srt".toHttpUrl(), stream))
+        assertTrue(isInHeaderScope("https://VIDEO.example.com/a.srt".toHttpUrl(), stream))
+        assertFalse(isInHeaderScope("http://video.example.com/a.srt".toHttpUrl(), stream))
         assertTrue(
-            mayCarryStreamCredentials(
+            isInHeaderScope(
                 "http://video.example.com/a.srt".toHttpUrl(),
                 "http://video.example.com/v.mkv".toHttpUrl()
             )
         )
         // A sibling host under the same domain is outside.
-        assertFalse(mayCarryStreamCredentials("https://subs.example.com/a.srt".toHttpUrl(), stream))
-        assertFalse(mayCarryStreamCredentials("https://example.com/a.srt".toHttpUrl(), stream))
-        assertFalse(mayCarryStreamCredentials("https://video.example.com/a.srt".toHttpUrl(), null))
+        assertFalse(isInHeaderScope("https://subs.example.com/a.srt".toHttpUrl(), stream))
+        assertFalse(isInHeaderScope("https://example.com/a.srt".toHttpUrl(), stream))
+        assertFalse(isInHeaderScope("https://video.example.com/a.srt".toHttpUrl(), null))
         // Matched by the old last-two-label check.
         assertFalse(
-            mayCarryStreamCredentials(
+            isInHeaderScope(
                 "https://evil.example.co.uk/a.srt".toHttpUrl(),
                 "https://video.example.co.uk/v.mkv".toHttpUrl()
             )
         )
         assertFalse(
-            mayCarryStreamCredentials(
+            isInHeaderScope(
                 "https://attacker.github.io/a.srt".toHttpUrl(),
                 "https://victim.github.io/v.mkv".toHttpUrl()
             )
@@ -121,27 +121,28 @@ class SubtitleCredentialScopeTest {
     }
 
     @Test
-    fun `leaving the scope drops the forwarded stream headers but not the subtitle's own`() {
+    fun `stream and subtitle headers are scoped separately`() {
         val request = buildSubtitleRequest(
             "https://video.example.com/a.srt".toHttpUrl(),
             "https://video.example.com/v.mkv".toHttpUrl(),
             streamHeaders,
-            explicitHeaders = mapOf("x-api-key" to "subtitle-own")
+            explicitHeaders = mapOf("x-api-key" to "subtitle-own", "Referer" to "https://subs.example/")
         )
-        // Subtitle header wins, even with different casing.
+        // Subtitle header wins, even with different casing, and is tracked as the subtitle's.
         assertEquals("subtitle-own", request.header("X-Api-Key"))
+        assertEquals(setOf("x-api-key"), request.tag(SubtitleOwnHeaders::class.java)?.names)
+        assertTrue(request.tag(ForwardedStreamHeaders::class.java)?.names.orEmpty().none { it.lowercase() == "x-api-key" })
 
-        // What the TLS retry and an out-of-scope hop send.
-        val stripped = request.withoutForwardedStreamHeaders()
-
-        assertEquals("subtitle-own", stripped.header("X-Api-Key"))
-        assertNull(stripped.header("Authorization"))
-        assertNull(stripped.header("Cookie"))
-        crossHostHeaders.forEach { (name, value) -> assertEquals(name, value, stripped.header(name)) }
+        // The TLS retry drops both sets, but keeps cross-host headers.
+        val retry = request.withoutCredentialHeaders()
+        assertNull(retry.header("X-Api-Key"))
+        assertNull(retry.header("Authorization"))
+        assertEquals("https://subs.example/", retry.header("Referer"))
+        assertEquals("Player", retry.header("User-Agent"))
     }
 
     @Test
-    fun `a redirect to another host drops the forwarded stream headers on that hop`() {
+    fun `a redirect to another host drops stream and subtitle credentials on that hop`() {
         // Same server, different hosts.
         HeaderRecordingServer().use { server ->
             val base = "http://127.0.0.1:${server.port}"
@@ -158,14 +159,15 @@ class SubtitleCredentialScopeTest {
             server.assertEvery("/redirect.srt") {
                 assertEquals("secret", it["x-api-key"])
                 assertEquals("session=1", it["cookie"])
+                assertEquals("own", it["x-subtitle-key"])
             }
             server.assertEvery("/landed.srt") {
                 assertNull(it["x-api-key"])
                 assertNull(it["cookie"])
                 assertNull(it["authorization"])
+                assertNull(it["x-subtitle-key"])
                 assertEquals("https://addon.example/", it["referer"])
                 assertEquals("https://addon.example", it["origin"])
-                assertEquals("own", it["x-subtitle-key"])
             }
         }
     }
@@ -182,7 +184,7 @@ class SubtitleCredentialScopeTest {
                     "$httpsBase/redirect.srt".toHttpUrl(),
                     "$httpsBase/v.mkv".toHttpUrl(),
                     streamHeaders,
-                    explicitHeaders = null
+                    explicitHeaders = mapOf("X-Subtitle-Key" to "own", "Referer" to "https://subs.example/")
                 )
                 // Real subtitle client, trusting the test certificate.
                 val client = subtitleHttpClient.newBuilder()
@@ -194,21 +196,26 @@ class SubtitleCredentialScopeTest {
                 httpsServer.assertEvery("/redirect.srt") {
                     assertEquals("secret", it["x-api-key"])
                     assertEquals("session=1", it["cookie"])
+                    assertEquals("own", it["x-subtitle-key"])
+                    assertEquals("https://subs.example/", it["referer"])
                 }
                 httpServer.assertEvery("/middle.srt") {
                     assertNull(it["x-api-key"])
                     assertNull(it["cookie"])
-                    // Downgraded hop drops Referer and Origin too.
+                    // Downgraded hop drops Referer and Origin too, the subtitle's own included.
+                    assertNull(it["x-subtitle-key"])
                     assertNull(it["referer"])
                     assertNull(it["origin"])
                     assertEquals("Player", it["user-agent"])
+                    assertEquals("en", it["accept-language"])
                 }
                 // Back on the stream's HTTPS host, so they are allowed again. Authorization isn't: OkHttp
                 // drops it after a scheme change.
                 httpsServer.assertEvery("/landed.srt") {
                     assertEquals("secret", it["x-api-key"])
                     assertEquals("session=1", it["cookie"])
-                    assertEquals("https://addon.example/", it["referer"])
+                    assertEquals("own", it["x-subtitle-key"])
+                    assertEquals("https://subs.example/", it["referer"])
                     assertNull(it["authorization"])
                 }
             }
@@ -216,7 +223,7 @@ class SubtitleCredentialScopeTest {
     }
 
     @Test
-    fun `a redirect within the stream's https host keeps the forwarded stream headers`() {
+    fun `a redirect within the same https host keeps stream and subtitle credentials`() {
         val tls = testTls()
         HeaderRecordingServer(tls).use { server ->
             val base = "https://127.0.0.1:${server.port}"
@@ -225,7 +232,7 @@ class SubtitleCredentialScopeTest {
                 "$base/redirect.srt".toHttpUrl(),
                 "$base/v.mkv".toHttpUrl(),
                 streamHeaders,
-                explicitHeaders = null
+                explicitHeaders = mapOf("X-Subtitle-Key" to "own")
             )
             val client = subtitleHttpClient.newBuilder()
                 .sslSocketFactory(tls.socketFactory, tls.trustManager)
@@ -238,13 +245,14 @@ class SubtitleCredentialScopeTest {
                     assertEquals("secret", it["x-api-key"])
                     assertEquals("session=1", it["cookie"])
                     assertEquals("Bearer token", it["authorization"])
+                    assertEquals("own", it["x-subtitle-key"])
                 }
             }
         }
     }
 
     @Test
-    fun `a redirect to a host failing hostname verification is retried without the forwarded headers`() {
+    fun `a redirect to a host failing hostname verification is retried without credentials`() {
         val tls = testTls()
         // Cert only covers 127.0.0.1, so localhost fails verification. DNS is pinned to IPv4, otherwise
         // OkHttp reports the refused ::1 route instead.
@@ -258,7 +266,7 @@ class SubtitleCredentialScopeTest {
                 "$base/redirect.srt".toHttpUrl(),
                 "$base/v.mkv".toHttpUrl(),
                 streamHeaders,
-                explicitHeaders = null
+                explicitHeaders = mapOf("X-Subtitle-Key" to "own")
             )
             // No connection retries, so request counts are exact.
             val validated = subtitleHttpClient.newBuilder()
@@ -277,13 +285,16 @@ class SubtitleCredentialScopeTest {
             val redirectHops = server.requestsTo("/redirect.srt")
             assertEquals(2, redirectHops.size)
             assertEquals("secret", redirectHops[0]["x-api-key"])
+            assertEquals("own", redirectHops[0]["x-subtitle-key"])
             // Retry, without them.
             assertNull(redirectHops[1]["x-api-key"])
             assertNull(redirectHops[1]["cookie"])
+            assertNull(redirectHops[1]["x-subtitle-key"])
             val landed = server.requestsTo("/landed.srt").single()
             assertNull(landed["x-api-key"])
             assertNull(landed["cookie"])
             assertNull(landed["authorization"])
+            assertNull(landed["x-subtitle-key"])
             assertEquals("https://addon.example/", landed["referer"])
         }
     }
