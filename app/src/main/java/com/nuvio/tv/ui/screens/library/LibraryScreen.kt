@@ -1013,6 +1013,17 @@ private fun CloudFilePickerDialog(
     onPlay: (CloudLibraryFile) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val displayFiles = remember(item.playableFiles) {
+        val hasEpisodePattern = item.playableFiles.any { file ->
+            file.name.contains(Regex("(?i)s\\d+e\\d+|ep?\\d+|episode\\s*\\d+"))
+        }
+        if (!hasEpisodePattern) {
+            item.playableFiles.sortedByDescending { it.sizeBytes ?: 0L }
+        } else {
+            item.playableFiles
+        }
+    }
+
     NuvioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.cloud_library_file_picker_title),
@@ -1026,7 +1037,7 @@ private fun CloudFilePickerDialog(
                 .heightIn(max = 420.dp),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
         ) {
-            items(item.playableFiles, key = { it.stableKey }) { file ->
+            items(displayFiles, key = { it.stableKey }) { file ->
                 val resolving = resolvingFileKey == "${item.stableKey}:${file.stableKey}"
                 Card(
                     onClick = { if (!resolving) onPlay(file) },

@@ -132,6 +132,7 @@ import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.TorrentFilePickerDialog
 import android.text.format.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -285,6 +286,8 @@ fun PlayerScreen(
             viewModel.onEvent(PlayerEvent.OnHideSubtitleDelayOverlay)
         } else if (uiState.showSubtitleStylePanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSubtitleStylePanel)
+        } else if (uiState.showTorrentFilePicker) {
+            viewModel.onEvent(PlayerEvent.OnDismissTorrentFilePicker)
         } else if (uiState.showSourcesPanel) {
             if (uiState.currentStreamUrl.isNullOrBlank()) {
                 exitPlayer()
@@ -1634,6 +1637,24 @@ fun PlayerScreen(
                 currentSpeed = uiState.playbackSpeed,
                 onSpeedSelected = { viewModel.onEvent(PlayerEvent.OnSetPlaybackSpeed(it)) },
                 onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissTransientOverlay) }
+            )
+        }
+
+        if (uiState.showTorrentFilePicker) {
+            TorrentFilePickerDialog(
+                title = uiState.torrentFilePickerTitle,
+                isLoading = uiState.torrentFilePickerLoading,
+                error = uiState.torrentFilePickerError,
+                files = uiState.torrentFilePickerFiles,
+                targetSeason = uiState.episodesSelectedSeason ?: uiState.currentSeason,
+                targetEpisode = uiState.currentEpisode,
+                contentType = uiState.contentType,
+                onFileSelected = { fileId ->
+                    viewModel.onEvent(PlayerEvent.OnTorrentFileSelected(fileId))
+                },
+                onDismiss = {
+                    viewModel.onEvent(PlayerEvent.OnDismissTorrentFilePicker)
+                }
             )
         }
     }

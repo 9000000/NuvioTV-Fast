@@ -55,6 +55,8 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
     nextEpisodeAutoPlayJob = null
     debridResolveJob?.cancel()
     debridResolveJob = null
+    torrentFilePickerJob?.cancel()
+    torrentFilePickerJob = null
     stillWatchingPromptJob?.cancel()
     stillWatchingPromptJob = null
     errorRetryJob?.cancel()

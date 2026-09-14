@@ -502,6 +502,7 @@ fun StreamScreen(
                 files = uiState.torrentFilePickerFiles,
                 targetSeason = uiState.season,
                 targetEpisode = uiState.episode,
+                contentType = uiState.contentType,
                 onFileSelected = { fileId ->
                     scope.coroutineLaunch {
                         val playbackInfo = viewModel.resolveTorrServerPlayback(fileId)

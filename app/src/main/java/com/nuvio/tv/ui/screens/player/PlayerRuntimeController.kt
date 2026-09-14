@@ -88,6 +88,7 @@ class PlayerRuntimeController(
     internal val torrentService: TorrentService,
     internal val torrentSettings: com.nuvio.tv.core.torrent.TorrentSettings,
     internal val torrServerRemoteApi: com.nuvio.tv.core.torrent.TorrServerRemoteApi,
+    internal val torrServerAddonConfig: com.nuvio.tv.core.torrent.TorrServerAddonConfig,
     internal val tmdbService: com.nuvio.tv.core.tmdb.TmdbService,
     internal val tmdbMetadataService: com.nuvio.tv.core.tmdb.TmdbMetadataService,
     internal val tmdbSettingsDataStore: com.nuvio.tv.data.local.TmdbSettingsDataStore,
@@ -255,6 +256,8 @@ class PlayerRuntimeController(
         )
     )
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+    internal var torrServerConfigData: com.nuvio.tv.core.torrent.TorrServerAddonConfigData =
+        com.nuvio.tv.core.torrent.TorrServerAddonConfigData()
 
     init {
         scope.launch {
@@ -265,6 +268,16 @@ class PlayerRuntimeController(
                     com.nuvio.tv.core.recommendations.TvRecommendationManager.isPlaybackActive.value = isPlaying
                 }
         }
+        scope.launch {
+            torrServerAddonConfig.config.collect { config ->
+                torrServerConfigData = config
+            }
+        }
+    }
+
+    internal fun isTorrServerStream(stream: com.nuvio.tv.domain.model.Stream): Boolean {
+        val isExplicitTorrServer = stream.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
+        return isExplicitTorrServer || (torrServerConfigData.enabled && stream.isTorrent())
     }
 
     internal fun consumePendingExitReason() {
@@ -365,6 +378,7 @@ class PlayerRuntimeController(
     internal var subtitleTimingRefreshJob: Job? = null
     internal var nextEpisodeAutoPlayJob: Job? = null
     internal var debridResolveJob: Job? = null
+    internal var torrentFilePickerJob: Job? = null
     internal var stillWatchingPromptJob: Job? = null
     internal var startupLoadingReportJob: Job? = null
     internal var sourceStreamsJob: Job? = null

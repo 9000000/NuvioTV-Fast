@@ -1563,6 +1563,12 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         is PlayerEvent.OnSourceStreamSelected -> {
             switchToSourceStream(event.stream)
         }
+        PlayerEvent.OnDismissTorrentFilePicker -> {
+            dismissTorrentFilePicker()
+        }
+        is PlayerEvent.OnTorrentFileSelected -> {
+            resolveTorrServerPlaybackAndSwitch(event.fileId)
+        }
         PlayerEvent.OnDismissTransientOverlay -> {
             _uiState.update {
                 it.copy(

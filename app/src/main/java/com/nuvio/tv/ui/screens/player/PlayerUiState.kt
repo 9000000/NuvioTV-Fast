@@ -160,6 +160,14 @@ data class PlayerUiState(
     val sourceFilteredStreams: List<Stream> = emptyList(),
     val sourceAvailableAddons: List<String> = emptyList(),
     val sourceChips: List<SourceChipItem> = emptyList(),
+    // TorrServer torrent file picker
+    val showTorrentFilePicker: Boolean = false,
+    val torrentFilePickerLoading: Boolean = false,
+    val torrentFilePickerError: String? = null,
+    val torrentFilePickerTitle: String = "",
+    val torrentFilePickerFiles: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList(),
+    val torrentFilePickerPendingStream: Stream? = null,
+    val torrentFilePickerPendingHash: String? = null,
     val showFileSizeBadges: Boolean = true,
     val showAddonLogo: Boolean = true,
     val streamBadgePlacement: StreamBadgePlacement = StreamBadgePlacement.BOTTOM,
@@ -315,6 +323,8 @@ sealed class PlayerEvent {
     data object OnReloadSourceStreams : PlayerEvent()
     data class OnSourceAddonFilterSelected(val addonName: String?) : PlayerEvent()
     data class OnSourceStreamSelected(val stream: Stream) : PlayerEvent()
+    data object OnDismissTorrentFilePicker : PlayerEvent()
+    data class OnTorrentFileSelected(val fileId: Int) : PlayerEvent()
     data object OnDismissTransientOverlay : PlayerEvent()
     data object OnRetry : PlayerEvent()
     data object OnReportPlaybackIssue : PlayerEvent()

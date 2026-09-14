@@ -71,6 +71,7 @@ fun TorrentFilePickerDialog(
     files: List<TorrServerRemoteFile>,
     targetSeason: Int? = null,
     targetEpisode: Int? = null,
+    contentType: String? = null,
     onFileSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -78,14 +79,28 @@ fun TorrentFilePickerDialog(
     val closeFocusRequester = remember { FocusRequester() }
 
     // Pre-calculate sorted list and UI models once per input change
-    val uiFiles = remember(files, targetSeason, targetEpisode) {
+    val uiFiles = remember(files, targetSeason, targetEpisode, contentType) {
+        val isMovie = contentType?.equals("movie", ignoreCase = true) == true ||
+            (targetSeason == null && targetEpisode == null &&
+             contentType?.equals("series", ignoreCase = true) != true &&
+             contentType?.equals("tv", ignoreCase = true) != true)
         val matcher = buildEpisodeMatcher(targetSeason, targetEpisode)
-        val sorted = files.sortedWith(
-            compareByDescending<TorrServerRemoteFile> { file ->
-                val ext = file.path.substringAfterLast('.', "").lowercase()
-                ext in VIDEO_EXTENSIONS
-            }.thenBy { it.path }
-        )
+        val sorted = if (isMovie) {
+            files.sortedWith(
+                compareByDescending<TorrServerRemoteFile> { file ->
+                    val ext = file.path.substringAfterLast('.', "").lowercase()
+                    ext in VIDEO_EXTENSIONS
+                }.thenByDescending { it.length }
+                .thenBy { it.path }
+            )
+        } else {
+            files.sortedWith(
+                compareByDescending<TorrServerRemoteFile> { file ->
+                    val ext = file.path.substringAfterLast('.', "").lowercase()
+                    ext in VIDEO_EXTENSIONS
+                }.thenBy { it.path }
+            )
+        }
         sorted.map { file ->
             val ext = file.path.substringAfterLast('.', "").lowercase()
             val isVideo = ext in VIDEO_EXTENSIONS
