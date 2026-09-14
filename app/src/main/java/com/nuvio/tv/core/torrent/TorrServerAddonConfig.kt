@@ -31,8 +31,7 @@ data class TorrServerAddonConfigData(
     val authPassword: String = "",
     val preload: Boolean = true,
     val saveToDb: Boolean = false,
-    val gst: Boolean = false,
-    val parallelConnections: Boolean = true
+    val gst: Boolean = false
 )
 
 @Singleton
@@ -50,7 +49,6 @@ class TorrServerAddonConfig @Inject constructor(
         val PRELOAD = booleanPreferencesKey("preload")
         val SAVE_TO_DB = booleanPreferencesKey("save_to_db")
         val GST = booleanPreferencesKey("gst")
-        val PARALLEL_CONNECTIONS = booleanPreferencesKey("parallel_connections")
     }
 
     val config: Flow<TorrServerAddonConfigData> = context.torrServerAddonDataStore.data
@@ -63,8 +61,7 @@ class TorrServerAddonConfig @Inject constructor(
                 authPassword = prefs[Keys.AUTH_PASSWORD] ?: "",
                 preload = prefs[Keys.PRELOAD] ?: true,
                 saveToDb = prefs[Keys.SAVE_TO_DB] ?: false,
-                gst = prefs[Keys.GST] ?: false,
-                parallelConnections = prefs[Keys.PARALLEL_CONNECTIONS] ?: true
+                gst = prefs[Keys.GST] ?: false
             )
         }
         .distinctUntilChanged()
@@ -116,12 +113,6 @@ class TorrServerAddonConfig @Inject constructor(
         }
     }
 
-    fun setParallelConnections(enabled: Boolean) {
-        scope.launch {
-            context.torrServerAddonDataStore.edit { it[Keys.PARALLEL_CONNECTIONS] = enabled }
-        }
-    }
-
     suspend fun updateConfig(config: TorrServerAddonConfigData) {
         context.torrServerAddonDataStore.edit {
             it[Keys.ENABLED] = config.enabled
@@ -132,7 +123,6 @@ class TorrServerAddonConfig @Inject constructor(
             it[Keys.PRELOAD] = config.preload
             it[Keys.SAVE_TO_DB] = config.saveToDb
             it[Keys.GST] = config.gst
-            it[Keys.PARALLEL_CONNECTIONS] = config.parallelConnections
         }
     }
 

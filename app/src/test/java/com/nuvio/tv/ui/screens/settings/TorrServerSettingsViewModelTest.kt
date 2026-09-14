@@ -84,12 +84,10 @@ class TorrServerSettingsViewModelTest {
         viewModel.onEvent(TorrServerSettingsEvent.TogglePreload(false))
         viewModel.onEvent(TorrServerSettingsEvent.ToggleSaveToDb(true))
         viewModel.onEvent(TorrServerSettingsEvent.ToggleGst(true))
-        viewModel.onEvent(TorrServerSettingsEvent.ToggleParallelConnections(false))
         runCurrent()
 
         verify { addonConfig.setPreload(false) }
         verify { addonConfig.setSaveToDb(true) }
         verify { addonConfig.setGst(true) }
-        verify { addonConfig.setParallelConnections(false) }
     }
 }

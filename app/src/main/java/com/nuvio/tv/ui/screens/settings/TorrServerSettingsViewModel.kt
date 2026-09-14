@@ -24,7 +24,6 @@ data class TorrServerSettingsUiState(
     val preload: Boolean = true,
     val saveToDb: Boolean = false,
     val gst: Boolean = false,
-    val parallelConnections: Boolean = true,
     val isTestingServer: Boolean = false,
     val serverStatusMessage: String? = null,
     val serverStatusSuccess: Boolean? = null,
@@ -40,7 +39,6 @@ sealed class TorrServerSettingsEvent {
     data class TogglePreload(val enabled: Boolean) : TorrServerSettingsEvent()
     data class ToggleSaveToDb(val enabled: Boolean) : TorrServerSettingsEvent()
     data class ToggleGst(val enabled: Boolean) : TorrServerSettingsEvent()
-    data class ToggleParallelConnections(val enabled: Boolean) : TorrServerSettingsEvent()
     data object TestServerConnection : TorrServerSettingsEvent()
     data object CheckGstSupport : TorrServerSettingsEvent()
 }
@@ -67,8 +65,7 @@ class TorrServerSettingsViewModel @Inject constructor(
                         authPassword = config.authPassword,
                         preload = config.preload,
                         saveToDb = config.saveToDb,
-                        gst = config.gst,
-                        parallelConnections = config.parallelConnections
+                        gst = config.gst
                     )
                 }
             }
@@ -105,9 +102,6 @@ class TorrServerSettingsViewModel @Inject constructor(
                 } else {
                     _uiState.update { it.copy(gstStatusMessage = null, gstStatusSuccess = null) }
                 }
-            }
-            is TorrServerSettingsEvent.ToggleParallelConnections -> {
-                addonConfig.setParallelConnections(event.enabled)
             }
             TorrServerSettingsEvent.TestServerConnection -> testServerConnection()
             TorrServerSettingsEvent.CheckGstSupport -> checkGstSupport()

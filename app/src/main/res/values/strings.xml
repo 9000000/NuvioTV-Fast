@@ -3240,8 +3240,6 @@
     <string name="torrserver_save_subtitle">Save downloaded torrents to TorrServer database</string>
     <string name="torrserver_gst_title">GStreamer transcoding (GST)</string>
     <string name="torrserver_gst_subtitle">Stream via GStreamer HLS transcoding (requires -gst TorrServer build)</string>
-    <string name="torrserver_parallel_title">Parallel Streams</string>
-    <string name="torrserver_parallel_subtitle">Fetch parallel streams for optimization</string>
 
     <!-- Torrent File Picker Dialog -->
     <string name="torrent_file_picker_title">Select Torrent File</string>

@@ -60,7 +60,6 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
     var parallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
     var parallelChunkSizeKb: Int = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_KB
-    var torrServerParallelEnabled: Boolean = true
     var nuvioPerformanceModeEnabled: Boolean = PlayerSettings.DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED
     var vodCacheEnabled: Boolean = PlayerSettings.DEFAULT_VOD_CACHE_ENABLED
     var vodCacheSizeMode: VodCacheSizeMode = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
@@ -116,25 +115,16 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val mediaItem = mediaItemBuilder.build()
 
         val isTorrServerStream = isTorrServerUrl(url)
-        val isTorrServerParallelStream = isTorrServerStream && torrServerParallelEnabled && !isHls && !isDash
         if (isTorrServerStream) {
-            if (isTorrServerParallelStream) {
-                Log.i(
-                    "PlayerMediaSourceFactory",
-                    "TorrServer parallel stream engaged: micro-chunked ParallelRangeDataSource " +
-                        "(${TORRSERVER_PARALLEL_CHUNK_BYTES / (1024L * 1024L)}MB chunks) with parallel connections"
-                )
-            } else {
-                Log.i(
-                    "PlayerMediaSourceFactory",
-                    "TorrServer stream detected: bypassing ParallelRangeDataSource and VOD Cache for single sequential HTTP stream"
-                )
-            }
+            Log.i(
+                "PlayerMediaSourceFactory",
+                "TorrServer stream detected: bypassing ParallelRangeDataSource and VOD Cache for single sequential HTTP stream"
+            )
         }
 
         val mp4SessionMode = !isTorrServerStream && !useParallelConnections && !isHls && !isDash &&
             resolvedMimeType == MimeTypes.VIDEO_MP4
-        val useChunkSessionSource = (isTorrServerParallelStream || (!isTorrServerStream && (useParallelConnections || mp4SessionMode))) && !isHls && !isDash
+        val useChunkSessionSource = !isTorrServerStream && (useParallelConnections || mp4SessionMode) && !isHls && !isDash
         parallelStartupPrefetchUnlocked.set(!useChunkSessionSource)
         val progressiveUpstreamFactory: DataSource.Factory = if (useChunkSessionSource) {
             if (mp4SessionMode) {
@@ -151,24 +141,19 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
             val effectiveNative =
                 nuvioPerformanceModeEnabled || NuvioEngineConfig.get().isNativeAllocationEnabled()
-
-            val connections = when {
-                isTorrServerParallelStream -> minOf(parallelConnectionCount, TORRSERVER_MAX_PARALLEL_CONNECTIONS).coerceAtLeast(2)
-                mp4SessionMode -> 1
-                else -> parallelConnectionCount
-            }
-            val chunkBytes = when {
-                isTorrServerParallelStream -> TORRSERVER_PARALLEL_CHUNK_BYTES
-                mp4SessionMode -> MP4_SESSION_CHUNK_BYTES
-                else -> parallelChunkSizeKb
-                    .coerceAtMost(com.nuvio.tv.ui.screens.settings.MemoryBudget.tierMaxChunkMb * 1024)
-                    .toLong() * 1024L
-            }
-
             ParallelRangeDataSource.Factory(
                 okHttpFactory,
-                connections,
-                chunkBytes,
+                if (mp4SessionMode) 1 else parallelConnectionCount,
+                if (mp4SessionMode) {
+                    MP4_SESSION_CHUNK_BYTES
+                } else {
+                    // Runtime enforcement of the tier chunk cap: a value
+                    // persisted before the cap existed (or on another device)
+                    // must not bypass it.
+                    parallelChunkSizeKb
+                        .coerceAtMost(com.nuvio.tv.ui.screens.settings.MemoryBudget.tierMaxChunkMb * 1024)
+                        .toLong() * 1024L
+                },
                 useNativeMemory = effectiveNative,
                 shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
                 onResolvedUri = { resolved -> currentVodCacheResolvedUrl = resolved?.toString() }
@@ -285,8 +270,6 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     companion object {
         private const val MIME_VIDEO_QUICK_TIME = "video/quicktime"
         internal const val MP4_SESSION_CHUNK_BYTES = 8L * 1024L * 1024L
-        internal const val TORRSERVER_PARALLEL_CHUNK_BYTES = 2L * 1024L * 1024L
-        internal const val TORRSERVER_MAX_PARALLEL_CONNECTIONS = 3
         private const val ENABLE_VOD_CACHE = true
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         internal const val DEFAULT_USER_AGENT =
