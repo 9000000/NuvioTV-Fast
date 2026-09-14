@@ -476,6 +476,7 @@ fun StreamScreen(
                         }
                     },
                     onRetry = { viewModel.onEvent(StreamScreenEvent.OnRetry) },
+                    onExpandStreams = { viewModel.expandFilteredStreamsIfNeeded() },
                     hazeState = streamHazeState,
                     modifier = Modifier
                         .weight(0.6f)
@@ -734,6 +735,7 @@ private fun RightStreamSection(
     shouldRestoreFocusedStream: Boolean,
     onRestoreFocusedStreamHandled: () -> Unit,
     onRetry: () -> Unit,
+    onExpandStreams: () -> Unit = {},
     hazeState: HazeState?,
     modifier: Modifier = Modifier
 ) {
@@ -920,7 +922,8 @@ private fun RightStreamSection(
                             onUserNavigatedFromFirstResult = {
                                 userMovedFromFirstResult = true
                             },
-                            onFocusChanged = { listHasFocus = it }
+                            onFocusChanged = { listHasFocus = it },
+                            onExpandStreams = onExpandStreams
                         )
                     }
                 }
@@ -1035,7 +1038,8 @@ private fun StreamsList(
     orderedAddonNames: List<String> = emptyList(),
     onRequestChipFocus: (Int) -> Unit = {},
     onUserNavigatedFromFirstResult: () -> Unit = {},
-    onFocusChanged: (Boolean) -> Unit = {}
+    onFocusChanged: (Boolean) -> Unit = {},
+    onExpandStreams: () -> Unit = {}
 ) {
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     val lastKeyRepeatDispatchRef = remember { java.util.concurrent.atomic.AtomicLong(0L) }
@@ -1088,6 +1092,18 @@ private fun StreamsList(
         } catch (_: Exception) {
         }
         onRestoreFocusedStreamHandled()
+    }
+
+    // Load more streams when scrolling near the bottom of the current page.
+    val lastVisibleIndex = remember(streamListState) {
+        androidx.compose.runtime.derivedStateOf {
+            streamListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+        }
+    }
+    LaunchedEffect(lastVisibleIndex.value, streams.size) {
+        if (lastVisibleIndex.value >= streams.size - 20) {
+            onExpandStreams()
+        }
     }
 
     LazyColumn(
