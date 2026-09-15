@@ -1943,8 +1943,17 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
             com.nuvio.tv.data.local.SubtitleFontOption.OSWALD -> runCatching {
                 androidx.core.content.res.ResourcesCompat.getFont(context, R.font.oswald)
             }.getOrNull()
+            com.nuvio.tv.data.local.SubtitleFontOption.CUSTOM -> runCatching {
+                val prefs = context.getSharedPreferences(
+                    "nuvio_global_subtitle_prefs",
+                    android.content.Context.MODE_PRIVATE
+                )
+                val path = prefs.getString("custom_subtitle_font_path", null)
+                if (path != null) android.graphics.Typeface.createFromFile(path) else null
+            }.getOrNull()
             else -> null
         }
+
 
         val typeface = if (baseTypeface != null) {
             if (subtitleStyle.bold) {

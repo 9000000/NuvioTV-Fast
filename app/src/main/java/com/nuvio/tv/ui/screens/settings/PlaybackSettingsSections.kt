@@ -1064,7 +1064,10 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissStreamAutoPlayAddonSelectionDialog: () -> Unit,
     onDismissStreamAutoPlayPluginSelectionDialog: () -> Unit,
     onDismissNextEpisodeThresholdModeDialog: () -> Unit,
-    onDismissReuseLastLinkCacheDialog: () -> Unit
+    onDismissReuseLastLinkCacheDialog: () -> Unit,
+    onPickCustomFont: () -> Unit = {},
+    onClearCustomFont: () -> Unit = {},
+    customFontName: String? = null
 ) {
     if (showPlayerPreferenceDialog) {
         PlayerPreferenceDialog(
@@ -1107,7 +1110,10 @@ internal fun PlaybackSettingsDialogsHost(
         onDismissFontDialog = onDismissFontDialog,
         onDismissTextColorDialog = onDismissTextColorDialog,
         onDismissBackgroundColorDialog = onDismissBackgroundColorDialog,
-        onDismissOutlineColorDialog = onDismissOutlineColorDialog
+        onDismissOutlineColorDialog = onDismissOutlineColorDialog,
+        onPickCustomFont = onPickCustomFont,
+        onClearCustomFont = onClearCustomFont,
+        customFontName = customFontName
     )
 
     AudioSettingsDialogs(

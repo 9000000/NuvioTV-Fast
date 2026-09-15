@@ -383,15 +383,24 @@ internal fun SubtitleSettingsDialogs(
     onDismissFontDialog: () -> Unit,
     onDismissTextColorDialog: () -> Unit,
     onDismissBackgroundColorDialog: () -> Unit,
-    onDismissOutlineColorDialog: () -> Unit
+    onDismissOutlineColorDialog: () -> Unit,
+    onPickCustomFont: () -> Unit = {},
+    onClearCustomFont: () -> Unit = {},
+    customFontName: String? = null
 ) {
     if (showFontDialog) {
         SubtitleFontDialog(
             selectedFont = playerSettings.subtitleStyle.font,
+            customFontName = customFontName,
             onFontSelected = {
                 onSetSubtitleFont(it)
                 onDismissFontDialog()
             },
+            onPickCustomFont = {
+                onDismissFontDialog()
+                onPickCustomFont()
+            },
+            onClearCustomFont = onClearCustomFont,
             onDismiss = onDismissFontDialog
         )
     }
@@ -468,13 +477,14 @@ internal fun SubtitleSettingsDialogs(
 }
 
 @Composable
-internal fun getSubtitleFontDisplayName(font: String): String {
+internal fun getSubtitleFontDisplayName(font: String, customFontName: String? = null): String {
     return when (font) {
         SubtitleFontOption.PHIMMOI -> stringResource(R.string.sub_font_phimmoi)
         SubtitleFontOption.INTER -> stringResource(R.string.sub_font_inter)
         SubtitleFontOption.OPENSANS -> stringResource(R.string.sub_font_opensans)
         SubtitleFontOption.DMSANS -> stringResource(R.string.sub_font_dmsans)
         SubtitleFontOption.OSWALD -> stringResource(R.string.sub_font_oswald)
+        SubtitleFontOption.CUSTOM -> customFontName ?: stringResource(R.string.sub_font_custom)
         else -> stringResource(R.string.sub_font_default)
     }
 }
@@ -483,6 +493,9 @@ internal fun getSubtitleFontDisplayName(font: String): String {
 internal fun SubtitleFontDialog(
     selectedFont: String,
     onFontSelected: (String) -> Unit,
+    onPickCustomFont: () -> Unit,
+    onClearCustomFont: () -> Unit,
+    customFontName: String? = null,
     onDismiss: () -> Unit
 ) {
     val options = listOf(
@@ -509,6 +522,13 @@ internal fun SubtitleFontDialog(
         SettingsPickerOption(
             value = SubtitleFontOption.OSWALD,
             title = stringResource(R.string.sub_font_oswald)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.CUSTOM,
+            title = if (customFontName != null)
+                stringResource(R.string.sub_font_custom_named, customFontName)
+            else
+                stringResource(R.string.sub_font_custom_pick)
         )
     )
 
@@ -516,9 +536,20 @@ internal fun SubtitleFontDialog(
         title = stringResource(R.string.sub_font),
         options = options,
         selectedValue = selectedFont,
-        onOptionSelected = onFontSelected,
+        onOptionSelected = { value ->
+            if (value == SubtitleFontOption.CUSTOM) {
+                // If already custom and has a font -> keep it selected, or trigger picker
+                if (customFontName != null) {
+                    onFontSelected(value)
+                } else {
+                    onPickCustomFont()
+                }
+            } else {
+                onFontSelected(value)
+            }
+        },
         onDismiss = onDismiss,
-        width = 400.dp,
-        maxHeight = 320.dp
+        width = 440.dp,
+        maxHeight = 380.dp
     )
 }

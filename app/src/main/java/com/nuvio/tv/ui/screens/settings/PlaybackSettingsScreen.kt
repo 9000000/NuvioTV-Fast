@@ -62,6 +62,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -120,6 +122,21 @@ fun PlaybackSettingsContent(
     val coroutineScope = rememberCoroutineScope()
     var memoryUsageTrigger by remember { mutableStateOf(0) }
     var showMemoryUsage by remember { mutableStateOf(false) }
+    var customFontName by remember { mutableStateOf(viewModel.getCustomSubtitleFontName()) }
+
+    // File picker for custom subtitle font
+    val fontFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val success = viewModel.importCustomSubtitleFont(uri)
+                if (success) {
+                    customFontName = viewModel.getCustomSubtitleFontName()
+                }
+            }
+        }
+    }
 
     // Dialog states
     var showLanguageDialog by remember { mutableStateOf(false) }
@@ -610,7 +627,17 @@ fun PlaybackSettingsContent(
         onDismissStreamAutoPlayAddonSelectionDialog = ::dismissAllDialogs,
         onDismissStreamAutoPlayPluginSelectionDialog = ::dismissAllDialogs,
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
-        onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
+        onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs,
+        onPickCustomFont = {
+            fontFilePicker.launch("*/*")
+        },
+        onClearCustomFont = {
+            coroutineScope.launch {
+                viewModel.clearCustomSubtitleFont()
+                customFontName = null
+            }
+        },
+        customFontName = customFontName
     )
 
     if (showP2pConsentDialog) {

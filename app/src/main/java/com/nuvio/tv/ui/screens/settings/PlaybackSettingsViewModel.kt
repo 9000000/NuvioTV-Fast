@@ -1,7 +1,12 @@
 package com.nuvio.tv.ui.screens.settings
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.util.UnstableApi
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.InternalPlayerEngine
@@ -40,7 +45,8 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val pluginManager: PluginManager,
     private val torrentSettings: TorrentSettings,
-    private val torrServerAddonConfig: TorrServerAddonConfig
+    private val torrServerAddonConfig: TorrServerAddonConfig,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
@@ -541,5 +547,50 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setNuvioPerformanceModeEnabled(enabled: Boolean) {
         playerSettingsDataStore.setNuvioPerformanceModeEnabled(enabled)
+    }
+
+    /** Returns the display name of the currently active custom subtitle font, or null. */
+    fun getCustomSubtitleFontName(): String? = playerSettingsDataStore.getCustomSubtitleFontName()
+
+    /**
+     * Copies the font file from [uri] into internal storage, registers it, and sets
+     * the subtitle font to CUSTOM. Returns true on success.
+     */
+    suspend fun importCustomSubtitleFont(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val cr = context.contentResolver
+            // Resolve display name from content uri
+            val displayName = cr.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
+            } ?: "custom_font.ttf"
+
+            val fontsDir = java.io.File(context.filesDir, "subtitle_fonts")
+            fontsDir.mkdirs()
+            val destFile = java.io.File(fontsDir, displayName)
+
+            // Delete old custom font file if different
+            val oldPath = playerSettingsDataStore.getCustomSubtitleFontPath()
+            if (oldPath != null && oldPath != destFile.absolutePath) {
+                runCatching { java.io.File(oldPath).delete() }
+            }
+
+            cr.openInputStream(uri)?.use { input ->
+                destFile.outputStream().use { output -> input.copyTo(output) }
+            }
+
+            playerSettingsDataStore.setCustomSubtitleFont(
+                displayName = displayName.removeSuffix(".ttf").removeSuffix(".otf"),
+                internalPath = destFile.absolutePath
+            )
+            playerSettingsDataStore.setSubtitleFont(com.nuvio.tv.data.local.SubtitleFontOption.CUSTOM)
+            true
+        }.getOrDefault(false)
+    }
+
+    /** Clears the custom subtitle font and reverts to default. */
+    suspend fun clearCustomSubtitleFont() = withContext(Dispatchers.IO) {
+        playerSettingsDataStore.clearCustomSubtitleFont()
+        playerSettingsDataStore.setSubtitleFont(com.nuvio.tv.data.local.SubtitleFontOption.DEFAULT)
     }
 }

@@ -141,6 +141,7 @@ object SubtitleFontOption {
     const val OPENSANS = "opensans"
     const val DMSANS = "dmsans"
     const val OSWALD = "oswald"
+    const val CUSTOM = "custom" // User-imported font from device storage
 }
 
 /**
@@ -483,6 +484,42 @@ class PlayerSettingsDataStore @Inject constructor(
         private const val AUDIO_AMPLIFICATION_DB_MAX = 10
         private const val CENTER_MIX_LEVEL_DB_MIN = -10
         private const val CENTER_MIX_LEVEL_DB_MAX = 30
+
+        // Global SharedPreferences keys for custom subtitle font (not per-profile)
+        private const val GLOBAL_PREFS_NAME = "nuvio_global_subtitle_prefs"
+        private const val PREF_KEY_CUSTOM_FONT_PATH = "custom_subtitle_font_path"
+        private const val PREF_KEY_CUSTOM_FONT_NAME = "custom_subtitle_font_name"
+    }
+
+    // Global prefs (not tied to any profile)
+    private val globalPrefs by lazy {
+        context.getSharedPreferences(GLOBAL_PREFS_NAME, android.content.Context.MODE_PRIVATE)
+    }
+
+    /** Returns the internal path to the user's custom subtitle font, or null if not set. */
+    fun getCustomSubtitleFontPath(): String? = globalPrefs.getString(PREF_KEY_CUSTOM_FONT_PATH, null)
+
+    /** Returns the display name of the user's custom subtitle font, or null if not set. */
+    fun getCustomSubtitleFontName(): String? = globalPrefs.getString(PREF_KEY_CUSTOM_FONT_NAME, null)
+
+    /** Saves a custom subtitle font (copies must be done by caller before calling this). */
+    fun setCustomSubtitleFont(displayName: String, internalPath: String) {
+        globalPrefs.edit()
+            .putString(PREF_KEY_CUSTOM_FONT_PATH, internalPath)
+            .putString(PREF_KEY_CUSTOM_FONT_NAME, displayName)
+            .apply()
+    }
+
+    /** Clears the custom subtitle font and deletes the cached file. */
+    fun clearCustomSubtitleFont() {
+        val path = globalPrefs.getString(PREF_KEY_CUSTOM_FONT_PATH, null)
+        if (path != null) {
+            runCatching { java.io.File(path).delete() }
+        }
+        globalPrefs.edit()
+            .remove(PREF_KEY_CUSTOM_FONT_PATH)
+            .remove(PREF_KEY_CUSTOM_FONT_NAME)
+            .apply()
     }
 
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
