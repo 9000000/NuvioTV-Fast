@@ -21,12 +21,14 @@ sealed class TorrentState {
         val statString: String? = null
     ) : TorrentState() {
         val isPreloadReady: Boolean
-            get() = stat == 3 || statString.equals("active", ignoreCase = true) ||
-                (preloadSize > 0 && preloadedBytes >= preloadSize * 95 / 100)
+            get() = (preloadSize > 0 && preloadedBytes >= preloadSize * 95 / 100) ||
+                stat == 3 ||
+                statString.equals("active", ignoreCase = true) ||
+                statString.equals("Torrent working", ignoreCase = true)
 
         val preloadProgress: Float
             get() {
-                if (stat == 3) return 1f
+                if (isPreloadReady) return 1f
                 val target = if (preloadSize > 0) preloadSize else if (stat == 2 && preloadedBytes > 0) 33_554_432L else 0L
                 return if (target > 0) (preloadedBytes.toFloat() / target).coerceIn(0f, 1f) else 0f
             }

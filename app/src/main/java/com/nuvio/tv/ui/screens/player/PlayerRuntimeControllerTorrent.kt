@@ -226,7 +226,14 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
     val preloadJob = scope.launch(kotlinx.coroutines.Dispatchers.IO) {
         try {
             preloadCall.execute().use { response ->
-                if (!response.isSuccessful) {
+                if (response.isSuccessful) {
+                    val byteStream = response.body?.byteStream()
+                    val buffer = ByteArray(16384)
+                    while (isActive) {
+                        val read = byteStream?.read(buffer) ?: -1
+                        if (read == -1) break
+                    }
+                } else {
                     Log.w(TAG, "Remote TorrServer preload request failed: ${response.code}")
                 }
             }
@@ -243,9 +250,9 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
                 val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
                 if (stats?.isPreloadReady == true) {
                     Log.d(TAG, "Remote TorrServer preload is active; handing stream to player")
-                    return@withTimeoutOrNull uri.withoutPreloadParameter()
+                    return@withTimeoutOrNull uri.toTorrServerPlaybackUrl()
                 }
-                delay(1_000L)
+                delay(500L)
             }
             null
         }
@@ -253,23 +260,38 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
         if (playbackUrl == null) {
             Log.w(TAG, "Remote TorrServer preload status timeout; handing stream to player anyway")
         }
-        playbackUrl ?: uri.withoutPreloadParameter()
+        playbackUrl ?: uri.toTorrServerPlaybackUrl()
     } finally {
         preloadCall.cancel()
         preloadJob.cancel()
     }
 }
 
-private fun android.net.Uri.withoutPreloadParameter(): String {
+private fun android.net.Uri.toTorrServerPlaybackUrl(): String {
     val builder = buildUpon().clearQuery()
+    var hasPlay = false
     queryParameterNames
         .filterNot { it.equals("preload", ignoreCase = true) }
         .forEach { name ->
+            if (name.equals("play", ignoreCase = true)) {
+                hasPlay = true
+            }
             getQueryParameters(name).forEach { value ->
-                builder.appendQueryParameter(name, value)
+                if (value.isNullOrEmpty()) {
+                    builder.appendQueryParameter(name, "")
+                } else {
+                    builder.appendQueryParameter(name, value)
+                }
             }
         }
+    if (!hasPlay) {
+        builder.appendQueryParameter("play", "")
+    }
     return builder.build().toString()
+        .replace("play=", "play")
+        .replace("save=", "save")
+        .replace("&&", "&")
+        .trimEnd('&', '?')
 }
 
 /**

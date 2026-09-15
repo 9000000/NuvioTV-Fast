@@ -27,26 +27,34 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
         }
     }
 
-    val infoHash = navigationArgs.infoHash
+    val isTorrServer = navigationArgs.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME ||
+        currentStreamUrl.contains("/stream?link=") || currentStreamUrl.contains("/play/") || currentStreamUrl.contains("/gst/")
+    val effectiveInfoHash = navigationArgs.infoHash
+        ?: if (initialStreamUrl.startsWith("torrent://")) {
+            initialStreamUrl.removePrefix("torrent://").substringBefore("/")
+        } else if (isTorrServer) {
+            extractTorrServerHash(currentStreamUrl)
+        } else {
+            null
+        }
+
     val clickElapsedMs = launchStartedAtElapsedMs
         ?.let { (SystemClock.elapsedRealtime() - it).coerceAtLeast(0L) }
         ?: -1L
     queuePlaybackRawEventLine(
         "PLAYER_START_REQUEST: clickElapsedMs=$clickElapsedMs host=${initialStreamUrl.safeStartupHost()} " +
             "contentId=${contentId ?: "n/a"} videoId=${currentVideoId ?: "n/a"} " +
-            "S${currentSeason ?: "-"}E${currentEpisode ?: "-"} infoHash=${infoHash != null} " +
+            "S${currentSeason ?: "-"}E${currentEpisode ?: "-"} infoHash=${effectiveInfoHash != null} " +
             "startFromBeginning=${navigationArgs.startFromBeginning} streamName=${streamName ?: "n/a"}"
     )
     Log.d(
         "PlayerStartup",
-        "startInitialPlayback: infoHash=$infoHash host=${currentStreamUrl.safeStartupHost()} " +
+        "startInitialPlayback: infoHash=$effectiveInfoHash host=${currentStreamUrl.safeStartupHost()} " +
             "urlHash=${currentStreamUrl.hashCode().toUInt().toString(16)}"
     )
-    val isTorrServer = navigationArgs.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME ||
-        currentStreamUrl.contains("/stream?link=") || currentStreamUrl.contains("/play/") || currentStreamUrl.contains("/gst/")
 
-    if (infoHash != null && isTorrServer) {
-        Log.d("PlayerStartup", "Starting remote TorrServer stream for $infoHash: $currentStreamUrl")
+    if (effectiveInfoHash != null && isTorrServer) {
+        Log.d("PlayerStartup", "Starting remote TorrServer stream for $effectiveInfoHash: $currentStreamUrl")
         isTorrentStream = true
         _uiState.update {
             it.copy(
@@ -55,9 +63,9 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
                 hideTorrentStats = false
             )
         }
-        startRemoteTorrServerStatsPolling(infoHash, currentStreamUrl)
+        startRemoteTorrServerStatsPolling(effectiveInfoHash, currentStreamUrl)
         scope.launch {
-            currentStreamUrl = awaitRemoteTorrServerPreload(infoHash, currentStreamUrl)
+            currentStreamUrl = awaitRemoteTorrServerPreload(effectiveInfoHash, currentStreamUrl)
             preparePlaybackBeforeStart(
                 url = currentStreamUrl,
                 headers = currentHeaders,
@@ -67,13 +75,13 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
         return
     }
 
-    if (infoHash != null && !initialStreamUrl.startsWith("http")) {
+    if (effectiveInfoHash != null && !initialStreamUrl.startsWith("http")) {
         torrentStreamJob = scope.launch {
             try {
-                Log.d("PlayerStartup", "Starting torrent stream for $infoHash")
+                Log.d("PlayerStartup", "Starting torrent stream for $effectiveInfoHash")
                 observeTorrentState()
                 val localUrl = startTorrentStream(
-                    infoHash = infoHash,
+                    infoHash = effectiveInfoHash,
                     fileIdx = navigationArgs.fileIdx,
                     filename = navigationArgs.filename,
                     title = contentName ?: title,
@@ -123,4 +131,19 @@ private fun String.safeStartupHost(): String {
     return runCatching {
         android.net.Uri.parse(this).host ?: substringBefore("://").takeIf { it.isNotBlank() } ?: "unknown"
     }.getOrDefault("unknown")
+}
+
+private fun extractTorrServerHash(url: String): String? {
+    if (url.isBlank()) return null
+    val playMatch = Regex("""/(?:play|gst)/([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})""").find(url)
+    if (playMatch != null) return playMatch.groupValues[1]
+
+    val btihMatch = Regex("""urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})""", RegexOption.IGNORE_CASE).find(url)
+    if (btihMatch != null) return btihMatch.groupValues[1]
+
+    val linkParam = runCatching { android.net.Uri.parse(url).getQueryParameter("link") }.getOrNull()
+    if (!linkParam.isNullOrBlank() && (linkParam.length == 40 || linkParam.length == 32) && linkParam.all { it.isLetterOrDigit() }) {
+        return linkParam
+    }
+    return null
 }

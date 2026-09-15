@@ -103,10 +103,18 @@ class TorrentService @Inject constructor(
 
         if (isPreload) {
             val preloadUrl = api.getStreamUrl(magnetLink, resolvedIdx, preload = true)
+            val call = api.newStreamCall(preloadUrl)
             preloadJob = scope.launch {
                 try {
-                    api.newStreamCall(preloadUrl).execute().use { response ->
-                        if (!response.isSuccessful) {
+                    call.execute().use { response ->
+                        if (response.isSuccessful) {
+                            val byteStream = response.body?.byteStream()
+                            val buffer = ByteArray(16384)
+                            while (isActive) {
+                                val read = byteStream?.read(buffer) ?: -1
+                                if (read == -1) break
+                            }
+                        } else {
                             Log.w(TAG, "TorrServer preload request failed: ${response.code}")
                         }
                     }
@@ -116,9 +124,13 @@ class TorrentService @Inject constructor(
                     Log.w(TAG, "TorrServer preload request ended: ${e.message}")
                 }
             }
-            awaitPreloadReady(hash)
-            preloadJob?.cancel()
-            preloadJob = null
+            try {
+                awaitPreloadReady(hash)
+            } finally {
+                call.cancel()
+                preloadJob?.cancel()
+                preloadJob = null
+            }
         }
 
         streamUrl

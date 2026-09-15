@@ -783,6 +783,21 @@ private fun PlaybackNavHost(
                     nullable = true
                     defaultValue = null
                 },
+                navArgument("infoHash") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("fileIdx") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("sources") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
                 navArgument("contentLanguage") {
                     type = NavType.StringType
                     nullable = true
