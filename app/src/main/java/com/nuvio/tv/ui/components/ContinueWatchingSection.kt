@@ -25,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -77,6 +76,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
+import com.nuvio.tv.ui.theme.NuvioComponents
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -456,20 +456,15 @@ fun ContinueWatchingCard(
     var internalFocused by remember { mutableStateOf(false) }
     val effectivelyFocused = isFocused || internalFocused
 
-    val targetScale = if (effectivelyFocused && NuvioTheme.animationsEnabled) {
+    val targetScale = if (effectivelyFocused) {
         when (cardStyle) {
-            ContinueWatchingCardStyle.POSTER -> 1.14f
-            ContinueWatchingCardStyle.CARD -> 1.10f
+            ContinueWatchingCardStyle.POSTER -> NuvioComponents.tokens.posterCard.focusedScale
+            ContinueWatchingCardStyle.CARD -> NuvioComponents.tokens.continueWatchingCard.focusedScale
             ContinueWatchingCardStyle.WIDE -> 1.08f
         }
     } else {
         1f
     }
-    val animatedScale by animateFloatAsState(
-        targetValue = targetScale,
-        animationSpec = tween(durationMillis = if (NuvioTheme.animationsEnabled) 150 else 0),
-        label = "cwCardScale"
-    )
 
     val effectiveEpisodeThumbnails =
         continueWatchingUsesEpisodeThumbnails(cardStyle, useEpisodeThumbnails)
@@ -654,8 +649,8 @@ fun ContinueWatchingCard(
             .width(cardWidth)
             .then(if (effectivelyFocused) Modifier.zIndex(1f) else Modifier)
             .graphicsLayer {
-                scaleX = animatedScale
-                scaleY = animatedScale
+                scaleX = targetScale
+                scaleY = targetScale
             }
             .onFocusChanged { internalFocused = it.isFocused }
             .recompositionHighlighter()
