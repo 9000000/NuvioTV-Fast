@@ -263,6 +263,7 @@ class MDBListRepository @Inject constructor(
     ): String? {
         extractImdbId(meta.id)?.let { return it }
         extractImdbId(fallbackItemId)?.let { return it }
+        extractImdbId(meta.imdbId)?.let { return it }
 
         val tmdbId = extractTmdbId(meta.id)
             ?: extractTmdbId(fallbackItemId)
