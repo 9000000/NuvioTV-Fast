@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 @Immutable
 class NuvioFocusRingStyle internal constructor(
@@ -43,3 +44,24 @@ internal fun createFocusRingStyle(palette: ThemeColorPalette): NuvioFocusRingSty
         gradientColors = palette.focusRingGradient
     )
 }
+
+val PosterRainbowColors: List<Color> = listOf(
+    Color(0xFFFF2A55), // Đỏ
+    Color(0xFFFF7E1D), // Cam
+    Color(0xFFFFD000), // Vàng
+    Color(0xFF05DF72), // Lục
+    Color(0xFF00D4FF), // Lam
+    Color(0xFF2B7FFF), // Chàm
+    Color(0xFFB026FF), // Tím
+    Color(0xFFFF2A55)  // Đỏ khép vòng
+)
+
+val PosterRainbowBrush: Brush = Brush.linearGradient(PosterRainbowColors)
+
+val PosterFocusedBorderWidth: Dp = 4.dp
+
+val PosterFocusRingStyle: NuvioFocusRingStyle = NuvioFocusRingStyle(
+    solidColor = Color(0xFFFF2A55),
+    gradientColors = PosterRainbowColors
+)
+

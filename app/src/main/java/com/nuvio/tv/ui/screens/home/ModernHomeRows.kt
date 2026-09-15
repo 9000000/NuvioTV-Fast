@@ -1224,8 +1224,8 @@ private fun ModernCarouselCard(
     val backgroundPainter = remember(backgroundCardColor) { ColorPainter(backgroundCardColor) }
     val isFastScrollingState = LocalFastScrollActive.current
     val isFastScrolling = isFastScrollingState.value
-    val focusRingBorderWidth = 3.dp
-    val focusRingStyle = NuvioTheme.focusRing
+    val focusRingBorderWidth = com.nuvio.tv.ui.theme.PosterFocusedBorderWidth
+    val focusRingStyle = NuvioTheme.posterFocusRing
     val focusRingBorder = remember(focusRingStyle, focusRingBorderWidth, cardShape) {
         Border(
             border = focusRingStyle.border(focusRingBorderWidth, alpha = 1.0f),

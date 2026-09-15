@@ -191,6 +191,9 @@ object NuvioTheme {
         @ReadOnlyComposable
         get() = LocalNuvioFocusRingStyle.current
 
+    val posterFocusRing: NuvioFocusRingStyle
+        get() = PosterFocusRingStyle
+
     val layout: NuvioLayoutTokens
         get() = NuvioLayout.tokens
 

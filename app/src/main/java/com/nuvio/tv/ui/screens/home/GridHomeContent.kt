@@ -914,7 +914,7 @@ private fun SeeAllGridCard(
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = NuvioTheme.focusRing.border(posterCardStyle.focusedBorderWidth),
+                    border = NuvioTheme.posterFocusRing.border(posterCardStyle.focusedBorderWidth),
                     shape = seeAllCardShape
                 )
             ),
@@ -1005,7 +1005,7 @@ private fun GridCollectionFolderCard(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = NuvioTheme.focusRing.border(posterCardStyle.focusedBorderWidth),
+                border = NuvioTheme.posterFocusRing.border(posterCardStyle.focusedBorderWidth),
                 shape = cardShape
             )
         ),

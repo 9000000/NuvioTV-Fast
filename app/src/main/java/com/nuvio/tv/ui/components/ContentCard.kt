@@ -268,7 +268,7 @@ fun ContentCard(
 
         val bgCardColor = NuvioTheme.colors.BackgroundCard
         val backgroundPainter = remember(bgCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(bgCardColor) }
-        val focusRingStyle = NuvioTheme.focusRing
+        val focusRingStyle = NuvioTheme.posterFocusRing
         val focusedBorder = remember(focusRingStyle, posterCardStyle.focusedBorderWidth, cardShape) {
             Border(
                 border = focusRingStyle.border(posterCardStyle.focusedBorderWidth, alpha = 1.0f),

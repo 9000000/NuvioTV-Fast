@@ -621,8 +621,8 @@ fun ContinueWatchingCard(
     
     val bgCardColor = NuvioTheme.colors.BackgroundCard
     val backgroundPainter = remember(bgCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(bgCardColor) }
-    val focusRingBorderWidth = 3.dp
-    val focusRingStyle = NuvioTheme.focusRing
+    val focusRingBorderWidth = com.nuvio.tv.ui.theme.PosterFocusedBorderWidth
+    val focusRingStyle = NuvioTheme.posterFocusRing
     val focusedBorder = remember(focusRingStyle, focusRingBorderWidth, cwCardShape) {
         Border(
             border = focusRingStyle.border(focusRingBorderWidth, alpha = 1.0f),

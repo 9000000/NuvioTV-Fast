@@ -765,7 +765,7 @@ private fun DiscoverActionCard(
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = NuvioTheme.focusRing.border(posterCardStyle.focusedBorderWidth),
+                    border = NuvioTheme.posterFocusRing.border(posterCardStyle.focusedBorderWidth),
                     shape = cardShape
                 )
             ),
