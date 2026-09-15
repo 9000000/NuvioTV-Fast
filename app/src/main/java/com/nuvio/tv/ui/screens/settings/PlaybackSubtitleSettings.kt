@@ -392,14 +392,8 @@ internal fun SubtitleSettingsDialogs(
         SubtitleFontDialog(
             selectedFont = playerSettings.subtitleStyle.font,
             customFontName = customFontName,
-            onFontSelected = {
-                onSetSubtitleFont(it)
-                onDismissFontDialog()
-            },
-            onPickCustomFont = {
-                onDismissFontDialog()
-                onPickCustomFont()
-            },
+            onFontSelected = { onSetSubtitleFont(it) },
+            onPickCustomFont = onPickCustomFont,
             onClearCustomFont = onClearCustomFont,
             onDismiss = onDismissFontDialog
         )
@@ -498,7 +492,11 @@ internal fun SubtitleFontDialog(
     customFontName: String? = null,
     onDismiss: () -> Unit
 ) {
-    val options = listOf(
+    // Sentinel values for action items (not real font options)
+    val VALUE_PICK_NEW = "__pick_custom__"
+    val VALUE_CLEAR = "__clear_custom__"
+
+    val baseOptions = listOf(
         SettingsPickerOption(
             value = SubtitleFontOption.DEFAULT,
             title = stringResource(R.string.sub_font_default)
@@ -522,34 +520,72 @@ internal fun SubtitleFontDialog(
         SettingsPickerOption(
             value = SubtitleFontOption.OSWALD,
             title = stringResource(R.string.sub_font_oswald)
-        ),
-        SettingsPickerOption(
-            value = SubtitleFontOption.CUSTOM,
-            title = if (customFontName != null)
-                stringResource(R.string.sub_font_custom_named, customFontName)
-            else
-                stringResource(R.string.sub_font_custom_pick)
         )
     )
+
+    // When a custom font is already loaded: show its name as selected item
+    // plus two action items to change or remove it.
+    // When no custom font yet: show a single "pick from storage" item.
+    val customOptions: List<SettingsPickerOption<String>> = if (customFontName != null) {
+        listOf(
+            SettingsPickerOption(
+                value = SubtitleFontOption.CUSTOM,
+                title = stringResource(R.string.sub_font_custom_named, customFontName)
+            ),
+            SettingsPickerOption(
+                value = VALUE_PICK_NEW,
+                title = stringResource(R.string.sub_font_custom_change)
+            ),
+            SettingsPickerOption(
+                value = VALUE_CLEAR,
+                title = stringResource(R.string.sub_font_custom_remove)
+            )
+        )
+    } else {
+        listOf(
+            SettingsPickerOption(
+                value = SubtitleFontOption.CUSTOM,
+                title = stringResource(R.string.sub_font_custom_pick)
+            )
+        )
+    }
+
+    val options = baseOptions + customOptions
+    val dialogHeight = if (customFontName != null) 440.dp else 380.dp
 
     SettingsSingleChoiceDialog(
         title = stringResource(R.string.sub_font),
         options = options,
         selectedValue = selectedFont,
         onOptionSelected = { value ->
-            if (value == SubtitleFontOption.CUSTOM) {
-                // If already custom and has a font -> keep it selected, or trigger picker
-                if (customFontName != null) {
-                    onFontSelected(value)
-                } else {
+            when (value) {
+                VALUE_PICK_NEW -> {
+                    onDismiss()
                     onPickCustomFont()
                 }
-            } else {
-                onFontSelected(value)
+                VALUE_CLEAR -> {
+                    onClearCustomFont()
+                    onDismiss()
+                }
+                SubtitleFontOption.CUSTOM -> {
+                    if (customFontName != null) {
+                        // Re-select current custom font — just close dialog
+                        onFontSelected(value)
+                        onDismiss()
+                    } else {
+                        // No font yet → open picker
+                        onDismiss()
+                        onPickCustomFont()
+                    }
+                }
+                else -> {
+                    onFontSelected(value)
+                    onDismiss()
+                }
             }
         },
         onDismiss = onDismiss,
-        width = 440.dp,
-        maxHeight = 380.dp
+        width = 460.dp,
+        maxHeight = dialogHeight
     )
 }

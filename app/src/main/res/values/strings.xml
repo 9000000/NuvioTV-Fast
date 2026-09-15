@@ -897,6 +897,8 @@
     <string name="sub_font_custom">Custom Font</string>
     <string name="sub_font_custom_pick">Font from storage…</string>
     <string name="sub_font_custom_named">Custom: %s</string>
+    <string name="sub_font_custom_change">↩ Change font file…</string>
+    <string name="sub_font_custom_remove">✕ Remove custom font</string>
     <string name="sub_advanced_section">Advanced Subtitle Rendering</string>
     <string name="sub_libass">Use libass for ASS/SSA subtitles</string>
     <string name="sub_libass_sub">Experimental: advanced ASS/SSA rendering (styles, positioning, animations)</string>
