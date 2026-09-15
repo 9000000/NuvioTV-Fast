@@ -456,7 +456,7 @@ fun ContinueWatchingCard(
     var internalFocused by remember { mutableStateOf(false) }
     val effectivelyFocused = isFocused || internalFocused
 
-    val targetScale = if (effectivelyFocused) {
+    val targetScale = if (effectivelyFocused && NuvioTheme.animationsEnabled) {
         when (cardStyle) {
             ContinueWatchingCardStyle.POSTER -> 1.14f
             ContinueWatchingCardStyle.CARD -> 1.10f
@@ -467,7 +467,7 @@ fun ContinueWatchingCard(
     }
     val animatedScale by animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = tween(durationMillis = 150),
+        animationSpec = tween(durationMillis = if (NuvioTheme.animationsEnabled) 150 else 0),
         label = "cwCardScale"
     )
 

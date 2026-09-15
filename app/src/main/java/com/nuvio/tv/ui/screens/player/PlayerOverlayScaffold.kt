@@ -2,9 +2,12 @@ package com.nuvio.tv.ui.screens.player
 
 import android.view.KeyEvent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -40,8 +43,8 @@ internal fun PlayerOverlayScaffold(
 ) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(animationSpec = tween(250)),
-        exit = fadeOut(animationSpec = tween(200)),
+        enter = if (NuvioTheme.animationsEnabled) fadeIn(animationSpec = tween(250)) else EnterTransition.None,
+        exit = if (NuvioTheme.animationsEnabled) fadeOut(animationSpec = tween(200)) else ExitTransition.None,
         modifier = modifier
     ) {
         val focusRequester = remember { FocusRequester() }

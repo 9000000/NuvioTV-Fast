@@ -326,6 +326,10 @@
     <string name="appearance_subtitle">Chọn màu chủ đề, phông chữ và ngôn ngữ</string>
     <string name="appearance_color_theme">Màu chủ đề</string>
     <string name="appearance_color_theme_subtitle">Chọn màu nhấn dùng cho toàn bộ ứng dụng</string>
+    <string name="appearance_animations">Hiệu ứng chuyển động</string>
+    <string name="appearance_animations_subtitle">Hiệu ứng chuyển cảnh, chuyển động và phóng to</string>
+    <string name="appearance_disable_animations">Tắt toàn bộ hiệu ứng chuyển động</string>
+    <string name="appearance_disable_animations_subtitle">Tắt toàn bộ animation, chuyển cảnh và phóng to khi focus để tối ưu tốc độ tối đa cho thiết bị yếu</string>
     <string name="theme_color_gold">Vàng</string>
     <string name="theme_color_jade">Ngọc bích</string>
     <string name="theme_color_rose_gold">Vàng Hồng</string>

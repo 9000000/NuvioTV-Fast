@@ -425,6 +425,16 @@ fun AdvancedSettingsContent(
         item(key = "performance_settings") {
             SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
                 SettingsToggleRow(
+                    title = stringResource(R.string.appearance_disable_animations),
+                    subtitle = stringResource(R.string.appearance_disable_animations_subtitle),
+                    checked = !uiState.animationsEnabled,
+                    onToggle = {
+                        viewModel.onEvent(
+                            AdvancedSettingsEvent.SetAnimationsEnabled(!uiState.animationsEnabled)
+                        )
+                    }
+                )
+                SettingsToggleRow(
                     title = stringResource(R.string.advanced_fast_horizontal_navigation),
                     subtitle = stringResource(R.string.advanced_fast_horizontal_navigation_subtitle),
                     checked = uiState.fastHorizontalNavigationEnabled,

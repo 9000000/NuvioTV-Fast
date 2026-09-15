@@ -34,6 +34,13 @@ class ThemeDataStore @Inject constructor(
     private val amoledModeKey = booleanPreferencesKey("amoled_mode")
     private val amoledSurfacesModeKey = booleanPreferencesKey("amoled_surfaces_mode")
     private val settingsUiStyleKey = stringPreferencesKey("settings_ui_style")
+    private val animationsEnabledKey = booleanPreferencesKey("animations_enabled")
+
+    val animationsEnabled: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            prefs[animationsEnabledKey] ?: true
+        }
+    }
 
     val themeSelection: Flow<ThemeSelection> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
@@ -115,6 +122,12 @@ class ThemeDataStore @Inject constructor(
     suspend fun setSettingsUiStyle(style: SettingsUiStyle) {
         store().edit { prefs ->
             prefs[settingsUiStyleKey] = style.name
+        }
+    }
+
+    suspend fun setAnimationsEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[animationsEnabledKey] = enabled
         }
     }
 

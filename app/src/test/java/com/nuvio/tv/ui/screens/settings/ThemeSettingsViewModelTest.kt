@@ -40,10 +40,12 @@ class ThemeSettingsViewModelTest {
         every { selectedFont } returns flowOf(AppFont.INTER)
         every { amoledMode } returns flowOf(false)
         every { amoledSurfacesMode } returns flowOf(false)
+        every { animationsEnabled } returns flowOf(true)
         every { settingsUiStyle } returns flowOf(SettingsUiStyle.CLASSIC)
         coEvery { setCustomTheme(any()) } coAnswers {
             selection.value = ThemeSelection(AppTheme.CUSTOM, firstArg())
         }
+        coEvery { setAnimationsEnabled(any()) } coAnswers { }
     }
 
     @Test
@@ -129,6 +131,33 @@ class ThemeSettingsViewModelTest {
         assertTrue(viewModel.uiState.value.customThemeGradientEnabled)
         assertEquals(availableThemes, viewModel.uiState.value.availableThemes)
         assertEquals(solid, viewModel.uiState.value.customThemeColors)
+    }
+
+    @Test
+    fun togglingAnimationsUpdatesPreference() = runTest {
+        val animationsFlow = MutableStateFlow(true)
+        val testStore = mockk<ThemeDataStore> {
+            every { themeSelection } returns selection
+            every { selectedFont } returns flowOf(AppFont.INTER)
+            every { amoledMode } returns flowOf(false)
+            every { amoledSurfacesMode } returns flowOf(false)
+            every { animationsEnabled } returns animationsFlow
+            every { settingsUiStyle } returns flowOf(SettingsUiStyle.CLASSIC)
+            coEvery { setAnimationsEnabled(any()) } coAnswers {
+                animationsFlow.value = firstArg()
+            }
+        }
+        val members = mockk<MemberAccessRepository> { every { access } returns this@ThemeSettingsViewModelTest.access }
+        val icons = mockk<AppIconManager> { every { state } returns MutableStateFlow(AppIconSettingsState()) }
+        val viewModel = ThemeSettingsViewModel(testStore, members, icons)
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.animationsEnabled)
+        viewModel.onEvent(ThemeSettingsEvent.ToggleAnimations(false))
+        runCurrent()
+
+        coVerify(exactly = 1) { testStore.setAnimationsEnabled(false) }
+        assertFalse(viewModel.uiState.value.animationsEnabled)
     }
 
     private fun createViewModel(): ThemeSettingsViewModel {

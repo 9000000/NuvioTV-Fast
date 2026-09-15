@@ -51,6 +51,12 @@ val LocalNuvioFocusRingStyle = staticCompositionLocalOf {
     createFocusRingStyle(ThemeColors.Ocean)
 }
 
+val LocalAnimationsEnabled = staticCompositionLocalOf { true }
+
+val LocalNuvioMotionTokens = staticCompositionLocalOf { NuvioMotion.tokens }
+
+val LocalNuvioFocusTokens = staticCompositionLocalOf { NuvioFocus.tokens }
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun NuvioTheme(
@@ -60,8 +66,10 @@ fun NuvioTheme(
     amoledSurfacesMode: Boolean = false,
     settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
     customThemeColors: CustomThemeColors = CustomThemeColors.Default,
+    animationsEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    NuvioMotion.animationsEnabled = animationsEnabled
     val palette = androidx.compose.runtime.remember(appTheme, customThemeColors) {
         ThemeColors.getColorPalette(appTheme, customThemeColors)
     }
@@ -98,6 +106,9 @@ fun NuvioTheme(
         rating = colorScheme.Rating
     )
 
+    val motionTokens = if (animationsEnabled) NuvioMotion.enabledTokens else NuvioMotion.disabledTokens
+    val focusTokens = if (animationsEnabled) NuvioFocus.enabledTokens else NuvioFocus.disabledTokens
+
     CompositionLocalProvider(
         LocalNuvioColors provides colorScheme,
         LocalNuvioExtendedColors provides extendedColors,
@@ -105,7 +116,10 @@ fun NuvioTheme(
         LocalAppTheme provides appTheme,
         LocalThemePalette provides palette,
         LocalSettingsUiStyle provides settingsUiStyle,
-        LocalNuvioFocusRingStyle provides focusRingStyle
+        LocalNuvioFocusRingStyle provides focusRingStyle,
+        LocalAnimationsEnabled provides animationsEnabled,
+        LocalNuvioMotionTokens provides motionTokens,
+        LocalNuvioFocusTokens provides focusTokens
     ) {
         MaterialTheme(
             colorScheme = materialColorScheme,
@@ -157,11 +171,20 @@ object NuvioTheme {
     val effects: NuvioEffectTokens
         get() = NuvioEffects.tokens
 
+    val animationsEnabled: Boolean
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalAnimationsEnabled.current
+
     val motion: NuvioMotionTokens
-        get() = NuvioMotion.tokens
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalNuvioMotionTokens.current
 
     val focus: NuvioFocusTokens
-        get() = NuvioFocus.tokens
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalNuvioFocusTokens.current
 
     val focusRing: NuvioFocusRingStyle
         @Composable

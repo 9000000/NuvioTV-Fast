@@ -87,51 +87,67 @@ private fun PlaybackNavHost(
         navController = navController,
         startDestination = startDestination,
         enterTransition = {
-            val from = initialState.destination.route.orEmpty()
-            val to = targetState.destination.route.orEmpty()
-            val isAutoPlayNav = targetState.arguments
-                ?.getString("autoPlayNav")
-                ?.toBooleanStrictOrNull() == true
-            if (isStreamToPlayer(from, to) && isAutoPlayNav) {
+            if (!NuvioMotion.animationsEnabled) {
                 EnterTransition.None
             } else {
-                fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast))
+                val from = initialState.destination.route.orEmpty()
+                val to = targetState.destination.route.orEmpty()
+                val isAutoPlayNav = targetState.arguments
+                    ?.getString("autoPlayNav")
+                    ?.toBooleanStrictOrNull() == true
+                if (isStreamToPlayer(from, to) && isAutoPlayNav) {
+                    EnterTransition.None
+                } else {
+                    fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast))
+                }
             }
         },
         exitTransition = {
-            val from = initialState.destination.route.orEmpty()
-            val to = targetState.destination.route.orEmpty()
-            val isAutoPlayNav = targetState.arguments
-                ?.getString("autoPlayNav")
-                ?.toBooleanStrictOrNull() == true
-            if (isStreamToPlayer(from, to) && isAutoPlayNav) {
+            if (!NuvioMotion.animationsEnabled) {
                 ExitTransition.None
             } else {
-                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast))
+                val from = initialState.destination.route.orEmpty()
+                val to = targetState.destination.route.orEmpty()
+                val isAutoPlayNav = targetState.arguments
+                    ?.getString("autoPlayNav")
+                    ?.toBooleanStrictOrNull() == true
+                if (isStreamToPlayer(from, to) && isAutoPlayNav) {
+                    ExitTransition.None
+                } else {
+                    fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast))
+                }
             }
         },
         popEnterTransition = {
-            val from = initialState.destination.route.orEmpty()
-            val to = targetState.destination.route.orEmpty()
-            val isAutoPlayNav = initialState.arguments
-                ?.getString("autoPlayNav")
-                ?.toBooleanStrictOrNull() == true
-            if (isPlayerToStream(from, to) && isAutoPlayNav) {
+            if (!NuvioMotion.animationsEnabled) {
                 EnterTransition.None
             } else {
-                fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast))
+                val from = initialState.destination.route.orEmpty()
+                val to = targetState.destination.route.orEmpty()
+                val isAutoPlayNav = initialState.arguments
+                    ?.getString("autoPlayNav")
+                    ?.toBooleanStrictOrNull() == true
+                if (isPlayerToStream(from, to) && isAutoPlayNav) {
+                    EnterTransition.None
+                } else {
+                    fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast))
+                }
             }
         },
         popExitTransition = {
-            val from = initialState.destination.route.orEmpty()
-            val to = targetState.destination.route.orEmpty()
-            val isAutoPlayNav = initialState.arguments
-                ?.getString("autoPlayNav")
-                ?.toBooleanStrictOrNull() == true
-            if (isPlayerToStream(from, to) && isAutoPlayNav) {
+            if (!NuvioMotion.animationsEnabled) {
                 ExitTransition.None
             } else {
-                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast))
+                val from = initialState.destination.route.orEmpty()
+                val to = targetState.destination.route.orEmpty()
+                val isAutoPlayNav = initialState.arguments
+                    ?.getString("autoPlayNav")
+                    ?.toBooleanStrictOrNull() == true
+                if (isPlayerToStream(from, to) && isAutoPlayNav) {
+                    ExitTransition.None
+                } else {
+                    fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast))
+                }
             }
         }
     ) {

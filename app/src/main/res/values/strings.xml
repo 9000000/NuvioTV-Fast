@@ -326,6 +326,10 @@
     <string name="appearance_subtitle">Choose your color theme, font and language</string>
     <string name="appearance_color_theme">Color Theme</string>
     <string name="appearance_color_theme_subtitle">Pick the accent color used across the app</string>
+    <string name="appearance_animations">Animations</string>
+    <string name="appearance_animations_subtitle">Transitions, scale effects, and motion</string>
+    <string name="appearance_disable_animations">Disable animations</string>
+    <string name="appearance_disable_animations_subtitle">Turn off all transitions and focus scale effects for maximum speed on low-end devices</string>
     <string name="theme_color_gold">Gold</string>
     <string name="theme_color_jade">Jade</string>
     <string name="theme_color_rose_gold">Rose Gold</string>

@@ -165,7 +165,7 @@ fun HeroCarousel(
         // Crossfade between slides
         Crossfade(
             targetState = activeIndex,
-            animationSpec = tween(300),
+            animationSpec = tween(if (NuvioTheme.animationsEnabled) 300 else 0),
             label = "heroSlide"
         ) { index ->
             val item = items.getOrNull(index) ?: return@Crossfade

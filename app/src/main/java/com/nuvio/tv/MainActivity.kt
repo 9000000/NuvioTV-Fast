@@ -245,7 +245,8 @@ private data class MainUiPrefs(
     val fastHorizontalNavigationEnabled: Boolean = false,
     val composeHighlighterEnabled: Boolean = false,
     val settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
-    val cardDepthStyle: CardDepthStyle = CardDepthStyle()
+    val cardDepthStyle: CardDepthStyle = CardDepthStyle(),
+    val animationsEnabled: Boolean = true
 )
 
 @AndroidEntryPoint
@@ -552,8 +553,9 @@ open class MainActivity : ComponentActivity() {
                     themeAndExperienceFlow,
                     layoutAndFeaturesFlow,
                     extraFeaturesFlow,
-                    layoutPreferenceDataStore.cardDepthStyle
-                ) { themePrefs, layoutPrefs, extraPrefs, cardDepthStyle ->
+                    layoutPreferenceDataStore.cardDepthStyle,
+                    themeDataStore.animationsEnabled
+                ) { themePrefs, layoutPrefs, extraPrefs, cardDepthStyle, animationsEnabled ->
                     themePrefs.copy(
                         hasChosenLayout = layoutPrefs.hasChosenLayout,
                         sidebarCollapsed = layoutPrefs.sidebarCollapsed,
@@ -565,6 +567,7 @@ open class MainActivity : ComponentActivity() {
                         fastHorizontalNavigationEnabled = extraPrefs.fastHorizontalNavigationEnabled,
                         composeHighlighterEnabled = extraPrefs.composeHighlighterEnabled,
                         settingsUiStyle = extraPrefs.settingsUiStyle,
+                        animationsEnabled = animationsEnabled,
                         cardDepthStyle = cardDepthStyle
                     )
                 }
@@ -585,7 +588,8 @@ open class MainActivity : ComponentActivity() {
                 appFont = mainUiPrefs.font,
                 amoledMode = mainUiPrefs.amoledMode,
                 amoledSurfacesMode = mainUiPrefs.amoledSurfacesMode,
-                settingsUiStyle = mainUiPrefs.settingsUiStyle
+                settingsUiStyle = mainUiPrefs.settingsUiStyle,
+                animationsEnabled = mainUiPrefs.animationsEnabled
             ) {
                 val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
                 val bringIntoViewSpec = if (mainUiPrefs.smoothBringIntoViewEnabled) {
@@ -1860,7 +1864,11 @@ private fun ModernSidebarScaffold(
     val sidebarSlideX = NuvioTheme.spacing.none
     val sidebarSurfaceAlpha by animateFloatAsState(
         targetValue = if (isSidebarExpanded) 1f else 0f,
-        animationSpec = tween(durationMillis = if (isSidebarExpanded) 280 else 200, easing = animationEasing),
+        animationSpec = if (NuvioTheme.animationsEnabled) {
+            tween(durationMillis = if (isSidebarExpanded) 280 else 200, easing = animationEasing)
+        } else {
+            tween(durationMillis = 0)
+        },
         label = "sidebarSurfaceAlpha"
     )
     val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled

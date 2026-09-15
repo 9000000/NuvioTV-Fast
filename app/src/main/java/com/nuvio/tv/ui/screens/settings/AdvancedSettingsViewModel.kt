@@ -8,6 +8,7 @@ import com.nuvio.tv.data.local.ImagePerformancePreferences
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.SentrySettingsDataStore
+import com.nuvio.tv.data.local.ThemeDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,8 @@ data class AdvancedSettingsUiState(
     val playbackIssueReportsEnabled: Boolean = false,
     val playerStatsHudEnabled: Boolean = false,
     val rgb565Enabled: Boolean = true,
-    val sentryEnabled: Boolean = true
+    val sentryEnabled: Boolean = true,
+    val animationsEnabled: Boolean = true
 )
 
 sealed class AdvancedSettingsEvent {
@@ -35,6 +37,7 @@ sealed class AdvancedSettingsEvent {
     data class SetPlayerStatsHudEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
     data class SetRgb565Enabled(val enabled: Boolean) : AdvancedSettingsEvent()
     data class SetSentryEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
+    data class SetAnimationsEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
 }
 
 @HiltViewModel
@@ -44,6 +47,7 @@ class AdvancedSettingsViewModel @Inject constructor(
     private val deviceLocalPlayerPreferences: DeviceLocalPlayerPreferences,
     private val sentrySettingsDataStore: SentrySettingsDataStore,
     private val imagePerformancePreferences: ImagePerformancePreferences,
+    private val themeDataStore: ThemeDataStore,
     private val appRestarter: AppRestarter
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AdvancedSettingsUiState())
@@ -79,6 +83,11 @@ class AdvancedSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             sentrySettingsDataStore.enabled.collectLatest { enabled ->
                 _uiState.update { it.copy(sentryEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            themeDataStore.animationsEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(animationsEnabled = enabled) }
             }
         }
     }
@@ -119,6 +128,11 @@ class AdvancedSettingsViewModel @Inject constructor(
             is AdvancedSettingsEvent.SetSentryEnabled -> {
                 viewModelScope.launch {
                     sentrySettingsDataStore.setEnabled(event.enabled)
+                }
+            }
+            is AdvancedSettingsEvent.SetAnimationsEnabled -> {
+                viewModelScope.launch {
+                    themeDataStore.setAnimationsEnabled(event.enabled)
                 }
             }
         }

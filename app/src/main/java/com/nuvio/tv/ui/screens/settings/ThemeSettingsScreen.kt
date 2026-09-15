@@ -287,6 +287,23 @@ fun ThemeSettingsContent(
 
             SettingsGroupCard(
                 modifier = Modifier.fillMaxWidth(),
+                title = stringResource(R.string.appearance_animations),
+                subtitle = stringResource(R.string.appearance_animations_subtitle)
+            ) {
+                SettingsToggleRow(
+                    title = stringResource(R.string.appearance_disable_animations),
+                    subtitle = stringResource(R.string.appearance_disable_animations_subtitle),
+                    checked = !uiState.animationsEnabled,
+                    onToggle = {
+                        viewModel.onEvent(
+                            ThemeSettingsEvent.ToggleAnimations(!uiState.animationsEnabled)
+                        )
+                    }
+                )
+            }
+
+            SettingsGroupCard(
+                modifier = Modifier.fillMaxWidth(),
                 title = stringResource(R.string.appearance_launcher_artwork),
                 subtitle = stringResource(R.string.appearance_launcher_artwork_subtitle)
             ) {
