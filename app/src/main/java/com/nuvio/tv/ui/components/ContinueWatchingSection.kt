@@ -449,15 +449,8 @@ fun ContinueWatchingCard(
     var internalFocused by remember { mutableStateOf(false) }
     val effectivelyFocused = isFocused || internalFocused
 
-    val targetScale = if (effectivelyFocused) {
-        when (cardStyle) {
-            ContinueWatchingCardStyle.POSTER -> NuvioComponents.tokens.posterCard.focusedScale
-            ContinueWatchingCardStyle.CARD -> NuvioComponents.tokens.continueWatchingCard.focusedScale
-            ContinueWatchingCardStyle.WIDE -> 1.08f
-        }
-    } else {
-        1f
-    }
+    // No scale-up on focus for Continue Watching cards — layout stability is preferred.
+    val targetScale = 1f
 
     val effectiveEpisodeThumbnails =
         continueWatchingUsesEpisodeThumbnails(cardStyle, useEpisodeThumbnails)
@@ -630,193 +623,6 @@ fun ContinueWatchingCard(
         )
     }
 
-    if (textBelowArtwork) {
-        Column(
-            modifier = Modifier
-                .width(cardWidth)
-                .then(if (effectivelyFocused) Modifier.zIndex(1f) else Modifier)
-                .recompositionHighlighter(),
-            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)
-        ) {
-            Card(
-                onClick = {
-                    if (longPressTriggered) {
-                        longPressTriggered = false
-                    } else {
-                        onClick()
-                    }
-                },
-                modifier = modifier
-                    .fillMaxWidth()
-                    .height(imageHeight)
-                    .onFocusChanged { internalFocused = it.isFocused }
-                    .graphicsLayer {
-                        scaleX = targetScale
-                        scaleY = targetScale
-                    }
-                    .onPreviewKeyEvent { event ->
-                        val native = event.nativeKeyEvent
-                        if (native.action == AndroidKeyEvent.ACTION_DOWN) {
-                            if (native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
-                                longPressTriggered = true
-                                onLongPress()
-                                return@onPreviewKeyEvent true
-                            }
-                        }
-                        if (longPressKeyTracker.handle(native, ::isSelectKey) {
-                                longPressTriggered = true
-                                onLongPress()
-                            }
-                        ) {
-                            if (native.action == AndroidKeyEvent.ACTION_UP) {
-                                longPressTriggered = false
-                            }
-                            return@onPreviewKeyEvent true
-                        }
-                        if (native.action == AndroidKeyEvent.ACTION_UP &&
-                            longPressTriggered &&
-                            (isSelectKey(native.keyCode) || native.keyCode == AndroidKeyEvent.KEYCODE_MENU)
-                        ) {
-                            longPressTriggered = false
-                            return@onPreviewKeyEvent true
-                        }
-                        false
-                    },
-                shape = CardDefaults.shape(shape = cwClipShape),
-                colors = CardDefaults.colors(
-                    containerColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent
-                ),
-                border = CardDefaults.border(focusedBorder = focusedBorder),
-                scale = CardDefaults.scale(focusedScale = 1f)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(cwClipShape)
-                        .nuvioCardDepth(
-                            shape = cwClipShape,
-                            surface = CardDepthSurface.CONTINUE_WATCHING,
-                            style = cardDepthStyle
-                        )
-                ) {
-                    // Background image with size hints for efficient decoding
-                    if (effectiveImageModel.isNullOrBlank()) {
-                        MonochromePosterPlaceholder()
-                    } else {
-                        AsyncImage(
-                            model = imageRequest,
-                            contentDescription = titleText,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(cwClipShape),
-                            placeholder = backgroundPainter,
-                            error = backgroundPainter,
-                            fallback = backgroundPainter,
-                            contentScale = ContentScale.Crop,
-                            onError = {
-                                // Primary image failed (e.g. broken thumbnail URL) — remember and try fallback.
-                                if (!usesFallbackImage) {
-                                    brokenImageUrls.add(effectiveImageModel)
-                                    if (fallbackImageModel != null && fallbackImageModel != effectiveImageModel) {
-                                        usesFallbackImage = true
-                                    }
-                                }
-                            }
-                        )
-                    }
-
-                    // Remaining time badge - hide progress labels in poster style (only show next-up/new episode badges)
-                    val showBadgeInPoster = progress == null
-                    if (showBadgeInPoster) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(NuvioTheme.spacing.sm)
-                                .clip(BadgeShape)
-                                .background(badgeBackground)
-                                .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs)
-                        ) {
-                            Text(
-                                text = badgeText,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = NuvioTheme.colors.TextPrimary
-                            )
-                        }
-                    }
-
-                    if (progress != null) {
-                        // The poster card lifts its bar off the bottom edge and sits it on a pill, matching mobile.
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(horizontal = 10.dp, vertical = NuvioTheme.spacing.sm)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(NuvioTheme.colors.Background.copy(alpha = 0.7f))
-                                .padding(NuvioTheme.spacing.xxs)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(1.5.dp))
-                                    .height(3.dp)
-                                    .background(Color.Black.copy(alpha = 0.3f))
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(progressFraction)
-                                        .clip(RoundedCornerShape(1.5.dp))
-                                        .height(3.dp)
-                                        .background(NuvioTheme.colors.Primary)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Title block outside Card so it stays strictly stationary and unscaled on focus
-            val titleBlockHeight = if (posterTitleOverride != null) 46.dp else POSTER_TITLE_BLOCK_HEIGHT
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        top = NuvioTheme.spacing.xxs,
-                        start = NuvioTheme.spacing.xs,
-                        end = NuvioTheme.spacing.xs
-                    )
-                    .height(titleBlockHeight),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = titleText,
-                        style = titleStyle,
-                        color = NuvioTheme.colors.TextPrimary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                if (episodeStr != null) {
-                    Text(
-                        text = episodeStr,
-                        modifier = Modifier.padding(start = NuvioTheme.spacing.xs),
-                        style = if (posterTitleOverride != null) {
-                            MaterialTheme.typography.labelMedium
-                        } else {
-                            MaterialTheme.typography.labelSmall
-                        },
-                        color = NuvioTheme.extendedColors.textSecondary,
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-        return
-    }
-
     Card(
         onClick = {
             if (longPressTriggered) {
@@ -828,10 +634,6 @@ fun ContinueWatchingCard(
         modifier = modifier
             .width(cardWidth)
             .then(if (effectivelyFocused) Modifier.zIndex(1f) else Modifier)
-            .graphicsLayer {
-                scaleX = targetScale
-                scaleY = targetScale
-            }
             .onFocusChanged { internalFocused = it.isFocused }
             .recompositionHighlighter()
             .onPreviewKeyEvent { event ->
