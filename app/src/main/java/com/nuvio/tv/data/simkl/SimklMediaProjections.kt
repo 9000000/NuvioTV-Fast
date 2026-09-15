@@ -156,12 +156,16 @@ fun SimklMedia.canonicalContentId(preference: SimklAnimeIdPreference): String? {
             ids.idValue("mal")?.takeIf(String::isNotBlank)?.let { return "mal:$it" }
             ids.idValue("anidb")?.takeIf(String::isNotBlank)?.let { return "anidb:$it" }
         }
+        SimklAnimeIdPreference.TVDB -> {
+            ids.idValue("tvdb")?.takeIf(String::isNotBlank)?.let { return "tvdb:$it" }
+        }
         SimklAnimeIdPreference.IMDB -> Unit
     }
     return when {
         !ids.idValue("imdb").isNullOrBlank() -> ids.idValue("imdb")
         !ids.idValue("tmdb").isNullOrBlank() -> "tmdb:${ids.idValue("tmdb")}"
         !ids.idValue("tvdb").isNullOrBlank() -> "tvdb:${ids.idValue("tvdb")}"
+        !ids.idValue("kitsu").isNullOrBlank() -> "kitsu:${ids.idValue("kitsu")}"
         !ids.idValue("mal").isNullOrBlank() -> "mal:${ids.idValue("mal")}"
         !ids.idValue("anidb").isNullOrBlank() -> "anidb:${ids.idValue("anidb")}"
         !ids.idValue("anilist").isNullOrBlank() -> "anilist:${ids.idValue("anilist")}"
