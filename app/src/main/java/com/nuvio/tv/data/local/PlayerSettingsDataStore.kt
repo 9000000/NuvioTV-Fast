@@ -157,11 +157,11 @@ data class SubtitleStyleSettings(
     val size: Int = 120, // Percentage (50-200)
     val verticalOffset: Int = 5, // Percentage from bottom (-20 to 50)
     val bold: Boolean = false,
-    val textColor: Int = Color.White.toArgb(),
+    val textColor: Int = Color.Yellow.toArgb(),
     val backgroundColor: Int = Color.Transparent.toArgb(),
     val outlineEnabled: Boolean = true,
     val outlineColor: Int = Color.Black.toArgb(),
-    val outlineWidth: Int = 2, // 1-50
+    val outlineWidth: Int = 15, // 1-50
     val font: String = SubtitleFontOption.DEFAULT
 )
 
@@ -1033,11 +1033,11 @@ class PlayerSettingsDataStore @Inject constructor(
                         size = prefs[subtitleSizeKey] ?: 100,
                         verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
                         bold = prefs[subtitleBoldKey] ?: false,
-                        textColor = prefs[subtitleTextColorKey] ?: Color.White.toArgb(),
+                        textColor = prefs[subtitleTextColorKey] ?: Color.Yellow.toArgb(),
                         backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
                         outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
                         outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
-                        outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2,
+                        outlineWidth = prefs[subtitleOutlineWidthKey] ?: 15,
                         font = prefs[subtitleFontKey] ?: SubtitleFontOption.DEFAULT
                     )
                 },
