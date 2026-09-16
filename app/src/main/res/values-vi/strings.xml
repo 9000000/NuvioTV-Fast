@@ -341,7 +341,7 @@
     <string name="theme_color_custom">Tùy chỉnh</string>
     <string name="custom_theme_title">Dải màu chuyển tiếp tùy chỉnh của bạn</string>
     <string name="custom_theme_subtitle">Chọn 3 màu cho chủ đề của bạn. Chọn một màu để chỉnh sửa.</string>
-    <string name="custom_theme_solid_title">Màu tùy chỉnh của bạn</string>
+    <string name="custom_theme_solid_title">Màu tùy chỉnh</string>
     <string name="custom_theme_solid_subtitle">Chọn một màu cho chủ đề của bạn.</string>
     <string name="custom_theme_mode_gradient">Dải màu chuyển tiếp</string>
     <string name="custom_theme_mode_solid">Màu trơn</string>
@@ -419,6 +419,9 @@
     <string name="licenses_attributions_section_app">GIẤY PHÉP ỨNG DỤNG</string>
     <string name="licenses_attributions_section_data">DỮ LIỆU &amp; DỊCH VỤ</string>
     <string name="licenses_attributions_section_playback">GIẤY PHÉP PHÁT LẠI TRÊN ANDROID</string>
+    <string name="licenses_attributions_section_ui">THƯ VIỆN GIAO DIỆN NGƯỜI DÙNG</string>
+    <string name="licenses_attributions_haze_title">Haze 1.7.2</string>
+    <string name="licenses_attributions_haze_body">Dùng cho hiệu ứng làm mờ nền. Được tạo bởi Chris Banes. Được cấp phép theo Giấy phép Apache, Phiên bản 2.0.</string>
     <string name="licenses_attributions_nuvio_title">Nuvio TV</string>
     <string name="licenses_attributions_nuvio_body">Mã nguồn và các điều khoản cấp phép có sẵn trong kho lưu trữ của dự án. Phần mềm được cấp phép theo Giấy phép Công cộng GNU phiên bản 3.0.</string>
     <string name="licenses_attributions_tmdb_title">The Movie Database (TMDB)</string>
@@ -477,6 +480,7 @@
     <string name="tracking_simkl_anime_id_imdb">Ưu tiên IMDb</string>
     <string name="tracking_simkl_anime_id_mal">Ưu tiên MyAnimeList</string>
     <string name="tracking_simkl_anime_id_kitsu">Ưu tiên Kitsu</string>
+    <string name="tracking_simkl_anime_id_tvdb">Ưu tiên TVDB</string>
     <string name="tracking_status_connected">Đã kết nối</string>
     <string name="tracking_status_disconnected">Chưa kết nối</string>
     <string name="tracking_status_waiting">Đang chờ phê duyệt</string>
@@ -585,9 +589,9 @@
     <string name="sentry_disable_dialog_subtitle">Các sự cố trong tương lai và các lỗi ứng dụng không phản hồi hiện tại trên thiết bị này sẽ không được báo cáo. Điều này có thể khiến các lỗi chỉ xảy ra trên thiết bị này khó khắc phục hơn nhiều.</string>
     <string name="sentry_help_title">Cách thức hoạt động</string>
     <string name="sentry_help_body">Báo cáo được nhóm theo phiên bản ứng dụng, dòng máy, phiên bản Android và lỗi hệ thống để chúng tôi có thể sửa chữa các sự cố thường gặp một cách dễ dàng hơn</string>
-    <string name="sentry_sent_title">Đã gửi</string>
+    <string name="sentry_sent_title">Thông tin được gửi</string>
     <string name="sentry_sent_body">Sự cố, các lỗi ứng dụng không phản hồi hiện tại, dấu vết ngăn xếp, phiên bản ứng dụng, loại bản dựng, biến thể, siêu dữ liệu về thiết bị và hệ điều hành, cùng các dấu vết mạng an toàn gồm phương thức, máy chủ, đường dẫn, trạng thái, thời lượng và loại ngoại lệ.</string>
-    <string name="sentry_not_sent_title">Không gửi</string>
+    <string name="sentry_not_sent_title">Thông tin không được gửi</string>
     <string name="sentry_not_sent_body">Mật khẩu, token truy cập, token làm mới, nội dung yêu cầu, nội dung phản hồi, tiêu đề, cookie, ảnh chụp màn hình, cấu trúc phân cấp giao diện, bản phát lại phiên, dữ liệu chẩn đoán thô và các giá trị tham số truy vấn hoặc phân đoạn của URL luồng.</string>
     <string name="sentry_keep_enabled">Tiếp tục bật</string>
     <string name="sentry_turn_off">Tắt</string>
