@@ -29,8 +29,8 @@ internal fun SkipInterval.followingPostCreditsScene(
     return intervals.filter {
         it.type == "post-credits" && it.startTime.isFinite() && it.endTime.isFinite() &&
             it.startTime >= endTime && it.endTime > it.startTime &&
-            (durationMs <= 0L || (it.startTime * 1000.0 < durationMs &&
-                it.endTime * 1000.0 <= durationMs + PlayerNextEpisodeRules.END_OF_VIDEO_EPSILON_MS))
+            // A different release can end before the submitted scene does; its start is still playable.
+            (durationMs <= 0L || it.startTime * 1000.0 < durationMs)
     }.minByOrNull { it.startTime }
 }
 

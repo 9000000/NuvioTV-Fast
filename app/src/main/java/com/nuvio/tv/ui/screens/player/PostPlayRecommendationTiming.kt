@@ -99,15 +99,18 @@ private fun movieRecommendationTriggerPositionMs(
     val validIntervals = skipIntervals.filter {
         it.startTime.isFinite() && it.endTime.isFinite() &&
             it.startTime >= 0.0 && it.endTime > it.startTime &&
-            it.startTime * 1_000.0 < durationMs &&
+            it.startTime * 1_000.0 < durationMs
+    }
+    val credits = validIntervals.filter {
+        it.type == "movie-credits" &&
             it.endTime * 1_000.0 <= durationMs + PlayerNextEpisodeRules.END_OF_VIDEO_EPSILON_MS
     }
-    val credits = validIntervals.filter { it.type == "movie-credits" }
     val firstCreditsStart = credits.minOfOrNull { it.startTime }
     val scenes = validIntervals.filter {
         it.type == "post-credits" && (firstCreditsStart == null || it.startTime >= firstCreditsStart)
     }
     if (scenes.isNotEmpty()) {
+        // Keep a playable scene even when its submitted end exceeds this release's runtime.
         return (scenes.maxOf { it.endTime } * 1_000.0).toLong().coerceAtMost(durationMs)
     }
     if (credits.isEmpty()) return fallbackPositionMs
