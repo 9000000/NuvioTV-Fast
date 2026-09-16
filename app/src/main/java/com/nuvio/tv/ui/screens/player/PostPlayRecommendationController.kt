@@ -274,7 +274,10 @@ internal class PostPlayRecommendationController(
                     contentType = snapshot.contentType,
                     movieThresholdPercent = snapshot.postPlayMovieThresholdPercent,
                     durationMs = effectiveDuration,
-                    skipIntervals = playbackController.skipIntervals
+                    skipIntervals = playbackController.skipIntervals,
+                    episodeThresholdMode = playbackController.nextEpisodeThresholdModeSetting,
+                    episodeThresholdPercent = playbackController.nextEpisodeThresholdPercentSetting,
+                    episodeThresholdMinutesBeforeEnd = playbackController.nextEpisodeThresholdMinutesBeforeEndSetting
                 )
             )
         ) {

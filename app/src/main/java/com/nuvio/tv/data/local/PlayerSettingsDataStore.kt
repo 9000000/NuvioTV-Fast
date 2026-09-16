@@ -402,8 +402,7 @@ enum class AutoSkipSegmentType(val storedValue: String) {
     INTRO("intro"),
     RECAP("recap"),
     OUTRO("outro"),
-    MOVIE_CREDITS("movie-credits"),
-    POST_CREDITS("post-credits");
+    MOVIE_CREDITS("movie-credits");
 
     companion object {
         fun fromStoredValue(value: String): AutoSkipSegmentType? =
@@ -414,7 +413,6 @@ enum class AutoSkipSegmentType(val storedValue: String) {
             "recap" -> RECAP
             "ed", "ending", "mixed-ed", "outro", "credits" -> OUTRO
             "movie-credits" -> MOVIE_CREDITS
-            "post-credits" -> POST_CREDITS
             else -> null
         }
     }

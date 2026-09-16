@@ -11,7 +11,10 @@ internal fun postPlayRecommendationPrefetchProgress(
     contentType: String?,
     movieThresholdPercent: Int,
     durationMs: Long = 0L,
-    skipIntervals: List<SkipInterval> = emptyList()
+    skipIntervals: List<SkipInterval> = emptyList(),
+    episodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+    episodeThresholdPercent: Float = 99f,
+    episodeThresholdMinutesBeforeEnd: Float = 2f
 ): Float {
     if (resolvePostPlayContentType(contentType) != ContentType.MOVIE) {
         return POST_PLAY_RECOMMENDATION_PREFETCH_PROGRESS
@@ -21,7 +24,10 @@ internal fun postPlayRecommendationPrefetchProgress(
         PlayerSettings.MAX_POST_PLAY_MOVIE_THRESHOLD_PERCENT
     )
     val triggerProgress = if (durationMs > 0L) {
-        movieRecommendationTriggerPositionMs(durationMs, threshold, skipIntervals).toFloat() / durationMs
+        movieRecommendationTriggerPositionMs(
+            durationMs, threshold, skipIntervals, episodeThresholdMode,
+            episodeThresholdPercent, episodeThresholdMinutesBeforeEnd
+        ).toFloat() / durationMs
     } else {
         threshold / 100f
     }
@@ -43,7 +49,10 @@ internal fun shouldShowPostPlayRecommendation(
             positionMs = positionMs,
             durationMs = durationMs,
             thresholdPercent = movieThresholdPercent,
-            skipIntervals = skipIntervals
+            skipIntervals = skipIntervals,
+            episodeThresholdMode = episodeThresholdMode,
+            episodeThresholdPercent = episodeThresholdPercent,
+            episodeThresholdMinutesBeforeEnd = episodeThresholdMinutesBeforeEnd
         )
         ContentType.SERIES -> PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
             positionMs = positionMs,
@@ -61,37 +70,59 @@ private fun shouldShowMovieRecommendation(
     positionMs: Long,
     durationMs: Long,
     thresholdPercent: Int,
-    skipIntervals: List<SkipInterval>
+    skipIntervals: List<SkipInterval>,
+    episodeThresholdMode: NextEpisodeThresholdMode,
+    episodeThresholdPercent: Float,
+    episodeThresholdMinutesBeforeEnd: Float
 ): Boolean {
     if (durationMs <= 0L) return false
     val position = positionMs.coerceIn(0L, durationMs)
-    return position >= movieRecommendationTriggerPositionMs(durationMs, thresholdPercent, skipIntervals)
+    return position >= movieRecommendationTriggerPositionMs(
+        durationMs, thresholdPercent, skipIntervals, episodeThresholdMode,
+        episodeThresholdPercent, episodeThresholdMinutesBeforeEnd
+    )
 }
 
 private fun movieRecommendationTriggerPositionMs(
     durationMs: Long,
     thresholdPercent: Int,
-    skipIntervals: List<SkipInterval>
+    skipIntervals: List<SkipInterval>,
+    episodeThresholdMode: NextEpisodeThresholdMode,
+    episodeThresholdPercent: Float,
+    episodeThresholdMinutesBeforeEnd: Float
 ): Long {
     val threshold = thresholdPercent.coerceIn(
         PlayerSettings.MIN_POST_PLAY_MOVIE_THRESHOLD_PERCENT,
         PlayerSettings.MAX_POST_PLAY_MOVIE_THRESHOLD_PERCENT
     )
     val fallbackPositionMs = kotlin.math.ceil(durationMs * (threshold / 100.0)).toLong()
-    val credits = skipIntervals.filter {
-        it.type == "movie-credits" && it.startTime.isFinite() && it.endTime.isFinite() &&
+    val validIntervals = skipIntervals.filter {
+        it.startTime.isFinite() && it.endTime.isFinite() &&
             it.startTime >= 0.0 && it.endTime > it.startTime &&
             it.startTime * 1_000.0 < durationMs &&
             it.endTime * 1_000.0 <= durationMs + PlayerNextEpisodeRules.END_OF_VIDEO_EPSILON_MS
+    }
+    val credits = validIntervals.filter { it.type == "movie-credits" }
+    val firstCreditsStart = credits.minOfOrNull { it.startTime }
+    val scenes = validIntervals.filter {
+        it.type == "post-credits" && (firstCreditsStart == null || it.startTime >= firstCreditsStart)
+    }
+    if (scenes.isNotEmpty()) {
+        return (scenes.maxOf { it.endTime } * 1_000.0).toLong().coerceAtMost(durationMs)
     }
     if (credits.isEmpty()) return fallbackPositionMs
 
     val latestCreditsEndMs = (credits.maxOf { it.endTime } * 1_000.0).toLong()
     val postCreditsGapMs = durationMs - latestCreditsEndMs
-    val userThresholdMs = durationMs - fallbackPositionMs
-    // Match episode endings: a substantial tail after credits uses the user's end threshold.
+    val userThresholdMs = when (episodeThresholdMode) {
+        NextEpisodeThresholdMode.PERCENTAGE ->
+            ((1.0 - episodeThresholdPercent.coerceIn(97f, 100f) / 100.0) * durationMs).toLong()
+        NextEpisodeThresholdMode.MINUTES_BEFORE_END ->
+            (episodeThresholdMinutesBeforeEnd.coerceIn(0f, 3.5f) * 60_000f).toLong()
+    }
+    // An unexplained tail may contain a scene: use the later episode threshold, not the movie setting.
     return if (postCreditsGapMs > userThresholdMs) {
-        fallbackPositionMs
+        (durationMs - userThresholdMs).coerceAtLeast(latestCreditsEndMs)
     } else {
         (credits.minOf { it.startTime } * 1_000.0).toLong()
     }

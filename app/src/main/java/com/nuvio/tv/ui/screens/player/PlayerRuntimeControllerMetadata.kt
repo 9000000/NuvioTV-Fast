@@ -449,9 +449,14 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
     val currentActive = _uiState.value.activeSkipInterval
 
     if (active != null) {
-        if (currentActive == null || active.type != currentActive.type || active.startTime != currentActive.startTime) {
+        val targetsPostCredits = active.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs()) != null
+        if (currentActive != active || targetsPostCredits != _uiState.value.activeSkipTargetsPostCredits) {
             lastActiveSkipType = active.type
-            _uiState.update { it.copy(activeSkipInterval = active, skipIntervalDismissed = false) }
+            _uiState.update { it.copy(
+                activeSkipInterval = active,
+                activeSkipTargetsPostCredits = targetsPostCredits,
+                skipIntervalDismissed = false
+            ) }
         }
         val segmentType = AutoSkipSegmentType.fromSkipIntervalType(active.type)
         val activeKey = active.autoSkipKey()

@@ -11,7 +11,8 @@ internal fun findActiveSkipInterval(
     if (intervals.isEmpty()) return null
     val positionSec = positionMs / 1000.0
     return intervals.find { interval ->
-        positionSec >= interval.startTime && positionSec < interval.endTime
+        interval.type != "post-credits" &&
+            positionSec >= interval.startTime && positionSec < interval.endTime
     }
 }
 
@@ -19,6 +20,19 @@ internal fun nextActiveSkipInterval(
     intervals: List<SkipInterval>,
     positionMs: Long,
 ): SkipInterval? = findActiveSkipInterval(intervals, positionMs)
+
+internal fun SkipInterval.followingPostCreditsScene(
+    intervals: List<SkipInterval>,
+    durationMs: Long,
+): SkipInterval? {
+    if (type != "movie-credits") return null
+    return intervals.filter {
+        it.type == "post-credits" && it.startTime.isFinite() && it.endTime.isFinite() &&
+            it.startTime >= endTime && it.endTime > it.startTime &&
+            (durationMs <= 0L || (it.startTime * 1000.0 < durationMs &&
+                it.endTime * 1000.0 <= durationMs + PlayerNextEpisodeRules.END_OF_VIDEO_EPSILON_MS))
+    }.minByOrNull { it.startTime }
+}
 
 internal fun isSkipIntroButtonVisible(
     hasActiveInterval: Boolean,

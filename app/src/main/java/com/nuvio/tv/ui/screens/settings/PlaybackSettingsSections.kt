@@ -470,19 +470,6 @@ internal fun PlaybackSettingsSections(
                     )
                 }
 
-                item(key = "general_auto_skip_post_credits") {
-                    ToggleSettingsItem(
-                        icon = Icons.Default.SkipNext,
-                        title = stringResource(R.string.auto_skip_post_credits),
-                        subtitle = stringResource(R.string.auto_skip_post_credits_sub),
-                        isChecked = AutoSkipSegmentType.POST_CREDITS in playerSettings.autoSkipSegmentTypes,
-                        onCheckedChange = {
-                            onSetAutoSkipSegmentTypeEnabled(AutoSkipSegmentType.POST_CREDITS, it)
-                        },
-                        onFocused = { focusedSection = PlaybackSection.GENERAL },
-                        enabled = !generalUi.isExternalPlayer && playerSettings.skipIntroEnabled
-                    )
-                }
             }
 
         }

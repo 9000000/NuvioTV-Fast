@@ -33,7 +33,7 @@ internal fun IntroDbSegmentsResponse.toSkipIntervals(movie: Boolean): List<SkipI
     )
     val credits = outro.toSkipIntervalOrNull("movie-credits")
     val scene = postCredits.toSkipIntervalOrNull("post-credits")
-    // Skipping credits must not also skip the separately controlled scene.
+    // Skipping credits must not also skip the post-credits scene.
     val safeCredits = if (credits != null && scene != null &&
         scene.startTime < credits.endTime && scene.endTime > credits.startTime
     ) {

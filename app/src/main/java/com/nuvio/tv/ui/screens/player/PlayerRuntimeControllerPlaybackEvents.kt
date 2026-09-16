@@ -54,13 +54,16 @@ internal fun PlayerRuntimeController.skipActiveInterval(): Boolean {
 }
 
 internal fun PlayerRuntimeController.skipInterval(interval: SkipInterval): Boolean {
+    if (interval.type == "post-credits") return false
     val duration = currentPlaybackDurationMs().takeIf { it > 0 } ?: Long.MAX_VALUE
-    val seekMs = if (interval.endTime == Double.MAX_VALUE) {
+    val targetTime = interval.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs())?.startTime
+        ?: interval.endTime
+    val seekMs = if (targetTime == Double.MAX_VALUE) {
         duration
     } else {
-        (interval.endTime * 1000).toLong()
+        (targetTime * 1000).toLong()
     }
-    val seekParameters = if (interval.type == "movie-credits" || interval.type == "post-credits") {
+    val seekParameters = if (interval.type == "movie-credits") {
         SeekParameters.EXACT
     } else SeekParameters.NEXT_SYNC
     seekPlaybackTo(seekMs.coerceAtMost(duration), seekParameters)
