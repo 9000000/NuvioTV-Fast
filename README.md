@@ -39,9 +39,8 @@ This repository is a **custom fork of NuvioTV** that aggregates, curates, and en
 ## ⚡ Key Optimizations & Features
 
 ### 1. 🧲 TorrServer Integration (Native P2P Torrent Streaming)
-* **Embedded & Remote Engine**: Stream torrents and magnet links on-the-fly without requiring third-party debrid accounts.
-  * **Bundled Internal Server**: Manages the embedded TorrServer (`libtorrserver.so`) daemon lifecycle directly within the app (no external helper APK required).
-  * **Remote Server Support**: Seamlessly connect to your existing home NAS, PC, Docker, or LAN TorrServer instance (`http://<ip>:8090`) with optional HTTP Basic Authentication.
+* **Torrent Streaming**: Stream torrents and magnet links on-the-fly without requiring third-party debrid accounts.
+  * **Remote & External Server Support**: Seamlessly connect to your existing home NAS, PC, Docker, or LAN/Android TorrServer instance (`http://<ip>:8090`) with optional HTTP Basic Authentication.
 * **Smart Multi-File Picker**: Automatically selects the main video track or presents an in-player file selector for multi-episode series and season packs.
 * **Preloading & Adaptive Buffering**: Pre-caches configurable data blocks before starting playback, ensuring instant seek response and jitter-free streaming even on unstable swarms.
 * **Real-time Torrent HUD**: Monitor live download/upload speeds, active peer/seed counts, and cache fill progress directly in the player statistics overlay.
