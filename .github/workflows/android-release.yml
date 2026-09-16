@@ -152,16 +152,16 @@ jobs:
         run: |
           keystore_path="${RUNNER_TEMP}/nuviotv-release.jks"
           key_alias="${RELEASE_KEY_ALIAS:-nuviotv}"
-          key_password="${RELEASE_KEY_PASSWORD:-815787}"
-          store_password="${RELEASE_STORE_PASSWORD:-815787}"
+          key_password="${RELEASE_KEY_PASSWORD}"
+          store_password="${RELEASE_STORE_PASSWORD}"
 
           if [[ -n "${RELEASE_KEYSTORE_BASE64}" ]]; then
+            echo "Decoding release keystore from GitHub Secrets..."
             printf '%s' "${RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${keystore_path}"
-          elif [[ -f "keystore/release.jks" ]]; then
-            echo "Using persistent repository release keystore..."
-            cp "keystore/release.jks" "${keystore_path}"
           else
             echo "Generating self-signed release keystore for CI build..."
+            key_password="${key_password:-nuvio_temp_ci_pass}"
+            store_password="${store_password:-nuvio_temp_ci_pass}"
             keytool -genkeypair \
               -v \
               -keystore "${keystore_path}" \

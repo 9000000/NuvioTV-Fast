@@ -21,6 +21,10 @@ __pycache__/
 local.properties
 libass-android
 Stremio addons refer
+# Keystores and signing files
+*.jks
+*.keystore
+/keystore/
 nuviotv.jks
 CLAUDE.md
 build_and_install.sh

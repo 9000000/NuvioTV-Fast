@@ -102,9 +102,9 @@ val releaseStoreFilePath = env("NUVIO_RELEASE_STORE_FILE")
 val releaseKeyAliasValue = env("NUVIO_RELEASE_KEY_ALIAS")
     ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuviotv")
 val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "815787")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "")
 val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
+    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "")
 
 android {
     namespace = "com.nuvio.tv"
@@ -199,7 +199,7 @@ android {
             if (direct.exists()) direct else rootProject.file(path)
         } ?: rootProject.file("keystore/release.jks")
 
-        if (releaseKeystore.exists()) {
+        if (releaseKeystore.exists() && releaseStorePasswordValue.isNotBlank()) {
             create("release") {
                 keyAlias = releaseKeyAliasValue
                 keyPassword = releaseKeyPasswordValue
