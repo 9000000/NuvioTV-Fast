@@ -1068,6 +1068,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     url = url,
                     headers = headers,
                     subtitleConfigurations = startupSubtitleConfigurations,
+                    subtitleRoutes = subtitleRoutes(startupSubtitlePreparation.attachedSubtitles),
                     filename = currentFilename,
                     responseHeaders = currentStreamResponseHeaders,
                     mimeTypeOverride = currentStreamMimeType,
@@ -2086,6 +2087,8 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
         progress = null
     )
     hasRenderedFirstFrame = false
+    endDetectionArmed = false
+    mpvEofSeenClear = false
     hasMarkedCurrentEpisodeCompleted = false
     shouldEnforceAutoplayOnFirstReady = true
     userPausedManually = false
