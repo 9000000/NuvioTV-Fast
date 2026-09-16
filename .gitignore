@@ -53,6 +53,7 @@ scripts/*
 !scripts/release_notes/*.py
 !scripts/release-metadata.sh
 !scripts/release_beta.py
+!scripts/release.py
 !scripts/tests/
 !scripts/tests/*.py
 /supabase
