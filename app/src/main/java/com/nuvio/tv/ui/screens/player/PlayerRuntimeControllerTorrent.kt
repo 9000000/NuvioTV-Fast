@@ -106,41 +106,43 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
 
     torrentStateObserverJob = scope.launch {
         var lastLoadingMessage: String? = null
-        var lastLoadingProgress = -1f
+        var lastLoadingProgress: Float? = -1f
         var lastDownloadSpeed = Long.MIN_VALUE
+        var lastLoadedSize = Long.MIN_VALUE
         var lastBufferingMessage: String? = null
+        val hasPreloadParam = runCatching {
+            val uri = android.net.Uri.parse(streamUrl)
+            uri.queryParameterNames.any { it.equals("preload", ignoreCase = true) }
+        }.getOrDefault(false)
+
         while (isActive) {
             try {
                 val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
                 if (stats != null) {
-                    val speed = formatSpeed(context, stats.downloadSpeed)
                     val statsHidden = _uiState.value.hideTorrentStats
-                    val preloadProgress = stats.preloadProgress
-
-                    // Strictly show preload % (0% -> 100%), NEVER % of the entire torrent/movie
-                    val percentStr = when {
-                        preloadProgress > 0f -> "${(preloadProgress * 100).toInt()}%"
-                        stats.stat == 2 -> "0%"
-                        stats.stat == 1 -> stats.statString
-                        else -> null
-                    }
-
-                    // Only show preload % and download speed (no peers, seeds, upload, or MBs)
-                    val statusParts = listOfNotNull(
-                        percentStr,
-                        speed.takeIf { stats.downloadSpeed > 0 } ?: speed
+                    val speed = formatSpeed(context, stats.downloadSpeed)
+                    val (message, progress) = formatTorrentLoadingDisplay(
+                        context = context,
+                        isPreloadActive = hasPreloadParam,
+                        isPreloadReady = stats.isPreloadReady,
+                        preloadProgress = stats.preloadProgress,
+                        stat = stats.stat,
+                        statString = stats.statString,
+                        downloadSpeed = stats.downloadSpeed,
+                        loadedSize = stats.loadedSize,
+                        statsHidden = statsHidden
                     )
-                    val message = if (statsHidden) null else statusParts.joinToString(" · ")
 
                     if (!hasRenderedFirstFrame) {
                         recordLoadingDiagnosticEvent(
-                            phase = "torrent_preloading",
+                            phase = if (progress != null) "torrent_preloading" else "torrent_buffering",
                             message = message,
-                            progress = preloadProgress
+                            progress = progress ?: 0f
                         )
                         val changed = message != lastLoadingMessage ||
-                            preloadProgress != lastLoadingProgress ||
-                            stats.downloadSpeed != lastDownloadSpeed
+                            progress != lastLoadingProgress ||
+                            stats.downloadSpeed != lastDownloadSpeed ||
+                            stats.loadedSize != lastLoadedSize
                         if (changed) {
                             _uiState.update {
                                 it.copy(
@@ -148,19 +150,22 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                                     showLoadingOverlay = true,
                                     showTorrentStats = false,
                                     loadingMessage = message,
-                                    loadingProgress = preloadProgress,
+                                    loadingProgress = progress,
                                     torrentDownloadSpeed = stats.downloadSpeed,
                                     torrentUploadSpeed = 0L,
                                     torrentPeers = 0,
                                     torrentSeeds = 0,
-                                    torrentBufferProgress = preloadProgress,
-                                    torrentTotalProgress = preloadProgress,
-                                    torrentBufferingMessage = null
+                                    torrentBufferProgress = progress ?: 0f,
+                                    torrentTotalProgress = progress ?: 0f,
+                                    torrentBufferingMessage = null,
+                                    streamDownloadSpeed = stats.downloadSpeed,
+                                    streamLoadedBytes = stats.loadedSize
                                 )
                             }
                             lastLoadingMessage = message
-                            lastLoadingProgress = preloadProgress
+                            lastLoadingProgress = progress
                             lastDownloadSpeed = stats.downloadSpeed
+                            lastLoadedSize = stats.loadedSize
                         }
                     } else {
                         // When video is playing: turn off loading stats!
@@ -185,7 +190,10 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                                         torrentBufferProgress = 0f,
                                         torrentTotalProgress = 0f,
                                         torrentBufferingMessage = rebufferingMessage,
-                                        torrentBufferingProgress = 0f
+                                        torrentBufferingProgress = 0f,
+                                        bufferingMessage = rebufferingMessage,
+                                        streamDownloadSpeed = stats.downloadSpeed,
+                                        streamLoadedBytes = stats.loadedSize
                                     )
                                 }
                                 lastBufferingMessage = rebufferingMessage
@@ -324,24 +332,24 @@ internal fun PlayerRuntimeController.observeTorrentState() {
                 is TorrentState.Streaming -> {
                     val speed = formatSpeed(context, torrentState.downloadSpeed)
                     val statsHidden = _uiState.value.hideTorrentStats
+                    val isPreloadActive = torrServerConfigData.preload && (torrentState.preloadSize > 0 || torrentState.stat == 2)
+                    val (message, progress) = formatTorrentLoadingDisplay(
+                        context = context,
+                        isPreloadActive = isPreloadActive,
+                        isPreloadReady = torrentState.isPreloadReady,
+                        preloadProgress = torrentState.preloadProgress,
+                        stat = torrentState.stat,
+                        statString = torrentState.statString,
+                        downloadSpeed = torrentState.downloadSpeed,
+                        loadedSize = torrentState.loadedSize,
+                        statsHidden = statsHidden
+                    )
 
                     if (!hasRenderedFirstFrame) {
-                        val progress = torrentState.preloadProgress
-                        val percentStr = when {
-                            progress > 0f -> "${(progress * 100).toInt()}%"
-                            torrentState.stat == 2 -> "0%"
-                            torrentState.stat == 1 -> torrentState.statString
-                            else -> null
-                        }
-                        val statusParts = listOfNotNull(
-                            percentStr,
-                            speed.takeIf { torrentState.downloadSpeed > 0 } ?: speed
-                        )
-                        val message = if (statsHidden) null else statusParts.joinToString(" · ")
                         recordLoadingDiagnosticEvent(
-                            phase = "torrent_preloading",
+                            phase = if (progress != null) "torrent_preloading" else "torrent_buffering",
                             message = message,
-                            progress = progress
+                            progress = progress ?: 0f
                         )
                         _uiState.update {
                             it.copy(
@@ -352,14 +360,16 @@ internal fun PlayerRuntimeController.observeTorrentState() {
                                 torrentDownloadSpeed = torrentState.downloadSpeed,
                                 torrentUploadSpeed = 0L,
                                 torrentPeers = 0,
-                                torrentBufferProgress = progress,
-                                torrentTotalProgress = progress,
-                                torrentBufferingMessage = null
+                                torrentBufferProgress = progress ?: 0f,
+                                torrentTotalProgress = progress ?: 0f,
+                                torrentBufferingMessage = null,
+                                streamDownloadSpeed = torrentState.downloadSpeed,
+                                streamLoadedBytes = torrentState.loadedSize
                             )
                         }
                     } else {
                         val isBuffering = _uiState.value.isBuffering
-                        val message = if (isBuffering && !statsHidden) speed else null
+                        val rebufferingMessage = if (isBuffering && !statsHidden) speed else null
                         _uiState.update {
                             it.copy(
                                 showTorrentStats = false,
@@ -370,7 +380,10 @@ internal fun PlayerRuntimeController.observeTorrentState() {
                                 torrentSeeds = 0,
                                 torrentBufferProgress = 0f,
                                 torrentTotalProgress = 0f,
-                                torrentBufferingMessage = message
+                                torrentBufferingMessage = rebufferingMessage,
+                                bufferingMessage = rebufferingMessage,
+                                streamDownloadSpeed = torrentState.downloadSpeed,
+                                streamLoadedBytes = torrentState.loadedSize
                             )
                         }
                     }
@@ -445,6 +458,50 @@ internal fun PlayerRuntimeController.launchTorrentSourceStream(
     }
 }
 
+private fun formatTorrentLoadingDisplay(
+    context: android.content.Context,
+    isPreloadActive: Boolean,
+    isPreloadReady: Boolean,
+    preloadProgress: Float,
+    stat: Int,
+    statString: String?,
+    downloadSpeed: Long,
+    loadedSize: Long,
+    statsHidden: Boolean
+): Pair<String?, Float?> {
+    if (statsHidden) return Pair(null, null)
+    val speed = formatSpeed(context, downloadSpeed)
+
+    // Preload phase: only when preload is configured and not yet ready
+    if (isPreloadActive && !isPreloadReady && (preloadProgress < 1f || stat == 2)) {
+        val percentStr = when {
+            preloadProgress > 0f -> "${(preloadProgress * 100).toInt()}%"
+            stat == 2 -> "0%"
+            stat == 1 -> statString
+            else -> null
+        }
+        val statusParts = listOfNotNull(
+            percentStr,
+            speed.takeIf { downloadSpeed > 0 } ?: speed
+        )
+        return Pair(statusParts.joinToString(" · "), preloadProgress)
+    }
+
+    // Player buffering phase (preload completed or disabled):
+    // Display MB loaded into buffer + speed. Progress bar is hidden (null).
+    val mbStr = if (loadedSize > 0) formatMB(context, loadedSize) else null
+    val statusParts = listOfNotNull(
+        mbStr,
+        speed.takeIf { downloadSpeed > 0 } ?: speed
+    )
+    val message = if (statusParts.isNotEmpty()) {
+        statusParts.joinToString(" · ")
+    } else {
+        context.getString(R.string.player_loading_buffering)
+    }
+    return Pair(message, null)
+}
+
 private fun formatSpeed(context: android.content.Context, bytesPerSec: Long): String {
     val bitsPerSec = bytesPerSec * 8.0
     return when {
@@ -455,4 +512,5 @@ private fun formatSpeed(context: android.content.Context, bytesPerSec: Long): St
 }
 
 private fun formatMB(context: android.content.Context, bytes: Long): String =
-    context.getString(com.nuvio.tv.R.string.unit_size_mb, String.format("%.1f", bytes / 1_048_576.0))
+    context.getString(com.nuvio.tv.R.string.unit_size_mb, String.format(java.util.Locale.US, "%.1f", bytes / 1_048_576.0))
+

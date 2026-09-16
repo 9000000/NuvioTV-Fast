@@ -35,6 +35,8 @@ internal fun PlayerRuntimeController.preparePlaybackBeforeStart(
             "currentEpisode=${currentEpisode ?: -1} streamName=${_uiState.value.currentStreamName ?: "n/a"}"
     )
     clearPendingEngineSwitchTrackPreference()
+    httpStreamLoadedBytes = 0L
+    httpStreamSpeedBps = 0L
     playbackPreparationJob?.cancel()
 
     // Fire-and-forget: warm the Trakt episode mapping in the background.

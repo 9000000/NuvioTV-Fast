@@ -29,7 +29,7 @@ object StreamSpeedTester {
 
             PlayerPlaybackNetworking.playbackHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext 0.0
-                val inputStream = response.body?.byteStream() ?: return@withContext 0.0
+                val inputStream = response.body.byteStream()
                 val buffer = ByteArray(64 * 1024)
                 while (System.currentTimeMillis() < tDeadline) {
                     val read = inputStream.read(buffer)
@@ -105,26 +105,19 @@ object StreamSpeedTester {
         headers: Map<String, String>
     ): Long = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
-            val request = Request.Builder().url(url).head().apply {
-                headers.forEach { (k, v) -> header(k, v) }
-            }.build()
-            PlayerPlaybackNetworking.playbackHttpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val len = response.headers["Content-Length"]?.toLongOrNull()
-                    if (len != null && len > 0) return@withContext len
-                }
-            }
-
-            // Fallback to GET request if HEAD is not allowed/supported
-            val getRequest = Request.Builder().url(url).apply {
-                headers.forEach { (k, v) -> header(k, v) }
-            }.build()
-            PlayerPlaybackNetworking.playbackHttpClient.newCall(getRequest).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body
-                    if (body != null) {
-                        return@withContext body.contentLength().coerceAtLeast(0L)
+            val rangeRequest = Request.Builder().url(url).get().header("Range", "bytes=0-0").apply {
+                headers.forEach { (k, v) ->
+                    if (!k.equals("Range", ignoreCase = true)) {
+                        header(k, v)
                     }
+                }
+            }.build()
+            PlayerPlaybackNetworking.playbackHttpClient.newCall(rangeRequest).execute().use { response ->
+                if (response.code == 206 || response.code == 200) {
+                    val contentRange = response.header("Content-Range")
+                    val totalFromRange = contentRange?.substringAfter('/', missingDelimiterValue = "")?.trim()?.toLongOrNull()
+                    val len = totalFromRange ?: response.header("Content-Length")?.toLongOrNull() ?: response.body.contentLength()
+                    if (len > 0) return@withContext len
                 }
             }
         } catch (e: Exception) {

@@ -17,6 +17,7 @@ sealed class TorrentState {
         val totalProgress: Float,
         val preloadedBytes: Long = 0L,
         val preloadSize: Long = 0L,
+        val loadedSize: Long = 0L,
         val stat: Int = 0,
         val statString: String? = null
     ) : TorrentState() {

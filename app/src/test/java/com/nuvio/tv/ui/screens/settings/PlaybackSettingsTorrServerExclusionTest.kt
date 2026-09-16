@@ -38,7 +38,8 @@ class PlaybackSettingsTorrServerExclusionTest {
             addonRepository = addonRepository,
             pluginManager = pluginManager,
             torrentSettings = torrentSettings,
-            torrServerAddonConfig = torrServerAddonConfig
+            torrServerAddonConfig = torrServerAddonConfig,
+            context = mockk(relaxed = true)
         )
     }
 

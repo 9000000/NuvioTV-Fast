@@ -471,6 +471,13 @@ internal fun PlayerRuntimeController.initializePlayer(
                     .build()
             }
             val bandwidthMeter = SafeBandwidthMeter(rawBandwidthMeter, isHls)
+            bandwidthMeter.addEventListener(
+                android.os.Handler(android.os.Looper.getMainLooper())
+            ) { _, bytesTransferred, bitrateEstimate ->
+                if (!isTorrentStream) {
+                    onHttpBandwidthSample(bytesTransferred, bitrateEstimate)
+                }
+            }
 
             val resolvedStreamMime = currentStreamMimeType ?: PlayerMediaSourceFactory.inferMimeType(
                 url = url,

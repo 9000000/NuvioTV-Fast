@@ -215,6 +215,31 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                                 }
                             }
                         }
+                    if (!firstFrameReady && !isTorrentStream) {
+                        val cacheBytes = view.demuxerCacheBytes()
+                        val cacheSpeed = view.demuxerCacheSpeedBps()
+                        if (cacheBytes > 0L || cacheSpeed > 0L) {
+                            val mb = formatPlaybackMB(context, cacheBytes)
+                            val speed = formatPlaybackSpeed(context, cacheSpeed)
+                            val message = if (cacheBytes > 0L) "$mb · $speed" else speed
+                            _uiState.update {
+                                it.copy(
+                                    loadingMessage = message,
+                                    streamDownloadSpeed = cacheSpeed,
+                                    streamLoadedBytes = cacheBytes
+                                )
+                            }
+                        }
+                    } else if (cacheBuffering && hasRenderedFirstFrame && !isTorrentStream) {
+                        val cacheSpeed = view.demuxerCacheSpeedBps()
+                        val speed = formatPlaybackSpeed(context, cacheSpeed)
+                        _uiState.update {
+                            it.copy(
+                                bufferingMessage = speed,
+                                streamDownloadSpeed = cacheSpeed
+                            )
+                        }
+                    }
                     if (playerDuration > lastKnownDuration) {
                         lastKnownDuration = playerDuration
                     }
@@ -292,23 +317,25 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     rebufferCount = rebufferCount,
                     rebufferTotalMs = rebufferTotalMs
                 )
-                // Update torrent rebuffer progress from ExoPlayer's buffer state
-                if (isTorrentStream && _uiState.value.isBuffering && hasRenderedFirstFrame) {
+                // Update rebuffer progress and speed for both torrent and HTTP streams
+                if (_uiState.value.isBuffering && hasRenderedFirstFrame) {
                     val bufferedAheadMs = (player.bufferedPosition - pos).coerceAtLeast(0)
                     val bufferedSec = bufferedAheadMs / 1000f
                     val statsHidden = _uiState.value.hideTorrentStats
                     val message = if (statsHidden) {
                         null
                     } else {
-                        val speed = formatTorrentSpeed(context, _uiState.value.torrentDownloadSpeed)
-                        val bufLabel = String.format("%.0fs", bufferedSec)
+                        val speedBytes = if (isTorrentStream) _uiState.value.torrentDownloadSpeed else _uiState.value.streamDownloadSpeed
+                        val speed = formatPlaybackSpeed(context, speedBytes)
+                        val bufLabel = String.format(java.util.Locale.US, "%.0fs", bufferedSec)
                         if (speed.isNotBlank()) "$bufLabel · $speed" else bufLabel
                     }
                     val progress = (bufferedSec / 10f).coerceIn(0f, 1f)
                     _uiState.update {
                         it.copy(
-                            torrentBufferingMessage = message,
-                            torrentBufferingProgress = progress
+                            torrentBufferingMessage = if (isTorrentStream) message else null,
+                            torrentBufferingProgress = if (isTorrentStream) progress else 0f,
+                            bufferingMessage = message
                         )
                     }
                 }
@@ -1862,7 +1889,7 @@ private fun String.safePlaybackEventsHost(): String {
     }.getOrDefault("unknown")
 }
 
-private fun formatTorrentSpeed(context: android.content.Context, bytesPerSec: Long): String {
+internal fun formatPlaybackSpeed(context: android.content.Context, bytesPerSec: Long): String {
     val bitsPerSec = bytesPerSec * 8.0
     return when {
         bitsPerSec >= 1_000_000.0 -> context.getString(R.string.unit_speed_mb_s, String.format(java.util.Locale.US, "%.1f", bitsPerSec / 1_000_000.0))
@@ -1870,3 +1897,38 @@ private fun formatTorrentSpeed(context: android.content.Context, bytesPerSec: Lo
         else -> context.getString(R.string.unit_speed_b_s, bitsPerSec.toLong())
     }
 }
+
+internal fun formatPlaybackMB(context: android.content.Context, bytes: Long): String =
+    context.getString(R.string.unit_size_mb, String.format(java.util.Locale.US, "%.1f", bytes / 1_048_576.0))
+
+internal fun PlayerRuntimeController.onHttpBandwidthSample(bytesTransferred: Long, bitrateEstimate: Long) {
+    if (isTorrentStream) return
+    if (bytesTransferred > 0L) {
+        httpStreamLoadedBytes += bytesTransferred
+    }
+    val speedBps = (bitrateEstimate / 8L).coerceAtLeast(0L)
+    httpStreamSpeedBps = speedBps
+
+    val speed = formatPlaybackSpeed(context, speedBps)
+    val mb = formatPlaybackMB(context, httpStreamLoadedBytes)
+    val message = if (httpStreamLoadedBytes > 0L) "$mb · $speed" else speed
+
+    if (!hasRenderedFirstFrame) {
+        _uiState.update {
+            it.copy(
+                loadingMessage = message,
+                streamDownloadSpeed = speedBps,
+                streamLoadedBytes = httpStreamLoadedBytes
+            )
+        }
+    } else if (_uiState.value.isBuffering) {
+        _uiState.update {
+            it.copy(
+                bufferingMessage = message,
+                streamDownloadSpeed = speedBps,
+                streamLoadedBytes = httpStreamLoadedBytes
+            )
+        }
+    }
+}
+

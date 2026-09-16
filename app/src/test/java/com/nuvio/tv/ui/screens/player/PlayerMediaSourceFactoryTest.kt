@@ -218,6 +218,42 @@ class PlayerMediaSourceFactoryTest {
         assertFalse(PlayerMediaSourceFactory.isTorrServerUrl("https://stream.provider.org/live/playlist.m3u8"))
     }
 
+    @Test
+    fun `extractPipeHeaders correctly extracts query-style headers and strips pipe from url`() {
+        val rawUrl = "https://stream.example.org/play.mkv|User-Agent=CustomUA%2F1.0&Referer=https%3A%2F%2Fref.org"
+        val (cleanUrl, headers) = PlayerMediaSourceFactory.extractPipeHeaders(rawUrl)
+
+        assertEquals("https://stream.example.org/play.mkv", cleanUrl)
+        assertEquals("CustomUA/1.0", headers["User-Agent"])
+        assertEquals("https://ref.org", headers["Referer"])
+    }
+
+    @Test
+    fun `extractPipeHeaders correctly extracts JSON headers and strips pipe from url`() {
+        val rawUrl = "https://stream.example.org/play.mp4|{\"User-Agent\":\"CustomJSON/2.0\",\"Cookie\":\"token=123\"}"
+        val (cleanUrl, headers) = PlayerMediaSourceFactory.extractPipeHeaders(rawUrl)
+
+        assertEquals("https://stream.example.org/play.mp4", cleanUrl)
+        assertEquals("CustomJSON/2.0", headers["User-Agent"])
+        assertEquals("token=123", headers["Cookie"])
+    }
+
+    @Test
+    fun `normalizePlaybackRequest combines pipe headers with existing headers while preserving explicit headers`() {
+        val rawUrl = "https://stream.example.org/movie.mkv|User-Agent=PipeUA&Referer=https%3A%2F%2Ffrompipe.org"
+        val explicitHeaders = mapOf(
+            "User-Agent" to "ExplicitUA",
+            "Authorization" to "Bearer token"
+        )
+
+        val normalized = PlayerMediaSourceFactory.normalizePlaybackRequest(rawUrl, explicitHeaders)
+
+        assertEquals("https://stream.example.org/movie.mkv", normalized.url)
+        assertEquals("ExplicitUA", normalized.headers["User-Agent"])
+        assertEquals("https://frompipe.org", normalized.headers["Referer"])
+        assertEquals("Bearer token", normalized.headers["Authorization"])
+    }
+
     private fun String.basicAuthHeader(): String =
         "Basic " + Base64.getEncoder().encodeToString(toByteArray(Charsets.UTF_8))
 }

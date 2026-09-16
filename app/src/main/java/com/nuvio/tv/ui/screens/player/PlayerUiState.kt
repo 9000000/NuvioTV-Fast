@@ -226,6 +226,10 @@ data class PlayerUiState(
     val torrentBufferProgress: Float = 0f,
     val torrentTotalProgress: Float = 0f,
     val showTorrentStats: Boolean = false,
+    // Generic stream buffering stats (used for both Torrent and HTTP streams)
+    val streamDownloadSpeed: Long = 0L,
+    val streamLoadedBytes: Long = 0L,
+    val bufferingMessage: String? = null,
     // Torrent mid-playback rebuffering (shown on the buffering spinner, not loading overlay)
     val torrentBufferingMessage: String? = null,
     val torrentBufferingProgress: Float = 0f,

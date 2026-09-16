@@ -582,6 +582,8 @@ class PlayerRuntimeController(
     internal var dv7ToDv81LastProbeReasonForCurrentPlayback: String? = null
 
     internal var playerInitializationStartedAtMs: Long = 0L
+    internal var httpStreamLoadedBytes: Long = 0L
+    internal var httpStreamSpeedBps: Long = 0L
     internal var pendingSeekTelemetryRequestedAtMs: Long = 0L
     internal var pendingSeekTelemetryTargetMs: Long = -1L
     internal var pendingSeekTelemetryReadyAtMs: Long = 0L

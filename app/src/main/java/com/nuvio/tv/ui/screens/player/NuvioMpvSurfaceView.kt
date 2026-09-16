@@ -181,6 +181,21 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         return mpv.getPropertyDouble("demuxer-cache-duration") ?: 0.0
     }
 
+    fun demuxerCacheBytes(): Long {
+        if (!initialized) return 0L
+        return mpv.getPropertyLong("demuxer-cache-state/fw-bytes")
+            ?: mpv.getPropertyLong("demuxer-cache-state/total-bytes")
+            ?: 0L
+    }
+
+    fun demuxerCacheSpeedBps(): Long {
+        if (!initialized) return 0L
+        val rawRate = mpv.getPropertyDouble("demuxer-cache-state/raw-input-rate")
+            ?: mpv.getPropertyDouble("cache-speed")
+            ?: 0.0
+        return rawRate.toLong().coerceAtLeast(0L)
+    }
+
     fun isCoreIdleNow(): Boolean {
         if (!initialized) return false
         return mpv.getPropertyBoolean("core-idle") == true

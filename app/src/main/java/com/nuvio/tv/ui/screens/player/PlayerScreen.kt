@@ -980,7 +980,7 @@ fun PlayerScreen(
             backdropUrl = uiState.backdrop,
             logoUrl = uiState.logo,
             title = uiState.title,
-            message = uiState.loadingMessage.takeIf { uiState.showPlayerLoadingStatus || uiState.isTorrentStream },
+            message = uiState.loadingMessage.takeIf { uiState.showPlayerLoadingStatus || uiState.isTorrentStream || uiState.streamLoadedBytes > 0L },
             progress = uiState.loadingProgress,
             modifier = Modifier
                 .fillMaxSize()
@@ -1070,7 +1070,8 @@ fun PlayerScreen(
             showLoadingOverlay = uiState.showLoadingOverlay,
             isTorrentStream = uiState.isTorrentStream,
             torrentBufferingMessage = uiState.torrentBufferingMessage,
-            torrentBufferingProgress = uiState.torrentBufferingProgress
+            torrentBufferingProgress = uiState.torrentBufferingProgress,
+            bufferingMessage = uiState.bufferingMessage
         )
 
         // Error state
@@ -3732,23 +3733,26 @@ private fun PlayerBufferingIndicator(
     showLoadingOverlay: Boolean,
     isTorrentStream: Boolean,
     torrentBufferingMessage: String?,
-    torrentBufferingProgress: Float
+    torrentBufferingProgress: Float,
+    bufferingMessage: String? = null
 ) {
     if (!isBuffering || showLoadingOverlay) return
+
+    val displayMessage = if (isTorrentStream) torrentBufferingMessage else bufferingMessage
 
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        if (isTorrentStream && torrentBufferingMessage != null) {
-            // Torrent rebuffer: spinner + download stats + progress bar
+        if (displayMessage != null) {
+            // Rebuffer: spinner + download stats (+ progress bar for torrents)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 LoadingIndicator()
                 Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
                 Text(
-                    text = torrentBufferingMessage,
+                    text = displayMessage,
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White.copy(alpha = 0.8f)
                 )
