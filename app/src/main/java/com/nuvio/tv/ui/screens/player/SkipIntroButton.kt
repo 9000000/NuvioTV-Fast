@@ -240,7 +240,8 @@ fun SkipIntroButton(
 @Composable
 private fun getSkipLabel(type: String?, targetsPostCredits: Boolean): String = when (type?.trim()?.lowercase()) {
     "op", "opening", "mixed-op", "intro" -> stringResource(R.string.skip_intro)
-    "ed", "ending", "mixed-ed", "outro", "credits" -> stringResource(R.string.skip_ending)
+    "ed", "ending", "mixed-ed", "outro", "credits" ->
+        stringResource(if (targetsPostCredits) R.string.skip_to_post_credits else R.string.skip_ending)
     "movie-credits" -> stringResource(if (targetsPostCredits) R.string.skip_to_post_credits else R.string.skip_movie_credits)
     "recap" -> stringResource(R.string.skip_recap)
     else -> stringResource(R.string.skip_generic)
