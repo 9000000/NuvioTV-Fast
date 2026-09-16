@@ -352,6 +352,15 @@ android {
         }
     }
 
+    applicationVariants.all {
+        val variant = this
+        outputs.all {
+            val outputImpl = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            val abi = outputImpl?.getFilter("ABI") ?: "universal"
+            outputImpl?.outputFileName = "NuvioTV-${variant.versionName}-${abi}.apk"
+        }
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
