@@ -16,7 +16,6 @@ import com.nuvio.tv.core.tracking.buildTrackingMediaReference
 import com.nuvio.tv.core.util.parseRuntimeMinutes
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.PlayerSettings
-import com.nuvio.tv.data.local.AutoSkipSegmentType
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
@@ -43,22 +42,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
-internal fun PlayerSettings.shouldSendSkipSegments(contentType: String): Boolean {
-    if (!skipIntroEnabled || !externalPlayerSendSkipSegments) return false
-    val applicableTypes = if (contentType.equals("movie", ignoreCase = true)) {
-        setOf(AutoSkipSegmentType.MOVIE_CREDITS, AutoSkipSegmentType.POST_CREDITS)
-    } else {
-        setOf(AutoSkipSegmentType.INTRO, AutoSkipSegmentType.RECAP, AutoSkipSegmentType.OUTRO)
-    }
-    return autoSkipSegmentTypes.any { it in applicableTypes }
-}
+internal fun PlayerSettings.shouldSendSkipSegments(): Boolean = externalPlayerSendSkipSegments
 
 internal fun externalSkipIntervals(
-    intervals: List<SkipInterval>,
-    enabled: Set<AutoSkipSegmentType>
-): List<SkipInterval> = intervals.filter {
-    AutoSkipSegmentType.fromSkipIntervalType(it.type) in enabled
-}.map {
+    intervals: List<SkipInterval>
+): List<SkipInterval> = intervals.map {
     // Retain the established external-player type for movie end credits.
     if (it.type == "movie-credits") it.copy(type = "outro") else it
 }
@@ -467,13 +455,13 @@ class ExternalPlaybackTracker @Inject constructor(
     /**
      * Resolves intro/outro skip segments for [metadata] via the same repository the internal
      * player uses, and serializes them to a JSON array string for the external player. Mirrors
-     * the id-format handling in `fetchSkipIntervals`. Returns null when skip is disabled, the
+     * the id-format handling in `fetchSkipIntervals`. Returns null when forwarding is disabled, the
      * content can't be identified, or nothing is found.
      */
     private suspend fun resolveSkipSegmentsJson(metadata: ExternalPlaybackMetadata): String? {
         if (metadata.contentType.equals("cloud", ignoreCase = true)) return null
         val settings = playerSettingsDataStore.playerSettings.first()
-        if (!settings.shouldSendSkipSegments(metadata.contentType)) return null
+        if (!settings.shouldSendSkipSegments()) return null
 
         // videoId carries the episode-specific id (e.g. mal:/kitsu:/imdb); fall back to contentId.
         val effectiveId = metadata.videoId.takeIf { it.isNotBlank() } ?: metadata.contentId
@@ -507,11 +495,10 @@ class ExternalPlaybackTracker @Inject constructor(
         }
         if (intervals.isNullOrEmpty()) return null
 
-        val selectedIntervals = externalSkipIntervals(intervals, settings.autoSkipSegmentTypes)
-        if (selectedIntervals.isEmpty()) return null
+        val forwardedIntervals = externalSkipIntervals(intervals)
 
         val arr = org.json.JSONArray()
-        selectedIntervals.forEach { iv ->
+        forwardedIntervals.forEach { iv ->
             arr.put(
                 org.json.JSONObject()
                     .put("type", iv.type)
