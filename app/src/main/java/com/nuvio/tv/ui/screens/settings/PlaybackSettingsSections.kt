@@ -384,8 +384,7 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_skip_intro_sub),
                     isChecked = playerSettings.skipIntroEnabled,
                     onCheckedChange = onSetSkipIntroEnabled,
-                    onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !generalUi.isExternalPlayer
+                    onFocused = { focusedSection = PlaybackSection.GENERAL }
                 )
             }
 
@@ -409,7 +408,7 @@ internal fun PlaybackSettingsSections(
                     onToggle = { autoSkipExpanded = !autoSkipExpanded },
                     focusRequester = autoSkipHeaderFocus,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !generalUi.isExternalPlayer && playerSettings.skipIntroEnabled
+                    enabled = playerSettings.skipIntroEnabled
                 )
             }
 
@@ -424,7 +423,7 @@ internal fun PlaybackSettingsSections(
                             onSetAutoSkipSegmentTypeEnabled(AutoSkipSegmentType.INTRO, it)
                         },
                         onFocused = { focusedSection = PlaybackSection.GENERAL },
-                        enabled = !generalUi.isExternalPlayer && playerSettings.skipIntroEnabled
+                        enabled = playerSettings.skipIntroEnabled
                     )
                 }
 
@@ -438,7 +437,7 @@ internal fun PlaybackSettingsSections(
                             onSetAutoSkipSegmentTypeEnabled(AutoSkipSegmentType.RECAP, it)
                         },
                         onFocused = { focusedSection = PlaybackSection.GENERAL },
-                        enabled = !generalUi.isExternalPlayer && playerSettings.skipIntroEnabled
+                        enabled = playerSettings.skipIntroEnabled
                     )
                 }
 
@@ -452,7 +451,35 @@ internal fun PlaybackSettingsSections(
                             onSetAutoSkipSegmentTypeEnabled(AutoSkipSegmentType.OUTRO, it)
                         },
                         onFocused = { focusedSection = PlaybackSection.GENERAL },
-                        enabled = !generalUi.isExternalPlayer && playerSettings.skipIntroEnabled
+                        enabled = playerSettings.skipIntroEnabled
+                    )
+                }
+
+                item(key = "general_auto_skip_movie_credits") {
+                    ToggleSettingsItem(
+                        icon = Icons.Default.SkipNext,
+                        title = stringResource(R.string.auto_skip_movie_credits),
+                        subtitle = stringResource(R.string.auto_skip_movie_credits_sub),
+                        isChecked = AutoSkipSegmentType.MOVIE_CREDITS in playerSettings.autoSkipSegmentTypes,
+                        onCheckedChange = {
+                            onSetAutoSkipSegmentTypeEnabled(AutoSkipSegmentType.MOVIE_CREDITS, it)
+                        },
+                        onFocused = { focusedSection = PlaybackSection.GENERAL },
+                        enabled = playerSettings.skipIntroEnabled
+                    )
+                }
+
+                item(key = "general_auto_skip_post_credits") {
+                    ToggleSettingsItem(
+                        icon = Icons.Default.SkipNext,
+                        title = stringResource(R.string.auto_skip_post_credits),
+                        subtitle = stringResource(R.string.auto_skip_post_credits_sub),
+                        isChecked = AutoSkipSegmentType.POST_CREDITS in playerSettings.autoSkipSegmentTypes,
+                        onCheckedChange = {
+                            onSetAutoSkipSegmentTypeEnabled(AutoSkipSegmentType.POST_CREDITS, it)
+                        },
+                        onFocused = { focusedSection = PlaybackSection.GENERAL },
+                        enabled = playerSettings.skipIntroEnabled
                     )
                 }
             }

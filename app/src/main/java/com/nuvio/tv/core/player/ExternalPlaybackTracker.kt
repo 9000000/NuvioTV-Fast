@@ -15,11 +15,14 @@ import com.nuvio.tv.core.tracking.TrackingScrobbleEvent
 import com.nuvio.tv.core.tracking.buildTrackingMediaReference
 import com.nuvio.tv.core.util.parseRuntimeMinutes
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.AutoSkipSegmentType
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import com.nuvio.tv.data.repository.SkipIntroRepository
+import com.nuvio.tv.data.repository.SkipInterval
 import com.nuvio.tv.ui.screens.player.PlayerNextEpisodeRules
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +42,26 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
+
+internal fun PlayerSettings.shouldSendSkipSegments(contentType: String): Boolean {
+    if (!skipIntroEnabled || !externalPlayerSendSkipSegments) return false
+    val applicableTypes = if (contentType.equals("movie", ignoreCase = true)) {
+        setOf(AutoSkipSegmentType.MOVIE_CREDITS, AutoSkipSegmentType.POST_CREDITS)
+    } else {
+        setOf(AutoSkipSegmentType.INTRO, AutoSkipSegmentType.RECAP, AutoSkipSegmentType.OUTRO)
+    }
+    return autoSkipSegmentTypes.any { it in applicableTypes }
+}
+
+internal fun externalSkipIntervals(
+    intervals: List<SkipInterval>,
+    enabled: Set<AutoSkipSegmentType>
+): List<SkipInterval> = intervals.filter {
+    AutoSkipSegmentType.fromSkipIntervalType(it.type) in enabled
+}.map {
+    // Retain the established external-player type for movie end credits.
+    if (it.type == "movie-credits") it.copy(type = "outro") else it
+}
 
 /**
  * Metadata about the content being played in an external player.
@@ -449,15 +472,16 @@ class ExternalPlaybackTracker @Inject constructor(
      */
     private suspend fun resolveSkipSegmentsJson(metadata: ExternalPlaybackMetadata): String? {
         if (metadata.contentType.equals("cloud", ignoreCase = true)) return null
-        // Opt-in via the External Player setting (not the internal player's "Skip Intro", which is
-        // greyed out while external player is selected).
-        if (!playerSettingsDataStore.playerSettings.first().externalPlayerSendSkipSegments) return null
+        val settings = playerSettingsDataStore.playerSettings.first()
+        if (!settings.shouldSendSkipSegments(metadata.contentType)) return null
 
         // videoId carries the episode-specific id (e.g. mal:/kitsu:/imdb); fall back to contentId.
         val effectiveId = metadata.videoId.takeIf { it.isNotBlank() } ?: metadata.contentId
 
         val intervals = withTimeoutOrNull(SKIP_RESOLVE_TIMEOUT_MS) {
             when {
+                metadata.contentType.equals("movie", ignoreCase = true) ->
+                    skipIntroRepository.getMovieSkipIntervals(metadata.contentId, effectiveId)
                 effectiveId.startsWith("mal:") -> {
                     val parts = effectiveId.split(":")
                     val malId = parts.getOrNull(1) ?: return@withTimeoutOrNull null
@@ -483,8 +507,11 @@ class ExternalPlaybackTracker @Inject constructor(
         }
         if (intervals.isNullOrEmpty()) return null
 
+        val selectedIntervals = externalSkipIntervals(intervals, settings.autoSkipSegmentTypes)
+        if (selectedIntervals.isEmpty()) return null
+
         val arr = org.json.JSONArray()
-        intervals.forEach { iv ->
+        selectedIntervals.forEach { iv ->
             arr.put(
                 org.json.JSONObject()
                     .put("type", iv.type)
