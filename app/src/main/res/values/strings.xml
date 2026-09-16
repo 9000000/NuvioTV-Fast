@@ -3278,6 +3278,7 @@
     <string name="torrserver_addon_valid">Valid: %1$s</string>
     <string name="torrserver_error_connect">Connection failed: %1$s</string>
     <string name="torrserver_error_addon">Addon check failed: %1$s</string>
+    <string name="torrserver_error_not_configured">TorrServer is not configured. Please enable and set Server URL in Settings > TorrServer.</string>
     <string name="torrserver_preload_title">Preload buffer</string>
     <string name="torrserver_preload_subtitle">Pre-buffer torrent stream data before playback starts</string>
     <string name="torrserver_save_title">Save torrent to server</string>

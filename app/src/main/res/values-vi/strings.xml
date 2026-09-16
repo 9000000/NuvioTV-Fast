@@ -3279,6 +3279,7 @@
     <string name="torrserver_addon_valid">Hợp lệ: %1$s</string>
     <string name="torrserver_error_connect">Kết nối thất bại: %1$s</string>
     <string name="torrserver_error_addon">Kiểm tra addon thất bại: %1$s</string>
+    <string name="torrserver_error_not_configured">TorrServer chưa được cấu hình. Vui lòng bật và cài đặt URL máy chủ trong Cài đặt > TorrServer.</string>
     <string name="torrserver_preload_title">Tải trước bộ đệm (Preload)</string>
     <string name="torrserver_preload_subtitle">Tải trước đệm dữ liệu torrent trước khi bắt đầu phát video</string>
     <string name="torrserver_save_title">Lưu torrent vào máy chủ (Save)</string>

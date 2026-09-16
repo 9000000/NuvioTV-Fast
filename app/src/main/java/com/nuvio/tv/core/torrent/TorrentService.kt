@@ -1,6 +1,8 @@
 package com.nuvio.tv.core.torrent
 
+import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,9 +26,8 @@ internal fun torrServerDisplayTitle(title: String?): String? =
 
 @Singleton
 class TorrentService @Inject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
-    private val binary: TorrServerBinary,
-    private val api: TorrServerApi,
+    @ApplicationContext private val appContext: Context,
+    private val remoteApi: TorrServerRemoteApi,
     private val addonConfig: TorrServerAddonConfig
 ) {
     companion object {
@@ -50,7 +50,7 @@ class TorrentService @Inject constructor(
     private var currentHash: String? = null
 
     /**
-     * Starts streaming a torrent. Returns the local HTTP URL for ExoPlayer.
+     * Starts streaming a torrent via the remote TorrServer instance. Returns the HTTP URL for ExoPlayer.
      */
     suspend fun startStream(
         infoHash: String,
@@ -63,33 +63,43 @@ class TorrentService @Inject constructor(
         stopStream()
         _state.value = TorrentState.Connecting
 
-        // Ensure binary is running
-        binary.start()
+        val config = addonConfig.config.first()
+        val serverUrl = config.serverUrl.trim().trimEnd('/')
+        if (serverUrl.isBlank()) {
+            val errorMsg = appContext.getString(com.nuvio.tv.R.string.torrserver_error_not_configured)
+            _state.value = TorrentState.Error(errorMsg)
+            throw TorrentException(errorMsg)
+        }
 
         val magnetLink = buildMagnetUri(infoHash, trackers)
-        Log.d(TAG, "Starting stream: $magnetLink")
+        Log.d(TAG, "Starting remote TorrServer stream on $serverUrl: $magnetLink")
 
-        // Add torrent
-        val hash = api.addTorrent(
+        // Add torrent to remote TorrServer
+        val hash = remoteApi.addTorrent(
             magnetLink = magnetLink,
             title = torrServerDisplayTitle(title),
-            poster = poster
-        )
-            ?: throw TorrentException(appContext.getString(com.nuvio.tv.R.string.torrent_error_add_failed))
+            poster = poster,
+            serverUrlOverride = serverUrl
+        ) ?: throw TorrentException(appContext.getString(com.nuvio.tv.R.string.torrent_error_add_failed))
         currentHash = hash
 
-        // Resolve file index
-        val resolvedIdx = resolveFileIndex(hash, fileIdx, filename)
+        // Resolve file index from metadata
+        val resolvedIdx = resolveFileIndex(hash, fileIdx, filename, serverUrl)
 
-        // Keep preload and playback requests separate. TorrServer blocks a
-        // /stream request with &preload until its preload operation completes.
-        // The player must receive a plain &play URL once the status is active.
-        val isPreload = runCatching { addonConfig.config.first().preload }.getOrDefault(false)
-        val streamUrl = api.getStreamUrl(magnetLink, resolvedIdx, preload = false)
+        val isPreload = config.preload
+        val streamUrl = remoteApi.buildStreamUrl(
+            serverUrl = serverUrl,
+            magnetLink = magnetLink,
+            fileIdx = resolvedIdx,
+            preload = false,
+            save = config.saveToDb,
+            gst = config.gst,
+            hash = hash
+        )
         Log.d(TAG, "Playback stream URL: $streamUrl")
 
         // Start stats polling
-        startStatsPolling(hash)
+        startStatsPolling(hash, serverUrl)
 
         _state.value = TorrentState.Streaming(
             localUrl = streamUrl,
@@ -102,8 +112,16 @@ class TorrentService @Inject constructor(
         )
 
         if (isPreload) {
-            val preloadUrl = api.getStreamUrl(magnetLink, resolvedIdx, preload = true)
-            val call = api.newStreamCall(preloadUrl)
+            val preloadUrl = remoteApi.buildStreamUrl(
+                serverUrl = serverUrl,
+                magnetLink = magnetLink,
+                fileIdx = resolvedIdx,
+                preload = true,
+                save = config.saveToDb,
+                gst = config.gst,
+                hash = hash
+            )
+            val call = remoteApi.newStreamCall(preloadUrl)
             preloadJob = scope.launch {
                 try {
                     call.execute().use { response ->
@@ -125,7 +143,7 @@ class TorrentService @Inject constructor(
                 }
             }
             try {
-                awaitPreloadReady(hash)
+                awaitPreloadReady(hash, serverUrl)
             } finally {
                 call.cancel()
                 preloadJob?.cancel()
@@ -143,30 +161,30 @@ class TorrentService @Inject constructor(
         preloadJob = null
 
         currentHash?.let { hash ->
-            try {
-                runBlocking(Dispatchers.IO) {
-                    api.dropTorrent(hash)
+            scope.launch(Dispatchers.IO) {
+                try {
+                    remoteApi.dropTorrent(hash)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error dropping torrent: $hash", e)
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Error dropping torrent", e)
             }
         }
         currentHash = null
         _state.value = TorrentState.Idle
     }
 
-    private suspend fun awaitPreloadReady(hash: String) {
+    private suspend fun awaitPreloadReady(hash: String, serverUrl: String) {
         val deadline = System.currentTimeMillis() + 60_000L
         while (System.currentTimeMillis() < deadline) {
-            val stats = api.getTorrentStats(hash)
+            val stats = remoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
             if (stats != null) {
                 val currentState = _state.value
                 if (currentState is TorrentState.Streaming) {
                     _state.value = currentState.copy(
                         downloadSpeed = stats.downloadSpeed,
                         uploadSpeed = stats.uploadSpeed,
-                        peers = stats.peers,
-                        seeds = stats.seeds,
+                        peers = stats.activePeers,
+                        seeds = stats.connectedSeeders,
                         preloadedBytes = stats.preloadedBytes,
                         preloadSize = stats.preloadSize,
                         loadedSize = stats.loadedSize,
@@ -188,7 +206,6 @@ class TorrentService @Inject constructor(
 
     fun shutdown() {
         stopStream()
-        binary.stop()
     }
 
     private fun buildMagnetUri(infoHash: String, extraTrackers: List<String>): String {
@@ -197,13 +214,17 @@ class TorrentService @Inject constructor(
         return "magnet:?xt=urn:btih:$infoHash$trackerParams"
     }
 
-    private suspend fun resolveFileIndex(hash: String, requestedIdx: Int?, filename: String?): Int {
-        // Poll for metadata — magnet links may not have it immediately
+    private suspend fun resolveFileIndex(
+        hash: String,
+        requestedIdx: Int?,
+        filename: String?,
+        serverUrl: String
+    ): Int {
         val deadline = System.currentTimeMillis() + 15_000L
-        var files: List<TorrServerFile> = emptyList()
+        var files: List<TorrServerRemoteFile> = emptyList()
 
         while (System.currentTimeMillis() < deadline) {
-            files = api.getTorrentStats(hash)?.files ?: emptyList()
+            files = remoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)?.files ?: emptyList()
             if (files.isNotEmpty()) break
             Log.d(TAG, "Waiting for torrent metadata...")
             delay(1_000L)
@@ -219,7 +240,6 @@ class TorrentService @Inject constructor(
         // Strategy 1: Match by filename (most reliable for season packs)
         if (!filename.isNullOrBlank()) {
             val name = filename.trim()
-            // Exact basename match
             val exact = files.firstOrNull { f ->
                 f.path.substringAfterLast('/').equals(name, ignoreCase = true)
             }
@@ -227,7 +247,6 @@ class TorrentService @Inject constructor(
                 Log.d(TAG, "File resolved by exact filename match: ${exact.path} -> id=${exact.id}")
                 return exact.id
             }
-            // Contains match (addon filename may be substring of full path)
             val contains = files.firstOrNull { f ->
                 f.path.contains(name, ignoreCase = true)
             }
@@ -266,19 +285,19 @@ class TorrentService @Inject constructor(
         return result
     }
 
-    private fun startStatsPolling(hash: String) {
+    private fun startStatsPolling(hash: String, serverUrl: String) {
         statsJob?.cancel()
         statsJob = scope.launch {
             while (isActive) {
                 try {
-                    val stats = api.getTorrentStats(hash)
+                    val stats = remoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
                     val currentState = _state.value
                     if (stats != null && currentState is TorrentState.Streaming) {
                         _state.value = currentState.copy(
                             downloadSpeed = stats.downloadSpeed,
                             uploadSpeed = stats.uploadSpeed,
-                            peers = stats.peers,
-                            seeds = stats.seeds,
+                            peers = stats.activePeers,
+                            seeds = stats.connectedSeeders,
                             preloadedBytes = stats.preloadedBytes,
                             preloadSize = stats.preloadSize,
                             loadedSize = stats.loadedSize,
