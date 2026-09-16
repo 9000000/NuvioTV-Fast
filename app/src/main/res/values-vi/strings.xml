@@ -173,7 +173,7 @@
     <string name="action_see_all">Xem tất cả</string>
     <string name="action_load_more">Tải thêm</string>
 
-    <string name="hero_creator">Tác giả: %1$s</string>
+    <string name="hero_creator">Nhà sáng tạo: %1$s</string>
     <string name="hero_director">Đạo diễn: %1$s</string>
     <string name="hero_writer">Biên kịch: %1$s</string>
     <string name="hero_play">Xem</string>
@@ -219,13 +219,15 @@
     <string name="detail_marked_episodes_unwatched">Đã đánh dấu %1$d tập chưa xem</string>
     <string name="detail_marked_previous_watched">Đã đánh dấu %1$d tập trước đã xem</string>
 
+    <string name="playback_unavailable">Không thể phát nội dung</string>
+    <string name="playback_unavailable_message">Không thể phát nội dung này với thiết lập hiện tại.</string>
     <string name="detail_btn_play">Phát</string>
     <string name="detail_btn_resume">Xem tiếp</string>
     <string name="detail_btn_play_episode">Phát M%1$dT%2$d</string>
     <string name="detail_btn_resume_episode">Xem tiếp M%1$dT%2$d</string>
     <string name="detail_btn_next_episode">Tập tiếp theo M%1$dT%2$d</string>
     <string name="detail_tab_cast">Nhà sáng tạo &amp; Diễn viên</string>
-    <string name="cast_role_creator">Tác giả</string>
+    <string name="cast_role_creator">Nhà sáng tạo</string>
     <string name="cast_role_director">Đạo diễn</string>
     <string name="cast_role_writer">Biên kịch</string>
     <string name="detail_tab_ratings">Điểm đánh giá</string>
