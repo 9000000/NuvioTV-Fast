@@ -7,6 +7,7 @@ import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.CustomThemeColors
+import com.nuvio.tv.domain.model.PosterBorderStyle
 import com.nuvio.tv.domain.model.SettingsUiStyle
 import com.nuvio.tv.domain.model.ThemeSelection
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +36,7 @@ class ThemeDataStore @Inject constructor(
     private val amoledSurfacesModeKey = booleanPreferencesKey("amoled_surfaces_mode")
     private val settingsUiStyleKey = stringPreferencesKey("settings_ui_style")
     private val animationsEnabledKey = booleanPreferencesKey("animations_enabled")
+    private val posterBorderStyleKey = stringPreferencesKey("poster_border_style")
 
     val animationsEnabled: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
@@ -85,6 +87,17 @@ class ThemeDataStore @Inject constructor(
         }
     }
 
+    val posterBorderStyle: Flow<PosterBorderStyle> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            val name = prefs[posterBorderStyleKey] ?: PosterBorderStyle.Default.name
+            try {
+                PosterBorderStyle.valueOf(name)
+            } catch (e: IllegalArgumentException) {
+                PosterBorderStyle.Default
+            }
+        }
+    }
+
     suspend fun setTheme(theme: AppTheme) {
         store().edit { prefs ->
             prefs[themeKey] = theme.name
@@ -128,6 +141,12 @@ class ThemeDataStore @Inject constructor(
     suspend fun setAnimationsEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[animationsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setPosterBorderStyle(style: PosterBorderStyle) {
+        store().edit { prefs ->
+            prefs[posterBorderStyleKey] = style.name
         }
     }
 

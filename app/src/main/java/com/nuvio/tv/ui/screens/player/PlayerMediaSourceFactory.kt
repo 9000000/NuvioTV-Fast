@@ -572,7 +572,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 return@withContext null
             }
             val sanitizedHeaders = sanitizeHeaders(headers)
-            val methods = listOf("HEAD", "GET")
+            // Presigned S3/R2 URLs sign only the 'host' header, so HEAD is rejected with 403.
+            // Detect these URLs by their query parameters and skip straight to GET.
+            val isPresignedUrl = url.contains("X-Amz-Signature", ignoreCase = true) ||
+                url.contains("X-Amz-SignedHeaders", ignoreCase = true)
+            val methods = if (isPresignedUrl) listOf("GET") else listOf("HEAD", "GET")
             for (method in methods) {
                 runCatching {
                     val requestBuilder = Request.Builder().url(url)

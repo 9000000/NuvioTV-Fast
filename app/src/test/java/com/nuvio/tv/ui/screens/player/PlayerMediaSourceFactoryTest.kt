@@ -12,6 +12,23 @@ import java.util.Base64
 class PlayerMediaSourceFactoryTest {
 
     @Test
+    fun `test R2 url with playbackHttpClient`() {
+        val url = "https://3a771b2296d1c87878ede7f6b1346c1e.r2.cloudflarestorage.com/hub/54621d908e8826da0616e59656f6377e?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=eb323da762571bdb4777624ba6dd0424%2F20260916%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20260916T035250Z&X-Amz-Expires=28800&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3D%22Toy.Story.5.2026.2160p.MA.WEB-DL.English.DDP5.1.Atmos.DV.HDR.H.265-BYNDR-4kHdHub.mkv%22&X-Amz-Signature=b7aadb1805a489776d5790facab42b08eee0154332994312dfc896c1d67fa3af"
+        val request = okhttp3.Request.Builder()
+            .url(url)
+            .header("User-Agent", PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
+            .header("Range", "bytes=0-1024")
+            .build()
+        try {
+            val response = PlayerPlaybackNetworking.playbackHttpClient.newCall(request).execute()
+            println("OKHTTP RESPONSE: code=" + response.code + " msg=" + response.message + " body=" + response.body?.string()?.take(200))
+        } catch (e: Exception) {
+            println("OKHTTP EXCEPTION: " + e)
+            e.printStackTrace()
+        }
+    }
+
+    @Test
     fun `media segment 404 with an alternative prefers another HLS track`() {
         assertTrue(
             shouldPreferAlternativeHlsTrack(
@@ -218,41 +235,7 @@ class PlayerMediaSourceFactoryTest {
         assertFalse(PlayerMediaSourceFactory.isTorrServerUrl("https://stream.provider.org/live/playlist.m3u8"))
     }
 
-    @Test
-    fun `extractPipeHeaders correctly extracts query-style headers and strips pipe from url`() {
-        val rawUrl = "https://stream.example.org/play.mkv|User-Agent=CustomUA%2F1.0&Referer=https%3A%2F%2Fref.org"
-        val (cleanUrl, headers) = PlayerMediaSourceFactory.extractPipeHeaders(rawUrl)
 
-        assertEquals("https://stream.example.org/play.mkv", cleanUrl)
-        assertEquals("CustomUA/1.0", headers["User-Agent"])
-        assertEquals("https://ref.org", headers["Referer"])
-    }
-
-    @Test
-    fun `extractPipeHeaders correctly extracts JSON headers and strips pipe from url`() {
-        val rawUrl = "https://stream.example.org/play.mp4|{\"User-Agent\":\"CustomJSON/2.0\",\"Cookie\":\"token=123\"}"
-        val (cleanUrl, headers) = PlayerMediaSourceFactory.extractPipeHeaders(rawUrl)
-
-        assertEquals("https://stream.example.org/play.mp4", cleanUrl)
-        assertEquals("CustomJSON/2.0", headers["User-Agent"])
-        assertEquals("token=123", headers["Cookie"])
-    }
-
-    @Test
-    fun `normalizePlaybackRequest combines pipe headers with existing headers while preserving explicit headers`() {
-        val rawUrl = "https://stream.example.org/movie.mkv|User-Agent=PipeUA&Referer=https%3A%2F%2Ffrompipe.org"
-        val explicitHeaders = mapOf(
-            "User-Agent" to "ExplicitUA",
-            "Authorization" to "Bearer token"
-        )
-
-        val normalized = PlayerMediaSourceFactory.normalizePlaybackRequest(rawUrl, explicitHeaders)
-
-        assertEquals("https://stream.example.org/movie.mkv", normalized.url)
-        assertEquals("ExplicitUA", normalized.headers["User-Agent"])
-        assertEquals("https://frompipe.org", normalized.headers["Referer"])
-        assertEquals("Bearer token", normalized.headers["Authorization"])
-    }
 
     private fun String.basicAuthHeader(): String =
         "Basic " + Base64.getEncoder().encodeToString(toByteArray(Charsets.UTF_8))

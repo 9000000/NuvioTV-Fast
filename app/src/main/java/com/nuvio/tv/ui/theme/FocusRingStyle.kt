@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.nuvio.tv.domain.model.PosterBorderStyle
 
 @Immutable
 class NuvioFocusRingStyle internal constructor(
@@ -65,3 +66,42 @@ val PosterFocusRingStyle: NuvioFocusRingStyle = NuvioFocusRingStyle(
     gradientColors = PosterRainbowColors
 )
 
+/** A transparent, zero-width style used when the user selects [PosterBorderStyle.NONE]. */
+private val NoBorderStyle: NuvioFocusRingStyle = NuvioFocusRingStyle(
+    solidColor = Color.Transparent,
+    gradientColors = listOf(Color.Transparent)
+)
+
+/**
+ * Maps a [PosterBorderStyle] preference to a [NuvioFocusRingStyle].
+ *
+ * [palette] is required for [PosterBorderStyle.THEME] so the border matches the active theme.
+ * All other styles are palette-independent.
+ *
+ * Never returns null — [PosterBorderStyle.NONE] returns a transparent style so call sites
+ * do not need null checks.
+ */
+fun createPosterFocusRingStyle(
+    style: PosterBorderStyle,
+    palette: ThemeColorPalette
+): NuvioFocusRingStyle = when (style) {
+    PosterBorderStyle.THEME -> createFocusRingStyle(palette) // follows theme accent (dev branch default)
+    PosterBorderStyle.RAINBOW -> PosterFocusRingStyle
+    PosterBorderStyle.SOLID_WHITE -> NuvioFocusRingStyle(
+        solidColor = Color.White,
+        gradientColors = listOf(Color.White)
+    )
+    PosterBorderStyle.SOLID_RED -> NuvioFocusRingStyle(
+        solidColor = Color(0xFFFF2A55),
+        gradientColors = listOf(Color(0xFFFF2A55))
+    )
+    PosterBorderStyle.SOLID_BLUE -> NuvioFocusRingStyle(
+        solidColor = Color(0xFF2B7FFF),
+        gradientColors = listOf(Color(0xFF2B7FFF))
+    )
+    PosterBorderStyle.SOLID_GOLD -> NuvioFocusRingStyle(
+        solidColor = Color(0xFFFFD000),
+        gradientColors = listOf(Color(0xFFFFD000))
+    )
+    PosterBorderStyle.NONE -> NoBorderStyle
+}

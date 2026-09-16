@@ -9,6 +9,7 @@ import com.nuvio.tv.domain.model.AppIconOption
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.CosmeticEntitlements
 import com.nuvio.tv.domain.model.CustomThemeColors
+import com.nuvio.tv.domain.model.PosterBorderStyle
 import com.nuvio.tv.domain.model.SettingsUiStyle
 import com.nuvio.tv.domain.model.availableAppThemes
 import com.nuvio.tv.domain.model.resolveAppTheme
@@ -37,7 +38,8 @@ data class ThemeSettingsUiState(
     val amoledSurfacesMode: Boolean = false,
     val animationsEnabled: Boolean = true,
     val settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
-    val availableSettingsUiStyles: List<SettingsUiStyle> = SettingsUiStyle.entries.toList()
+    val availableSettingsUiStyles: List<SettingsUiStyle> = SettingsUiStyle.entries.toList(),
+    val posterBorderStyle: PosterBorderStyle = PosterBorderStyle.Default
 )
 
 sealed class ThemeSettingsEvent {
@@ -48,6 +50,7 @@ sealed class ThemeSettingsEvent {
     data class ToggleAmoledSurfacesMode(val enabled: Boolean) : ThemeSettingsEvent()
     data class ToggleAnimations(val enabled: Boolean) : ThemeSettingsEvent()
     data class SelectSettingsUiStyle(val style: SettingsUiStyle) : ThemeSettingsEvent()
+    data class SelectPosterBorderStyle(val style: PosterBorderStyle) : ThemeSettingsEvent()
     data object DismissAppIconFailure : ThemeSettingsEvent()
 }
 
@@ -144,6 +147,15 @@ class ThemeSettingsViewModel @Inject constructor(
                     }
                 }
         }
+        viewModelScope.launch {
+            themeDataStore.posterBorderStyle
+                .distinctUntilChanged()
+                .collectLatest { style ->
+                    _uiState.update { state ->
+                        if (state.posterBorderStyle == style) state else state.copy(posterBorderStyle = style)
+                    }
+                }
+        }
     }
 
     private fun currentTheme(): AppTheme {
@@ -159,6 +171,7 @@ class ThemeSettingsViewModel @Inject constructor(
             is ThemeSettingsEvent.ToggleAmoledSurfacesMode -> setAmoledSurfacesMode(event.enabled)
             is ThemeSettingsEvent.ToggleAnimations -> setAnimationsEnabled(event.enabled)
             is ThemeSettingsEvent.SelectSettingsUiStyle -> selectSettingsUiStyle(event.style)
+            is ThemeSettingsEvent.SelectPosterBorderStyle -> selectPosterBorderStyle(event.style)
             ThemeSettingsEvent.DismissAppIconFailure -> appIconManager.clearFailure()
         }
     }
@@ -214,6 +227,13 @@ class ThemeSettingsViewModel @Inject constructor(
         restoreStyleFocus = true
         viewModelScope.launch {
             themeDataStore.setSettingsUiStyle(style)
+        }
+    }
+
+    private fun selectPosterBorderStyle(style: PosterBorderStyle) {
+        if (_uiState.value.posterBorderStyle == style) return
+        viewModelScope.launch {
+            themeDataStore.setPosterBorderStyle(style)
         }
     }
 }

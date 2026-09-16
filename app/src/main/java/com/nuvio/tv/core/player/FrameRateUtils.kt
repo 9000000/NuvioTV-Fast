@@ -1286,9 +1286,15 @@ object FrameRateUtils {
         isCancelled: () -> Boolean = NEVER_CANCELLED
     ): Long {
         if (isCancelled()) return -1L
+        // Use GET Range: bytes=0-0 instead of HEAD.
+        // Cloudflare R2 / AWS S3 presigned URLs sign only the 'host' header
+        // (X-Amz-SignedHeaders=host), which causes them to reject HEAD requests
+        // with HTTP 403. A minimal GET range request is universally accepted and
+        // lets us read the total file size from the Content-Range response header.
         val requestBuilder = okhttp3.Request.Builder()
             .url(url)
-            .head()
+            .get()
+            .header("Range", "bytes=0-0")
 
         if (headers.none { it.key.equals("User-Agent", ignoreCase = true) }) {
             requestBuilder.header("User-Agent", com.nuvio.tv.ui.screens.player.PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
@@ -1304,7 +1310,14 @@ object FrameRateUtils {
         return try {
             call.execute().use { response ->
                 if (!response.isSuccessful) return -1L
-                response.header("Content-Length")?.toLongOrNull() ?: -1L
+                // Parse total size from Content-Range: bytes 0-0/TOTAL
+                val contentRange = response.header("Content-Range")
+                if (contentRange != null) {
+                    parseContentRangeTotalLength(contentRange) ?: -1L
+                } else {
+                    // Server returned 200 (no range support): use Content-Length
+                    response.header("Content-Length")?.toLongOrNull() ?: -1L
+                }
             }
         } catch (_: Exception) {
             call.cancel()

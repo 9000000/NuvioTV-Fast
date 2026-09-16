@@ -11,6 +11,7 @@ import androidx.tv.material3.darkColorScheme
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.CustomThemeColors
+import com.nuvio.tv.domain.model.PosterBorderStyle
 import com.nuvio.tv.domain.model.SettingsUiStyle
 
 data class NuvioExtendedColors(
@@ -51,6 +52,12 @@ val LocalNuvioFocusRingStyle = staticCompositionLocalOf {
     createFocusRingStyle(ThemeColors.Ocean)
 }
 
+// Poster-specific focus ring, driven by user preference.
+// Default mirrors the active theme accent (THEME style).
+val LocalPosterFocusRingStyle = staticCompositionLocalOf {
+    createFocusRingStyle(ThemeColors.Ocean)
+}
+
 val LocalAnimationsEnabled = staticCompositionLocalOf { true }
 
 val LocalNuvioMotionTokens = staticCompositionLocalOf { NuvioMotion.tokens }
@@ -67,6 +74,7 @@ fun NuvioTheme(
     settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
     customThemeColors: CustomThemeColors = CustomThemeColors.Default,
     animationsEnabled: Boolean = true,
+    posterBorderStyle: PosterBorderStyle = PosterBorderStyle.Default,
     content: @Composable () -> Unit
 ) {
     NuvioMotion.animationsEnabled = animationsEnabled
@@ -74,6 +82,9 @@ fun NuvioTheme(
         ThemeColors.getColorPalette(appTheme, customThemeColors)
     }
     val focusRingStyle = createFocusRingStyle(palette)
+    val posterFocusRingStyle = androidx.compose.runtime.remember(posterBorderStyle, palette) {
+        createPosterFocusRingStyle(posterBorderStyle, palette)
+    }
     val colorScheme = NuvioColorScheme(
         palette = palette,
         amoledMode = amoledMode,
@@ -117,6 +128,7 @@ fun NuvioTheme(
         LocalThemePalette provides palette,
         LocalSettingsUiStyle provides settingsUiStyle,
         LocalNuvioFocusRingStyle provides focusRingStyle,
+        LocalPosterFocusRingStyle provides posterFocusRingStyle,
         LocalAnimationsEnabled provides animationsEnabled,
         LocalNuvioMotionTokens provides motionTokens,
         LocalNuvioFocusTokens provides focusTokens
@@ -192,7 +204,9 @@ object NuvioTheme {
         get() = LocalNuvioFocusRingStyle.current
 
     val posterFocusRing: NuvioFocusRingStyle
-        get() = PosterFocusRingStyle
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalPosterFocusRingStyle.current
 
     val layout: NuvioLayoutTokens
         get() = NuvioLayout.tokens

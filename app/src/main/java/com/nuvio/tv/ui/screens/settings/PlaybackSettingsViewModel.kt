@@ -559,6 +559,12 @@ class PlaybackSettingsViewModel @Inject constructor(
     suspend fun importCustomSubtitleFont(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         runCatching {
             val cr = context.contentResolver
+
+            // Safely attempt to persist read permissions if the provider supports it
+            runCatching {
+                cr.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
             // Resolve display name from content uri
             val displayName = cr.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
@@ -567,7 +573,37 @@ class PlaybackSettingsViewModel @Inject constructor(
 
             val fontsDir = java.io.File(context.filesDir, "subtitle_fonts")
             fontsDir.mkdirs()
+
+            // Stage to a temporary file first so we never corrupt an active font
+            val tempFile = java.io.File(fontsDir, "temp_import_${System.currentTimeMillis()}.tmp")
+            val copiedBytes = cr.openInputStream(uri)?.use { input ->
+                tempFile.outputStream().use { output -> input.copyTo(output) }
+            } ?: 0L
+
+            if (copiedBytes <= 0L || !tempFile.exists() || tempFile.length() <= 0L) {
+                tempFile.delete()
+                return@withContext false
+            }
+
+            // Validate font parsing safely on background IO thread before saving
+            val isFontValid = runCatching {
+                val typeface = android.graphics.Typeface.createFromFile(tempFile)
+                typeface != null
+            }.getOrDefault(false)
+
+            if (!isFontValid) {
+                tempFile.delete()
+                return@withContext false
+            }
+
             val destFile = java.io.File(fontsDir, displayName)
+            if (destFile.exists()) {
+                destFile.delete()
+            }
+            if (!tempFile.renameTo(destFile)) {
+                tempFile.copyTo(destFile, overwrite = true)
+                tempFile.delete()
+            }
 
             // Delete old custom font file if different
             val oldPath = playerSettingsDataStore.getCustomSubtitleFontPath()
@@ -575,12 +611,8 @@ class PlaybackSettingsViewModel @Inject constructor(
                 runCatching { java.io.File(oldPath).delete() }
             }
 
-            cr.openInputStream(uri)?.use { input ->
-                destFile.outputStream().use { output -> input.copyTo(output) }
-            }
-
             playerSettingsDataStore.setCustomSubtitleFont(
-                displayName = displayName.removeSuffix(".ttf").removeSuffix(".otf"),
+                displayName = displayName.substringBeforeLast('.'),
                 internalPath = destFile.absolutePath
             )
             playerSettingsDataStore.setSubtitleFont(com.nuvio.tv.data.local.SubtitleFontOption.CUSTOM)

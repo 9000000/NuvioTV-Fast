@@ -1906,6 +1906,9 @@ private fun PlayerView.isAssOrSsaSubtitleSelected(): Boolean {
     return false
 }
 
+private var cachedCustomFontPath: String? = null
+private var cachedCustomTypeface: android.graphics.Typeface? = null
+
 private fun PlayerView.applySubtitleStyleIfNeeded(
     subtitleStyle: SubtitleStyleSettings,
     force: Boolean = false
@@ -1950,7 +1953,20 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
                     android.content.Context.MODE_PRIVATE
                 )
                 val path = prefs.getString("custom_subtitle_font_path", null)
-                if (path != null) android.graphics.Typeface.createFromFile(path) else null
+                if (path != null) {
+                    if (path == cachedCustomFontPath && cachedCustomTypeface != null) {
+                        cachedCustomTypeface
+                    } else {
+                        val tf = android.graphics.Typeface.createFromFile(path)
+                        cachedCustomFontPath = path
+                        cachedCustomTypeface = tf
+                        tf
+                    }
+                } else {
+                    cachedCustomFontPath = null
+                    cachedCustomTypeface = null
+                    null
+                }
             }.getOrNull()
             else -> null
         }

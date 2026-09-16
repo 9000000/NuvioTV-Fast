@@ -160,6 +160,7 @@ import com.nuvio.tv.domain.model.ExperienceMode
 import com.nuvio.tv.domain.model.MemberAccess
 import com.nuvio.tv.domain.model.ProfileBackgroundSelection
 import com.nuvio.tv.domain.model.resolveProfileBackgroundSelection
+import com.nuvio.tv.domain.model.PosterBorderStyle
 import com.nuvio.tv.domain.model.SettingsUiStyle
 import com.nuvio.tv.domain.model.resolveAppTheme
 import com.nuvio.tv.domain.model.resolveCustomThemeColors
@@ -246,7 +247,8 @@ private data class MainUiPrefs(
     val composeHighlighterEnabled: Boolean = false,
     val settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
     val cardDepthStyle: CardDepthStyle = CardDepthStyle(),
-    val animationsEnabled: Boolean = true
+    val animationsEnabled: Boolean = true,
+    val posterBorderStyle: PosterBorderStyle = PosterBorderStyle.Default
 )
 
 @AndroidEntryPoint
@@ -553,9 +555,14 @@ open class MainActivity : ComponentActivity() {
                     themeAndExperienceFlow,
                     layoutAndFeaturesFlow,
                     extraFeaturesFlow,
-                    layoutPreferenceDataStore.cardDepthStyle,
-                    themeDataStore.animationsEnabled
-                ) { themePrefs, layoutPrefs, extraPrefs, cardDepthStyle, animationsEnabled ->
+                    combine(
+                        layoutPreferenceDataStore.cardDepthStyle,
+                        themeDataStore.animationsEnabled,
+                        themeDataStore.posterBorderStyle
+                    ) { cardDepthStyle, animationsEnabled, posterBorderStyle ->
+                        Triple(cardDepthStyle, animationsEnabled, posterBorderStyle)
+                    }
+                ) { themePrefs, layoutPrefs, extraPrefs, (cardDepthStyle, animationsEnabled, posterBorderStyle) ->
                     themePrefs.copy(
                         hasChosenLayout = layoutPrefs.hasChosenLayout,
                         sidebarCollapsed = layoutPrefs.sidebarCollapsed,
@@ -568,7 +575,8 @@ open class MainActivity : ComponentActivity() {
                         composeHighlighterEnabled = extraPrefs.composeHighlighterEnabled,
                         settingsUiStyle = extraPrefs.settingsUiStyle,
                         animationsEnabled = animationsEnabled,
-                        cardDepthStyle = cardDepthStyle
+                        cardDepthStyle = cardDepthStyle,
+                        posterBorderStyle = posterBorderStyle
                     )
                 }
             }
@@ -589,7 +597,8 @@ open class MainActivity : ComponentActivity() {
                 amoledMode = mainUiPrefs.amoledMode,
                 amoledSurfacesMode = mainUiPrefs.amoledSurfacesMode,
                 settingsUiStyle = mainUiPrefs.settingsUiStyle,
-                animationsEnabled = mainUiPrefs.animationsEnabled
+                animationsEnabled = mainUiPrefs.animationsEnabled,
+                posterBorderStyle = mainUiPrefs.posterBorderStyle
             ) {
                 val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
                 val bringIntoViewSpec = if (mainUiPrefs.smoothBringIntoViewEnabled) {

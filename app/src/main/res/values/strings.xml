@@ -330,6 +330,17 @@
     <string name="appearance_animations_subtitle">Transitions, scale effects, and motion</string>
     <string name="appearance_disable_animations">Disable animations</string>
     <string name="appearance_disable_animations_subtitle">Turn off all transitions and focus scale effects for maximum speed on low-end devices</string>
+    <string name="appearance_poster_border">Poster Border</string>
+    <string name="appearance_poster_border_subtitle">Focus ring style on poster cards</string>
+    <string name="appearance_poster_border_row_title">Border style</string>
+    <string name="appearance_poster_border_row_subtitle">Change the poster border style when focused</string>
+    <string name="poster_border_theme">Theme accent (Default)</string>
+    <string name="poster_border_rainbow">Rainbow</string>
+    <string name="poster_border_white">Solid White</string>
+    <string name="poster_border_red">Solid Red</string>
+    <string name="poster_border_blue">Solid Blue</string>
+    <string name="poster_border_gold">Solid Gold</string>
+    <string name="poster_border_none">None</string>
     <string name="theme_color_gold">Gold</string>
     <string name="theme_color_jade">Jade</string>
     <string name="theme_color_rose_gold">Rose Gold</string>
@@ -900,6 +911,9 @@
     <string name="sub_font_custom_named">Custom: %s</string>
     <string name="sub_font_custom_change">↩ Change font file…</string>
     <string name="sub_font_custom_remove">✕ Remove custom font</string>
+    <string name="sub_font_import_success">Custom font applied: %s</string>
+    <string name="sub_font_import_failed">Invalid or unreadable font file.</string>
+    <string name="sub_font_picker_not_found">No file manager app found. Please install a file manager (such as X-plore or AnExplorer) to pick font files.</string>
     <string name="sub_advanced_section">Advanced Subtitle Rendering</string>
     <string name="sub_libass">Use libass for ASS/SSA subtitles</string>
     <string name="sub_libass_sub">Experimental: advanced ASS/SSA rendering (styles, positioning, animations)</string>

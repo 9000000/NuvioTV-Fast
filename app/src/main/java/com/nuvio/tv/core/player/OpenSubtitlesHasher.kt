@@ -66,7 +66,12 @@ object OpenSubtitlesHasher {
 
         val requestBuilder = Request.Builder()
             .url(url)
-            .head()
+            .get()
+            // Use GET Range:0-0 instead of HEAD.
+            // R2/S3 presigned URLs (X-Amz-SignedHeaders=host) reject HEAD with 403;
+            // a minimal range GET is universally accepted and returns Content-Range
+            // with the total file size without streaming actual content bytes.
+            .header("Range", "bytes=0-0")
         headers.forEach { (k, v) ->
             if (!k.equals("Range", ignoreCase = true)) {
                 requestBuilder.header(k, v)
@@ -79,8 +84,15 @@ object OpenSubtitlesHasher {
         return try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) return null
-                val lenStr = response.header("Content-Length")
-                val len = lenStr?.toLongOrNull() ?: response.body?.contentLength()
+                // 206: parse Content-Range: bytes 0-0/TOTAL
+                val contentRange = response.header("Content-Range")
+                val len: Long? = if (contentRange != null) {
+                    contentRange.substringAfterLast('/', "").trim().toLongOrNull()
+                } else {
+                    // 200: no range support, fall back to Content-Length
+                    response.header("Content-Length")?.toLongOrNull()
+                        ?: response.body.contentLength().takeIf { it > 0 }
+                }
                 if (len == null) return null
                 if (len > 0) len else null
             }

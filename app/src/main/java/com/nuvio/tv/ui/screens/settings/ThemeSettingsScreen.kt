@@ -66,6 +66,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.AppIconOption
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.CustomThemeColors
+import com.nuvio.tv.domain.model.PosterBorderStyle
 import com.nuvio.tv.domain.model.SettingsUiStyle
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames
@@ -101,6 +102,7 @@ fun ThemeSettingsContent(
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showAppIconDialog by remember { mutableStateOf(false) }
     var showCustomThemeDialog by remember(uiState.customThemeGradientEnabled) { mutableStateOf(false) }
+    var showPosterBorderDialog by remember { mutableStateOf(false) }
     var restoreCustomThemeFocus by remember { mutableStateOf(false) }
     var appIconConfirmation by remember { mutableStateOf<AppIconOption?>(null) }
     var pendingLanguageRestart by remember { mutableStateOf(false) }
@@ -302,6 +304,20 @@ fun ThemeSettingsContent(
                 )
             }
 
+            // --- Poster Border Style ---
+            SettingsGroupCard(
+                modifier = Modifier.fillMaxWidth(),
+                title = stringResource(R.string.appearance_poster_border),
+                subtitle = stringResource(R.string.appearance_poster_border_subtitle)
+            ) {
+                SettingsActionRow(
+                    title = stringResource(R.string.appearance_poster_border_row_title),
+                    subtitle = stringResource(R.string.appearance_poster_border_row_subtitle),
+                    value = uiState.posterBorderStyle.localizedName(),
+                    onClick = { showPosterBorderDialog = true }
+                )
+            }
+
             SettingsGroupCard(
                 modifier = Modifier.fillMaxWidth(),
                 title = stringResource(R.string.appearance_launcher_artwork),
@@ -367,6 +383,23 @@ fun ThemeSettingsContent(
             onDismiss = { showFontDialog = false },
             width = 400.dp,
             maxHeight = 280.dp
+        )
+    }
+
+    if (showPosterBorderDialog) {
+        SettingsSingleChoiceDialog(
+            title = stringResource(R.string.appearance_poster_border),
+            options = PosterBorderStyle.entries.map { style ->
+                SettingsPickerOption(style, style.localizedName())
+            },
+            selectedValue = uiState.posterBorderStyle,
+            onOptionSelected = { style ->
+                viewModel.onEvent(ThemeSettingsEvent.SelectPosterBorderStyle(style))
+                showPosterBorderDialog = false
+            },
+            onDismiss = { showPosterBorderDialog = false },
+            width = 380.dp,
+            maxHeight = 340.dp
         )
     }
 
@@ -605,4 +638,15 @@ private fun AppTheme.localizedName(): String = when (this) {
     AppTheme.AMBER -> stringResource(R.string.theme_color_amber)
     AppTheme.ROSE -> stringResource(R.string.theme_color_rose)
     AppTheme.WHITE -> stringResource(R.string.theme_color_white)
+}
+
+@Composable
+private fun PosterBorderStyle.localizedName(): String = when (this) {
+    PosterBorderStyle.THEME -> stringResource(R.string.poster_border_theme)
+    PosterBorderStyle.RAINBOW -> stringResource(R.string.poster_border_rainbow)
+    PosterBorderStyle.SOLID_WHITE -> stringResource(R.string.poster_border_white)
+    PosterBorderStyle.SOLID_RED -> stringResource(R.string.poster_border_red)
+    PosterBorderStyle.SOLID_BLUE -> stringResource(R.string.poster_border_blue)
+    PosterBorderStyle.SOLID_GOLD -> stringResource(R.string.poster_border_gold)
+    PosterBorderStyle.NONE -> stringResource(R.string.poster_border_none)
 }
