@@ -47,8 +47,7 @@ internal fun PlayerSettings.shouldSendSkipSegments(): Boolean = externalPlayerSe
 internal fun externalSkipIntervals(
     intervals: List<SkipInterval>
 ): List<SkipInterval> = intervals.map {
-    // Retain the established external-player type for movie end credits.
-    if (it.type == "movie-credits") it.copy(type = "outro") else it
+    if (it.type == "movie-credits") it.copy(type = "end-credits") else it
 }
 
 /**
