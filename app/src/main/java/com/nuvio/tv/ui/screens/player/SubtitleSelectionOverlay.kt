@@ -579,6 +579,15 @@ internal fun SubtitleSelectionOverlay(
                             activeRail = OverlayFocusRail.OPTION
                             onAddonSubtitleSelected(subtitle)
                             revealStyleRail = true
+                        },
+                        onOptionLongPressed = { optionId ->
+                            activeOptionFocusId = optionId
+                            activeRail = OverlayFocusRail.OPTION
+                            if (optionId == selectedOptionId) {
+                                selectedOptionId = null
+                                revealStyleRail = false
+                                onDisableSubtitles()
+                            }
                         }
                     )
                 }
@@ -703,7 +712,8 @@ private fun SubtitleOptionsRail(
     onMoveLeft: () -> Unit,
     onMoveRight: () -> Unit,
     onInternalTrackSelected: (String, Int) -> Unit,
-    onAddonSubtitleSelected: (String, Subtitle) -> Unit
+    onAddonSubtitleSelected: (String, Subtitle) -> Unit,
+    onOptionLongPressed: (String) -> Unit
 ) {
     LaunchedEffect(focusToken) {
         if (focusToken <= 0) return@LaunchedEffect
@@ -788,7 +798,8 @@ private fun SubtitleOptionsRail(
                                         }
                                     }
                                 }
-                            }
+                            },
+                            onLongClick = { onOptionLongPressed(option.id) }
                         )
                     }
                 }
@@ -1200,7 +1211,8 @@ private fun SubtitleOptionCard(
     onMoveLeft: () -> Unit,
     onMoveRight: () -> Unit,
     onFocused: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val titleColor = if (item.isSelected) NuvioTheme.colors.OnSecondary else Color.White
     val metaColor = if (item.isSelected) {
@@ -1214,6 +1226,7 @@ private fun SubtitleOptionCard(
 
     Card(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = Modifier
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)

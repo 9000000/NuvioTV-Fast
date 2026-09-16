@@ -621,8 +621,8 @@ internal class PostPlayRecommendationController(
                 val settings = tmdbSettingsDataStore.settings.first()
                 if (!settings.enabled || !settings.useMoreLikeThis) return@withTimeoutOrNull emptyList()
                 val lookupType = tmdbContentType.toApiString(playbackController.contentType)
-                val tmdbId = tmdbService.ensureTmdbId(meta.id, lookupType)
-                    ?: playbackController.contentId?.let { tmdbService.ensureTmdbId(it, lookupType) }
+                val tmdbId = tmdbService.ensureTmdbId(meta.id, lookupType, fallbackImdbId = meta.imdbId)
+                    ?: playbackController.contentId?.let { tmdbService.ensureTmdbId(it, lookupType, fallbackImdbId = meta.imdbId) }
                     ?: return@withTimeoutOrNull emptyList()
                 runCatching {
                     tmdbMetadataService.fetchMoreLikeThis(
@@ -678,12 +678,14 @@ internal class PostPlayRecommendationController(
             apiType = meta?.apiType ?: candidate.apiType,
             fallback = meta?.type ?: candidate.type
         )
+        val candidateImdbId = meta?.imdbId ?: candidate.imdbId
         val tmdbId = try {
             tmdbService.ensureTmdbId(
                 videoId = meta?.id ?: candidate.id,
-                mediaType = meta?.apiType ?: candidate.apiType
+                mediaType = meta?.apiType ?: candidate.apiType,
+                fallbackImdbId = candidateImdbId
             ) ?: if (meta?.id != candidate.id) {
-                tmdbService.ensureTmdbId(candidate.id, candidate.apiType)
+                tmdbService.ensureTmdbId(candidate.id, candidate.apiType, fallbackImdbId = candidateImdbId)
             } else {
                 null
             }
