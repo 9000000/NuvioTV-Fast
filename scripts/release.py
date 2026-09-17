@@ -226,6 +226,60 @@ def get_release_apks(version):
 
     return sorted(apks, key=lambda x: x.name)
 
+def get_previous_tag(target_version: str = None) -> str | None:
+    try:
+        res = subprocess.run(
+            ["git", "tag", "--sort=-creatordate"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True
+        )
+        tags = [t.strip() for t in res.stdout.splitlines() if t.strip()]
+        target_tags = {f"v{target_version}", target_version} if target_version else set()
+        for tag in tags:
+            if tag not in target_tags:
+                return tag
+    except Exception:
+        pass
+    return None
+
+def get_git_commit_notes(previous_tag: str | None = None, limit: int = 20) -> list[str]:
+    try:
+        cmd = ["git", "log", "--no-merges", "--pretty=format:%s"]
+        if previous_tag:
+            cmd.append(f"{previous_tag}..HEAD")
+        else:
+            cmd.extend(["-n", str(limit)])
+
+        res = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+        if res.returncode != 0:
+            return []
+
+        raw_commits = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        cleaned = []
+        seen = set()
+        drop_prefixes = ("merge ", "revert ", "bump version", "update version")
+
+        for commit in raw_commits:
+            c_lower = commit.lower()
+            if any(c_lower.startswith(p) for p in drop_prefixes):
+                continue
+            if c_lower in seen:
+                continue
+            seen.add(c_lower)
+
+            item = commit
+            if item and item[0].islower() and not item.startswith(("feat", "fix", "chore", "docs", "perf", "refactor", "ci", "build", "style", "test")):
+                item = item[0].upper() + item[1:]
+
+            cleaned.append(item)
+            if len(cleaned) >= limit:
+                break
+
+        return cleaned
+    except Exception:
+        return []
+
 def get_default_release_notes(version):
     if RELEASE_NOTES_FILE.exists():
         try:
@@ -236,14 +290,31 @@ def get_default_release_notes(version):
         except Exception:
             pass
 
+    # Tu dong trich xuat tu lich su git commit
+    prev_tag = get_previous_tag(version)
+    commits = get_git_commit_notes(prev_tag, limit=20)
+    if commits:
+        commit_bullets = "\n".join(f"- {c}" for c in commits)
+        compare_url = ""
+        if prev_tag and GITHUB_OWNER and GITHUB_REPO:
+            curr_tag = f"v{version}" if not version.startswith("v") else version
+            compare_url = f"\n\n**Full Changelog**: https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/compare/{prev_tag}...{curr_tag}"
+
+        return f"""## Nuvio TV {version}
+
+### What's Changed:
+{commit_bullets}{compare_url}
+"""
+
     return f"""## Nuvio TV {version}
 
-### Cập nhật & Tối ưu hóa:
-- Cấu hình & tối ưu kết nối P2P tự động, nâng cao độ ổn định và tốc độ truyền tải.
-- Tối ưu giao diện Android TV: Điều hướng remote siêu mượt, cải thiện độ trễ và giữ focus ổn định.
-- TorrServer Remote Engine: Hỗ trợ stream torrent qua máy chủ TorrServer từ xa (PC, Docker, NAS, Box).
-- Tinh gọn bộ nhớ: Loại bỏ tập tin nhị phân cục bộ giúp giảm dung lượng cài đặt.
-- Trình phát đa phương tiện nâng cao: Hỗ trợ lựa chọn audio, phụ đề và tùy biến tốc độ phát.
+### What's New & Improvements:
+- Optimized P2P streaming engine with improved stability and faster buffering rates.
+- Enhanced Android TV remote navigation: smoother focus transitions and reduced input latency.
+- Remote TorrServer Integration: Stream torrents smoothly via external TorrServer instances (PC, Docker, NAS).
+- Optimized binary dependencies for smaller APK sizes and cleaner installs.
+- Advanced Media Player features: Multi-audio track selection, external subtitles, and playback speed control.
+- General bug fixes and performance improvements.
 """
 
 def upload_via_gh(tag, title, notes, apks, is_prerelease=False, is_draft=False):
@@ -478,26 +549,29 @@ def main():
     current_gradle_code = read_version_code()
 
     # Xác định phiên bản release:
-    # 1. Nếu có truyền tham số phiên bản (ví dụ: ./release.py 0.9.15 hoặc -v 0.9.15) -> lấy tham số đó
-    # 2. Nếu có cờ -i / --interactive -> hỏi người dùng nhập qua bàn phím
-    # 3. Mặc định: lấy phiên bản hiện tại từ app/build.gradle.kts và phát hành trực tiếp
+    # 1. Nếu có truyền tham số phiên bản (ví dụ: .\release.bat 0.9.16 hoặc -v 0.9.16) -> lấy tham số đó
+    # 2. Nếu chạy .\release.bat trong console (không có cờ -y/--yes) -> hiện prompt cho phép nhập số phiên bản
+    # 3. Mặc định (non-interactive hoặc bấm Enter): dùng phiên bản hiện tại từ app/build.gradle.kts
     specified_version = args.version_flag or args.version_pos
     if specified_version:
         version = specified_version.strip().lstrip("v").lstrip("V")
-    elif args.interactive and sys.stdin.isatty():
-        print("==================================================")
-        print("Nuvio TV - Trình phát hành Release APK")
-        print("==================================================")
-        code_info = f" (versionCode: {current_gradle_code})" if current_gradle_code else ""
-        print(f"Phiên bản hiện tại : {current_gradle_version}{code_info}")
+    elif not args.yes:
         try:
-            prompt_text = f"Nhập số phiên bản mới [Enter để giữ '{current_gradle_version}']: "
+            print("==================================================")
+            print("Nuvio TV - Trình phát hành Release APK")
+            print("==================================================")
+            code_info = f" (versionCode: {current_gradle_code})" if current_gradle_code else ""
+            print(f"Phiên bản hiện tại : {current_gradle_version}{code_info}")
+            prompt_text = f"Nhập số phiên bản release [Enter để giữ '{current_gradle_version}']: "
             user_input = input(prompt_text).strip()
             if user_input:
                 version = user_input.lstrip("v").lstrip("V")
             else:
                 version = current_gradle_version
-        except (KeyboardInterrupt, EOFError):
+        except EOFError:
+            # Truong hop pipe hoac non-interactive stdin
+            version = current_gradle_version
+        except KeyboardInterrupt:
             print("\n[INFO] Đã hủy thao tác.")
             sys.exit(0)
     else:
