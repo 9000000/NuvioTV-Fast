@@ -94,6 +94,38 @@ def read_version():
         print(f"[WARN] Khong doc duoc phien ban tu build.gradle.kts: {e}")
     return "0.9.14-beta"
 
+def read_version_code():
+    if not BUILD_GRADLE.exists():
+        return None
+    try:
+        with open(BUILD_GRADLE, "r", encoding="utf-8") as f:
+            content = f.read()
+            m = re.search(r'versionCode\s*=\s*(\d+)', content)
+            if m:
+                return int(m.group(1).strip())
+    except Exception:
+        pass
+    return None
+
+def update_gradle_version(version_name: str, version_code: int = None) -> bool:
+    if not BUILD_GRADLE.exists():
+        return False
+    try:
+        content = BUILD_GRADLE.read_text(encoding="utf-8")
+        new_content = re.sub(r'(versionName\s*=\s*")[^"]+(")', rf'\g<1>{version_name}\g<2>', content)
+        if version_code is not None:
+            new_content = re.sub(r'(versionCode\s*=\s*)\d+', rf'\g<1>{version_code}', new_content)
+        if new_content != content:
+            BUILD_GRADLE.write_text(new_content, encoding="utf-8")
+            details = [f'versionName = "{version_name}"']
+            if version_code is not None:
+                details.append(f'versionCode = {version_code}')
+            print(f"[OK] Da cap nhat app/build.gradle.kts: {', '.join(details)}")
+            return True
+    except Exception as e:
+        print(f"[WARN] Khong the cap nhat phien ban vao app/build.gradle.kts: {e}")
+    return False
+
 def is_prerelease_version(version: str) -> bool:
     v_lower = version.lower()
     return any(keyword in v_lower for keyword in ["beta", "alpha", "rc", "preview", "dev"])
@@ -167,6 +199,30 @@ def get_release_apks(version):
                 if p not in seen:
                     apks.append(p)
                     seen.add(p)
+
+    # 3. Neu van chua thay APK nao (vi du nguoi dung dung --skip-build sau khi doi version)
+    if not apks:
+        for d in search_dirs:
+            for p in d.rglob("*.apk"):
+                if "unaligned" in p.name.lower():
+                    continue
+                m = re.search(r"^NuvioTV-.+?-(arm64-v8a|armeabi-v7a|x86_64|x86|universal)\.apk$", p.name)
+                if m:
+                    abi = m.group(1)
+                    new_name = f"NuvioTV-{version}-{abi}.apk"
+                    new_path = p.parent / new_name
+                    try:
+                        if p != new_path:
+                            if new_path.exists():
+                                new_path.unlink()
+                            p.rename(new_path)
+                            print(f"   [RENAME] {p.name} -> {new_name}")
+                            p = new_path
+                    except Exception as e:
+                        print(f"   [WARN] Khong the doi ten {p.name}: {e}")
+                    if p not in seen:
+                        apks.append(p)
+                        seen.add(p)
 
     return sorted(apks, key=lambda x: x.name)
 
@@ -329,6 +385,45 @@ def parse_arguments():
         description="Script tự động phát hành bản Release APK của Nuvio TV lên GitHub Releases."
     )
     parser.add_argument(
+        "version_pos",
+        nargs="?",
+        default=None,
+        metavar="VERSION",
+        help="Số phiên bản release tùy chọn (ví dụ: 0.9.14 hoặc 0.9.14-beta)."
+    )
+    parser.add_argument(
+        "-v", "--version",
+        type=str,
+        default=None,
+        dest="version_flag",
+        metavar="VERSION",
+        help="Tùy chỉnh số phiên bản release (ví dụ: 0.9.14)."
+    )
+    parser.add_argument(
+        "--version-code",
+        type=int,
+        default=None,
+        help="Tùy chỉnh versionCode trong build.gradle.kts (ví dụ: 1070)."
+    )
+    parser.add_argument(
+        "--publish",
+        action="store_true",
+        default=True,
+        help="Đóng gói APK Release và phát hành lên GitHub Releases (mặc định luôn bật khi chạy lệnh)."
+    )
+    parser.add_argument(
+        "-i", "--interactive",
+        action="store_true",
+        default=False,
+        help="Bật chế độ nhập tương tác số phiên bản từ bàn phím."
+    )
+    parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        default=False,
+        help="Tự động xác nhận và tiến hành (bỏ qua các câu hỏi tương tác)."
+    )
+    parser.add_argument(
         "--skip-build",
         action="store_true",
         help="Bỏ qua bước biên dịch Gradle (:app:assembleFullRelease), sử dụng các file APK có sẵn."
@@ -379,7 +474,54 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
-    version = read_version()
+    current_gradle_version = read_version()
+    current_gradle_code = read_version_code()
+
+    # Xác định phiên bản release:
+    # 1. Nếu có truyền tham số phiên bản (ví dụ: ./release.py 0.9.15 hoặc -v 0.9.15) -> lấy tham số đó
+    # 2. Nếu có cờ -i / --interactive -> hỏi người dùng nhập qua bàn phím
+    # 3. Mặc định: lấy phiên bản hiện tại từ app/build.gradle.kts và phát hành trực tiếp
+    specified_version = args.version_flag or args.version_pos
+    if specified_version:
+        version = specified_version.strip().lstrip("v").lstrip("V")
+    elif args.interactive and sys.stdin.isatty():
+        print("==================================================")
+        print("Nuvio TV - Trình phát hành Release APK")
+        print("==================================================")
+        code_info = f" (versionCode: {current_gradle_code})" if current_gradle_code else ""
+        print(f"Phiên bản hiện tại : {current_gradle_version}{code_info}")
+        try:
+            prompt_text = f"Nhập số phiên bản mới [Enter để giữ '{current_gradle_version}']: "
+            user_input = input(prompt_text).strip()
+            if user_input:
+                version = user_input.lstrip("v").lstrip("V")
+            else:
+                version = current_gradle_version
+        except (KeyboardInterrupt, EOFError):
+            print("\n[INFO] Đã hủy thao tác.")
+            sys.exit(0)
+    else:
+        version = current_gradle_version
+
+    # Tự động nâng versionCode khi versionName thay đổi (nếu người dùng không chỉ định cụ thể)
+    is_version_changed = (version != current_gradle_version)
+    if args.version_code is not None:
+        target_code = args.version_code
+    elif is_version_changed and current_gradle_code is not None:
+        target_code = current_gradle_code + 1
+    else:
+        target_code = current_gradle_code
+
+    # Cập nhật app/build.gradle.kts nếu có thay đổi phiên bản hoặc versionCode
+    if not args.dry_run:
+        if is_version_changed or (target_code != current_gradle_code):
+            update_gradle_version(version, target_code)
+    else:
+        if is_version_changed:
+            print(f"[DRY-RUN] Sẽ cập nhật app/build.gradle.kts -> versionName = \"{version}\"")
+        if target_code != current_gradle_code:
+            print(f"[DRY-RUN] Sẽ tự động nâng app/build.gradle.kts -> versionCode = {target_code} (từ {current_gradle_code})")
+
     tag = args.tag if args.tag else f"v{version}"
     title = args.title if args.title else f"Nuvio TV {tag.lstrip('v')}"
 
@@ -397,9 +539,11 @@ def main():
     else:
         is_prerelease = is_prerelease_version(version)
 
-    print(f"==================================================")
+    print(f"\n==================================================")
     print(f"Nuvio TV - Tu dong phat hanh ban Release")
     print(f"Phien ban: {tag} ({title})")
+    if target_code:
+        print(f"Version Code: {target_code}")
     print(f"Pre-release: {'Co' if is_prerelease else 'Khong'} | Draft: {'Co' if args.draft else 'Khong'}")
     print(f"Nhanh nguon (Target Branch): {TARGET_BRANCH}")
     print(f"Kho chua (Repository): {GITHUB_OWNER}/{GITHUB_REPO}")
