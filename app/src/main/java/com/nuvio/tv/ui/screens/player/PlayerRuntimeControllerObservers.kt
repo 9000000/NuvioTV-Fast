@@ -612,6 +612,18 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
     // Prefer videoId over contentId — videoId carries the season/episode-specific ID
     val effectiveId = currentVideoId?.takeIf { it.isNotBlank() } ?: id
 
+    if (contentType.equals("movie", ignoreCase = true)) {
+        val key = "movie:$id:$effectiveId"
+        if (skipIntroFetchedKey == key) return
+        skipIntroFetchedKey = key
+        scope.launch {
+            skipIntervals = withTimeoutOrNull(15_000L) {
+                skipIntroRepository.getMovieSkipIntervals(id, effectiveId)
+            } ?: emptyList()
+        }
+        return
+    }
+
     val metaImdbId = contentType?.let { type ->
         metaRepository.getCachedMeta(type, id)?.imdbId
             ?: metaRepository.getCachedMeta(type, effectiveId.substringBefore(':'))?.imdbId
