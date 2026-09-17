@@ -329,6 +329,8 @@ def upload_via_gh(tag, title, notes, apks, is_prerelease=False, is_draft=False):
     ]
     if is_prerelease:
         cmd.append("--prerelease")
+    else:
+        cmd.append("--latest")
     if is_draft:
         cmd.append("--draft")
 
@@ -357,7 +359,8 @@ def upload_via_api(token, tag, title, notes, apks, is_prerelease=False, is_draft
         "name": title,
         "body": notes,
         "draft": is_draft,
-        "prerelease": is_prerelease
+        "prerelease": is_prerelease,
+        "make_latest": "true" if not is_prerelease and not is_draft else "false"
     }).encode("utf-8")
 
     req_headers = {**headers, "Content-Type": "application/json"}
@@ -376,6 +379,24 @@ def upload_via_api(token, tag, title, notes, apks, is_prerelease=False, is_draft
                 get_req = urllib.request.Request(get_url, headers=headers, method="GET")
                 with urllib.request.urlopen(get_req, timeout=60) as get_resp:
                     release_data = json.loads(get_resp.read().decode("utf-8"))
+
+                if release_data:
+                    # Cap nhat metadata release (chuyen doi release/prerelease) neu can
+                    try:
+                        patch_url = f"{api_base}/releases/{release_data.get('id')}"
+                        patch_payload = json.dumps({
+                            "name": title,
+                            "body": notes,
+                            "draft": is_draft,
+                            "prerelease": is_prerelease,
+                            "make_latest": "true" if not is_prerelease and not is_draft else "false"
+                        }).encode("utf-8")
+                        patch_req = urllib.request.Request(patch_url, data=patch_payload, headers=req_headers, method="PATCH")
+                        with urllib.request.urlopen(patch_req, timeout=30) as p_resp:
+                            release_data = json.loads(p_resp.read().decode("utf-8"))
+                            print(f"   [SYNC] Da dong bo thong tin release (Pre-release: {'Co' if is_prerelease else 'Khong'})")
+                    except Exception as p_ex:
+                        print(f"   [WARN] Khong the cap nhat thong tin release ton tai: {p_ex}")
             except Exception as ex:
                 print(f"[ERROR] Khong the lay thong tin release ton tai: {ex}")
                 return False
@@ -529,6 +550,12 @@ def parse_arguments():
         help="Đường dẫn tới file markdown chứa nội dung Release Notes."
     )
     parser.add_argument(
+        "--release",
+        action="store_true",
+        default=False,
+        help="Bắt buộc phát hành dưới dạng bản Release chính thức (Latest), không đánh dấu Pre-release."
+    )
+    parser.add_argument(
         "--prerelease",
         action="store_true",
         default=None,
@@ -608,8 +635,24 @@ def main():
         notes = get_default_release_notes(version)
 
     # Xác định prerelease flag
-    if args.prerelease is not None:
+    if args.release:
+        is_prerelease = False
+    elif args.prerelease is not None:
         is_prerelease = args.prerelease
+    elif not args.yes:
+        default_is_pre = is_prerelease_version(version)
+        default_choice = "2" if default_is_pre else "1"
+        try:
+            choice_prompt = f"Loại phát hành [1: Release chính thức (Latest), 2: Pre-release] [Enter để chọn '{default_choice}']: "
+            user_choice = input(choice_prompt).strip()
+            if user_choice == "1":
+                is_prerelease = False
+            elif user_choice == "2":
+                is_prerelease = True
+            else:
+                is_prerelease = default_is_pre
+        except (EOFError, KeyboardInterrupt):
+            is_prerelease = default_is_pre
     else:
         is_prerelease = is_prerelease_version(version)
 
