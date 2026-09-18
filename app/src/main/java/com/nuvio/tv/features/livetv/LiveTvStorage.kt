@@ -33,6 +33,11 @@ object LiveTvStorage {
         if (isReady) prefs.edit().putString("last_watched_id", channelId).apply()
     }
 
+    fun loadRecentChannelIdsBlob(): String? = if (isReady) prefs.getString("recent_channels_blob", null) else null
+    fun saveRecentChannelIdsBlob(blob: String) {
+        if (isReady) prefs.edit().putString("recent_channels_blob", blob).apply()
+    }
+
     fun loadNavigationEnabled(): Boolean? = 
         if (isReady && prefs.contains("nav_enabled")) prefs.getBoolean("nav_enabled", true) else null
     fun saveNavigationEnabled(enabled: Boolean) {

@@ -85,13 +85,16 @@ object LiveTvRepository {
         if (hasLoaded) return
         hasLoaded = true
         val playlists = loadSavedPlaylists()
+        val recentIds = loadRecentChannelIds()
+        val lastWatched = recentIds.firstOrNull() ?: LiveTvStorage.loadLastWatchedChannelId()
         _uiState.value = LiveTvUiState(
             playlistUrl = playlists.firstEnabledUrlSource(),
             playlists = playlists,
             stalkerSettings = LiveTvStorage.loadStalkerSettings(),
             xtreamSettings = LiveTvStorage.loadXtreamSettings(),
             favoriteChannelIds = loadFavoriteChannelIds(),
-            lastWatchedChannelId = LiveTvStorage.loadLastWatchedChannelId(),
+            lastWatchedChannelId = lastWatched,
+            recentChannelIds = recentIds,
             isNavigationEnabled = LiveTvStorage.loadNavigationEnabled() ?: true,
         )
         publishNavigationVisibility()
@@ -414,8 +417,14 @@ object LiveTvRepository {
 
     fun markChannelWatched(channel: LiveTvChannel) {
         ensureLoaded()
+        val currentRecent = _uiState.value.recentChannelIds
+        val updatedRecent = (listOf(channel.id) + currentRecent.filterNot { it == channel.id }).take(MAX_RECENT_CHANNELS)
+        persistRecentChannelIds(updatedRecent)
         LiveTvStorage.saveLastWatchedChannelId(channel.id)
-        _uiState.value = _uiState.value.copy(lastWatchedChannelId = channel.id)
+        _uiState.value = _uiState.value.copy(
+            lastWatchedChannelId = channel.id,
+            recentChannelIds = updatedRecent
+        )
     }
 
     fun recordLastWatched(channel: LiveTvChannel) = markChannelWatched(channel)
@@ -447,6 +456,26 @@ object LiveTvRepository {
 
     private fun persistFavoriteChannelIds(channelIds: Set<String>) {
         LiveTvStorage.saveFavoriteChannelIdsBlob(channelIds.sorted().joinToString("\n"))
+    }
+
+    private const val MAX_RECENT_CHANNELS = 30
+
+    private fun loadRecentChannelIds(): List<String> {
+        val blob = LiveTvStorage.loadRecentChannelIdsBlob()
+        if (!blob.isNullOrBlank()) {
+            return blob.lineSequence()
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .distinct()
+                .take(MAX_RECENT_CHANNELS)
+                .toList()
+        }
+        val legacyLastWatched = LiveTvStorage.loadLastWatchedChannelId()?.trim()
+        return if (!legacyLastWatched.isNullOrBlank()) listOf(legacyLastWatched) else emptyList()
+    }
+
+    private fun persistRecentChannelIds(channelIds: List<String>) {
+        LiveTvStorage.saveRecentChannelIdsBlob(channelIds.take(MAX_RECENT_CHANNELS).joinToString("\n"))
     }
 }
 
@@ -520,7 +549,7 @@ internal fun parseM3uPlaylist(
                     }
 
                     channels += LiveTvChannel(
-                        id = stableChannelId(streamUrl, channels.size),
+                        id = stableChannelId(playlist?.id, streamUrl),
                         name = name,
                         streamUrl = streamUrl,
                         logoUrl = info?.logoUrl?.takeIf(String::isNotBlank),
@@ -669,5 +698,7 @@ private fun unescapePlaylistField(value: String): String =
 private fun stablePlaylistId(source: String, index: Int): String =
     "playlist_${source.hashCode()}_$index"
 
-private fun stableChannelId(url: String, index: Int): String =
-    "channel_${url.hashCode()}_$index"
+private fun stableChannelId(playlistId: String?, url: String): String {
+    val prefix = playlistId?.takeIf(String::isNotBlank) ?: "m3u"
+    return "channel_${prefix}_${url.hashCode()}"
+}

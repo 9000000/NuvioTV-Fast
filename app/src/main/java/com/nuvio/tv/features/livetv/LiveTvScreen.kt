@@ -1,5 +1,6 @@
 package com.nuvio.tv.features.livetv
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,12 +37,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +63,7 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.theme.NuvioTheme
+import kotlinx.coroutines.delay
 
 private enum class FilterType {
     ALL,
@@ -262,19 +270,45 @@ private fun LiveTvContent(
     onRefresh: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
-    var activeFilter by remember { mutableStateOf(FilterType.ALL) }
-    var selectedGroup by remember { mutableStateOf<String?>(null) }
+    var activeFilter by rememberSaveable { mutableStateOf(FilterType.ALL) }
+    var selectedGroup by rememberSaveable { mutableStateOf<String?>(null) }
 
     val allGroups = remember(state.channels) {
         state.channels.mapNotNull { it.group?.trim() }.filter { it.isNotBlank() }.distinct().sorted()
     }
 
-    val filteredChannels = remember(state.channels, activeFilter, selectedGroup, state.favoriteChannelIds, state.lastWatchedChannelId) {
+    val filteredChannels = remember(state.channels, activeFilter, selectedGroup, state.favoriteChannelIds, state.recentChannelIds) {
         when (activeFilter) {
             FilterType.ALL -> state.channels
             FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
-            FilterType.RECENT -> state.channels.filter { it.id == state.lastWatchedChannelId }
+            FilterType.RECENT -> {
+                val channelMap = state.channels.associateBy { it.id }
+                state.recentChannelIds.mapNotNull { channelMap[it] }
+            }
             FilterType.GROUP -> state.channels.filter { it.group?.trim() == selectedGroup }
+        }
+    }
+
+    val gridState = rememberLazyGridState()
+    val channelFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    var restoredChannelId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val currentChannelIds = remember(filteredChannels) { filteredChannels.map { it.id }.toSet() }
+    LaunchedEffect(currentChannelIds) {
+        channelFocusRequesters.keys.retainAll(currentChannelIds)
+    }
+
+    // Restore focus and scroll position to last watched channel when returning to this screen
+    LaunchedEffect(state.lastWatchedChannelId, filteredChannels) {
+        val targetId = state.lastWatchedChannelId
+        if (targetId != null && targetId != restoredChannelId) {
+            val targetIndex = filteredChannels.indexOfFirst { it.id == targetId }
+            if (targetIndex >= 0) {
+                gridState.scrollToItem(targetIndex)
+                delay(120)
+                channelFocusRequesters[targetId]?.requestFocus()
+                restoredChannelId = targetId
+            }
         }
     }
 
@@ -304,7 +338,32 @@ private fun LiveTvContent(
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Favorite Hint badge
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(NuvioTheme.colors.BackgroundElevated)
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Giữ [OK] / [Menu]: Yêu thích",
+                        color = NuvioTheme.colors.TextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+
                 // Refresh Button
                 Card(
                     onClick = onRefresh,
@@ -378,7 +437,7 @@ private fun LiveTvContent(
             }
 
             // Recent
-            if (state.lastWatchedChannelId != null) {
+            if (state.recentChannelIds.isNotEmpty()) {
                 item {
                     FilterChipItem(
                         label = stringResource(R.string.livetv_group_recent),
@@ -421,6 +480,7 @@ private fun LiveTvContent(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(5),
+                state = gridState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -430,10 +490,17 @@ private fun LiveTvContent(
             ) {
                 items(filteredChannels, key = { it.id }) { channel ->
                     val isFav = channel.id in state.favoriteChannelIds
+                    val requester = remember(channel.id) {
+                        channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
+                    }
                     TvChannelCard(
                         channel = channel,
                         isFavorite = isFav,
-                        onClick = { onChannelSelected(channel) },
+                        focusRequester = requester,
+                        onClick = {
+                            restoredChannelId = null
+                            onChannelSelected(channel)
+                        },
                         onToggleFavorite = { onToggleFavorite(channel.id) }
                     )
                 }
@@ -472,14 +539,35 @@ private fun FilterChipItem(
 private fun TvChannelCard(
     channel: LiveTvChannel,
     isFavorite: Boolean,
+    focusRequester: FocusRequester? = null,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+
     Card(
         onClick = onClick,
+        onLongClick = onToggleFavorite,
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1.25f),
+            .aspectRatio(1.25f)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { isFocused = it.isFocused }
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
+                    when (keyEvent.nativeKeyEvent.keyCode) {
+                        AndroidKeyEvent.KEYCODE_MENU,
+                        AndroidKeyEvent.KEYCODE_STAR,
+                        AndroidKeyEvent.KEYCODE_BUTTON_Y,
+                        AndroidKeyEvent.KEYCODE_BOOKMARK,
+                        AndroidKeyEvent.KEYCODE_PROG_YELLOW -> {
+                            onToggleFavorite()
+                            true
+                        }
+                        else -> false
+                    }
+                } else false
+            },
         colors = CardDefaults.colors(
             containerColor = NuvioTheme.colors.BackgroundElevated,
             focusedContainerColor = NuvioTheme.colors.FocusBackground
@@ -531,11 +619,30 @@ private fun TvChannelCard(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Star,
                         contentDescription = "Favorite",
                         tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            } else if (isFocused) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .padding(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "Add to favorite",
+                        tint = Color.White.copy(alpha = 0.6f),
                         modifier = Modifier.size(16.dp)
                     )
                 }
