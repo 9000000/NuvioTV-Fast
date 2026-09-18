@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -430,7 +431,7 @@ open class MainActivity : ComponentActivity() {
             val activeProfile = remember(activeProfileId, profiles) {
                 profiles.firstOrNull { it.id == activeProfileId }
             }
-            var profilePinStates by remember { mutableStateOf<Map<Int, Boolean>>(emptyMap()) }
+            var profilePinStates by remember { mutableStateOf(emptyMap<Int, Boolean>()) }
 
             LaunchedEffect(authState, profiles) {
                 if (authState is AuthState.FullAccount) {
@@ -1016,9 +1017,18 @@ open class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val rootRoutes = remember(discoverLocation) {
+                    LaunchedEffect(Unit) {
+                        com.nuvio.tv.features.livetv.LiveTvRepository.ensureLoaded()
+                    }
+                    val liveTvUiState by com.nuvio.tv.features.livetv.LiveTvRepository.uiState.collectAsState()
+                    val showLiveTvInDrawer = liveTvUiState.isNavigationEnabled
+
+                    val rootRoutes = remember(discoverLocation, showLiveTvInDrawer) {
                         buildSet {
                             add(Screen.Home.route)
+                            if (showLiveTvInDrawer) {
+                                add(Screen.LiveTv.route)
+                            }
                             add(Screen.Search.route)
                             add(Screen.Library.route)
                             add(Screen.Settings.route)
@@ -1033,12 +1043,15 @@ open class MainActivity : ComponentActivity() {
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
                     val strNavSettings = stringResource(R.string.nav_settings)
+                    val strNavLiveTv = stringResource(R.string.nav_livetv)
                     val drawerItems = remember(
                         strNavHome,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
                         strNavSettings,
+                        strNavLiveTv,
+                        showLiveTvInDrawer,
                         discoverLocation
                     ) {
                         buildList {
@@ -1055,6 +1068,15 @@ open class MainActivity : ComponentActivity() {
                                         route = Screen.Discover.route,
                                         label = strNavDiscover,
                                         icon = Icons.Default.Explore
+                                    )
+                                )
+                            }
+                            if (showLiveTvInDrawer) {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTv.route,
+                                        label = strNavLiveTv,
+                                        icon = Icons.Default.LiveTv
                                     )
                                 )
                             }
@@ -1579,11 +1601,11 @@ private fun LegacySidebarScaffold(
                                         .width(itemWidth)
                                         .offset(x = NuvioTheme.spacing.md)
                                 )
+                            }
                         }
                     }
                 }
             }
-        }
         }
     ) {
         val contentStartPadding by animateDpAsState(

@@ -55,6 +55,8 @@ import com.nuvio.tv.ui.screens.profile.ProfileSelectionMode
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nuvio.tv.ui.screens.tmdb.TmdbEntityBrowseScreen
 import com.nuvio.tv.ui.screens.home.HeroBackdropState
+import com.nuvio.tv.features.livetv.LiveTvScreen
+import com.nuvio.tv.features.livetv.LiveTvRepository
 
 @Composable
 fun NuvioNavHost(
@@ -151,6 +153,30 @@ private fun PlaybackNavHost(
             }
         }
     ) {
+        composable(Screen.LiveTv.route) {
+            LiveTvScreen(
+                onChannelSelected = { channel ->
+                    val route = Screen.Player.createRoute(
+                        streamUrl = channel.streamUrl,
+                        title = channel.name,
+                        headers = channel.headers,
+                        logo = channel.logoUrl,
+                        contentType = "livetv"
+                    )
+                    navController.navigate(route)
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Screen.LiveTvSettings.route)
+                }
+            )
+        }
+
+        composable(Screen.LiveTvSettings.route) {
+            com.nuvio.tv.ui.screens.settings.LiveTvSettingsScreen(
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.ExperienceModeSelection.route) {
             ExperienceModeSelectionScreen(
                 onContinue = { mode ->
