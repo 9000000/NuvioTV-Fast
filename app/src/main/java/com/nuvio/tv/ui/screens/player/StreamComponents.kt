@@ -65,15 +65,13 @@ import com.nuvio.tv.ui.components.SourceStatusFilterChip
 import com.nuvio.tv.ui.components.StreamBadgeChips
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.contentTextDirection
+import com.nuvio.tv.ui.util.toAbsoluteAlignment
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.launch as coroutineLaunch
 import com.nuvio.tv.ui.components.RefreshFilterChip
 import com.nuvio.tv.R
-
-private fun TextDirection.toAbsoluteAlignment(): Alignment.Horizontal =
-    if (this == TextDirection.Rtl) AbsoluteAlignment.Right else AbsoluteAlignment.Left
 
 @Composable
 internal fun StreamItem(
