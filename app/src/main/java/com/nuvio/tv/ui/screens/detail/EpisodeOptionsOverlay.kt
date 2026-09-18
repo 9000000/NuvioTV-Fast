@@ -94,6 +94,7 @@ internal fun EpisodeOptionsOverlay(
     hasProgress: Boolean = false,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
+    isPlayEnabled: Boolean = true,
     onStartFromBeginning: () -> Unit = {},
     onOpenEpisodeComments: () -> Unit = {},
     showOpenEpisodeComments: Boolean = false,
@@ -211,7 +212,8 @@ internal fun EpisodeOptionsOverlay(
         }
         add(
             EpisodeOverlayAction(
-                label = stringResource(R.string.episodes_play),
+                label = stringResource(if (isPlayEnabled) R.string.episodes_play else R.string.playback_unavailable),
+                enabled = isPlayEnabled,
                 onClick = onPlay
             )
         )
@@ -223,7 +225,7 @@ internal fun EpisodeOptionsOverlay(
                 )
             )
         }
-        if (showPlayManually) {
+        if (showPlayManually && isPlayEnabled) {
             add(
                 EpisodeOverlayAction(
                     label = stringResource(R.string.play_manually),
@@ -231,7 +233,7 @@ internal fun EpisodeOptionsOverlay(
                 )
             )
         }
-        if (hasProgress) {
+        if (hasProgress && isPlayEnabled) {
             add(
                 EpisodeOverlayAction(
                     label = stringResource(R.string.cw_action_start_from_beginning),
