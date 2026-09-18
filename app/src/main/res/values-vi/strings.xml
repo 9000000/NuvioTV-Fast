@@ -2325,13 +2325,18 @@
     <string name="nav_addons">Tiện ích</string>
     <string name="nav_movies">Phim</string>
     <string name="nav_series">Loạt phim</string>
-    <string name="nav_livetv">Live TV (Truyền hình)</string>
+    <string name="nav_livetv">Live TV</string>
     <!-- Live TV Strings -->
-    <string name="settings_livetv_title">Live TV (Truyền hình)</string>
+    <string name="settings_livetv_title">Live TV</string>
     <string name="settings_livetv_subtitle">Quản lý danh sách phát M3U, tài khoản Xtream Codes và cổng Stalker Portal</string>
     <string name="livetv_section_playlists">Danh sách phát (M3U)</string>
     <string name="livetv_add_playlist">Thêm Playlist M3U</string>
     <string name="livetv_add_playlist_desc">Thêm link URL danh sách phát M3U hoặc M3U8</string>
+    <string name="livetv_import_file">Nhập tệp M3U từ bộ nhớ</string>
+    <string name="livetv_import_file_desc">Chọn tệp danh sách phát .m3u hoặc .m3u8 từ bộ nhớ máy hoặc USB</string>
+    <string name="livetv_file_import_success">Đã nhập danh sách phát từ tệp: %1$s</string>
+    <string name="livetv_file_import_failed">Không thể nhập tệp M3U: %1$s</string>
+    <string name="livetv_file_import_empty">Tệp đã chọn rỗng hoặc không có nội dung</string>
     <string name="livetv_playlist_name">Tên danh sách phát</string>
     <string name="livetv_playlist_name_hint">vd: Kênh Việt Nam, Thể thao, IPTV...</string>
     <string name="livetv_playlist_url">Đường dẫn Playlist URL</string>
@@ -2357,6 +2362,9 @@
     <string name="livetv_section_navigation">Thanh điều hướng</string>
     <string name="livetv_nav_show_title">Hiện Truyền hình trên thanh bên</string>
     <string name="livetv_nav_show_desc">Hiển thị mục Truyền hình trực tiếp trên thanh menu chính</string>
+    <string name="livetv_manage_from_phone_title">Cài đặt từ điện thoại</string>
+    <string name="livetv_manage_from_phone_subtitle">Quét mã QR để nhập link Playlist, tài khoản Xtream và Stalker từ điện thoại</string>
+    <string name="livetv_qr_scan_instruction">Quét mã QR này bằng điện thoại để cài đặt Live TV</string>
     <string name="livetv_empty_title">Chưa có kênh truyền hình</string>
     <string name="livetv_empty_desc">Thêm đường dẫn danh sách phát M3U hoặc kết nối tài khoản Xtream Codes / Stalker Portal để bắt đầu xem truyền hình.</string>
     <string name="livetv_configure_now">Cài đặt Truyền hình ngay</string>

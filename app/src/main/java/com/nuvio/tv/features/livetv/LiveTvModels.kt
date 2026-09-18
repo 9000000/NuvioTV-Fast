@@ -58,6 +58,9 @@ data class LiveTvUiState(
     val isNavigationEnabled: Boolean = true,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val isQrModeActive: Boolean = false,
+    val qrCodeBitmap: android.graphics.Bitmap? = null,
+    val serverUrl: String? = null,
 ) {
     val hasPlaylist: Boolean
         get() = playlists.isNotEmpty() || playlistUrl.isNotBlank() ||

@@ -1,6 +1,10 @@
 package com.nuvio.tv.ui.screens.settings
 
+import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,19 +26,30 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import com.nuvio.tv.ui.screens.addon.QrCodeOverlay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -79,8 +94,63 @@ fun LiveTvSettingsScreen(
 fun LiveTvSettingsContent(
     initialFocusRequester: FocusRequester? = null
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val uiState by LiveTvRepository.uiState.collectAsState()
     val listState = rememberLazyListState()
+
+    val m3uFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
+                    } ?: "local_playlist.m3u"
+
+                    val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    if (!content.isNullOrBlank()) {
+                        withContext(Dispatchers.Main) {
+                            LiveTvRepository.addLocalPlaylist(
+                                name = fileName.substringBeforeLast('.'),
+                                fileName = fileName,
+                                content = content
+                            )
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.livetv_file_import_success, fileName),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.livetv_file_import_empty),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.livetv_file_import_failed, e.message ?: ""),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            LiveTvRepository.stopQrMode()
+        }
+    }
 
     var showAddPlaylistDialog by remember { mutableStateOf(false) }
     var editingPlaylist by remember { mutableStateOf<LiveTvPlaylist?>(null) }
@@ -108,13 +178,13 @@ fun LiveTvSettingsContent(
                     contentPadding = PaddingValues(bottom = NuvioTheme.spacing.md),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Navigation toggle
-                    item(key = "livetv_nav_toggle") {
-                        SettingsToggleRow(
-                            title = stringResource(R.string.livetv_nav_show_title),
-                            subtitle = stringResource(R.string.livetv_nav_show_desc),
-                            checked = uiState.isNavigationEnabled,
-                            onToggle = { LiveTvRepository.setNavigationEnabled(!uiState.isNavigationEnabled) },
+                    // Manage from phone (QR Code setup)
+                    item(key = "livetv_manage_from_phone") {
+                        SettingsActionRow(
+                            title = stringResource(R.string.livetv_manage_from_phone_title),
+                            subtitle = stringResource(R.string.livetv_manage_from_phone_subtitle),
+                            leadingIcon = Icons.Default.QrCode2,
+                            onClick = { LiveTvRepository.startQrMode(context) },
                             modifier = Modifier
                                 .padding(top = NuvioTheme.spacing.xxs)
                                 .then(
@@ -122,6 +192,16 @@ fun LiveTvSettingsContent(
                                         Modifier.focusRequester(initialFocusRequester)
                                     } else Modifier
                                 )
+                        )
+                    }
+
+                    // Navigation toggle
+                    item(key = "livetv_nav_toggle") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.livetv_nav_show_title),
+                            subtitle = stringResource(R.string.livetv_nav_show_desc),
+                            checked = uiState.isNavigationEnabled,
+                            onToggle = { LiveTvRepository.setNavigationEnabled(!uiState.isNavigationEnabled) }
                         )
                     }
 
@@ -144,6 +224,17 @@ fun LiveTvSettingsContent(
                             subtitle = stringResource(R.string.livetv_add_playlist_desc),
                             leadingIcon = Icons.Default.Add,
                             onClick = { showAddPlaylistDialog = true }
+                        )
+                    }
+
+                    item(key = "btn_import_m3u_file") {
+                        SettingsActionRow(
+                            title = stringResource(R.string.livetv_import_file),
+                            subtitle = stringResource(R.string.livetv_import_file_desc),
+                            leadingIcon = Icons.Default.FolderOpen,
+                            onClick = {
+                                m3uFilePicker.launch(arrayOf("*/*"))
+                            }
                         )
                     }
 
@@ -289,6 +380,17 @@ fun LiveTvSettingsContent(
             },
             onDismiss = { showStalkerDialog = false }
         )
+    }
+
+    if (uiState.isQrModeActive) {
+        Popup(properties = PopupProperties(focusable = true)) {
+            QrCodeOverlay(
+                qrBitmap = uiState.qrCodeBitmap,
+                serverUrl = uiState.serverUrl,
+                instruction = stringResource(R.string.livetv_qr_scan_instruction),
+                onClose = { LiveTvRepository.stopQrMode() }
+            )
+        }
     }
 }
 

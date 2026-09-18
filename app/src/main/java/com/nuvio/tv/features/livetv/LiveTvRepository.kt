@@ -1,6 +1,11 @@
 package com.nuvio.tv.features.livetv
 
+import android.content.Context
 import android.util.Log
+import com.nuvio.tv.R
+import com.nuvio.tv.core.qr.QrCodeGenerator
+import com.nuvio.tv.core.server.DeviceIpAddress
+import com.nuvio.tv.core.server.LiveTvConfigServer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.net.HttpURLConnection
@@ -32,6 +37,49 @@ object LiveTvRepository {
     val uiState: StateFlow<LiveTvUiState> = _uiState.asStateFlow()
 
     private var hasLoaded = false
+    private var liveTvConfigServer: LiveTvConfigServer? = null
+
+    fun startQrMode(context: Context) {
+        ensureLoaded()
+        val ip = DeviceIpAddress.get(context)
+        if (ip == null) {
+            _uiState.update { it.copy(errorMessage = context.getString(R.string.error_network_required)) }
+            return
+        }
+
+        stopQrMode()
+
+        liveTvConfigServer = LiveTvConfigServer.startOnAvailablePort(context)
+        val activeServer = liveTvConfigServer
+        if (activeServer == null) {
+            _uiState.update { it.copy(errorMessage = context.getString(R.string.error_server_ports_unavailable)) }
+            return
+        }
+
+        val url = "http://$ip:${activeServer.listeningPort}"
+        val qrBitmap = QrCodeGenerator.generate(url, 512)
+
+        _uiState.update {
+            it.copy(
+                isQrModeActive = true,
+                qrCodeBitmap = qrBitmap,
+                serverUrl = url,
+                errorMessage = null
+            )
+        }
+    }
+
+    fun stopQrMode() {
+        liveTvConfigServer?.stop()
+        liveTvConfigServer = null
+        _uiState.update {
+            it.copy(
+                isQrModeActive = false,
+                qrCodeBitmap = null,
+                serverUrl = null
+            )
+        }
+    }
 
     fun ensureLoaded() {
         if (hasLoaded) return

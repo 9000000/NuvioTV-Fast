@@ -2333,6 +2333,11 @@
     <string name="livetv_section_playlists">Playlists (M3U)</string>
     <string name="livetv_add_playlist">Add M3U Playlist</string>
     <string name="livetv_add_playlist_desc">Add a remote M3U/M3U8 playlist URL</string>
+    <string name="livetv_import_file">Import M3U from Storage</string>
+    <string name="livetv_import_file_desc">Select an .m3u or .m3u8 playlist file from internal storage or USB</string>
+    <string name="livetv_file_import_success">Imported playlist from file: %1$s</string>
+    <string name="livetv_file_import_failed">Failed to import M3U file: %1$s</string>
+    <string name="livetv_file_import_empty">Selected file is empty</string>
     <string name="livetv_playlist_name">Playlist Name</string>
     <string name="livetv_playlist_name_hint">e.g. Sports, News, My IPTV</string>
     <string name="livetv_playlist_url">Playlist URL</string>
@@ -2358,6 +2363,9 @@
     <string name="livetv_section_navigation">Navigation</string>
     <string name="livetv_nav_show_title">Show Live TV in Sidebar</string>
     <string name="livetv_nav_show_desc">Display Live TV shortcut in the main sidebar menu</string>
+    <string name="livetv_manage_from_phone_title">Manage from Phone</string>
+    <string name="livetv_manage_from_phone_subtitle">Scan QR code to configure playlists, Xtream Codes, and Stalker portals from your phone</string>
+    <string name="livetv_qr_scan_instruction">Scan this QR code with your phone to configure Live TV</string>
     <string name="livetv_empty_title">No Live TV Channels</string>
     <string name="livetv_empty_desc">Add an M3U playlist URL, or connect your Xtream Codes / Stalker Portal account to start watching live channels.</string>
     <string name="livetv_configure_now">Configure Live TV</string>
