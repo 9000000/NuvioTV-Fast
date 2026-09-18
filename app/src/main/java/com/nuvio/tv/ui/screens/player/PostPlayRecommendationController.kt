@@ -136,7 +136,8 @@ internal class PostPlayRecommendationController(
                     playbackEnded = playerState.playbackEnded,
                     positionMs = timeline.currentPosition,
                     durationMs = timeline.duration,
-                    hasActiveAutoPlay = playerState.postPlayMode is PostPlayMode.AutoPlay
+                    hasActiveAutoPlay = playerState.postPlayMode is PostPlayMode.AutoPlay &&
+                        playerState.nextEpisode?.hasAired == true
                 )
             }
                 .distinctUntilChanged()
@@ -187,7 +188,7 @@ internal class PostPlayRecommendationController(
         _uiState.value = returnedState
         returnToPlayerAnimationJob = scope.launch {
             delay(POST_PLAY_RECOMMENDATION_TRANSITION_MS.toLong())
-            _uiState.value = PostPlayRecommendationUiState(hasReturnedToPlayer = true)
+            _uiState.update { it.copy(isVisible = false, hasReturnedToPlayer = true, countdownSeconds = null, isTrailerPlaying = false) }
             returnToPlayerAnimationJob = null
         }
     }

@@ -124,6 +124,8 @@ import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+import com.nuvio.tv.core.player.LetterboxRenderPolicy
+import com.nuvio.tv.core.player.PlayerWindowBackdrop
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.LibassRenderType
@@ -297,7 +299,9 @@ fun PlayerScreen(
             } else {
                 viewModel.onEvent(PlayerEvent.OnDismissEpisodesPanel)
             }
-        } else if (uiState.postPlayMode is PostPlayMode.AutoPlay) {
+        } else if (uiState.postPlayMode is PostPlayMode.AutoPlay &&
+            postPlayRecommendationState.recommendation == null
+        ) {
             viewModel.onEvent(PlayerEvent.OnDismissNextEpisodeCard)
             // Transfer focus to skip button if it's still visible
             if (skipButtonActuallyVisible) {
@@ -505,10 +509,20 @@ fun PlayerScreen(
         }
     }
 
+    val transparentLetterbox = LetterboxRenderPolicy.defaultTransparentLetterbox() &&
+        uiState.internalPlayerEngine != InternalPlayerEngine.MVP_PLAYER
+    DisposableEffect(transparentLetterbox) {
+        if (!transparentLetterbox) {
+            return@DisposableEffect onDispose {}
+        }
+        PlayerWindowBackdrop.acquireTransparent()
+        onDispose { PlayerWindowBackdrop.releaseTransparent() }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .then(if (transparentLetterbox) Modifier else Modifier.background(Color.Black))
             .focusRequester(containerFocusRequester)
             .focusable(enabled = uiState.error == null)
             .onPreviewKeyEvent { keyEvent ->
@@ -852,6 +866,8 @@ fun PlayerScreen(
             label = "postPlayRecommendationPlayerBorderAlpha"
         )
         val playerSurfaceShape = RoundedCornerShape(postPlayRecommendationPlayerCornerRadius)
+        val playerSurfaceIsFullscreen = !postPlayRecommendationState.isVisible &&
+            postPlayRecommendationPlayerWidth >= 0.999f
         val playerSurfaceModifier = Modifier
             .align(Alignment.TopEnd)
             .padding(end = postPlayRecommendationPlayerPadding, top = postPlayRecommendationPlayerPadding)
@@ -862,7 +878,10 @@ fun PlayerScreen(
                 BorderStroke(1.dp, Color.White.copy(alpha = postPlayRecommendationPlayerBorderAlpha)),
                 playerSurfaceShape
             )
-            .background(Color.Black)
+            .then(
+                if (transparentLetterbox && playerSurfaceIsFullscreen) Modifier
+                else Modifier.background(Color.Black)
+            )
             .zIndex(
                 if (postPlayRecommendationState.isVisible || postPlayRecommendationPlayerWidth < 0.999f) {
                     2.2f
@@ -1114,7 +1133,8 @@ fun PlayerScreen(
             targetsPostCredits = uiState.activeSkipTargetsPostCredits,
             controlsVisible = uiState.showControls,
             // Autoplay next-episode card owns focus; subtitle menu must keep D-pad focus (#2874).
-            suppressFocus = uiState.postPlayMode is PostPlayMode.AutoPlay || !skipIntroCanFocus,
+            suppressFocus = (uiState.postPlayMode is PostPlayMode.AutoPlay &&
+                postPlayRecommendationState.recommendation == null) || !skipIntroCanFocus,
             canFocus = skipIntroCanFocus,
             onSkip = { viewModel.onEvent(PlayerEvent.OnSkipIntro) },
             onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissSkipIntro) },
