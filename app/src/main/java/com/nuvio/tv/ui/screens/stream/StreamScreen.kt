@@ -76,6 +76,7 @@ import coil3.request.crossfade
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import com.nuvio.tv.ui.util.contentTextDirection
+import com.nuvio.tv.ui.util.toAbsoluteAlignment
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -1182,9 +1183,6 @@ private fun StreamsList(
         }
     }
 }
-
-private fun TextDirection.toAbsoluteAlignment(): Alignment.Horizontal =
-    if (this == TextDirection.Rtl) AbsoluteAlignment.Right else AbsoluteAlignment.Left
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
