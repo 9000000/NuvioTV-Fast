@@ -13,6 +13,10 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.dash.DashMediaSource
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
+import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
+import androidx.media3.exoplayer.drm.FrameworkMediaDrm
+import androidx.media3.exoplayer.drm.LocalMediaDrmCallback
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -91,7 +95,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         responseHeaders: Map<String, String> = emptyMap(),
         mimeTypeOverride: String? = null,
         audioDelayUsProvider: (() -> Long)? = null,
-        mediaMetadata: androidx.media3.common.MediaMetadata? = null
+        mediaMetadata: androidx.media3.common.MediaMetadata? = null,
+        drmType: String? = null,
+        drmKey: String? = null
     ): MediaSource {
         val sanitizedHeaders = sanitizeHeaders(headers)
         val httpDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, sanitizedHeaders)
@@ -104,10 +110,34 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val isHls = resolvedMimeType == MimeTypes.APPLICATION_M3U8
         val isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD
 
+        val clearKeyJson = if (drmType?.equals("clearkey", ignoreCase = true) == true ||
+            (drmType == null && !drmKey.isNullOrBlank())) {
+            ClearKeyUtil.normalizeToJwkJson(drmKey)
+        } else null
+
+        val drmSessionManagerProvider: DrmSessionManagerProvider? = clearKeyJson?.let { jwkJson ->
+            runCatching {
+                val drmCallback = LocalMediaDrmCallback(jwkJson.toByteArray(Charsets.UTF_8))
+                val drmSessionManager = DefaultDrmSessionManager.Builder()
+                    .setUuidAndExoMediaDrmProvider(C.CLEARKEY_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
+                    .setMultiSession(false)
+                    .build(drmCallback)
+                DrmSessionManagerProvider { drmSessionManager }
+            }.onFailure {
+                Log.e("PlayerMediaSourceFactory", "Failed to build ClearKey DrmSessionManager", it)
+            }.getOrNull()
+        }
+
         val mediaItemBuilder = MediaItem.Builder().setUri(url)
         resolvedMimeType?.let(mediaItemBuilder::setMimeType)
         filename?.takeIf { it.isNotBlank() }?.let(mediaItemBuilder::setMediaId)
         mediaMetadata?.let(mediaItemBuilder::setMediaMetadata)
+
+        if (drmSessionManagerProvider != null) {
+            mediaItemBuilder.setDrmConfiguration(
+                MediaItem.DrmConfiguration.Builder(C.CLEARKEY_UUID).build()
+            )
+        }
 
         if (subtitleConfigurations.isNotEmpty()) {
             mediaItemBuilder.setSubtitleConfigurations(subtitleConfigurations)
@@ -138,7 +168,12 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
             val okHttpFactory = OkHttpDataSource.Factory(playbackHttpClient).apply {
                 setDefaultRequestProperties(sanitizedHeaders)
-                setUserAgent(DEFAULT_USER_AGENT)
+                val customUserAgent = sanitizedHeaders.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
+                if (customUserAgent != null) {
+                    setUserAgent(customUserAgent)
+                } else {
+                    setUserAgent(DEFAULT_USER_AGENT)
+                }
             }
             val effectiveNative =
                 nuvioPerformanceModeEnabled || NuvioEngineConfig.get().isNativeAllocationEnabled()
@@ -200,6 +235,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
         val defaultFactory = DefaultMediaSourceFactory(defaultSourceFactory, extractorsFactory).apply {
             setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+            if (drmSessionManagerProvider != null) {
+                setDrmSessionManagerProvider(drmSessionManagerProvider)
+            }
             customSubtitleParserFactory?.let { parserFactory ->
                 setSubtitleParserFactory(parserFactory)
             }
@@ -218,9 +256,19 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             isHls && !forceDefaultFactory -> HlsMediaSource.Factory(httpDataSourceFactory)
                 .setAllowChunklessPreparation(true)
                 .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                .apply {
+                    if (drmSessionManagerProvider != null) {
+                        setDrmSessionManagerProvider(drmSessionManagerProvider)
+                    }
+                }
                 .createMediaSource(mediaItem)
             isDash && !forceDefaultFactory -> DashMediaSource.Factory(httpDataSourceFactory)
                 .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                .apply {
+                    if (drmSessionManagerProvider != null) {
+                        setDrmSessionManagerProvider(drmSessionManagerProvider)
+                    }
+                }
                 .createMediaSource(mediaItem)
             else -> defaultFactory.createMediaSource(mediaItem)
         }

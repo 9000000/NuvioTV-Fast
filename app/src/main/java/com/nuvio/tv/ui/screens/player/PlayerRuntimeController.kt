@@ -205,6 +205,8 @@ class PlayerRuntimeController(
     internal var currentStreamResponseHeaders: Map<String, String> = emptyMap()
     internal var currentStreamMimeType: String?
     internal var currentHeaders: Map<String, String>
+    internal var currentDrmType: String? = navigationArgs.drmType
+    internal var currentDrmKey: String? = navigationArgs.drmKey
     internal var streamSubtitles: List<Subtitle> = emptyList()
 
     init {

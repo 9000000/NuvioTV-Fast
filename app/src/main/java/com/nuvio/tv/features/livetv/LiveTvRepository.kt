@@ -8,6 +8,7 @@ import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.core.server.LiveTvConfigServer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.random.Random
@@ -516,6 +517,41 @@ internal fun parseM3uPlaylist(
                         key.equals("inputstream.adaptive.manifest_type", ignoreCase = true) -> {
                             pending.manifestType = value
                         }
+                        key.equals("inputstream.adaptive.stream_headers", ignoreCase = true) -> {
+                            value.split('&').forEach { param ->
+                                val hKey = param.substringBefore('=').trim()
+                                val hVal = param.substringAfter('=', "").trim()
+                                if (hKey.isNotBlank() && hVal.isNotBlank()) {
+                                    val normalizedKey = when (hKey.lowercase()) {
+                                        "user-agent" -> "User-Agent"
+                                        "referer" -> "Referer"
+                                        "origin" -> "Origin"
+                                        else -> hKey
+                                    }
+                                    pending.headers[normalizedKey] = hVal
+                                }
+                            }
+                        }
+                    }
+                }
+                line.startsWith("#EXTHTTP:", ignoreCase = true) -> {
+                    val jsonStr = line.substringAfter("#EXTHTTP:", "").trim()
+                    runCatching {
+                        val json = JSONObject(jsonStr)
+                        val keys = json.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            val v = json.optString(k)
+                            if (v.isNotBlank()) {
+                                val normalizedKey = when (k.lowercase()) {
+                                    "user-agent" -> "User-Agent"
+                                    "referer" -> "Referer"
+                                    "origin" -> "Origin"
+                                    else -> k
+                                }
+                                pending.headers[normalizedKey] = v
+                            }
+                        }
                     }
                 }
                 line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> {
@@ -525,6 +561,7 @@ internal fun parseM3uPlaylist(
                     when {
                         key.equals("http-user-agent", ignoreCase = true) -> pending.headers["User-Agent"] = value
                         key.equals("http-referrer", ignoreCase = true) -> pending.headers["Referer"] = value
+                        key.equals("http-origin", ignoreCase = true) -> pending.headers["Origin"] = value
                     }
                 }
                 line.startsWith("#") -> Unit

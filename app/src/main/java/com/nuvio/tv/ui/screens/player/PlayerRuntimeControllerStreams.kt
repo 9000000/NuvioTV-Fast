@@ -915,7 +915,9 @@ internal fun PlayerRuntimeController.switchToSourceStream(
                         filename = currentFilename,
                         responseHeaders = currentStreamResponseHeaders,
                         mimeTypeOverride = currentStreamMimeType,
-                        audioDelayUsProvider = audioDelayUs::get
+                        audioDelayUsProvider = audioDelayUs::get,
+                        drmType = currentDrmType,
+                        drmKey = currentDrmKey
                     )
                 )
                 player.playWhenReady = true

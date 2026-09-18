@@ -125,7 +125,10 @@ internal object PlayerPlaybackNetworking {
         val client = createHttpClient(defaultHeaders)
         val httpFactory = OkHttpDataSource.Factory(client).apply {
             setDefaultRequestProperties(defaultHeaders)
-            if (defaultHeaders.none { it.key.equals("User-Agent", ignoreCase = true) }) {
+            val customUserAgent = defaultHeaders.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
+            if (customUserAgent != null) {
+                setUserAgent(customUserAgent)
+            } else {
                 setUserAgent(PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
             }
         }

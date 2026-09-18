@@ -36,7 +36,9 @@ internal data class PlayerNavigationArgs(
     val rememberedAudioLanguage: String?,
     val rememberedAudioName: String?,
     val launchStartedAtMs: Long?,
-    val profileId: Int?
+    val profileId: Int?,
+    val drmType: String? = null,
+    val drmKey: String? = null
 ) {
     val torrentTrackers: List<String>
         get() {
@@ -61,6 +63,21 @@ internal data class PlayerNavigationArgs(
                 // Fall back to the raw value rather
                 // than crashing the player on launch.
                 return runCatching { URLDecoder.decode(value, "UTF-8") }.getOrDefault(value)
+            }
+
+            fun safeDrmKeyOrNull(key: String): String? {
+                val value = savedStateHandle.get<String>(key) ?: return null
+                if (value.isEmpty()) return null
+                // If it's already decoded JSON or has no percent encoding, don't URL-decode again
+                // to avoid corrupting Base64 '+' characters into spaces.
+                if (value.startsWith("{") || value.startsWith("[")) {
+                    return value
+                }
+                return if (value.contains('%')) {
+                    runCatching { URLDecoder.decode(value, "UTF-8") }.getOrDefault(value)
+                } else {
+                    value
+                }
             }
 
             return PlayerNavigationArgs(
@@ -96,7 +113,9 @@ internal data class PlayerNavigationArgs(
                 rememberedAudioLanguage = decodedOrNull("rememberedAudioLanguage"),
                 rememberedAudioName = decodedOrNull("rememberedAudioName"),
                 launchStartedAtMs = savedStateHandle.get<String>("launchStartedAtMs")?.toLongOrNull(),
-                profileId = savedStateHandle.get<String>("profileId")?.toIntOrNull()
+                profileId = savedStateHandle.get<String>("profileId")?.toIntOrNull(),
+                drmType = decodedOrNull("drmType"),
+                drmKey = safeDrmKeyOrNull("drmKey")
             )
         }
     }

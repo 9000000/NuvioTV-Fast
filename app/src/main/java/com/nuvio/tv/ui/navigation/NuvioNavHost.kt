@@ -161,7 +161,9 @@ private fun PlaybackNavHost(
                         title = channel.name,
                         headers = channel.headers,
                         logo = channel.logoUrl,
-                        contentType = "livetv"
+                        contentType = "livetv",
+                        drmType = channel.drmType,
+                        drmKey = channel.drmKey
                     )
                     navController.navigate(route)
                 },
@@ -856,6 +858,16 @@ private fun PlaybackNavHost(
                     defaultValue = null
                 },
                 navArgument("profileId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("drmType") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("drmKey") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
