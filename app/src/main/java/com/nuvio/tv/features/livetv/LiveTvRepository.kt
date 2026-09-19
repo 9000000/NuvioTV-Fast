@@ -459,7 +459,7 @@ object LiveTvRepository {
         LiveTvStorage.saveFavoriteChannelIdsBlob(channelIds.sorted().joinToString("\n"))
     }
 
-    private const val MAX_RECENT_CHANNELS = 30
+    private const val MAX_RECENT_CHANNELS = 15
 
     private fun loadRecentChannelIds(): List<String> {
         val blob = LiveTvStorage.loadRecentChannelIdsBlob()

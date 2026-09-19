@@ -272,6 +272,7 @@ private fun LiveTvContent(
 ) {
     var activeFilter by rememberSaveable { mutableStateOf(FilterType.ALL) }
     var selectedGroup by rememberSaveable { mutableStateOf<String?>(null) }
+    var isInitialEntry by rememberSaveable { mutableStateOf(true) }
 
     val allGroups = remember(state.channels) {
         state.channels.mapNotNull { it.group?.trim() }.filter { it.isNotBlank() }.distinct().sorted()
@@ -293,15 +294,21 @@ private fun LiveTvContent(
     val channelFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     var restoredChannelId by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // Filter chip focus requesters
+    val allChipFocusRequester = remember { FocusRequester() }
+    val favoritesChipFocusRequester = remember { FocusRequester() }
+    val recentChipFocusRequester = remember { FocusRequester() }
+    val groupChipFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+
     val currentChannelIds = remember(filteredChannels) { filteredChannels.map { it.id }.toSet() }
     LaunchedEffect(currentChannelIds) {
         channelFocusRequesters.keys.retainAll(currentChannelIds)
     }
 
-    // Restore focus and scroll position to last watched channel when returning to this screen
-    LaunchedEffect(state.lastWatchedChannelId, filteredChannels) {
+    // Restore focus and scroll position to last watched channel when returning to this screen (not on initial entry)
+    LaunchedEffect(state.lastWatchedChannelId, filteredChannels, isInitialEntry) {
         val targetId = state.lastWatchedChannelId
-        if (targetId != null && targetId != restoredChannelId) {
+        if (!isInitialEntry && targetId != null && targetId != restoredChannelId) {
             val targetIndex = filteredChannels.indexOfFirst { it.id == targetId }
             if (targetIndex >= 0) {
                 gridState.scrollToItem(targetIndex)
@@ -309,6 +316,25 @@ private fun LiveTvContent(
                 channelFocusRequesters[targetId]?.requestFocus()
                 restoredChannelId = targetId
             }
+        }
+    }
+
+    // Initial focus on filter chip when entering screen for first time
+    LaunchedEffect(isInitialEntry, state.recentChannelIds) {
+        if (isInitialEntry) {
+            delay(150)
+            if (state.recentChannelIds.isNotEmpty()) {
+                // Focus on Recent chip if there are recent channels
+                recentChipFocusRequester.requestFocus()
+                activeFilter = FilterType.RECENT
+                selectedGroup = null
+            } else {
+                // Focus on ALL chip if no recent channels
+                allChipFocusRequester.requestFocus()
+                activeFilter = FilterType.ALL
+                selectedGroup = null
+            }
+            isInitialEntry = false
         }
     }
 
@@ -420,7 +446,9 @@ private fun LiveTvContent(
                     onClick = {
                         activeFilter = FilterType.ALL
                         selectedGroup = null
-                    }
+                        isInitialEntry = false
+                    },
+                    focusRequester = allChipFocusRequester
                 )
             }
 
@@ -432,7 +460,9 @@ private fun LiveTvContent(
                     onClick = {
                         activeFilter = FilterType.FAVORITES
                         selectedGroup = null
-                    }
+                        isInitialEntry = false
+                    },
+                    focusRequester = favoritesChipFocusRequester
                 )
             }
 
@@ -445,20 +475,27 @@ private fun LiveTvContent(
                         onClick = {
                             activeFilter = FilterType.RECENT
                             selectedGroup = null
-                        }
+                            isInitialEntry = false
+                        },
+                        focusRequester = recentChipFocusRequester
                     )
                 }
             }
 
             // Dynamic Groups from Playlist
             items(allGroups) { group ->
+                val groupFocusRequester = remember(group) {
+                    groupChipFocusRequesters.getOrPut(group) { FocusRequester() }
+                }
                 FilterChipItem(
                     label = group,
                     isSelected = activeFilter == FilterType.GROUP && selectedGroup == group,
                     onClick = {
                         activeFilter = FilterType.GROUP
                         selectedGroup = group
-                    }
+                        isInitialEntry = false
+                    },
+                    focusRequester = groupFocusRequester
                 )
             }
         }
@@ -493,15 +530,35 @@ private fun LiveTvContent(
                     val requester = remember(channel.id) {
                         channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
                     }
+                    val itemIndex = filteredChannels.indexOf(channel)
+                    
                     TvChannelCard(
                         channel = channel,
                         isFavorite = isFav,
                         focusRequester = requester,
+                        isFirstRow = itemIndex < 5,
                         onClick = {
                             restoredChannelId = null
                             onChannelSelected(channel)
                         },
-                        onToggleFavorite = { onToggleFavorite(channel.id) }
+                        onToggleFavorite = { onToggleFavorite(channel.id) },
+                        onRequestUpNavigation = {
+                            // Request focus to appropriate filter chip when pressing UP from first row
+                            when (activeFilter) {
+                                FilterType.ALL -> allChipFocusRequester.requestFocus()
+                                FilterType.FAVORITES -> favoritesChipFocusRequester.requestFocus()
+                                FilterType.RECENT -> {
+                                    if (state.recentChannelIds.isNotEmpty()) {
+                                        recentChipFocusRequester.requestFocus()
+                                    }
+                                }
+                                FilterType.GROUP -> {
+                                    if (selectedGroup != null) {
+                                        groupChipFocusRequesters[selectedGroup]?.requestFocus()
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -513,7 +570,8 @@ private fun LiveTvContent(
 private fun FilterChipItem(
     label: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null
 ) {
     Card(
         onClick = onClick,
@@ -522,7 +580,8 @@ private fun FilterChipItem(
             focusedContainerColor = NuvioTheme.colors.FocusBackground
         ),
         shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.05f)
+        scale = CardDefaults.scale(focusedScale = 1.05f),
+        modifier = if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
     ) {
         Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)) {
             Text(
@@ -540,8 +599,10 @@ private fun TvChannelCard(
     channel: LiveTvChannel,
     isFavorite: Boolean,
     focusRequester: FocusRequester? = null,
+    isFirstRow: Boolean = false,
     onClick: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onRequestUpNavigation: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -556,6 +617,14 @@ private fun TvChannelCard(
             .onKeyEvent { keyEvent ->
                 if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
                     when (keyEvent.nativeKeyEvent.keyCode) {
+                        AndroidKeyEvent.KEYCODE_DPAD_UP -> {
+                            if (isFirstRow) {
+                                onRequestUpNavigation()
+                                true
+                            } else {
+                                false
+                            }
+                        }
                         AndroidKeyEvent.KEYCODE_MENU,
                         AndroidKeyEvent.KEYCODE_STAR,
                         AndroidKeyEvent.KEYCODE_BUTTON_Y,
