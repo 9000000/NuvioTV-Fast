@@ -398,7 +398,31 @@ private fun LiveTvContent(
                         focusedContainerColor = NuvioTheme.colors.FocusBackground
                     ),
                     shape = CardDefaults.shape(CircleShape),
-                    scale = CardDefaults.scale(focusedScale = 1.1f)
+                    scale = CardDefaults.scale(focusedScale = 1.1f),
+                    modifier = Modifier.onKeyEvent { keyEvent ->
+                        if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
+                            when (keyEvent.nativeKeyEvent.keyCode) {
+                                AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                                    when (activeFilter) {
+                                        FilterType.ALL -> allChipFocusRequester.requestFocus()
+                                        FilterType.FAVORITES -> favoritesChipFocusRequester.requestFocus()
+                                        FilterType.RECENT -> {
+                                            if (state.recentChannelIds.isNotEmpty()) {
+                                                recentChipFocusRequester.requestFocus()
+                                            }
+                                        }
+                                        FilterType.GROUP -> {
+                                            if (selectedGroup != null) {
+                                                groupChipFocusRequesters[selectedGroup]?.requestFocus()
+                                            }
+                                        }
+                                    }
+                                    true
+                                }
+                                else -> false
+                            }
+                        } else false
+                    }
                 ) {
                     Box(modifier = Modifier.padding(10.dp)) {
                         Icon(
@@ -418,7 +442,31 @@ private fun LiveTvContent(
                         focusedContainerColor = NuvioTheme.colors.FocusBackground
                     ),
                     shape = CardDefaults.shape(CircleShape),
-                    scale = CardDefaults.scale(focusedScale = 1.1f)
+                    scale = CardDefaults.scale(focusedScale = 1.1f),
+                    modifier = Modifier.onKeyEvent { keyEvent ->
+                        if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
+                            when (keyEvent.nativeKeyEvent.keyCode) {
+                                AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                                    when (activeFilter) {
+                                        FilterType.ALL -> allChipFocusRequester.requestFocus()
+                                        FilterType.FAVORITES -> favoritesChipFocusRequester.requestFocus()
+                                        FilterType.RECENT -> {
+                                            if (state.recentChannelIds.isNotEmpty()) {
+                                                recentChipFocusRequester.requestFocus()
+                                            }
+                                        }
+                                        FilterType.GROUP -> {
+                                            if (selectedGroup != null) {
+                                                groupChipFocusRequesters[selectedGroup]?.requestFocus()
+                                            }
+                                        }
+                                    }
+                                    true
+                                }
+                                else -> false
+                            }
+                        } else false
+                    }
                 ) {
                     Box(modifier = Modifier.padding(10.dp)) {
                         Icon(
@@ -531,19 +579,22 @@ private fun LiveTvContent(
                         channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
                     }
                     val itemIndex = filteredChannels.indexOf(channel)
+                    val isFirstRow = itemIndex < 5
+                    val isLastRow = itemIndex >= (filteredChannels.size - (filteredChannels.size % 5).let { if (it == 0) 5 else it })
                     
                     TvChannelCard(
                         channel = channel,
                         isFavorite = isFav,
                         focusRequester = requester,
-                        isFirstRow = itemIndex < 5,
+                        isFirstRow = isFirstRow,
+                        isLastRow = isLastRow,
                         onClick = {
                             restoredChannelId = null
                             onChannelSelected(channel)
                         },
                         onToggleFavorite = { onToggleFavorite(channel.id) },
-                        onRequestUpNavigation = {
-                            // Request focus to appropriate filter chip when pressing UP from first row
+                        onRequestNavigateToCategory = {
+                            // Request focus to appropriate filter chip when pressing UP/DOWN from edge rows
                             when (activeFilter) {
                                 FilterType.ALL -> allChipFocusRequester.requestFocus()
                                 FilterType.FAVORITES -> favoritesChipFocusRequester.requestFocus()
@@ -600,9 +651,10 @@ private fun TvChannelCard(
     isFavorite: Boolean,
     focusRequester: FocusRequester? = null,
     isFirstRow: Boolean = false,
+    isLastRow: Boolean = false,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onRequestUpNavigation: () -> Unit = {}
+    onRequestNavigateToCategory: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -619,7 +671,15 @@ private fun TvChannelCard(
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         AndroidKeyEvent.KEYCODE_DPAD_UP -> {
                             if (isFirstRow) {
-                                onRequestUpNavigation()
+                                onRequestNavigateToCategory()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (isLastRow) {
+                                onRequestNavigateToCategory()
                                 true
                             } else {
                                 false
