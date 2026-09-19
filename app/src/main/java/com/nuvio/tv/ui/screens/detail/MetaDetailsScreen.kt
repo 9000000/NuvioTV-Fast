@@ -13,6 +13,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -1165,6 +1168,17 @@ private fun MetaDetailsContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val suppressDetailRowRelocation = pendingRestoreType == RestoreTarget.EPISODE
+    val suppressCompanyBringIntoView = pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK
+    val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
+    val companyRestoreBringIntoViewSpec = remember {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(
+                offset: Float,
+                size: Float,
+                containerSize: Float
+            ): Float = 0f
+        }
+    }
     val detailRowBringIntoViewResponder = remember(suppressDetailRowRelocation) {
         object : BringIntoViewResponder {
             override fun calculateRectForParent(localRect: Rect): Rect {
@@ -1811,6 +1825,13 @@ private fun MetaDetailsContent(
         )
 
         // Single scrollable column with hero + content
+        CompositionLocalProvider(
+            LocalBringIntoViewSpec provides if (suppressCompanyBringIntoView) {
+                companyRestoreBringIntoViewSpec
+            } else {
+                defaultBringIntoViewSpec
+            }
+        ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -2238,6 +2259,7 @@ private fun MetaDetailsContent(
                     }
                 }
             }
+        }
         }
 
         seasonOptionsDialogSeason?.let { season ->

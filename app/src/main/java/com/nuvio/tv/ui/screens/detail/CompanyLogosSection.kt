@@ -1,4 +1,7 @@
-@file:OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    androidx.tv.material3.ExperimentalTvMaterial3Api::class
+)
 
 package com.nuvio.tv.ui.screens.detail
 
@@ -11,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewResponder
+import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,14 +65,25 @@ fun CompanyLogosSection(
             .mapNotNull { company -> company.tmdbId?.let { it to FocusRequester() } }
             .toMap()
     }
+    var holdRestoreScrollSuppress by remember { mutableStateOf(false) }
+    val suppressRestoreScroll = holdRestoreScrollSuppress ||
+        (restoreFocusToken > 0 && restoreCompanyId != null)
+    val restoreNoScrollResponder = remember {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) {}
+        }
+    }
 
     LaunchedEffect(restoreCompanyId, restoreFocusToken) {
         if (restoreFocusToken <= 0 || restoreCompanyId == null) return@LaunchedEffect
-        val targetRequester = focusRequesters[restoreCompanyId]
-        if (targetRequester == null) return@LaunchedEffect
+        val targetRequester = focusRequesters[restoreCompanyId] ?: return@LaunchedEffect
+        holdRestoreScrollSuppress = true
         repeat(2) { withFrameNanos { } }
         runCatching { targetRequester.requestFocus() }
+        repeat(2) { withFrameNanos { } }
         onRestoreFocusHandled()
+        holdRestoreScrollSuppress = false
     }
 
     Column(
@@ -92,11 +109,19 @@ fun CompanyLogosSection(
                     "$title-$index-${company.name}-${company.logo.orEmpty()}"
                 }
             ) { _, company ->
-                CompanyLogoCard(
-                    company = company,
-                    focusRequester = focusRequesters[company.tmdbId],
-                    onClick = { onCompanyClick(company) }
-                )
+                Box(
+                    modifier = if (suppressRestoreScroll) {
+                        Modifier.bringIntoViewResponder(restoreNoScrollResponder)
+                    } else {
+                        Modifier
+                    }
+                ) {
+                    CompanyLogoCard(
+                        company = company,
+                        focusRequester = focusRequesters[company.tmdbId],
+                        onClick = { onCompanyClick(company) }
+                    )
+                }
             }
         }
     }
