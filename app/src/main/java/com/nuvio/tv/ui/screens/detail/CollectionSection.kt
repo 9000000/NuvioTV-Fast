@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.detail
 
 import com.nuvio.tv.ui.theme.NuvioTheme
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,15 +11,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.relocation.BringIntoViewResponder
+import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -28,7 +36,7 @@ import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.PosterCardStyle
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun CollectionSection(
     items: List<MetaPreview>,
@@ -51,15 +59,24 @@ fun CollectionSection(
     val restoreFocusRequester = remember { FocusRequester() }
     val itemFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
 
+    val suppressRestoreScroll = restoreFocusToken > 0 && !restoreItemId.isNullOrBlank()
+    var restorePending by remember(restoreFocusToken, restoreItemId) { mutableStateOf(suppressRestoreScroll) }
+    var placedFocused by remember(restoreFocusToken, restoreItemId) { mutableStateOf(false) }
+    val restoreNoScrollResponder = remember {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) {}
+        }
+    }
+    val restoreItemModifier = if (suppressRestoreScroll) {
+        Modifier.bringIntoViewResponder(restoreNoScrollResponder)
+    } else {
+        Modifier
+    }
+
     LaunchedEffect(items) {
         val validIds = items.mapTo(mutableSetOf()) { it.id }
         itemFocusRequesters.keys.retainAll(validIds)
-    }
-
-    LaunchedEffect(restoreFocusToken, restoreItemId, items) {
-        if (restoreFocusToken <= 0 || restoreItemId.isNullOrBlank()) return@LaunchedEffect
-        if (items.none { it.id == restoreItemId }) return@LaunchedEffect
-        restoreFocusRequester.requestFocusAfterFrames()
     }
 
     val landscapeStyle = remember(posterCardCornerRadius) {
@@ -90,7 +107,7 @@ fun CollectionSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (sectionFocusRequester != null) Modifier.focusRequester(sectionFocusRequester) else Modifier)
-                .focusRestorer { firstItemFocusRequester }
+                .focusRestorer { if (restorePending) restoreFocusRequester else firstItemFocusRequester }
                 .focusGroup(),
             contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.xxxl, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
@@ -107,7 +124,19 @@ fun CollectionSection(
                     else -> remember(item.id) { itemFocusRequesters.getOrPut(item.id) { FocusRequester() } }
                 }
 
-                Column {
+                Column(
+                    modifier = restoreItemModifier.then(
+                        if (isRestoreTarget && suppressRestoreScroll) {
+                            Modifier.onPlaced {
+                                if (placedFocused) return@onPlaced
+                                placedFocused = true
+                                runCatching { focusRequester.requestFocus() }
+                            }
+                        } else {
+                            Modifier
+                        }
+                    )
+                ) {
                     GridContentCard(
                         item = item,
                         onClick = { onItemClick(item) },
@@ -122,6 +151,7 @@ fun CollectionSection(
                         onFocused = {
                             onItemFocused(item)
                             if (isRestoreTarget && restoreFocusToken > 0) {
+                                restorePending = false
                                 onRestoreFocusHandled()
                             }
                         }

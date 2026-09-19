@@ -1177,7 +1177,9 @@ private fun MetaDetailsContent(
     val suppressDetailRowRelocation = pendingRestoreType == RestoreTarget.EPISODE
     val suppressRestoreBringIntoView =
         pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK ||
-            pendingRestoreType == RestoreTarget.CAST_MEMBER
+            pendingRestoreType == RestoreTarget.CAST_MEMBER ||
+            pendingRestoreType == RestoreTarget.MORE_LIKE_THIS ||
+            pendingRestoreType == RestoreTarget.COLLECTION
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
     val restoreNoScrollBringIntoViewSpec = remember {
         object : BringIntoViewSpec {
@@ -1317,6 +1319,7 @@ private fun MetaDetailsContent(
     fun markMoreLikeThisRestore(itemId: String) {
         capturePageScroll()
         restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        restoreFocusToken = 0
         pendingRestoreType = RestoreTarget.MORE_LIKE_THIS
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
@@ -1328,6 +1331,7 @@ private fun MetaDetailsContent(
     fun markCollectionRestore(itemId: String) {
         capturePageScroll()
         restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        restoreFocusToken = 0
         pendingRestoreType = RestoreTarget.COLLECTION
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
@@ -1666,22 +1670,26 @@ private fun MetaDetailsContent(
         if (commentsMode == CommentsMode.EPISODE) commentsEpisodeModeFocusRequester else commentsTitleModeFocusRequester
 
     val visiblePeopleTabsList = visiblePeopleTabItems.map { it.tab }
-    LaunchedEffect(visiblePeopleTabsList) {
-        if (visiblePeopleTabsList.isNotEmpty() && activePeopleTab !in visiblePeopleTabsList) {
-            activePeopleTab = visiblePeopleTabsList.first()
+    LaunchedEffect(visiblePeopleTabsList, pendingRestoreType) {
+        if (visiblePeopleTabsList.isEmpty() || activePeopleTab in visiblePeopleTabsList) return@LaunchedEffect
+        if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS ||
+            pendingRestoreType == RestoreTarget.COLLECTION
+        ) {
+            return@LaunchedEffect
         }
+        activePeopleTab = visiblePeopleTabsList.first()
     }
 
     // Switch to the correct people tab when restoring focus after navigation
     LaunchedEffect(restoreFocusToken, pendingRestoreType) {
         if (restoreFocusToken <= 0 || pendingRestoreType == null) return@LaunchedEffect
-        val targetTab = when (pendingRestoreType) {
-            RestoreTarget.MORE_LIKE_THIS -> PeopleSectionTab.MORE_LIKE_THIS
-            RestoreTarget.CAST_MEMBER -> PeopleSectionTab.CAST
-            else -> null
-        }
-        if (targetTab != null && targetTab in visiblePeopleTabsList && activePeopleTab != targetTab) {
-            activePeopleTab = targetTab
+        when (pendingRestoreType) {
+            RestoreTarget.MORE_LIKE_THIS -> activePeopleTab = PeopleSectionTab.MORE_LIKE_THIS
+            RestoreTarget.COLLECTION -> activePeopleTab = PeopleSectionTab.COLLECTION
+            RestoreTarget.CAST_MEMBER -> if (PeopleSectionTab.CAST in visiblePeopleTabsList) {
+                activePeopleTab = PeopleSectionTab.CAST
+            }
+            else -> Unit
         }
     }
 
@@ -2084,7 +2092,15 @@ private fun MetaDetailsContent(
                             upFocusRequester = seasonDownFocusRequester ?: heroPlayFocusRequester,
                             ratingsDownFocusRequester = ratingsContentFocusRequester,
                             onTabFocused = { tab ->
-                                activePeopleTab = tab
+                                val lockedTab = when (pendingRestoreType) {
+                                    RestoreTarget.MORE_LIKE_THIS -> PeopleSectionTab.MORE_LIKE_THIS
+                                    RestoreTarget.COLLECTION -> PeopleSectionTab.COLLECTION
+                                    RestoreTarget.CAST_MEMBER -> PeopleSectionTab.CAST
+                                    else -> null
+                                }
+                                if (lockedTab == null || tab == lockedTab) {
+                                    activePeopleTab = tab
+                                }
                             }
                         )
                     }
