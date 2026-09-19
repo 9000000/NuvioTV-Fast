@@ -15,6 +15,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1203,23 +1204,61 @@ private fun MetaDetailsContent(
     }
 
     fun pinDetailPageScroll() {
+        if (pinnedPageIndex >= 0) return
         pinnedPageIndex = listState.firstVisibleItemIndex
         pinnedPageOffset = listState.firstVisibleItemScrollOffset
+    }
+
+    suspend fun animateDetailScrollTo(index: Int, offset: Int) {
+        if (index < 0) return
+        val currentIndex = listState.firstVisibleItemIndex
+        val currentOffset = listState.firstVisibleItemScrollOffset
+        if (currentIndex == index) {
+            val delta = (offset - currentOffset).toFloat()
+            if (kotlin.math.abs(delta) > 1f) {
+                listState.animateScrollBy(delta, NuvioMotion.slowTween())
+            }
+            return
+        }
+        listState.animateScrollToItem(index, offset)
+    }
+
+    fun remainingDetailScrollPx(): Int {
+        val info = listState.layoutInfo
+        val lastVisible = info.visibleItemsInfo.lastOrNull() ?: return 0
+        val tail = (lastVisible.offset + lastVisible.size - info.viewportEndOffset).coerceAtLeast(0)
+        return if (lastVisible.index < info.totalItemsCount - 1) Int.MAX_VALUE else tail
+    }
+
+    fun onCompanyRowFocused(revealOverflowPx: Float) {
+        pinDetailPageScroll()
+        if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) return
+        val remaining = remainingDetailScrollPx()
+        val distance = when {
+            revealOverflowPx > 1f -> {
+                if (remaining == Int.MAX_VALUE) revealOverflowPx else minOf(revealOverflowPx, remaining.toFloat())
+            }
+            remaining in 1..200 -> remaining.toFloat()
+            else -> 0f
+        }
+        if (distance <= 1f) return
+        coroutineScope.launch {
+            listState.animateScrollBy(distance, NuvioMotion.slowTween())
+        }
     }
 
     fun restorePinnedDetailPageIfNudge() {
         val index = pinnedPageIndex
         val offset = pinnedPageOffset
         if (index < 0) return
+        pinnedPageIndex = -1
         val currentIndex = listState.firstVisibleItemIndex
         val currentOffset = listState.firstVisibleItemScrollOffset
         val offsetDelta = kotlin.math.abs(currentOffset - offset)
-        if (currentIndex == index && offsetDelta in 1..200) {
-            coroutineScope.launch {
-                listState.scrollToItem(index, offset)
-            }
+        if (currentIndex != index || offsetDelta !in 1..200) return
+        coroutineScope.launch {
+            animateDetailScrollTo(index, offset)
         }
-        pinnedPageIndex = -1
     }
 
     fun clearPendingRestore() {
@@ -1328,7 +1367,7 @@ private fun MetaDetailsContent(
                 val bumpCompany = pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK
                 coroutineScope.launch {
                     if (index >= 0) {
-                        listState.scrollToItem(index, offset)
+                        animateDetailScrollTo(index, offset)
                     }
                     if (bumpCompany) {
                         companyRestoreToken += 1
@@ -2261,7 +2300,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
-                            onCompanyFocused = { pinDetailPageScroll() },
+                            onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -2280,7 +2319,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
-                            onCompanyFocused = { pinDetailPageScroll() },
+                            onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -2299,7 +2338,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
-                            onCompanyFocused = { pinDetailPageScroll() },
+                            onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -2318,7 +2357,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
-                            onCompanyFocused = { pinDetailPageScroll() },
+                            onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
