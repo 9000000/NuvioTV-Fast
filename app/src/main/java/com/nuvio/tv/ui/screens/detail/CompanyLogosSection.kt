@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -56,7 +57,8 @@ fun CompanyLogosSection(
     onCompanyClick: (MetaCompany) -> Unit = {},
     restoreCompanyId: Int? = null,
     restoreFocusToken: Int = 0,
-    onRestoreFocusHandled: () -> Unit = {}
+    onRestoreFocusHandled: () -> Unit = {},
+    onCompanyFocused: () -> Unit = {}
 ) {
     if (companies.isEmpty()) return
 
@@ -119,6 +121,7 @@ fun CompanyLogosSection(
                     CompanyLogoCard(
                         company = company,
                         focusRequester = focusRequesters[company.tmdbId],
+                        onFocused = onCompanyFocused,
                         onClick = { onCompanyClick(company) }
                     )
                 }
@@ -131,6 +134,7 @@ fun CompanyLogosSection(
 private fun CompanyLogoCard(
     company: MetaCompany,
     focusRequester: FocusRequester? = null,
+    onFocused: () -> Unit = {},
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -159,7 +163,10 @@ private fun CompanyLogoCard(
             .height(NuvioTheme.spacing.huge)
             .then(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
-            ),
+            )
+            .onFocusChanged { state ->
+                if (state.isFocused) onFocused()
+            },
         shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.sm)),
         colors = CardDefaults.colors(
             containerColor = Color.White,

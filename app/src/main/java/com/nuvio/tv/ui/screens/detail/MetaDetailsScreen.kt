@@ -1122,6 +1122,12 @@ private fun MetaDetailsContent(
     }
     val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
     val listState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    val castRowListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    var lastFocusedCastKey by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
+    var savedRestoreScrollIndex by rememberSaveable(meta.id) { mutableIntStateOf(-1) }
+    var savedRestoreScrollOffset by rememberSaveable(meta.id) { mutableIntStateOf(0) }
+    var pinnedPageIndex by remember { mutableIntStateOf(-1) }
+    var pinnedPageOffset by remember { mutableIntStateOf(0) }
     // Suppress auto-scroll when hero buttons get focus
     val heroNoScrollResponder = remember {
         object : BringIntoViewResponder {
@@ -1191,7 +1197,34 @@ private fun MetaDetailsContent(
         }
     }
 
+    fun capturePageScroll() {
+        savedRestoreScrollIndex = listState.firstVisibleItemIndex
+        savedRestoreScrollOffset = listState.firstVisibleItemScrollOffset
+    }
+
+    fun pinDetailPageScroll() {
+        pinnedPageIndex = listState.firstVisibleItemIndex
+        pinnedPageOffset = listState.firstVisibleItemScrollOffset
+    }
+
+    fun restorePinnedDetailPageIfNudge() {
+        val index = pinnedPageIndex
+        val offset = pinnedPageOffset
+        if (index < 0) return
+        val currentIndex = listState.firstVisibleItemIndex
+        val currentOffset = listState.firstVisibleItemScrollOffset
+        val offsetDelta = kotlin.math.abs(currentOffset - offset)
+        if (currentIndex == index && offsetDelta in 1..200) {
+            coroutineScope.launch {
+                listState.scrollToItem(index, offset)
+            }
+        }
+        pinnedPageIndex = -1
+    }
+
     fun clearPendingRestore() {
+        savedRestoreScrollIndex = -1
+        savedRestoreScrollOffset = 0
         val shouldConsumeReturnFocus = consumeReturnEpisodeFocusOnClear
         pendingRestoreType = null
         pendingRestoreEpisodeId = null
@@ -1199,6 +1232,7 @@ private fun MetaDetailsContent(
         pendingRestoreMoreLikeItemId = null
         pendingRestoreCollectionItemId = null
         pendingRestoreCompanyId = null
+        restoreFocusToken = 0
         companyRestoreToken = 0
         restoreOnNextResume = false
         consumeReturnEpisodeFocusOnClear = false
@@ -1230,7 +1264,9 @@ private fun MetaDetailsContent(
     }
 
     fun markCastMemberRestore(personId: Int) {
+        capturePageScroll()
         restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        restoreFocusToken = 0
         pendingRestoreType = RestoreTarget.CAST_MEMBER
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = personId
@@ -1240,6 +1276,7 @@ private fun MetaDetailsContent(
     }
 
     fun markMoreLikeThisRestore(itemId: String) {
+        capturePageScroll()
         restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         pendingRestoreType = RestoreTarget.MORE_LIKE_THIS
         pendingRestoreEpisodeId = null
@@ -1250,6 +1287,7 @@ private fun MetaDetailsContent(
     }
 
     fun markCollectionRestore(itemId: String) {
+        capturePageScroll()
         restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         pendingRestoreType = RestoreTarget.COLLECTION
         pendingRestoreEpisodeId = null
@@ -1260,6 +1298,7 @@ private fun MetaDetailsContent(
     }
 
     fun markCompanyRestore(companyId: Int) {
+        capturePageScroll()
         restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         pendingRestoreType = RestoreTarget.COMPANY_OR_NETWORK
         pendingRestoreEpisodeId = null
@@ -1284,15 +1323,34 @@ private fun MetaDetailsContent(
                 pendingRestoreType != null
             ) {
                 restoreOnNextResume = false
-                restoreFocusToken += 1
-                if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) {
-                    companyRestoreToken += 1
+                val index = savedRestoreScrollIndex
+                val offset = savedRestoreScrollOffset
+                val bumpCompany = pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK
+                coroutineScope.launch {
+                    if (index >= 0) {
+                        listState.scrollToItem(index, offset)
+                    }
+                    if (bumpCompany) {
+                        companyRestoreToken += 1
+                    }
+                    restoreFocusToken += 1
                 }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    var lastCastRowMetaId by remember { mutableStateOf(meta.id) }
+    LaunchedEffect(meta.id) {
+        if (lastCastRowMetaId == meta.id) return@LaunchedEffect
+        lastCastRowMetaId = meta.id
+        if (castRowListState.firstVisibleItemIndex != 0 ||
+            castRowListState.firstVisibleItemScrollOffset != 0
+        ) {
+            castRowListState.scrollToItem(0)
         }
     }
 
@@ -2013,6 +2071,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.CAST -> {
                                 CastSection(
                                     cast = normalCastMembers,
+                                    listState = castRowListState,
                                     title = if (hasVisiblePeopleTabs) "" else strTabCast,
                                     leadingCast = directorWriterMembers,
                                     upFocusRequester = if (hasVisiblePeopleTabs) castTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
@@ -2020,8 +2079,13 @@ private fun MetaDetailsContent(
                                     sectionFocusRequester = castSectionFocusRequester,
                                     restorePersonId = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
+                                    lastFocusedPersonKey = lastFocusedCastKey,
+                                    onLastFocusedPersonKeyChange = { lastFocusedCastKey = it },
                                     onRestoreFocusHandled = {
                                         clearPendingRestore()
+                                    },
+                                    onCastMemberFocused = {
+                                        restorePinnedDetailPageIfNudge()
                                     },
                                     onCastMemberClick = { member ->
                                         member.tmdbId?.let { id ->
@@ -2197,6 +2261,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
+                            onCompanyFocused = { pinDetailPageScroll() },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -2215,6 +2280,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
+                            onCompanyFocused = { pinDetailPageScroll() },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -2233,6 +2299,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
+                            onCompanyFocused = { pinDetailPageScroll() },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -2251,6 +2318,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
+                            onCompanyFocused = { pinDetailPageScroll() },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
