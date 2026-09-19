@@ -1168,9 +1168,11 @@ private fun MetaDetailsContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val suppressDetailRowRelocation = pendingRestoreType == RestoreTarget.EPISODE
-    val suppressCompanyBringIntoView = pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK
+    val suppressRestoreBringIntoView =
+        pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK ||
+            pendingRestoreType == RestoreTarget.CAST_MEMBER
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
-    val companyRestoreBringIntoViewSpec = remember {
+    val restoreNoScrollBringIntoViewSpec = remember {
         object : BringIntoViewSpec {
             override fun calculateScrollDistance(
                 offset: Float,
@@ -1826,8 +1828,8 @@ private fun MetaDetailsContent(
 
         // Single scrollable column with hero + content
         CompositionLocalProvider(
-            LocalBringIntoViewSpec provides if (suppressCompanyBringIntoView) {
-                companyRestoreBringIntoViewSpec
+            LocalBringIntoViewSpec provides if (suppressRestoreBringIntoView) {
+                restoreNoScrollBringIntoViewSpec
             } else {
                 defaultBringIntoViewSpec
             }

@@ -22,11 +22,14 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewResponder
+import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -37,6 +40,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -98,6 +102,20 @@ fun CastSection(
 
     // Track whether a restore is pending so focusRestorer can use the correct fallback
     var restorePending by remember { mutableStateOf(false) }
+    var holdRestoreScrollSuppress by remember { mutableStateOf(false) }
+    val suppressRestoreScroll = holdRestoreScrollSuppress ||
+        (restoreFocusToken > 0 && restorePersonId != null)
+    val restoreNoScrollResponder = remember {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) {}
+        }
+    }
+    val restoreItemModifier = if (suppressRestoreScroll) {
+        Modifier.bringIntoViewResponder(restoreNoScrollResponder)
+    } else {
+        Modifier
+    }
 
     // Only react to restoreFocusToken changes (triggered on ON_RESUME).
     // restorePersonId/cast lists are read inside but not used as keys to avoid
@@ -114,7 +132,10 @@ fun CastSection(
             return@LaunchedEffect
         }
         restorePending = true
+        holdRestoreScrollSuppress = true
         restoreFocusRequester.requestFocusAfterFrames()
+        repeat(2) { withFrameNanos { } }
+        holdRestoreScrollSuppress = false
     }
 
     val itemWidth = 150.dp
@@ -178,7 +199,7 @@ fun CastSection(
                         else -> remember(focusKey) { itemFocusRequesters.getOrPut(focusKey) { FocusRequester() } }
                     }
 
-                    Box(modifier = Modifier.padding(end = endPadding)) {
+                    Box(modifier = restoreItemModifier.padding(end = endPadding)) {
                         CastMemberItem(
                             member = member,
                             modifier = Modifier
@@ -231,7 +252,7 @@ fun CastSection(
                     else -> remember(focusKey) { itemFocusRequesters.getOrPut(focusKey) { FocusRequester() } }
                 }
 
-                Box(modifier = Modifier.padding(end = standardGap)) {
+                Box(modifier = restoreItemModifier.padding(end = standardGap)) {
                     CastMemberItem(
                         member = member,
                         modifier = Modifier
