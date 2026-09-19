@@ -1124,7 +1124,11 @@ private fun MetaDetailsContent(
     val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
     val listState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
     val castRowListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    val moreLikeThisListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    val collectionListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
     var lastFocusedCastKey by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
+    var lastFocusedMoreLikeItemId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
+    var lastFocusedCollectionItemId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
     var savedRestoreScrollIndex by rememberSaveable(meta.id) { mutableIntStateOf(-1) }
     var savedRestoreScrollOffset by rememberSaveable(meta.id) { mutableIntStateOf(0) }
     var pinnedPageIndex by remember { mutableIntStateOf(-1) }
@@ -1394,6 +1398,16 @@ private fun MetaDetailsContent(
             castRowListState.firstVisibleItemScrollOffset != 0
         ) {
             castRowListState.scrollToItem(0)
+        }
+        if (moreLikeThisListState.firstVisibleItemIndex != 0 ||
+            moreLikeThisListState.firstVisibleItemScrollOffset != 0
+        ) {
+            moreLikeThisListState.scrollToItem(0)
+        }
+        if (collectionListState.firstVisibleItemIndex != 0 ||
+            collectionListState.firstVisibleItemScrollOffset != 0
+        ) {
+            collectionListState.scrollToItem(0)
         }
     }
 
@@ -2158,6 +2172,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.MORE_LIKE_THIS -> {
                                 MoreLikeThisSection(
                                     items = moreLikeThis,
+                                    listState = moreLikeThisListState,
                                     sourceLabel = moreLikeThisSourceLabel,
                                     posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                                     upFocusRequester = if (hasVisiblePeopleTabs) moreLikeTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
@@ -2165,10 +2180,15 @@ private fun MetaDetailsContent(
                                     sectionFocusRequester = moreLikeSectionFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
+                                    lastFocusedItemId = lastFocusedMoreLikeItemId,
+                                    onLastFocusedItemIdChange = { lastFocusedMoreLikeItemId = it },
                                     onRestoreFocusHandled = {
                                         clearPendingRestore()
                                     },
                                     isItemWatched = { item -> relatedWatchedStatus["${item.id}|${item.apiType}"] == true },
+                                    onItemFocused = {
+                                        restorePinnedDetailPageIfNudge()
+                                    },
                                     onItemClick = { item ->
                                         markMoreLikeThisRestore(item.id)
                                         onNavigateToDetail(item.id, item.apiType, null)
@@ -2197,16 +2217,22 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.COLLECTION -> {
                                 CollectionSection(
                                     items = collection,
+                                    listState = collectionListState,
                                     posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                                     upFocusRequester = if (hasVisiblePeopleTabs) collectionTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
                                     downFocusRequester = if (shouldShowCommentsSection && canToggleEpisodeComments) commentsSelectedModeFocusRequester else null,
                                     sectionFocusRequester = collectionSectionFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
+                                    lastFocusedItemId = lastFocusedCollectionItemId,
+                                    onLastFocusedItemIdChange = { lastFocusedCollectionItemId = it },
                                     onRestoreFocusHandled = {
                                         clearPendingRestore()
                                     },
                                     isItemWatched = { item -> relatedWatchedStatus["${item.id}|${item.apiType}"] == true },
+                                    onItemFocused = {
+                                        restorePinnedDetailPageIfNudge()
+                                    },
                                     onItemClick = { item ->
                                         markCollectionRestore(item.id)
                                         onNavigateToDetail(item.id, item.apiType, null)
@@ -2245,6 +2271,7 @@ private fun MetaDetailsContent(
                 item(key = "collection_section", contentType = "horizontal_row") {
                     CollectionSection(
                         items = collection,
+                        listState = collectionListState,
                         title = collectionName ?: strTabCollection,
                         posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                         upFocusRequester = if (hasVisiblePeopleSection) {
@@ -2261,8 +2288,13 @@ private fun MetaDetailsContent(
                         sectionFocusRequester = collectionSectionFocusRequester,
                         restoreItemId = if (pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
+                        lastFocusedItemId = lastFocusedCollectionItemId,
+                        onLastFocusedItemIdChange = { lastFocusedCollectionItemId = it },
                         onRestoreFocusHandled = {
                             clearPendingRestore()
+                        },
+                        onItemFocused = {
+                            restorePinnedDetailPageIfNudge()
                         },
                         onItemClick = { item ->
                             markCollectionRestore(item.id)

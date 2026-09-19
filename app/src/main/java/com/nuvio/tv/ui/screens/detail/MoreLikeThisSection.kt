@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.relocation.BringIntoViewResponder
@@ -40,6 +41,7 @@ import com.nuvio.tv.ui.components.PosterCardStyle
 @Composable
 fun MoreLikeThisSection(
     items: List<MetaPreview>,
+    listState: LazyListState,
     sourceLabel: String? = null,
     posterCardCornerRadius: Dp = NuvioTheme.spacing.md,
     upFocusRequester: FocusRequester? = null,
@@ -47,6 +49,8 @@ fun MoreLikeThisSection(
     sectionFocusRequester: FocusRequester? = null,
     restoreItemId: String? = null,
     restoreFocusToken: Int = 0,
+    lastFocusedItemId: String? = null,
+    onLastFocusedItemIdChange: (String) -> Unit = {},
     onRestoreFocusHandled: () -> Unit = {},
     onItemFocused: (MetaPreview) -> Unit = {},
     onItemClick: (MetaPreview) -> Unit,
@@ -58,6 +62,14 @@ fun MoreLikeThisSection(
     val firstItemFocusRequester = remember { FocusRequester() }
     val restoreFocusRequester = remember { FocusRequester() }
     val itemFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val lastFocusedRequester = remember(lastFocusedItemId, items, restoreItemId) {
+        when {
+            lastFocusedItemId == null -> firstItemFocusRequester
+            lastFocusedItemId == restoreItemId -> restoreFocusRequester
+            lastFocusedItemId == items.firstOrNull()?.id -> firstItemFocusRequester
+            else -> itemFocusRequesters.getOrPut(lastFocusedItemId) { FocusRequester() }
+        }
+    }
 
     LaunchedEffect(items) {
         val validIds = items.mapTo(mutableSetOf()) { it.id }
@@ -95,10 +107,11 @@ fun MoreLikeThisSection(
             .padding(top = NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.sm)
     ) {
         LazyRow(
+            state = listState,
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (sectionFocusRequester != null) Modifier.focusRequester(sectionFocusRequester) else Modifier)
-                .focusRestorer { if (restorePending) restoreFocusRequester else firstItemFocusRequester }
+                .focusRestorer { if (restorePending) restoreFocusRequester else lastFocusedRequester }
                 .focusGroup(),
             contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.xxxl, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
@@ -140,6 +153,7 @@ fun MoreLikeThisSection(
                         upFocusRequester = upFocusRequester,
                         downFocusRequester = downFocusRequester,
                         onFocused = {
+                            onLastFocusedItemIdChange(item.id)
                             onItemFocused(item)
                             if (isRestoreTarget && restoreFocusToken > 0) {
                                 restorePending = false
