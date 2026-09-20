@@ -577,7 +577,7 @@ fun ContinueWatchingCard(
         }
     }
     val imageRequest = remember(effectiveImageModel, requestWidthPx, requestHeightPx, shouldBlur) {
-        ImageRequest.Builder(context)
+        val builder = ImageRequest.Builder(context)
             .data(effectiveImageModel)
             .crossfade(true)
             .memoryCacheKey(
@@ -589,7 +589,16 @@ fun ContinueWatchingCard(
             .apply {
                 if (shouldBlur) transformations(com.nuvio.tv.ui.util.BlurTransformation())
             }
-            .build()
+        val fallbackUrl = when (item) {
+            is ContinueWatchingItem.InProgress -> item.originalPoster
+            is ContinueWatchingItem.NextUp -> item.originalPoster
+        }
+        if (!fallbackUrl.isNullOrBlank() && fallbackUrl != effectiveImageModel) {
+            builder.memoryCacheKeyExtras(
+                mapOf(com.nuvio.tv.core.image.CustomPosterFallbackInterceptor.FALLBACK_URL_KEY to fallbackUrl)
+            )
+        }
+        builder.build()
     }
 
     val bgColor = NuvioTheme.colors.Background

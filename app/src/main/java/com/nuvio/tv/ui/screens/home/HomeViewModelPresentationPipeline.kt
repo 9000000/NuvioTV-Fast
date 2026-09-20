@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.poster.withCustomPosterUrls
 import com.nuvio.tv.core.tmdb.TmdbEnrichment
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeImdbRatingsVisibility
@@ -267,8 +268,12 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                 ModernHomePresentationInput(
                     homeRows = state.homeRows,
                     catalogRows = state.catalogRows,
-                    continueWatchingItems = if (state.continueWatchingEnabled) state.continueWatchingItems else emptyList(),
-                    upcomingItems = if (state.continueWatchingEnabled) state.upcomingItems else emptyList(),
+                    continueWatchingItems = if (state.continueWatchingEnabled)
+                        state.continueWatchingItems.withCustomPosterUrls(state.customPosterUrlPattern)
+                    else emptyList(),
+                    upcomingItems = if (state.continueWatchingEnabled)
+                        state.upcomingItems.withCustomPosterUrls(state.customPosterUrlPattern)
+                    else emptyList(),
                     useLandscapePosters = state.modernLandscapePostersEnabled,
                     showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
                     showFullReleaseDate = state.showFullReleaseDate,

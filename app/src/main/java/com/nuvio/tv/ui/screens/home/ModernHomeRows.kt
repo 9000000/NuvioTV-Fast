@@ -1186,6 +1186,12 @@ private fun ModernCarouselCard(
             if (revalidationKey > 0) {
                 builder.placeholderMemoryCacheKey("${it}_${requestWidthPx}x${requestHeightPx}_v${revalidationKey - 1}")
             }
+            val fallbackUrl = item.metaPreview?.rawPosterUrl
+            if (!fallbackUrl.isNullOrBlank() && fallbackUrl != it) {
+                builder.memoryCacheKeyExtras(
+                    mapOf(com.nuvio.tv.core.image.CustomPosterFallbackInterceptor.FALLBACK_URL_KEY to fallbackUrl)
+                )
+            }
             builder.build()
         }
     }
