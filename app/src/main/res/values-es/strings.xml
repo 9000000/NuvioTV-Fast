@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Nuvio</string>
+    <string name="app_name">Nuvio TV</string>
     <string name="type_movie">Película</string>
     <string name="type_series">Series</string>
     <string name="type_unknown">Desconocido</string>
