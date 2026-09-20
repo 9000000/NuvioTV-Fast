@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -291,6 +292,7 @@ private fun LiveTvContent(
     }
 
     val gridState = rememberLazyGridState()
+    val filterChipsListState = rememberLazyListState()
     val channelFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     var restoredChannelId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -335,6 +337,19 @@ private fun LiveTvContent(
                 selectedGroup = null
             }
             isInitialEntry = false
+        }
+    }
+
+    // Scroll filter chips row when group filter is selected to ensure group chip is visible
+    LaunchedEffect(activeFilter, selectedGroup, allGroups) {
+        if (activeFilter == FilterType.GROUP && selectedGroup != null) {
+            delay(100)
+            val groupIndex = allGroups.indexOf(selectedGroup)
+            if (groupIndex >= 0) {
+                // Calculate chip index: 3 static chips (ALL, FAVORITES, RECENT) + group index
+                val staticChipCount = 3
+                filterChipsListState.scrollToItem(staticChipCount + groupIndex)
+            }
         }
     }
 
@@ -482,6 +497,7 @@ private fun LiveTvContent(
 
         // --- FILTER CHIPS ROW ---
         LazyRow(
+            state = filterChipsListState,
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(vertical = 4.dp)
@@ -595,17 +611,26 @@ private fun LiveTvContent(
                         onToggleFavorite = { onToggleFavorite(channel.id) },
                         onRequestNavigateToCategory = {
                             // Request focus to appropriate filter chip when pressing UP/DOWN from edge rows
+                            // With fallback for group chips that may not be rendered yet
                             when (activeFilter) {
                                 FilterType.ALL -> allChipFocusRequester.requestFocus()
                                 FilterType.FAVORITES -> favoritesChipFocusRequester.requestFocus()
                                 FilterType.RECENT -> {
                                     if (state.recentChannelIds.isNotEmpty()) {
                                         recentChipFocusRequester.requestFocus()
+                                    } else {
+                                        allChipFocusRequester.requestFocus()
                                     }
                                 }
                                 FilterType.GROUP -> {
                                     if (selectedGroup != null) {
-                                        groupChipFocusRequesters[selectedGroup]?.requestFocus()
+                                        val requester = groupChipFocusRequesters[selectedGroup]
+                                        if (requester != null) {
+                                            requester.requestFocus()
+                                        } else {
+                                            // Fallback to ALL if group FocusRequester not found
+                                            allChipFocusRequester.requestFocus()
+                                        }
                                     }
                                 }
                             }
