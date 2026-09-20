@@ -222,7 +222,8 @@ object CustomPosterUrlResolver {
     private val RPDB_DOMAINS = listOf(
         "ratingposterdb.com",
         "aioratings.com",
-        "top-posters.com"
+        "top-posters.com",
+        "btttr.cc"
     )
 
     private fun isRpdbFamily(pattern: String): Boolean =
