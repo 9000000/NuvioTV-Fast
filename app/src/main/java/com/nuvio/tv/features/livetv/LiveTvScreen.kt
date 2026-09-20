@@ -1,6 +1,11 @@
 package com.nuvio.tv.features.livetv
 
 import android.view.KeyEvent as AndroidKeyEvent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -16,17 +21,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -44,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -57,6 +68,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -71,62 +83,49 @@ import kotlinx.coroutines.launch
 private const val GRID_COLUMNS = 5
 
 private enum class FilterType {
-    ALL, FAVORITES, RECENT, GROUP
+    ALL, FAVORITES, RECENT, GROUP, PLAYLIST
 }
+
+// ─── Entry point ─────────────────────────────────────────────────────────────
 
 @Composable
 fun LiveTvScreen(
     onChannelSelected: (LiveTvChannel) -> Unit,
     onNavigateToSettings: () -> Unit = {}
 ) {
-    LaunchedEffect(Unit) {
-        LiveTvRepository.ensureLoaded()
-    }
-
+    LaunchedEffect(Unit) { LiveTvRepository.ensureLoaded() }
     val state by LiveTvRepository.uiState.collectAsState()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NuvioTheme.colors.Background)
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(NuvioTheme.colors.Background)) {
         when {
-            state.isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = NuvioTheme.colors.Primary)
-                }
+            state.isLoading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                CircularProgressIndicator(color = NuvioTheme.colors.Primary)
             }
-            !state.hasPlaylist -> {
-                LiveTvEmptyState(onNavigateToSettings = onNavigateToSettings)
-            }
-            state.errorMessage != null && state.channels.isEmpty() -> {
-                LiveTvErrorState(
-                    message = state.errorMessage!!,
-                    onRetry = { LiveTvRepository.refresh() },
-                    onNavigateToSettings = onNavigateToSettings
-                )
-            }
-            else -> {
-                LiveTvContent(
-                    state = state,
-                    onChannelSelected = { channel ->
-                        LiveTvRepository.recordLastWatched(channel)
-                        onChannelSelected(channel)
-                    },
-                    onToggleFavorite = { channelId ->
-                        LiveTvRepository.toggleFavoriteChannel(channelId)
-                    },
-                    onRefresh = { LiveTvRepository.refresh() },
-                    onNavigateToSettings = onNavigateToSettings
-                )
-            }
+            !state.hasPlaylist -> LiveTvEmptyState(onNavigateToSettings)
+            state.errorMessage != null && state.channels.isEmpty() -> LiveTvErrorState(
+                message = state.errorMessage!!,
+                onRetry = { LiveTvRepository.refresh() },
+                onNavigateToSettings = onNavigateToSettings
+            )
+            else -> LiveTvContent(
+                state = state,
+                onChannelSelected = { channel ->
+                    LiveTvRepository.recordLastWatched(channel)
+                    onChannelSelected(channel)
+                },
+                onToggleFavorite = { LiveTvRepository.toggleFavoriteChannel(it) },
+                onRefresh = { LiveTvRepository.refresh() },
+                onNavigateToSettings = onNavigateToSettings
+            )
         }
     }
 }
 
+// ─── Empty / Error ────────────────────────────────────────────────────────────
+
 @Composable
 private fun LiveTvEmptyState(onNavigateToSettings: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize(), Alignment.Center) {
         Card(
             onClick = onNavigateToSettings,
             modifier = Modifier.width(480.dp).padding(24.dp),
@@ -152,38 +151,16 @@ private fun LiveTvEmptyState(onNavigateToSettings: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.LiveTv,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = NuvioTheme.colors.Primary
-                )
-                Text(
-                    text = stringResource(R.string.livetv_empty_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioTheme.colors.TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = stringResource(R.string.livetv_empty_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioTheme.colors.TextSecondary,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(NuvioTheme.colors.Primary)
-                        .padding(horizontal = 24.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.livetv_configure_now),
-                        color = NuvioTheme.colors.OnPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+                Icon(Icons.Default.LiveTv, null, Modifier.size(64.dp), tint = NuvioTheme.colors.Primary)
+                Text(stringResource(R.string.livetv_empty_title), style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioTheme.colors.TextPrimary, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.livetv_empty_desc), style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioTheme.colors.TextSecondary, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(NuvioTheme.colors.Primary)
+                    .padding(horizontal = 24.dp, vertical = 10.dp)) {
+                    Text(stringResource(R.string.livetv_configure_now), color = NuvioTheme.colors.OnPrimary,
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
         }
@@ -191,57 +168,34 @@ private fun LiveTvEmptyState(onNavigateToSettings: () -> Unit) {
 }
 
 @Composable
-private fun LiveTvErrorState(
-    message: String,
-    onRetry: () -> Unit,
-    onNavigateToSettings: () -> Unit
-) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(24.dp)
-        ) {
-            Text(
-                text = "⚠️ $message",
-                color = NuvioTheme.colors.Error,
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center
-            )
+private fun LiveTvErrorState(message: String, onRetry: () -> Unit, onNavigateToSettings: () -> Unit) {
+    Box(Modifier.fillMaxSize(), Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(24.dp)) {
+            Text("⚠️ $message", color = NuvioTheme.colors.Error,
+                style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Card(
-                    onClick = onRetry,
-                    colors = CardDefaults.colors(
-                        containerColor = NuvioTheme.colors.Primary,
-                        focusedContainerColor = NuvioTheme.colors.FocusBackground
-                    ),
-                    shape = CardDefaults.shape(RoundedCornerShape(8.dp))
-                ) {
-                    Text(
-                        text = "Thử lại (Retry)",
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                        color = NuvioTheme.colors.OnPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
+                Card(onClick = onRetry,
+                    colors = CardDefaults.colors(containerColor = NuvioTheme.colors.Primary,
+                        focusedContainerColor = NuvioTheme.colors.FocusBackground),
+                    shape = CardDefaults.shape(RoundedCornerShape(8.dp))) {
+                    Text("Thử lại (Retry)", Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        color = NuvioTheme.colors.OnPrimary, fontWeight = FontWeight.Bold)
                 }
-                Card(
-                    onClick = onNavigateToSettings,
-                    colors = CardDefaults.colors(
-                        containerColor = NuvioTheme.colors.BackgroundElevated,
-                        focusedContainerColor = NuvioTheme.colors.FocusBackground
-                    ),
-                    shape = CardDefaults.shape(RoundedCornerShape(8.dp))
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_livetv_title),
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                        color = NuvioTheme.colors.TextPrimary
-                    )
+                Card(onClick = onNavigateToSettings,
+                    colors = CardDefaults.colors(containerColor = NuvioTheme.colors.BackgroundElevated,
+                        focusedContainerColor = NuvioTheme.colors.FocusBackground),
+                    shape = CardDefaults.shape(RoundedCornerShape(8.dp))) {
+                    Text(stringResource(R.string.settings_livetv_title),
+                        Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        color = NuvioTheme.colors.TextPrimary)
                 }
             }
         }
     }
 }
+
+// ─── Main content ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun LiveTvContent(
@@ -253,14 +207,27 @@ private fun LiveTvContent(
 ) {
     var activeFilter by rememberSaveable { mutableStateOf(FilterType.ALL) }
     var selectedGroup by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
     var isInitialEntry by rememberSaveable { mutableStateOf(true) }
+    var showPlaylistDropdown by remember { mutableStateOf(false) }
 
     val allGroups = remember(state.channels) {
         state.channels.mapNotNull { it.group?.trim() }.filter { it.isNotBlank() }.distinct().sorted()
     }
 
+    // Tất cả playlist có kênh, sắp xếp theo tên
+    val allPlaylists = remember(state.playlists, state.channels) {
+        val idsWithChannels = state.channels.mapNotNull { it.playlistId }.toSet()
+        state.playlists.filter { it.isEnabled && it.id in idsWithChannels }
+            .sortedBy { it.name }
+    }
+
+    val selectedPlaylistName = remember(selectedPlaylistId, allPlaylists) {
+        allPlaylists.firstOrNull { it.id == selectedPlaylistId }?.name
+    }
+
     val filteredChannels = remember(
-        state.channels, activeFilter, selectedGroup,
+        state.channels, activeFilter, selectedGroup, selectedPlaylistId,
         state.favoriteChannelIds, state.recentChannelIds
     ) {
         when (activeFilter) {
@@ -271,15 +238,15 @@ private fun LiveTvContent(
                 state.recentChannelIds.mapNotNull { channelMap[it] }
             }
             FilterType.GROUP -> state.channels.filter { it.group?.trim() == selectedGroup }
+            FilterType.PLAYLIST -> state.channels.filter { it.playlistId == selectedPlaylistId }
         }
     }
 
-    // Tính tổng số hàng và index bắt đầu của hàng cuối
     val totalRows = remember(filteredChannels) {
         if (filteredChannels.isEmpty()) 0
         else (filteredChannels.size + GRID_COLUMNS - 1) / GRID_COLUMNS
     }
-    val lastRowStartIndex = remember(filteredChannels, totalRows) {
+    val lastRowStartIndex = remember(totalRows) {
         if (totalRows == 0) 0 else (totalRows - 1) * GRID_COLUMNS
     }
 
@@ -289,24 +256,26 @@ private fun LiveTvContent(
     val channelFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     var restoredChannelId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Filter chip focus requesters
+    // Focus requesters cho filter chips
     val allChipFocusRequester = remember { FocusRequester() }
     val favoritesChipFocusRequester = remember { FocusRequester() }
     val recentChipFocusRequester = remember { FocusRequester() }
     val groupChipFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val playlistDropdownButtonFocusRequester = remember { FocusRequester() }
 
-    val currentChannelIds = remember(filteredChannels) { filteredChannels.map { it.id }.toSet() }
-    LaunchedEffect(currentChannelIds) {
-        channelFocusRequesters.keys.retainAll(currentChannelIds)
+    val staticChipCount = if (state.recentChannelIds.isNotEmpty()) 3 else 2
+
+    LaunchedEffect(filteredChannels.map { it.id }) {
+        channelFocusRequesters.keys.retainAll(filteredChannels.map { it.id }.toSet())
     }
 
-    // Restore focus khi quay lại từ player (không phải lần đầu vào)
+    // Restore focus khi quay lại từ player
     LaunchedEffect(state.lastWatchedChannelId, filteredChannels, isInitialEntry) {
         val targetId = state.lastWatchedChannelId
         if (!isInitialEntry && targetId != null && targetId != restoredChannelId) {
-            val targetIndex = filteredChannels.indexOfFirst { it.id == targetId }
-            if (targetIndex >= 0) {
-                gridState.scrollToItem(targetIndex)
+            val idx = filteredChannels.indexOfFirst { it.id == targetId }
+            if (idx >= 0) {
+                gridState.scrollToItem(idx)
                 delay(120)
                 channelFocusRequesters[targetId]?.requestFocus()
                 restoredChannelId = targetId
@@ -314,292 +283,502 @@ private fun LiveTvContent(
         }
     }
 
-    // Focus ban đầu khi vào screen lần đầu
+    // Focus ban đầu
     LaunchedEffect(isInitialEntry, state.recentChannelIds) {
         if (isInitialEntry) {
             delay(150)
             if (state.recentChannelIds.isNotEmpty()) {
                 activeFilter = FilterType.RECENT
-                selectedGroup = null
                 recentChipFocusRequester.requestFocus()
             } else {
                 activeFilter = FilterType.ALL
-                selectedGroup = null
                 allChipFocusRequester.requestFocus()
             }
             isInitialEntry = false
         }
     }
 
-    // Scroll filter chips để group chip visible khi chọn group
-    LaunchedEffect(activeFilter, selectedGroup, allGroups) {
+    // Scroll filter chips đến chip đang active
+    LaunchedEffect(activeFilter, selectedGroup) {
         if (activeFilter == FilterType.GROUP && selectedGroup != null) {
             delay(100)
-            val groupIndex = allGroups.indexOf(selectedGroup)
-            if (groupIndex >= 0) {
-                val staticCount = if (state.recentChannelIds.isNotEmpty()) 3 else 2
-                filterChipsListState.scrollToItem(staticCount + groupIndex)
-            }
+            val idx = allGroups.indexOf(selectedGroup)
+            if (idx >= 0) filterChipsListState.scrollToItem(staticChipCount + idx)
         }
     }
 
-    // Helper scroll + focus về chip của danh mục hiện tại
+    // Helper navigate về chip hiện tại
     suspend fun navigateToActiveChip() {
+        showPlaylistDropdown = false
         when (activeFilter) {
             FilterType.ALL -> {
-                filterChipsListState.scrollToItem(0)
-                delay(80)
+                filterChipsListState.scrollToItem(0); delay(80)
                 allChipFocusRequester.requestFocus()
             }
             FilterType.FAVORITES -> {
-                filterChipsListState.scrollToItem(1)
-                delay(80)
+                filterChipsListState.scrollToItem(1); delay(80)
                 favoritesChipFocusRequester.requestFocus()
             }
             FilterType.RECENT -> {
                 if (state.recentChannelIds.isNotEmpty()) {
-                    filterChipsListState.scrollToItem(2)
-                    delay(80)
+                    filterChipsListState.scrollToItem(2); delay(80)
                     recentChipFocusRequester.requestFocus()
                 } else {
-                    filterChipsListState.scrollToItem(0)
-                    delay(80)
+                    filterChipsListState.scrollToItem(0); delay(80)
                     allChipFocusRequester.requestFocus()
                 }
             }
             FilterType.GROUP -> {
-                if (selectedGroup != null) {
-                    val groupIndex = allGroups.indexOf(selectedGroup)
-                    if (groupIndex >= 0) {
-                        val staticCount = if (state.recentChannelIds.isNotEmpty()) 3 else 2
-                        filterChipsListState.scrollToItem(staticCount + groupIndex)
-                        delay(120)
-                    }
-                    val requester = groupChipFocusRequesters[selectedGroup]
-                    if (requester != null) {
-                        requester.requestFocus()
-                    } else {
-                        filterChipsListState.scrollToItem(0)
-                        delay(80)
-                        allChipFocusRequester.requestFocus()
-                    }
-                } else {
-                    filterChipsListState.scrollToItem(0)
-                    delay(80)
-                    allChipFocusRequester.requestFocus()
-                }
+                val idx = allGroups.indexOf(selectedGroup)
+                if (idx >= 0) { filterChipsListState.scrollToItem(staticChipCount + idx); delay(120) }
+                groupChipFocusRequesters[selectedGroup]?.requestFocus()
+                    ?: run { filterChipsListState.scrollToItem(0); delay(80); allChipFocusRequester.requestFocus() }
+            }
+            FilterType.PLAYLIST -> {
+                // Cuộn đến nút dropdown playlist và focus vào đó
+                filterChipsListState.animateScrollToItem(filterChipsListState.layoutInfo.totalItemsCount - 1)
+                delay(80)
+                playlistDropdownButtonFocusRequester.requestFocus()
             }
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        // --- HEADER BAR ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    // Bọc trong Box để có thể hiển thị dropdown overlay lên trên
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column {
-                Text(
-                    text = stringResource(R.string.nav_livetv),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = NuvioTheme.colors.TextPrimary
-                )
-                Text(
-                    text = stringResource(R.string.livetv_channels_count, filteredChannels.size),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NuvioTheme.colors.TextSecondary
-                )
-            }
-
+            // ── Header ──
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Favorite Hint badge
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(NuvioTheme.colors.BackgroundElevated)
-                        .padding(horizontal = 12.dp, vertical = 7.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = null,
-                        tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "Giữ [OK] / [Menu]: Yêu thích",
-                        color = NuvioTheme.colors.TextSecondary,
-                        fontSize = 12.sp
-                    )
+                Column {
+                    Text(stringResource(R.string.nav_livetv),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold, color = NuvioTheme.colors.TextPrimary)
+                    Text(stringResource(R.string.livetv_channels_count, filteredChannels.size),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioTheme.colors.TextSecondary)
                 }
-
-                // Refresh Button — DOWN → trỏ về chip danh mục hiện tại
-                Card(
-                    onClick = onRefresh,
-                    colors = CardDefaults.colors(
-                        containerColor = NuvioTheme.colors.BackgroundElevated,
-                        focusedContainerColor = NuvioTheme.colors.FocusBackground
-                    ),
-                    shape = CardDefaults.shape(CircleShape),
-                    scale = CardDefaults.scale(focusedScale = 1.0f),
-                    modifier = Modifier.onKeyEvent { keyEvent ->
-                        if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
-                            keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
-                        ) {
-                            coroutineScope.launch { navigateToActiveChip() }
-                            true
-                        } else false
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    // Hint badge
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                            .background(NuvioTheme.colors.BackgroundElevated)
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    ) {
+                        Icon(Icons.Default.Star, null, Modifier.size(16.dp), tint = Color(0xFFFFD700))
+                        Text("Giữ [OK] / [Menu]: Yêu thích",
+                            color = NuvioTheme.colors.TextSecondary, fontSize = 12.sp)
                     }
-                ) {
-                    Box(modifier = Modifier.padding(10.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = NuvioTheme.colors.TextPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                // Settings Button — DOWN → trỏ về chip danh mục hiện tại
-                Card(
-                    onClick = onNavigateToSettings,
-                    colors = CardDefaults.colors(
-                        containerColor = NuvioTheme.colors.BackgroundElevated,
-                        focusedContainerColor = NuvioTheme.colors.FocusBackground
-                    ),
-                    shape = CardDefaults.shape(CircleShape),
-                    scale = CardDefaults.scale(focusedScale = 1.0f),
-                    modifier = Modifier.onKeyEvent { keyEvent ->
-                        if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
-                            keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
-                        ) {
-                            coroutineScope.launch { navigateToActiveChip() }
-                            true
-                        } else false
-                    }
-                ) {
-                    Box(modifier = Modifier.padding(10.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = NuvioTheme.colors.TextPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    // Refresh
+                    Card(
+                        onClick = onRefresh,
+                        colors = CardDefaults.colors(containerColor = NuvioTheme.colors.BackgroundElevated,
+                            focusedContainerColor = NuvioTheme.colors.FocusBackground),
+                        shape = CardDefaults.shape(CircleShape),
+                        scale = CardDefaults.scale(focusedScale = 1.0f),
+                        modifier = Modifier.onKeyEvent { keyEvent ->
+                            if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                                keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                                coroutineScope.launch { navigateToActiveChip() }; true
+                            } else false
+                        }
+                    ) { Box(Modifier.padding(10.dp)) {
+                        Icon(Icons.Default.Refresh, "Refresh", Modifier.size(20.dp), tint = NuvioTheme.colors.TextPrimary)
+                    } }
+                    // Settings
+                    Card(
+                        onClick = onNavigateToSettings,
+                        colors = CardDefaults.colors(containerColor = NuvioTheme.colors.BackgroundElevated,
+                            focusedContainerColor = NuvioTheme.colors.FocusBackground),
+                        shape = CardDefaults.shape(CircleShape),
+                        scale = CardDefaults.scale(focusedScale = 1.0f),
+                        modifier = Modifier.onKeyEvent { keyEvent ->
+                            if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                                keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                                coroutineScope.launch { navigateToActiveChip() }; true
+                            } else false
+                        }
+                    ) { Box(Modifier.padding(10.dp)) {
+                        Icon(Icons.Default.Settings, "Settings", Modifier.size(20.dp), tint = NuvioTheme.colors.TextPrimary)
+                    } }
                 }
             }
-        }
 
-        // --- FILTER CHIPS ROW ---
-        LazyRow(
-            state = filterChipsListState,
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 4.dp)
-        ) {
-            item {
-                FilterChipItem(
-                    label = stringResource(R.string.livetv_group_all),
-                    isSelected = activeFilter == FilterType.ALL,
-                    onClick = { activeFilter = FilterType.ALL; selectedGroup = null; isInitialEntry = false },
-                    focusRequester = allChipFocusRequester
-                )
-            }
-            item {
-                FilterChipItem(
-                    label = stringResource(R.string.livetv_group_favorites),
-                    isSelected = activeFilter == FilterType.FAVORITES,
-                    onClick = { activeFilter = FilterType.FAVORITES; selectedGroup = null; isInitialEntry = false },
-                    focusRequester = favoritesChipFocusRequester
-                )
-            }
-            if (state.recentChannelIds.isNotEmpty()) {
+            // ── Filter Chips + Playlist Dropdown Button ──
+            LazyRow(
+                state = filterChipsListState,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                // ALL
                 item {
                     FilterChipItem(
-                        label = stringResource(R.string.livetv_group_recent),
-                        isSelected = activeFilter == FilterType.RECENT,
-                        onClick = { activeFilter = FilterType.RECENT; selectedGroup = null; isInitialEntry = false },
-                        focusRequester = recentChipFocusRequester
+                        label = stringResource(R.string.livetv_group_all),
+                        isSelected = activeFilter == FilterType.ALL,
+                        onClick = {
+                            activeFilter = FilterType.ALL
+                            selectedGroup = null; selectedPlaylistId = null
+                            showPlaylistDropdown = false; isInitialEntry = false
+                        },
+                        focusRequester = allChipFocusRequester
                     )
                 }
-            }
-            items(allGroups) { group ->
-                val groupFocusRequester = remember(group) {
-                    groupChipFocusRequesters.getOrPut(group) { FocusRequester() }
+                // FAVORITES
+                item {
+                    FilterChipItem(
+                        label = stringResource(R.string.livetv_group_favorites),
+                        isSelected = activeFilter == FilterType.FAVORITES,
+                        onClick = {
+                            activeFilter = FilterType.FAVORITES
+                            selectedGroup = null; selectedPlaylistId = null
+                            showPlaylistDropdown = false; isInitialEntry = false
+                        },
+                        focusRequester = favoritesChipFocusRequester
+                    )
                 }
-                FilterChipItem(
-                    label = group,
-                    isSelected = activeFilter == FilterType.GROUP && selectedGroup == group,
-                    onClick = { activeFilter = FilterType.GROUP; selectedGroup = group; isInitialEntry = false },
-                    focusRequester = groupFocusRequester
-                )
+                // RECENT
+                if (state.recentChannelIds.isNotEmpty()) {
+                    item {
+                        FilterChipItem(
+                            label = stringResource(R.string.livetv_group_recent),
+                            isSelected = activeFilter == FilterType.RECENT,
+                            onClick = {
+                                activeFilter = FilterType.RECENT
+                                selectedGroup = null; selectedPlaylistId = null
+                                showPlaylistDropdown = false; isInitialEntry = false
+                            },
+                            focusRequester = recentChipFocusRequester
+                        )
+                    }
+                }
+                // GROUP chips
+                items(allGroups) { group ->
+                    val req = remember(group) { groupChipFocusRequesters.getOrPut(group) { FocusRequester() } }
+                    FilterChipItem(
+                        label = group,
+                        isSelected = activeFilter == FilterType.GROUP && selectedGroup == group,
+                        onClick = {
+                            activeFilter = FilterType.GROUP
+                            selectedGroup = group; selectedPlaylistId = null
+                            showPlaylistDropdown = false; isInitialEntry = false
+                        },
+                        focusRequester = req
+                    )
+                }
+                // Playlist Dropdown Button — chỉ hiện khi có nhiều hơn 1 playlist
+                if (allPlaylists.size > 1) {
+                    item {
+                        PlaylistDropdownButton(
+                            selectedName = if (activeFilter == FilterType.PLAYLIST)
+                                selectedPlaylistName else null,
+                            isActive = activeFilter == FilterType.PLAYLIST,
+                            isOpen = showPlaylistDropdown,
+                            focusRequester = playlistDropdownButtonFocusRequester,
+                            onClick = {
+                                showPlaylistDropdown = !showPlaylistDropdown
+                                isInitialEntry = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // ── Channels Grid ──
+            if (filteredChannels.isEmpty()) {
+                Box(Modifier.fillMaxWidth().weight(1f), Alignment.Center) {
+                    Text("Không có kênh nào trong mục này",
+                        color = NuvioTheme.colors.TextSecondary, fontSize = 15.sp)
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(GRID_COLUMNS),
+                    state = gridState,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(filteredChannels, key = { it.id }) { channel ->
+                        val isFav = channel.id in state.favoriteChannelIds
+                        val requester = remember(channel.id) {
+                            channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
+                        }
+                        val itemIndex = filteredChannels.indexOf(channel)
+                        TvChannelCard(
+                            channel = channel,
+                            isFavorite = isFav,
+                            focusRequester = requester,
+                            isFirstRow = itemIndex < GRID_COLUMNS,
+                            isLastRow = itemIndex >= lastRowStartIndex,
+                            onClick = {
+                                showPlaylistDropdown = false
+                                restoredChannelId = null
+                                onChannelSelected(channel)
+                            },
+                            onToggleFavorite = { onToggleFavorite(channel.id) },
+                            onRequestNavigateToCategory = {
+                                coroutineScope.launch { navigateToActiveChip() }
+                            }
+                        )
+                    }
+                }
             }
         }
 
-        // --- CHANNELS GRID ---
-        if (filteredChannels.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                contentAlignment = Alignment.Center
+        // ── Playlist Dropdown Panel (overlay) ──
+        if (allPlaylists.size > 1) {
+            AnimatedVisibility(
+                visible = showPlaylistDropdown,
+                enter = fadeIn() + slideInVertically { -it / 3 },
+                exit = fadeOut() + slideOutVertically { -it / 3 },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 110.dp, end = 24.dp)
+                    .zIndex(10f)
             ) {
-                Text(
-                    text = "Không có kênh nào trong mục này",
-                    color = NuvioTheme.colors.TextSecondary,
-                    fontSize = 15.sp
+                PlaylistDropdownPanel(
+                    playlists = allPlaylists,
+                    selectedPlaylistId = selectedPlaylistId,
+                    onPlaylistSelected = { playlist ->
+                        activeFilter = FilterType.PLAYLIST
+                        selectedPlaylistId = playlist.id
+                        selectedGroup = null
+                        showPlaylistDropdown = false
+                        isInitialEntry = false
+                    },
+                    onDismiss = {
+                        showPlaylistDropdown = false
+                        coroutineScope.launch {
+                            delay(80)
+                            playlistDropdownButtonFocusRequester.requestFocus()
+                        }
+                    }
                 )
             }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(GRID_COLUMNS),
-                state = gridState,
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                items(filteredChannels, key = { it.id }) { channel ->
-                    val isFav = channel.id in state.favoriteChannelIds
-                    val requester = remember(channel.id) {
-                        channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
-                    }
-                    val itemIndex = filteredChannels.indexOf(channel)
-                    // Hàng đầu: index < GRID_COLUMNS
-                    val isFirstRow = itemIndex < GRID_COLUMNS
-                    // Hàng cuối: index >= lastRowStartIndex (đã tính đúng từ totalRows)
-                    val isLastRow = itemIndex >= lastRowStartIndex
+        }
+    }
+}
 
-                    TvChannelCard(
-                        channel = channel,
-                        isFavorite = isFav,
-                        focusRequester = requester,
-                        isFirstRow = isFirstRow,
-                        isLastRow = isLastRow,
-                        onClick = {
-                            restoredChannelId = null
-                            onChannelSelected(channel)
-                        },
-                        onToggleFavorite = { onToggleFavorite(channel.id) },
-                        onRequestNavigateToCategory = {
-                            coroutineScope.launch { navigateToActiveChip() }
-                        }
+// ─── Playlist Dropdown Button ──────────────────────────────────────────────────
+
+@Composable
+private fun PlaylistDropdownButton(
+    selectedName: String?,
+    isActive: Boolean,
+    isOpen: Boolean,
+    focusRequester: FocusRequester,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.colors(
+            containerColor = if (isActive) NuvioTheme.colors.Primary else NuvioTheme.colors.BackgroundElevated,
+            focusedContainerColor = NuvioTheme.colors.FocusBackground
+        ),
+        shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
+        scale = CardDefaults.scale(focusedScale = 1.0f),
+        modifier = Modifier.focusRequester(focusRequester)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlaylistPlay,
+                contentDescription = null,
+                modifier = Modifier.size(15.dp),
+                tint = if (isActive) NuvioTheme.colors.OnPrimary else NuvioTheme.colors.TextSecondary
+            )
+            Text(
+                text = selectedName ?: "Danh sách phát",
+                color = if (isActive) NuvioTheme.colors.OnPrimary else NuvioTheme.colors.TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 140.dp)
+            )
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (isActive) NuvioTheme.colors.OnPrimary else NuvioTheme.colors.TextSecondary
+            )
+        }
+    }
+}
+
+// ─── Playlist Dropdown Panel ───────────────────────────────────────────────────
+
+@Composable
+private fun PlaylistDropdownPanel(
+    playlists: List<LiveTvPlaylist>,
+    selectedPlaylistId: String?,
+    onPlaylistSelected: (LiveTvPlaylist) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val firstItemFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(80)
+        firstItemFocusRequester.requestFocus()
+    }
+
+    Box(
+        modifier = Modifier
+            .shadow(elevation = 16.dp, shape = RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(NuvioTheme.colors.BackgroundElevated)
+            .widthIn(min = 220.dp, max = 320.dp)
+    ) {
+        Column {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NuvioTheme.colors.Background.copy(alpha = 0.6f))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.PlaylistPlay, null, Modifier.size(16.dp),
+                    tint = NuvioTheme.colors.Primary)
+                Text("Chọn danh sách phát",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NuvioTheme.colors.TextSecondary,
+                    fontWeight = FontWeight.Medium)
+            }
+
+            // Divider
+            Box(Modifier.fillMaxWidth().height(1.dp).background(NuvioTheme.colors.Border))
+
+            // Playlist list
+            LazyColumn(
+                modifier = Modifier.widthIn(min = 220.dp, max = 320.dp),
+                contentPadding = PaddingValues(vertical = 6.dp)
+            ) {
+                items(playlists, key = { it.id }) { playlist ->
+                    val isSelected = playlist.id == selectedPlaylistId
+                    val itemFocusRequester = if (playlist == playlists.first())
+                        firstItemFocusRequester else remember { FocusRequester() }
+
+                    PlaylistDropdownItem(
+                        playlist = playlist,
+                        isSelected = isSelected,
+                        focusRequester = itemFocusRequester,
+                        onClick = { onPlaylistSelected(playlist) },
+                        onKeyUp = { onDismiss() }
                     )
                 }
             }
         }
     }
 }
+
+// ─── Playlist Dropdown Item ────────────────────────────────────────────────────
+
+@Composable
+private fun PlaylistDropdownItem(
+    playlist: LiveTvPlaylist,
+    isSelected: Boolean,
+    focusRequester: FocusRequester,
+    onClick: () -> Unit,
+    onKeyUp: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    val bgColor = when {
+        isSelected -> NuvioTheme.colors.Primary.copy(alpha = 0.18f)
+        isFocused -> NuvioTheme.colors.FocusBackground
+        else -> Color.Transparent
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bgColor)
+            .focusRequester(focusRequester)
+            .onFocusChanged { isFocused = it.isFocused }
+            .onKeyEvent { keyEvent ->
+                when {
+                    // BACK / UP từ item đầu → đóng dropdown
+                    keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                    keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP -> {
+                        onKeyUp(); true
+                    }
+                    keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                    keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_BACK -> {
+                        onKeyUp(); true
+                    }
+                    // OK / CENTER → chọn
+                    keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                    keyEvent.nativeKeyEvent.keyCode in listOf(
+                        AndroidKeyEvent.KEYCODE_DPAD_CENTER,
+                        AndroidKeyEvent.KEYCODE_ENTER
+                    ) -> { onClick(); true }
+                    else -> false
+                }
+            }
+    ) {
+        // Dùng Card để có ripple effect
+        Card(
+            onClick = onClick,
+            colors = CardDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent
+            ),
+            scale = CardDefaults.scale(focusedScale = 1.0f),
+            border = CardDefaults.border(
+                border = Border(BorderStroke(0.dp, Color.Transparent)),
+                focusedBorder = Border(BorderStroke(0.dp, Color.Transparent))
+            ),
+            shape = CardDefaults.shape(RoundedCornerShape(0.dp)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlaylistPlay,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = if (isSelected) NuvioTheme.colors.Primary
+                           else if (isFocused) NuvioTheme.colors.TextPrimary
+                           else NuvioTheme.colors.TextSecondary
+                )
+                Text(
+                    text = playlist.name,
+                    color = if (isSelected) NuvioTheme.colors.Primary
+                            else if (isFocused) NuvioTheme.colors.TextPrimary
+                            else NuvioTheme.colors.TextSecondary,
+                    fontSize = 14.sp,
+                    fontWeight = if (isSelected || isFocused) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isSelected) {
+                    Icon(Icons.Default.Check, null, Modifier.size(16.dp),
+                        tint = NuvioTheme.colors.Primary)
+                }
+            }
+        }
+    }
+}
+
+// ─── Filter Chip ──────────────────────────────────────────────────────────────
 
 @Composable
 private fun FilterChipItem(
@@ -611,7 +790,8 @@ private fun FilterChipItem(
     Card(
         onClick = onClick,
         colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioTheme.colors.Primary else NuvioTheme.colors.BackgroundElevated,
+            containerColor = if (isSelected) NuvioTheme.colors.Primary
+                            else NuvioTheme.colors.BackgroundElevated,
             focusedContainerColor = NuvioTheme.colors.FocusBackground
         ),
         shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
@@ -628,6 +808,8 @@ private fun FilterChipItem(
         }
     }
 }
+
+// ─── Channel Card ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun TvChannelCard(
@@ -654,32 +836,19 @@ private fun TvChannelCard(
                 val code = keyEvent.nativeKeyEvent.keyCode
                 val action = keyEvent.nativeKeyEvent.action
                 when {
-                    // D-pad UP từ hàng đầu → về chip danh mục (dùng ACTION_DOWN để phản hồi ngay)
                     action == AndroidKeyEvent.ACTION_DOWN &&
-                    code == AndroidKeyEvent.KEYCODE_DPAD_UP &&
-                    isFirstRow -> {
-                        onRequestNavigateToCategory()
-                        true
+                    code == AndroidKeyEvent.KEYCODE_DPAD_UP && isFirstRow -> {
+                        onRequestNavigateToCategory(); true
                     }
-                    // D-pad DOWN từ hàng cuối → về chip danh mục (dùng ACTION_DOWN để phản hồi ngay)
                     action == AndroidKeyEvent.ACTION_DOWN &&
-                    code == AndroidKeyEvent.KEYCODE_DPAD_DOWN &&
-                    isLastRow -> {
-                        onRequestNavigateToCategory()
-                        true
+                    code == AndroidKeyEvent.KEYCODE_DPAD_DOWN && isLastRow -> {
+                        onRequestNavigateToCategory(); true
                     }
-                    // Phím yêu thích — dùng ACTION_UP để tránh repeat
-                    action == AndroidKeyEvent.ACTION_UP &&
-                    code in listOf(
-                        AndroidKeyEvent.KEYCODE_MENU,
-                        AndroidKeyEvent.KEYCODE_STAR,
-                        AndroidKeyEvent.KEYCODE_BUTTON_Y,
-                        AndroidKeyEvent.KEYCODE_BOOKMARK,
+                    action == AndroidKeyEvent.ACTION_UP && code in listOf(
+                        AndroidKeyEvent.KEYCODE_MENU, AndroidKeyEvent.KEYCODE_STAR,
+                        AndroidKeyEvent.KEYCODE_BUTTON_Y, AndroidKeyEvent.KEYCODE_BOOKMARK,
                         AndroidKeyEvent.KEYCODE_PROG_YELLOW
-                    ) -> {
-                        onToggleFavorite()
-                        true
-                    }
+                    ) -> { onToggleFavorite(); true }
                     else -> false
                 }
             },
@@ -700,86 +869,44 @@ private fun TvChannelCard(
         shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
         scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
             if (!channel.logoUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = channel.logoUrl,
                     contentDescription = channel.name,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp)
-                        .padding(bottom = 28.dp),
+                    modifier = Modifier.fillMaxSize().padding(12.dp).padding(bottom = 28.dp),
                     contentScale = ContentScale.Fit
                 )
             } else {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(bottom = 28.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LiveTv,
-                        contentDescription = null,
-                        tint = NuvioTheme.colors.TextMuted,
-                        modifier = Modifier.size(36.dp)
-                    )
+                Box(Modifier.fillMaxSize().padding(bottom = 28.dp), Alignment.Center) {
+                    Icon(Icons.Default.LiveTv, null, Modifier.size(36.dp),
+                        tint = NuvioTheme.colors.TextMuted)
                 }
             }
-
-            // Favorite star badge
+            // Favorite badge
             if (isFavorite) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.55f))
-                        .padding(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Favorite",
-                        tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(16.dp)
-                    )
+                Box(Modifier.align(Alignment.TopEnd).padding(6.dp).clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f)).padding(4.dp)) {
+                    Icon(Icons.Default.Star, "Favorite", Modifier.size(16.dp), tint = Color(0xFFFFD700))
                 }
             } else if (isFocused) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .padding(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Add to favorite",
-                        tint = Color.White.copy(alpha = 0.6f),
-                        modifier = Modifier.size(16.dp)
-                    )
+                Box(Modifier.align(Alignment.TopEnd).padding(6.dp).clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f)).padding(4.dp)) {
+                    Icon(Icons.Default.Star, "Add to favorite", Modifier.size(16.dp),
+                        tint = Color.White.copy(alpha = 0.6f))
                 }
             }
-
             // Channel name bar
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))
-                    )
+                modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)
+                    .background(Brush.verticalGradient(
+                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = channel.name,
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
+                Text(channel.name, color = Color.White, fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
     }

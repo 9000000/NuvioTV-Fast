@@ -20,15 +20,36 @@ import kotlin.random.Random
 suspend fun httpGetText(url: String): String = httpGetTextWithHeaders(url, emptyMap())
 
 suspend fun httpGetTextWithHeaders(url: String, headers: Map<String, String> = emptyMap()): String = withContext(Dispatchers.IO) {
-    val connection = URL(url).openConnection() as HttpURLConnection
-    headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
-    connection.connectTimeout = 15000
-    connection.readTimeout = 15000
-    try {
-        connection.inputStream.bufferedReader().use { it.readText() }
-    } finally {
-        connection.disconnect()
+    // Follow up to 5 redirects, including cross-protocol HTTP → HTTPS
+    var currentUrl = url
+    var redirectCount = 0
+    while (true) {
+        val connection = URL(currentUrl).openConnection() as HttpURLConnection
+        connection.instanceFollowRedirects = false // handle manually for cross-protocol
+        headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
+        connection.connectTimeout = 15000
+        connection.readTimeout = 15000
+        try {
+            val code = connection.responseCode
+            if (code in 300..399) {
+                val location = connection.getHeaderField("Location")
+                connection.disconnect()
+                if (location.isNullOrBlank() || redirectCount >= 5) {
+                    error("Too many redirects or missing Location for $url")
+                }
+                // Resolve relative redirects
+                currentUrl = if (location.startsWith("http")) location
+                             else URL(URL(currentUrl), location).toString()
+                redirectCount++
+                continue
+            }
+            return@withContext connection.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            connection.disconnect()
+        }
     }
+    @Suppress("UNREACHABLE_CODE")
+    error("unreachable")
 }
 
 object LiveTvRepository {

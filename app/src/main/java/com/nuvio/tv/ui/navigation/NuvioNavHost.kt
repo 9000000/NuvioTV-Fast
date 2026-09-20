@@ -16,6 +16,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -154,18 +156,24 @@ private fun PlaybackNavHost(
         }
     ) {
         composable(Screen.LiveTv.route) {
+            val liveTvScope = rememberCoroutineScope()
             LiveTvScreen(
                 onChannelSelected = { channel ->
-                    val route = Screen.Player.createRoute(
-                        streamUrl = channel.streamUrl,
-                        title = channel.name,
-                        headers = channel.headers,
-                        logo = channel.logoUrl,
-                        contentType = "livetv",
-                        drmType = channel.drmType,
-                        drmKey = channel.drmKey
-                    )
-                    navController.navigate(route)
+                    liveTvScope.launch {
+                        val playableChannel = runCatching {
+                            LiveTvRepository.prepareForPlayback(channel)
+                        }.getOrDefault(channel)
+                        val route = Screen.Player.createRoute(
+                            streamUrl = playableChannel.streamUrl,
+                            title = playableChannel.name,
+                            headers = playableChannel.headers,
+                            logo = playableChannel.logoUrl,
+                            contentType = "livetv",
+                            drmType = playableChannel.drmType,
+                            drmKey = playableChannel.drmKey
+                        )
+                        navController.navigate(route)
+                    }
                 },
                 onNavigateToSettings = {
                     navController.navigate(Screen.LiveTvSettings.route)
