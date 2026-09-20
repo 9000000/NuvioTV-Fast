@@ -113,8 +113,12 @@ jobs:
             > release-notes.md || generation_status=$?
 
           if [[ ! -s release-notes.md ]]; then
-            echo "No release-note commits were found, creating fallback notes."
-            echo "Release ${{ steps.release.outputs.title }} (${{ steps.release.outputs.tag }})" > release-notes.md
+            if [[ "${RELEASE_MODE}" == "draft" ]]; then
+              printf '%s\n' 'Release notes pending. Replace this text before publishing.' > release-notes.md
+            else
+              echo "No release-note commits were found, creating fallback notes."
+              echo "Release ${{ steps.release.outputs.title }} (${{ steps.release.outputs.tag }})" > release-notes.md
+            fi
           fi
 
           {
