@@ -988,7 +988,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     extractorsFactory = effectiveExtractorsFactory,
                     subtitleParserFactory = null
                 )
-                val playerDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, headers)
+                val playerDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, headers, url)
                 ExoPlayer.Builder(context)
                     .setBandwidthMeter(bandwidthMeter)
                     .setTrackSelector(trackSelector!!)
@@ -1004,7 +1004,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             delay(PLAYER_REBUILD_SETTLE_DELAY_MS)
 
             _exoPlayer = if (useLibass) {
-                val playerDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, headers)
+                val playerDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, headers, url)
                 ExoPlayer.Builder(context)
                     .setBandwidthMeter(bandwidthMeter)
                     .setLoadControl(loadControl)

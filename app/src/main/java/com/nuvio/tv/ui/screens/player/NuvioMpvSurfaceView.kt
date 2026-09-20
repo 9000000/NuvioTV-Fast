@@ -707,11 +707,20 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
     }
 
     private fun applyHeaders(headers: Map<String, String>) {
-        if (headers.isEmpty()) {
+        // Merge with IPTV defaults if headers are empty and URL looks like IPTV
+        val effectiveHeaders = if (headers.isEmpty()) {
+            val currentUrl = requestedMediaUrl ?: ""
+            IptvHeaderProvider.mergeWithDefaults(currentUrl, headers)
+        } else {
+            headers
+        }
+        
+        if (effectiveHeaders.isEmpty()) {
             mpv.setPropertyString("http-header-fields", "")
             return
         }
-        val raw = headers.entries
+        
+        val raw = effectiveHeaders.entries
             .filter { it.key.isNotBlank() && it.value.isNotBlank() }
             .sortedWith(compareBy({ it.key.lowercase(Locale.ROOT) }, { it.value }))
             .joinToString(separator = ",") { (key, value) ->

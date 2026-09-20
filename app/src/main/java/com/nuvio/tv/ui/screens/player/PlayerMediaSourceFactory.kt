@@ -100,7 +100,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         drmKey: String? = null
     ): MediaSource {
         val sanitizedHeaders = sanitizeHeaders(headers)
-        val httpDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, sanitizedHeaders)
+        val httpDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, sanitizedHeaders, url)
 
         val resolvedMimeType = mimeTypeOverride ?: inferMimeType(
             url = url,

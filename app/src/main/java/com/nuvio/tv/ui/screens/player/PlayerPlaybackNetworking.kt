@@ -121,11 +121,17 @@ internal object PlayerPlaybackNetworking {
     }
 
     @UnstableApi
-    fun createHttpDataSourceFactory(defaultHeaders: Map<String, String> = emptyMap()): DataSource.Factory {
-        val client = createHttpClient(defaultHeaders)
+    fun createHttpDataSourceFactory(
+        defaultHeaders: Map<String, String> = emptyMap(),
+        streamUrl: String = ""
+    ): DataSource.Factory {
+        // Auto-apply IPTV headers if needed
+        val effectiveHeaders = IptvHeaderProvider.mergeWithDefaults(streamUrl, defaultHeaders)
+        
+        val client = createHttpClient(effectiveHeaders)
         val httpFactory = OkHttpDataSource.Factory(client).apply {
-            setDefaultRequestProperties(defaultHeaders)
-            val customUserAgent = defaultHeaders.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
+            setDefaultRequestProperties(effectiveHeaders)
+            val customUserAgent = effectiveHeaders.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
             if (customUserAgent != null) {
                 setUserAgent(customUserAgent)
             } else {
@@ -138,9 +144,10 @@ internal object PlayerPlaybackNetworking {
     @UnstableApi
     fun createDataSourceFactory(
         context: android.content.Context,
-        defaultHeaders: Map<String, String> = emptyMap()
+        defaultHeaders: Map<String, String> = emptyMap(),
+        streamUrl: String = ""
     ): DataSource.Factory {
-        return DefaultDataSource.Factory(context, createHttpDataSourceFactory(defaultHeaders))
+        return DefaultDataSource.Factory(context, createHttpDataSourceFactory(defaultHeaders, streamUrl))
     }
 
     fun openConnection(
@@ -151,13 +158,16 @@ internal object PlayerPlaybackNetworking {
         readTimeoutMs: Int,
         range: String? = null
     ): HttpURLConnection {
+        // Auto-apply IPTV headers if needed
+        val effectiveHeaders = IptvHeaderProvider.mergeWithDefaults(url, headers)
+        
         return (URL(url).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = true
             connectTimeout = connectTimeoutMs
             readTimeout = readTimeoutMs
             requestMethod = method
-            setRequestProperty("User-Agent", headers["User-Agent"] ?: PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
-            headers.forEach { (key, value) ->
+            setRequestProperty("User-Agent", effectiveHeaders["User-Agent"] ?: PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
+            effectiveHeaders.forEach { (key, value) ->
                 if (key.equals("Range", ignoreCase = true)) return@forEach
                 if (key.equals("User-Agent", ignoreCase = true)) return@forEach
                 setRequestProperty(key, value)
