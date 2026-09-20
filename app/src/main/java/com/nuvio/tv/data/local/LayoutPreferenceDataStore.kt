@@ -243,9 +243,9 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val discoverLocation: Flow<DiscoverLocation> = profileFlow { prefs ->
-        val stored = prefs[discoverLocationKey] ?: DiscoverLocation.IN_SEARCH.name
+        val stored = prefs[discoverLocationKey] ?: DiscoverLocation.IN_SIDEBAR.name
         runCatching { DiscoverLocation.valueOf(stored) }
-            .getOrDefault(DiscoverLocation.IN_SEARCH)
+            .getOrDefault(DiscoverLocation.IN_SIDEBAR)
     }
 
     val lastNonOffDiscoverLocation: Flow<DiscoverLocation> = profileFlow { prefs ->

@@ -38,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,15 +65,13 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.theme.NuvioTheme
-import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private const val GRID_COLUMNS = 5
+
 private enum class FilterType {
-    ALL,
-    FAVORITES,
-    RECENT,
-    GROUP
+    ALL, FAVORITES, RECENT, GROUP
 }
 
 @Composable
@@ -97,11 +96,9 @@ fun LiveTvScreen(
                     CircularProgressIndicator(color = NuvioTheme.colors.Primary)
                 }
             }
-
             !state.hasPlaylist -> {
                 LiveTvEmptyState(onNavigateToSettings = onNavigateToSettings)
             }
-
             state.errorMessage != null && state.channels.isEmpty() -> {
                 LiveTvErrorState(
                     message = state.errorMessage!!,
@@ -109,7 +106,6 @@ fun LiveTvScreen(
                     onNavigateToSettings = onNavigateToSettings
                 )
             }
-
             else -> {
                 LiveTvContent(
                     state = state,
@@ -129,18 +125,11 @@ fun LiveTvScreen(
 }
 
 @Composable
-private fun LiveTvEmptyState(
-    onNavigateToSettings: () -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
+private fun LiveTvEmptyState(onNavigateToSettings: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Card(
             onClick = onNavigateToSettings,
-            modifier = Modifier
-                .width(480.dp)
-                .padding(24.dp),
+            modifier = Modifier.width(480.dp).padding(24.dp),
             colors = CardDefaults.colors(
                 containerColor = NuvioTheme.colors.BackgroundElevated,
                 focusedContainerColor = NuvioTheme.colors.FocusBackground
@@ -156,12 +145,10 @@ private fun LiveTvEmptyState(
                 )
             ),
             shape = CardDefaults.shape(RoundedCornerShape(16.dp)),
-            scale = CardDefaults.scale(focusedScale = 1.04f)
+            scale = CardDefaults.scale(focusedScale = 1.0f)
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
+                modifier = Modifier.fillMaxWidth().padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -171,7 +158,6 @@ private fun LiveTvEmptyState(
                     modifier = Modifier.size(64.dp),
                     tint = NuvioTheme.colors.Primary
                 )
-
                 Text(
                     text = stringResource(R.string.livetv_empty_title),
                     style = MaterialTheme.typography.headlineSmall,
@@ -179,16 +165,13 @@ private fun LiveTvEmptyState(
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
-
                 Text(
                     text = stringResource(R.string.livetv_empty_desc),
                     style = MaterialTheme.typography.bodyMedium,
                     color = NuvioTheme.colors.TextSecondary,
                     textAlign = TextAlign.Center
                 )
-
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -213,10 +196,7 @@ private fun LiveTvErrorState(
     onRetry: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -228,7 +208,6 @@ private fun LiveTvErrorState(
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center
             )
-
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Card(
                     onClick = onRetry,
@@ -245,7 +224,6 @@ private fun LiveTvErrorState(
                         fontWeight = FontWeight.Bold
                     )
                 }
-
                 Card(
                     onClick = onNavigateToSettings,
                     colors = CardDefaults.colors(
@@ -281,7 +259,10 @@ private fun LiveTvContent(
         state.channels.mapNotNull { it.group?.trim() }.filter { it.isNotBlank() }.distinct().sorted()
     }
 
-    val filteredChannels = remember(state.channels, activeFilter, selectedGroup, state.favoriteChannelIds, state.recentChannelIds) {
+    val filteredChannels = remember(
+        state.channels, activeFilter, selectedGroup,
+        state.favoriteChannelIds, state.recentChannelIds
+    ) {
         when (activeFilter) {
             FilterType.ALL -> state.channels
             FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
@@ -291,6 +272,15 @@ private fun LiveTvContent(
             }
             FilterType.GROUP -> state.channels.filter { it.group?.trim() == selectedGroup }
         }
+    }
+
+    // Tính tổng số hàng và index bắt đầu của hàng cuối
+    val totalRows = remember(filteredChannels) {
+        if (filteredChannels.isEmpty()) 0
+        else (filteredChannels.size + GRID_COLUMNS - 1) / GRID_COLUMNS
+    }
+    val lastRowStartIndex = remember(filteredChannels, totalRows) {
+        if (totalRows == 0) 0 else (totalRows - 1) * GRID_COLUMNS
     }
 
     val gridState = rememberLazyGridState()
@@ -310,7 +300,7 @@ private fun LiveTvContent(
         channelFocusRequesters.keys.retainAll(currentChannelIds)
     }
 
-    // Restore focus and scroll position to last watched channel when returning to this screen (not on initial entry)
+    // Restore focus khi quay lại từ player (không phải lần đầu vào)
     LaunchedEffect(state.lastWatchedChannelId, filteredChannels, isInitialEntry) {
         val targetId = state.lastWatchedChannelId
         if (!isInitialEntry && targetId != null && targetId != restoredChannelId) {
@@ -324,39 +314,36 @@ private fun LiveTvContent(
         }
     }
 
-    // Initial focus on filter chip when entering screen for first time
+    // Focus ban đầu khi vào screen lần đầu
     LaunchedEffect(isInitialEntry, state.recentChannelIds) {
         if (isInitialEntry) {
             delay(150)
             if (state.recentChannelIds.isNotEmpty()) {
-                // Focus on Recent chip if there are recent channels
-                recentChipFocusRequester.requestFocus()
                 activeFilter = FilterType.RECENT
                 selectedGroup = null
+                recentChipFocusRequester.requestFocus()
             } else {
-                // Focus on ALL chip if no recent channels
-                allChipFocusRequester.requestFocus()
                 activeFilter = FilterType.ALL
                 selectedGroup = null
+                allChipFocusRequester.requestFocus()
             }
             isInitialEntry = false
         }
     }
 
-    // Scroll filter chips row when group filter is selected to ensure group chip is visible
+    // Scroll filter chips để group chip visible khi chọn group
     LaunchedEffect(activeFilter, selectedGroup, allGroups) {
         if (activeFilter == FilterType.GROUP && selectedGroup != null) {
             delay(100)
             val groupIndex = allGroups.indexOf(selectedGroup)
             if (groupIndex >= 0) {
-                // Calculate chip index: 3 static chips (ALL, FAVORITES, RECENT) + group index
-                val staticChipCount = 3
-                filterChipsListState.scrollToItem(staticChipCount + groupIndex)
+                val staticCount = if (state.recentChannelIds.isNotEmpty()) 3 else 2
+                filterChipsListState.scrollToItem(staticCount + groupIndex)
             }
         }
     }
 
-    // Helper: scroll filter chips row to active chip and request focus
+    // Helper scroll + focus về chip của danh mục hiện tại
     suspend fun navigateToActiveChip() {
         when (activeFilter) {
             FilterType.ALL -> {
@@ -457,7 +444,7 @@ private fun LiveTvContent(
                     )
                 }
 
-                // Refresh Button
+                // Refresh Button — DOWN → trỏ về chip danh mục hiện tại
                 Card(
                     onClick = onRefresh,
                     colors = CardDefaults.colors(
@@ -465,16 +452,13 @@ private fun LiveTvContent(
                         focusedContainerColor = NuvioTheme.colors.FocusBackground
                     ),
                     shape = CardDefaults.shape(CircleShape),
-                    scale = CardDefaults.scale(focusedScale = 1.1f),
+                    scale = CardDefaults.scale(focusedScale = 1.0f),
                     modifier = Modifier.onKeyEvent { keyEvent ->
-                        if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
-                            when (keyEvent.nativeKeyEvent.keyCode) {
-                                AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                                    coroutineScope.launch { navigateToActiveChip() }
-                                    true
-                                }
-                                else -> false
-                            }
+                        if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                            keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
+                        ) {
+                            coroutineScope.launch { navigateToActiveChip() }
+                            true
                         } else false
                     }
                 ) {
@@ -488,7 +472,7 @@ private fun LiveTvContent(
                     }
                 }
 
-                // Settings Button
+                // Settings Button — DOWN → trỏ về chip danh mục hiện tại
                 Card(
                     onClick = onNavigateToSettings,
                     colors = CardDefaults.colors(
@@ -496,16 +480,13 @@ private fun LiveTvContent(
                         focusedContainerColor = NuvioTheme.colors.FocusBackground
                     ),
                     shape = CardDefaults.shape(CircleShape),
-                    scale = CardDefaults.scale(focusedScale = 1.1f),
+                    scale = CardDefaults.scale(focusedScale = 1.0f),
                     modifier = Modifier.onKeyEvent { keyEvent ->
-                        if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
-                            when (keyEvent.nativeKeyEvent.keyCode) {
-                                AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                                    coroutineScope.launch { navigateToActiveChip() }
-                                    true
-                                }
-                                else -> false
-                            }
+                        if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                            keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
+                        ) {
+                            coroutineScope.launch { navigateToActiveChip() }
+                            true
                         } else false
                     }
                 ) {
@@ -528,51 +509,32 @@ private fun LiveTvContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(vertical = 4.dp)
         ) {
-            // All Channels
             item {
                 FilterChipItem(
                     label = stringResource(R.string.livetv_group_all),
                     isSelected = activeFilter == FilterType.ALL,
-                    onClick = {
-                        activeFilter = FilterType.ALL
-                        selectedGroup = null
-                        isInitialEntry = false
-                    },
+                    onClick = { activeFilter = FilterType.ALL; selectedGroup = null; isInitialEntry = false },
                     focusRequester = allChipFocusRequester
                 )
             }
-
-            // Favorites
             item {
                 FilterChipItem(
                     label = stringResource(R.string.livetv_group_favorites),
                     isSelected = activeFilter == FilterType.FAVORITES,
-                    onClick = {
-                        activeFilter = FilterType.FAVORITES
-                        selectedGroup = null
-                        isInitialEntry = false
-                    },
+                    onClick = { activeFilter = FilterType.FAVORITES; selectedGroup = null; isInitialEntry = false },
                     focusRequester = favoritesChipFocusRequester
                 )
             }
-
-            // Recent
             if (state.recentChannelIds.isNotEmpty()) {
                 item {
                     FilterChipItem(
                         label = stringResource(R.string.livetv_group_recent),
                         isSelected = activeFilter == FilterType.RECENT,
-                        onClick = {
-                            activeFilter = FilterType.RECENT
-                            selectedGroup = null
-                            isInitialEntry = false
-                        },
+                        onClick = { activeFilter = FilterType.RECENT; selectedGroup = null; isInitialEntry = false },
                         focusRequester = recentChipFocusRequester
                     )
                 }
             }
-
-            // Dynamic Groups from Playlist
             items(allGroups) { group ->
                 val groupFocusRequester = remember(group) {
                     groupChipFocusRequesters.getOrPut(group) { FocusRequester() }
@@ -580,11 +542,7 @@ private fun LiveTvContent(
                 FilterChipItem(
                     label = group,
                     isSelected = activeFilter == FilterType.GROUP && selectedGroup == group,
-                    onClick = {
-                        activeFilter = FilterType.GROUP
-                        selectedGroup = group
-                        isInitialEntry = false
-                    },
+                    onClick = { activeFilter = FilterType.GROUP; selectedGroup = group; isInitialEntry = false },
                     focusRequester = groupFocusRequester
                 )
             }
@@ -593,9 +551,7 @@ private fun LiveTvContent(
         // --- CHANNELS GRID ---
         if (filteredChannels.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -606,11 +562,9 @@ private fun LiveTvContent(
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
+                columns = GridCells.Fixed(GRID_COLUMNS),
                 state = gridState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 contentPadding = PaddingValues(bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -621,9 +575,11 @@ private fun LiveTvContent(
                         channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
                     }
                     val itemIndex = filteredChannels.indexOf(channel)
-                    val isFirstRow = itemIndex < 5
-                    val isLastRow = itemIndex >= (filteredChannels.size - (filteredChannels.size % 5).let { if (it == 0) 5 else it })
-                    
+                    // Hàng đầu: index < GRID_COLUMNS
+                    val isFirstRow = itemIndex < GRID_COLUMNS
+                    // Hàng cuối: index >= lastRowStartIndex (đã tính đúng từ totalRows)
+                    val isLastRow = itemIndex >= lastRowStartIndex
+
                     TvChannelCard(
                         channel = channel,
                         isFavorite = isFav,
@@ -659,7 +615,7 @@ private fun FilterChipItem(
             focusedContainerColor = NuvioTheme.colors.FocusBackground
         ),
         shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.05f),
+        scale = CardDefaults.scale(focusedScale = 1.0f),
         modifier = if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
     ) {
         Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)) {
@@ -695,35 +651,37 @@ private fun TvChannelCard(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { isFocused = it.isFocused }
             .onKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
-                    when (keyEvent.nativeKeyEvent.keyCode) {
-                        AndroidKeyEvent.KEYCODE_DPAD_UP -> {
-                            if (isFirstRow) {
-                                onRequestNavigateToCategory()
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (isLastRow) {
-                                onRequestNavigateToCategory()
-                                true
-                            } else {
-                                false
-                            }
-                        }
+                val code = keyEvent.nativeKeyEvent.keyCode
+                val action = keyEvent.nativeKeyEvent.action
+                when {
+                    // D-pad UP từ hàng đầu → về chip danh mục (dùng ACTION_DOWN để phản hồi ngay)
+                    action == AndroidKeyEvent.ACTION_DOWN &&
+                    code == AndroidKeyEvent.KEYCODE_DPAD_UP &&
+                    isFirstRow -> {
+                        onRequestNavigateToCategory()
+                        true
+                    }
+                    // D-pad DOWN từ hàng cuối → về chip danh mục (dùng ACTION_DOWN để phản hồi ngay)
+                    action == AndroidKeyEvent.ACTION_DOWN &&
+                    code == AndroidKeyEvent.KEYCODE_DPAD_DOWN &&
+                    isLastRow -> {
+                        onRequestNavigateToCategory()
+                        true
+                    }
+                    // Phím yêu thích — dùng ACTION_UP để tránh repeat
+                    action == AndroidKeyEvent.ACTION_UP &&
+                    code in listOf(
                         AndroidKeyEvent.KEYCODE_MENU,
                         AndroidKeyEvent.KEYCODE_STAR,
                         AndroidKeyEvent.KEYCODE_BUTTON_Y,
                         AndroidKeyEvent.KEYCODE_BOOKMARK,
-                        AndroidKeyEvent.KEYCODE_PROG_YELLOW -> {
-                            onToggleFavorite()
-                            true
-                        }
-                        else -> false
+                        AndroidKeyEvent.KEYCODE_PROG_YELLOW
+                    ) -> {
+                        onToggleFavorite()
+                        true
                     }
-                } else false
+                    else -> false
+                }
             },
         colors = CardDefaults.colors(
             containerColor = NuvioTheme.colors.BackgroundElevated,
@@ -740,10 +698,9 @@ private fun TvChannelCard(
             )
         ),
         shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.05f)
+        scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Channel Logo or Placeholder
             if (!channel.logoUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = channel.logoUrl,
@@ -756,9 +713,7 @@ private fun TvChannelCard(
                 )
             } else {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 28.dp),
+                    modifier = Modifier.fillMaxSize().padding(bottom = 28.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -805,15 +760,13 @@ private fun TvChannelCard(
                 }
             }
 
-            // Channel name bar at bottom
+            // Channel name bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                        )
+                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))
                     )
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center

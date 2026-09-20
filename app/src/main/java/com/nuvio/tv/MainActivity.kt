@@ -1038,10 +1038,12 @@ open class MainActivity : ComponentActivity() {
                             if (showLiveTvInDrawer) {
                                 add(Screen.LiveTv.route)
                             }
-                            add(Screen.Discover.route)
                             add(Screen.Search.route)
                             add(Screen.Library.route)
                             add(Screen.Settings.route)
+                            if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
+                                add(Screen.Discover.route)
+                            }
                         }
                     }
 
@@ -1069,13 +1071,15 @@ open class MainActivity : ComponentActivity() {
                                     icon = Icons.Default.Home
                                 )
                             )
-                            add(
-                                DrawerItem(
-                                    route = Screen.Discover.route,
-                                    label = strNavDiscover,
-                                    icon = Icons.Default.Explore
+                            if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.Discover.route,
+                                        label = strNavDiscover,
+                                        icon = Icons.Default.Explore
+                                    )
                                 )
-                            )
+                            }
                             if (showLiveTvInDrawer) {
                                 add(
                                     DrawerItem(
