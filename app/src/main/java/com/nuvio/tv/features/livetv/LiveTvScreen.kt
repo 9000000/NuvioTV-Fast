@@ -64,7 +64,9 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.theme.NuvioTheme
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class FilterType {
     ALL,
@@ -293,6 +295,7 @@ private fun LiveTvContent(
 
     val gridState = rememberLazyGridState()
     val filterChipsListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
     val channelFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     var restoredChannelId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -349,6 +352,55 @@ private fun LiveTvContent(
                 // Calculate chip index: 3 static chips (ALL, FAVORITES, RECENT) + group index
                 val staticChipCount = 3
                 filterChipsListState.scrollToItem(staticChipCount + groupIndex)
+            }
+        }
+    }
+
+    // Helper: scroll filter chips row to active chip and request focus
+    suspend fun navigateToActiveChip() {
+        when (activeFilter) {
+            FilterType.ALL -> {
+                filterChipsListState.scrollToItem(0)
+                delay(80)
+                allChipFocusRequester.requestFocus()
+            }
+            FilterType.FAVORITES -> {
+                filterChipsListState.scrollToItem(1)
+                delay(80)
+                favoritesChipFocusRequester.requestFocus()
+            }
+            FilterType.RECENT -> {
+                if (state.recentChannelIds.isNotEmpty()) {
+                    filterChipsListState.scrollToItem(2)
+                    delay(80)
+                    recentChipFocusRequester.requestFocus()
+                } else {
+                    filterChipsListState.scrollToItem(0)
+                    delay(80)
+                    allChipFocusRequester.requestFocus()
+                }
+            }
+            FilterType.GROUP -> {
+                if (selectedGroup != null) {
+                    val groupIndex = allGroups.indexOf(selectedGroup)
+                    if (groupIndex >= 0) {
+                        val staticCount = if (state.recentChannelIds.isNotEmpty()) 3 else 2
+                        filterChipsListState.scrollToItem(staticCount + groupIndex)
+                        delay(120)
+                    }
+                    val requester = groupChipFocusRequesters[selectedGroup]
+                    if (requester != null) {
+                        requester.requestFocus()
+                    } else {
+                        filterChipsListState.scrollToItem(0)
+                        delay(80)
+                        allChipFocusRequester.requestFocus()
+                    }
+                } else {
+                    filterChipsListState.scrollToItem(0)
+                    delay(80)
+                    allChipFocusRequester.requestFocus()
+                }
             }
         }
     }
@@ -418,20 +470,7 @@ private fun LiveTvContent(
                         if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
                             when (keyEvent.nativeKeyEvent.keyCode) {
                                 AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                                    when (activeFilter) {
-                                        FilterType.ALL -> allChipFocusRequester.requestFocus()
-                                        FilterType.FAVORITES -> favoritesChipFocusRequester.requestFocus()
-                                        FilterType.RECENT -> {
-                                            if (state.recentChannelIds.isNotEmpty()) {
-                                                recentChipFocusRequester.requestFocus()
-                                            }
-                                        }
-                                        FilterType.GROUP -> {
-                                            if (selectedGroup != null) {
-                                                groupChipFocusRequesters[selectedGroup]?.requestFocus()
-                                            }
-                                        }
-                                    }
+                                    coroutineScope.launch { navigateToActiveChip() }
                                     true
                                 }
                                 else -> false
@@ -462,20 +501,7 @@ private fun LiveTvContent(
                         if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_UP) {
                             when (keyEvent.nativeKeyEvent.keyCode) {
                                 AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                                    when (activeFilter) {
-                                        FilterType.ALL -> allChipFocusRequester.requestFocus()
-                                        FilterType.FAVORITES -> favoritesChipFocusRequester.requestFocus()
-                                        FilterType.RECENT -> {
-                                            if (state.recentChannelIds.isNotEmpty()) {
-                                                recentChipFocusRequester.requestFocus()
-                                            }
-                                        }
-                                        FilterType.GROUP -> {
-                                            if (selectedGroup != null) {
-                                                groupChipFocusRequesters[selectedGroup]?.requestFocus()
-                                            }
-                                        }
-                                    }
+                                    coroutineScope.launch { navigateToActiveChip() }
                                     true
                                 }
                                 else -> false
@@ -610,30 +636,7 @@ private fun LiveTvContent(
                         },
                         onToggleFavorite = { onToggleFavorite(channel.id) },
                         onRequestNavigateToCategory = {
-                            // Request focus to appropriate filter chip when pressing UP/DOWN from edge rows
-                            // With fallback for group chips that may not be rendered yet
-                            when (activeFilter) {
-                                FilterType.ALL -> allChipFocusRequester.requestFocus()
-                                FilterType.FAVORITES -> favoritesChipFocusRequester.requestFocus()
-                                FilterType.RECENT -> {
-                                    if (state.recentChannelIds.isNotEmpty()) {
-                                        recentChipFocusRequester.requestFocus()
-                                    } else {
-                                        allChipFocusRequester.requestFocus()
-                                    }
-                                }
-                                FilterType.GROUP -> {
-                                    if (selectedGroup != null) {
-                                        val requester = groupChipFocusRequesters[selectedGroup]
-                                        if (requester != null) {
-                                            requester.requestFocus()
-                                        } else {
-                                            // Fallback to ALL if group FocusRequester not found
-                                            allChipFocusRequester.requestFocus()
-                                        }
-                                    }
-                                }
-                            }
+                            coroutineScope.launch { navigateToActiveChip() }
                         }
                     )
                 }
