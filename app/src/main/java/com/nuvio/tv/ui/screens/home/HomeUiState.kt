@@ -82,13 +82,15 @@ sealed class ContinueWatchingItem {
         val genres: List<String> = emptyList(),
         val releaseInfo: String? = null,
         val contentLanguage: String? = null,
-        val originalPoster: String? = null
+        val originalPoster: String? = null,
+        val customLandscapePoster: String? = null
     ) : ContinueWatchingItem()
 
     @Immutable
     data class NextUp(
         val info: NextUpInfo,
-        val originalPoster: String? = null
+        val originalPoster: String? = null,
+        val customLandscapePoster: String? = null
     ) : ContinueWatchingItem()
 }
 

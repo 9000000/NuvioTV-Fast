@@ -174,11 +174,9 @@ fun com.nuvio.tv.ui.screens.home.ContinueWatchingItem.withCustomPosterUrl(
             } else null
             if (resolvedPoster == null && resolvedLandscape == null) return this
             copy(
-                progress = progress.copy(
-                    poster = resolvedPoster ?: progress.poster,
-                    backdrop = resolvedLandscape ?: progress.backdrop
-                ),
-                originalPoster = originalPoster ?: progress.poster
+                progress = progress.copy(poster = resolvedPoster ?: progress.poster),
+                originalPoster = originalPoster ?: progress.poster,
+                customLandscapePoster = resolvedLandscape
             )
         }
         is com.nuvio.tv.ui.screens.home.ContinueWatchingItem.NextUp -> {
@@ -190,11 +188,9 @@ fun com.nuvio.tv.ui.screens.home.ContinueWatchingItem.withCustomPosterUrl(
             } else null
             if (resolvedPoster == null && resolvedLandscape == null) return this
             copy(
-                info = info.copy(
-                    poster = resolvedPoster ?: info.poster,
-                    backdrop = resolvedLandscape ?: info.backdrop
-                ),
-                originalPoster = originalPoster ?: info.poster
+                info = info.copy(poster = resolvedPoster ?: info.poster),
+                originalPoster = originalPoster ?: info.poster,
+                customLandscapePoster = resolvedLandscape
             )
         }
     }
