@@ -1323,10 +1323,18 @@ private fun MetaDetailsContent(
             override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
         }
     }
-    val episodeRowStayVerticalResponder = remember {
+    var lastDetailDpadKey by rememberSaveable(meta.id) { mutableIntStateOf(0) }
+    val episodeRowStayVerticalResponder = remember(lastDetailDpadKey, pendingRestoreType) {
         object : BringIntoViewResponder {
             override fun calculateRectForParent(localRect: Rect): Rect {
-                return Rect(localRect.left, 0f, localRect.right, 0f)
+                val stayVertical = pendingRestoreType == RestoreTarget.EPISODE ||
+                    lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_RIGHT
+                return if (stayVertical) {
+                    Rect(localRect.left, 0f, localRect.right, 0f)
+                } else {
+                    localRect
+                }
             }
 
             override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
@@ -2129,7 +2137,19 @@ private fun MetaDetailsContent(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .recompositionHighlighter(),
+                .recompositionHighlighter()
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (native.action == KeyEvent.ACTION_DOWN) {
+                        when (native.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_UP,
+                            KeyEvent.KEYCODE_DPAD_DOWN,
+                            KeyEvent.KEYCODE_DPAD_LEFT,
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> lastDetailDpadKey = native.keyCode
+                        }
+                    }
+                    false
+                },
             state = listState
         ) {
             // Hero as first item in the lazy column
@@ -2257,6 +2277,16 @@ private fun MetaDetailsContent(
                             },
                             onEpisodeFocused = { episodeId ->
                                 lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
+                                if (lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_UP) {
+                                    val episodeListItemIndex = 1 + if (showSeasonTabs) 1 else 0
+                                    val episodeItem = listState.layoutInfo.visibleItemsInfo
+                                        .firstOrNull { it.index == episodeListItemIndex }
+                                    if (episodeItem == null || episodeItem.offset < 0) {
+                                        coroutineScope.launch {
+                                            listState.animateScrollToItem(episodeListItemIndex)
+                                        }
+                                    }
+                                }
                             },
                             scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] != null) {
                                 null
