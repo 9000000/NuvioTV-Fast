@@ -115,8 +115,8 @@ android {
         applicationId = "com.nuvio.tv.fast"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1075
-        versionName = "0.9.21"
+        versionCode = 1076
+        versionName = "0.9.22"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
