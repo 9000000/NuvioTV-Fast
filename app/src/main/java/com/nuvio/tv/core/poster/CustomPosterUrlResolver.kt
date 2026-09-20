@@ -204,13 +204,17 @@ object CustomPosterUrlResolver {
     }
 
     /**
-     * Formats the ID for RPDB-style services.
-     * IMDb IDs stay as-is ("tt0137523"), all others get a type prefix ("movie-1396", "series-81189").
+     * Formats the ID for RPDB-style services without namespace prefix.
+     * IMDb IDs stay as-is ("tt0137523"). TMDB and TVDB get a type prefix ("movie-1396",
+     * "series-81189") as required by RPDB/aioratings. All others return the raw numeric ID.
      */
     private fun formatTypedId(rawId: String, idType: String, contentType: String): String {
         if (idType == "imdb") return rawId
-        val prefix = if (contentType == "movie") "movie" else "series"
-        return "$prefix-$rawId"
+        if (idType == "tmdb" || idType == "tvdb") {
+            val prefix = if (contentType == "movie") "movie" else "series"
+            return "$prefix-$rawId"
+        }
+        return rawId
     }
 
     // -- RPDB-family fallback --
