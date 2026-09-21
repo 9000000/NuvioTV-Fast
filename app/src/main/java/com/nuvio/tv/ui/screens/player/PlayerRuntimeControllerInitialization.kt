@@ -1329,7 +1329,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                                 currentDiagnostics = currentDiagnostics.copy(
                                     rebufferCount = rebufferCount,
                                     rebufferTotalMs = rebufferTotalMs,
-                                    vodCacheStats = mediaSourceFactory.vodCacheStatsLabel
+                                    vodCacheStats = mediaSourceFactory.vodCacheStatsLabel(context)
                                 )
                                 val endDiagnostics = currentDiagnostics
                                 lastPlaybackDiagnosticsForReport = endDiagnostics
@@ -2776,7 +2776,7 @@ private fun PlayerRuntimeController.recordFirstFrameDiagnostics(
     }
     val finalDiagnostics = currentDiagnostics.copy(
         firstFrameMs = startupMs,
-        vodCacheState = mediaSourceFactory.vodCacheStateLabel,
+        vodCacheState = mediaSourceFactory.vodCacheStateLabel(context),
         dv7DoviCalls = conversionCalls.toInt(),
         dv7DoviSuccess = conversionSucceeded.toInt(),
         dv7DoviSignalRewrites = signalingRewrites.toInt(),

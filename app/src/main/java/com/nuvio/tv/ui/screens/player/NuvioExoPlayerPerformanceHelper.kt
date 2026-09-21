@@ -272,19 +272,17 @@ object NuvioExoPlayerPerformanceHelper {
         }
     }
 
-    /**
-     * Builds a [DefaultLoadControl] tuned for Nuvio performance when enabled,
-     * or a standard ExoPlayer [DefaultLoadControl] when disabled.
-     */
-    // Both buffers hold bitrate times duration, so their share of the byte target is their share
-    // of the duration whatever the stream. Half of minBufferMs leaves the back buffer a third of
-    // the two and the forward side the rest.
+    // Both buffers hold bitrate times duration, so half of minBufferMs gives the back buffer a third of the target whatever the stream.
     private fun effectiveBackBufferMs(): Int {
         if (backBufferMs <= 0) return 0
         val ceiling = (minBufferMs.toLong() * BACK_BUFFER_TARGET_SHARE_NUM / BACK_BUFFER_TARGET_SHARE_DEN).toInt()
         return backBufferMs.coerceAtMost(ceiling)
     }
 
+    /**
+     * Builds a [DefaultLoadControl] tuned for Nuvio performance when enabled,
+     * or a standard ExoPlayer [DefaultLoadControl] when disabled.
+     */
     fun buildLoadControl(context: Context? = null, chunkOverheadMb: Int = 0): DefaultLoadControl {
         return if (enabled) {
             val effectiveTargetBufferMb = (targetBufferSizeMb - chunkOverheadMb)
@@ -294,7 +292,7 @@ object NuvioExoPlayerPerformanceHelper {
                 .toInt()
             // A segment size other than the arena chunk size drops every allocation to a JNI path
             // with no other symptom, so say so rather than failing playback over it.
-            if (enabled && DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE != NATIVE_ARENA_CHUNK_SIZE) {
+            if (DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE != NATIVE_ARENA_CHUNK_SIZE) {
                 android.util.Log.w(
                     "NuvioExoPerf",
                     "Allocator segment $DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE does not match the " +

@@ -618,10 +618,11 @@ private fun PlayerRuntimeController.applySelectedStreamState(
         filename = currentFilename,
         responseHeaders = currentStreamResponseHeaders
     )
-    // Debrid links are minted per playback, so keying the media cache on the URL never hits
-    // again; the torrent identity is stable across sessions.
-    currentStreamCacheKey = stream.getEffectiveInfoHash()?.lowercase()?.let { hash ->
-        "$hash:${stream.getEffectiveFileIdx() ?: ""}"
+    // A source switch mints a new debrid link for the same file, and without a file index a
+    // multi-file torrent could hand one file's bytes to another, so that case keys on the url.
+    val fileIdx = stream.getEffectiveFileIdx()
+    currentStreamCacheKey = stream.getEffectiveInfoHash()?.lowercase()?.takeIf { fileIdx != null }?.let { hash ->
+        "$hash:$fileIdx"
     }
     parsingErrorProbeAttempted = false
     applyStreamMetadata(stream)

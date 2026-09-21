@@ -187,22 +187,26 @@ class PlayerRuntimeController(
     internal val cloudSessionToken: String? = navigationArgs.cloudSessionToken
     internal val mediaSourceFactory = PlayerMediaSourceFactory(context.applicationContext)
 
+    // Resolved per sample so it follows the player across rebuilds.
+    private val bufferedAheadProvider: () -> Long = {
+        _exoPlayer?.let { player -> player.bufferedPosition - player.currentPosition } ?: -1L
+    }
+
+    // The file rate is the only one every container reports, so the playhead is placed in the
+    // file by how far through it is rather than by any declared bitrate.
+    private val vodCachePlayheadBytesProvider: () -> Long = {
+        val timeline = playbackTimeline.value
+        val sizeBytes = currentVideoSize ?: 0L
+        if (timeline.duration > 0L && sizeBytes > 0L && timeline.currentPosition > 0L) {
+            (sizeBytes.toDouble() * timeline.currentPosition / timeline.duration).toLong()
+        } else {
+            0L
+        }
+    }
+
     init {
-        // Resolved per sample so it follows the player across rebuilds.
-        PlayerMemoryReporter.bufferedAheadProvider = {
-            _exoPlayer?.let { player -> player.bufferedPosition - player.currentPosition } ?: -1L
-        }
-        // The file rate is the only one every container reports, so the playhead is placed in the
-        // file by how far through it is rather than by any declared bitrate.
-        PlayerMediaSourceFactory.vodCachePlayheadBytesProvider = {
-            val timeline = playbackTimeline.value
-            val sizeBytes = currentVideoSize ?: 0L
-            if (timeline.duration > 0L && sizeBytes > 0L && timeline.currentPosition > 0L) {
-                (sizeBytes.toDouble() * timeline.currentPosition / timeline.duration).toLong()
-            } else {
-                0L
-            }
-        }
+        PlayerMemoryReporter.bufferedAheadProvider = bufferedAheadProvider
+        PlayerMediaSourceFactory.vodCachePlayheadBytesProvider = vodCachePlayheadBytesProvider
     }
 
     internal var currentVideoHash: String? = navigationArgs.videoHash
@@ -253,7 +257,7 @@ class PlayerRuntimeController(
             val converted = diagnostics.dv7DoviSuccess > 0 &&
                 diagnostics.dvSourceProfile in CONVERTIBLE_DV_PROFILES
             val updated = diagnostics.copy(
-                vodCacheStats = mediaSourceFactory.vodCacheStatsLabel,
+                vodCacheStats = mediaSourceFactory.vodCacheStatsLabel(context),
                 dvConvertEndedAtMs = if (converted) {
                     System.currentTimeMillis()
                 } else {
@@ -267,8 +271,24 @@ class PlayerRuntimeController(
         }
         mediaSourceFactory.logVodCacheStats()
         PlayerMemoryReporter.stopSampling(context)
+        releaseProcessWideReferences()
         mediaSourceFactory.evictCachedSession()
         releasePlayer()
+    }
+
+    // These are process wide, so without this the exited player stays reachable until the next one
+    // replaces them; the identity checks keep a player that has already started from losing its own.
+    private fun releaseProcessWideReferences() {
+        if (PlayerMemoryReporter.bufferedAheadProvider === bufferedAheadProvider) {
+            PlayerMemoryReporter.bufferedAheadProvider = null
+        }
+        if (PlayerMediaSourceFactory.vodCachePlayheadBytesProvider === vodCachePlayheadBytesProvider) {
+            PlayerMediaSourceFactory.vodCachePlayheadBytesProvider = null
+        }
+        val ownAllocator = _loadControl?.allocator
+        if (ownAllocator != null && NuvioExoPlayerPerformanceHelper.liveAllocator === ownAllocator) {
+            NuvioExoPlayerPerformanceHelper.liveAllocator = null
+        }
     }
 
     internal var currentVideoId: String? = videoId

@@ -172,9 +172,6 @@ data class BufferSettings(
         const val DEFAULT_BUFFER_FOR_PLAYBACK_MS = 5_000
         const val DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 3_000
         const val DEFAULT_TARGET_BUFFER_SIZE_MB: Int = 50
-        // Media3 reserves additional bytes for back buffer as a fraction of
-        // targetBufferBytes. 15s default keeps peak heap within Fire TV class
-        // limits while still covering 3 default 5s seek-back presses.
         const val DEFAULT_BACK_BUFFER_DURATION_MS = 0
     }
 }

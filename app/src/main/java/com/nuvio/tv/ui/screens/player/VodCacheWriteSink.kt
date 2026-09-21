@@ -32,7 +32,7 @@ internal class VodCacheWriteSink(
         val bufferTimeNs = AtomicLong(0L)
         val copyTimeNs = AtomicLong(0L)
         val allocations = AtomicLong(0L)
-        // Close runs on the read thread and cannot return until the worker has drained this span,
+        // Close runs on the read thread and waits for the worker to drain this span,
         // so a slow disk shows up here rather than in the enqueue or blocked counters.
         val closeWaitMs = AtomicLong(0L)
         val spans = AtomicLong(0L)
@@ -150,12 +150,23 @@ internal class VodCacheWriteSink(
         writer.execute { done.countDown() }
         val waitStartMs = SystemClock.elapsedRealtime()
         var interrupted = Thread.interrupted()
-        while (true) {
-            try {
-                done.await()
-                break
-            } catch (e: InterruptedException) {
-                interrupted = true
+        val drained = try {
+            done.await(MAX_CLOSE_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: InterruptedException) {
+            interrupted = true
+            false
+        }
+        if (!drained) {
+            // Queued writes skip once failed is set, so only the write already running is left to wait on.
+            failed = true
+            Log.w(TAG, "VOD_CACHE: close gave up on the rest of this span (interrupted=$interrupted)")
+            while (true) {
+                try {
+                    done.await()
+                    break
+                } catch (e: InterruptedException) {
+                    interrupted = true
+                }
             }
         }
         counters.closeWaitMs.addAndGet(SystemClock.elapsedRealtime() - waitStartMs)
@@ -193,6 +204,8 @@ internal class VodCacheWriteSink(
         const val MAX_QUEUED_BYTES = 24L * 1024L * 1024L
         const val BACKPRESSURE_SLEEP_MS = 2L
         const val MAX_BACKPRESSURE_WAIT_MS = 2_000L
+        // A seek or exit waits on close from the load thread, so a slow disk only gets this long.
+        const val MAX_CLOSE_WAIT_MS = 500L
         const val POOL_CAPACITY = 64
 
         // One worker for every sink: a thread per span cost thousands of threads over a playback.

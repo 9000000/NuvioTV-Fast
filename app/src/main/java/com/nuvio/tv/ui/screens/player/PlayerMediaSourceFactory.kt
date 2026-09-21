@@ -28,6 +28,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.SubtitleParser
 import com.nuvio.tv.NuvioApplication
+import com.nuvio.tv.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -68,13 +69,14 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     @Volatile private var currentVodCacheResolvedUrl: String? = null
     @Volatile private var currentVodCacheActive: Boolean = false
 
-    val vodCacheStateLabel: String
-        get() = when {
-            currentVodCacheActive -> "On - ${formatCacheBytes(configuredVodCacheMaxBytes)}"
-            isVodCacheDisabled -> "Unavailable"
-            vodCacheEnabled -> "Off - not used for this stream"
-            else -> "Off"
-        }
+    // Takes the caller's context because this factory only holds the application one, which ignores the in-app language.
+    fun vodCacheStateLabel(context: Context): String = when {
+        currentVodCacheActive ->
+            context.getString(R.string.diag_value_disk_cache_on, formatCacheBytes(configuredVodCacheMaxBytes))
+        isVodCacheDisabled -> context.getString(R.string.diag_value_disk_cache_unavailable)
+        vodCacheEnabled -> context.getString(R.string.diag_value_disk_cache_not_used)
+        else -> context.getString(R.string.diag_value_off)
+    }
 
     // Distinguishes an empty cache from one holding data the seek did not read.
     fun vodCacheBytesForKey(cacheKey: String?, url: String?): Long {
@@ -89,13 +91,15 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
     }
 
-    val vodCacheStatsLabel: String
-        get() = if (configuredVodCacheMaxBytes <= 0L) {
-            "-"
-        } else {
-            "${formatCacheBytes(vodCacheBytesReadFromCache.get())} read, " +
-                "${formatCacheBytes(vodCacheBytesRemoved.get())} evicted"
-        }
+    fun vodCacheStatsLabel(context: Context): String = if (configuredVodCacheMaxBytes <= 0L) {
+        "-"
+    } else {
+        context.getString(
+            R.string.diag_value_disk_cache_usage,
+            formatCacheBytes(vodCacheBytesReadFromCache.get()),
+            formatCacheBytes(vodCacheBytesRemoved.get())
+        )
+    }
     private val parallelStartupPrefetchUnlocked = AtomicBoolean(true)
 
     fun unlockStartupPrefetch() {
@@ -262,8 +266,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             currentVodCacheActive = false
             progressiveUpstreamFactory
         }
-        val progressiveFactory = DataSource.Factory {
-            BufferedReadDataSource(cachedProgressiveFactory.createDataSource())
+        // The buffer only pays off against the cache's per-call cost, so a direct stream keeps its original chain.
+        val progressiveFactory: DataSource.Factory = if (currentVodCacheActive) {
+            DataSource.Factory { BufferedReadDataSource(cachedProgressiveFactory.createDataSource()) }
+        } else {
+            cachedProgressiveFactory
         }
         // BUFFER_NETWORK reports the setting before this runs, so report what the stream actually got.
         Log.i(
@@ -403,6 +410,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private const val ENABLE_VOD_CACHE = true
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val VOD_CACHE_DIR_NAME = "nuvio_vod_cache"
+        private const val VOD_CACHE_STALE_PREFIX = "nuvio_vod_cache_stale_"
         // Larger fragments mean fewer files to create, index and delete, which is the part of cache
         // upkeep that competes with playback reads on slow storage.
         private const val VOD_CACHE_FRAGMENT_BYTES = 8L * 1024L * 1024L
@@ -466,6 +474,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         )
 
         @Volatile private var sharedSimpleCache: SimpleCache? = null
+        private var sharedVodDatabaseProvider: StandaloneDatabaseProvider? = null
         @Volatile private var configuredVodCacheMaxBytes: Long = -1L
         @Volatile private var isVodCacheDisabled: Boolean = false
         private val vodCacheLock = Any()
@@ -560,8 +569,6 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             return !isTorrServer
         }
 
-
-
         fun parseHeaders(headers: String?): Map<String, String> {
             if (headers.isNullOrEmpty()) return emptyMap()
 
@@ -608,6 +615,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 }
 
                 val dir = File(context.applicationContext.cacheDir, VOD_CACHE_DIR_NAME)
+                // Clearing the last run in place raced the first title's writes, and a resumed title shares its key.
+                val movedAside = moveStaleVodCacheAside(dir)
                 var created = createVodCache(context, dir, maxBytes)
                 if (created == null) {
                     // A crash mid-write can leave an index the cache cannot read, so drop it and rebuild once.
@@ -626,8 +635,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                     vodCacheBytesTrimmed.set(0L)
                     vodCacheBytesRemoved.set(0L)
                     vodCacheWriteCounters.reset()
-                    clearStaleVodCache(created)
+                    if (!movedAside) clearStaleVodCache(created)
                 }
+                deleteStaleVodCacheFolders(context)
                 sharedSimpleCache = created
                 return created
             }
@@ -641,7 +651,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             var cache: SimpleCache? = null
             return try {
                 dir.mkdirs()
-                val provider = StandaloneDatabaseProvider(context.applicationContext)
+                val provider = vodDatabaseProvider(context)
                 val evictor = CountingCacheEvictor(maxBytes)
                 val built = SimpleCache(dir, evictor, provider)
                 vodCacheEvictor = evictor
@@ -652,6 +662,36 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             } catch (_: Throwable) {
                 cache?.let(::releaseVodCacheQuietly)
                 null
+            }
+        }
+
+        // The live cache and the stale folder delete write to the same database.
+        private fun vodDatabaseProvider(context: Context): StandaloneDatabaseProvider =
+            synchronized(vodCacheLock) {
+                sharedVodDatabaseProvider
+                    ?: StandaloneDatabaseProvider(context.applicationContext).also { sharedVodDatabaseProvider = it }
+            }
+
+        private fun moveStaleVodCacheAside(dir: File): Boolean {
+            if (!dir.exists()) return true
+            return dir.renameTo(File(dir.parentFile, "$VOD_CACHE_STALE_PREFIX${System.currentTimeMillis()}"))
+        }
+
+        // Also picks up folders an earlier run was killed before it finished deleting.
+        private fun deleteStaleVodCacheFolders(context: Context) {
+            val appContext = context.applicationContext
+            vodCacheMaintenanceScope.launch {
+                val folders = appContext.cacheDir.listFiles { file ->
+                    file.name.startsWith(VOD_CACHE_STALE_PREFIX)
+                } ?: return@launch
+                for (folder in folders) {
+                    try {
+                        // Deleting the files alone would orphan the folder's index tables in the database.
+                        SimpleCache.delete(folder, vodDatabaseProvider(appContext))
+                    } catch (_: Throwable) {
+                        folder.deleteRecursively()
+                    }
+                }
             }
         }
 
