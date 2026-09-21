@@ -1223,7 +1223,8 @@ private fun ModernCarouselCard(
         (useLandscapeOverlayTreatment || isBackdropExpanded) &&
             !isCollectionFolder &&
             !effectiveLogoUrl.isNullOrBlank() &&
-            !landscapeLogoLoadFailed
+            !landscapeLogoLoadFailed &&
+            (isBackdropExpanded || item.metaPreview?.landscapePoster.isNullOrBlank())
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
     val backgroundCardColor = NuvioTheme.colors.BackgroundCard
