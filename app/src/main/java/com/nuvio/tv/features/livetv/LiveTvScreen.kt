@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -285,7 +286,7 @@ private fun LiveTvContent(
             if (idx >= 0) {
                 gridState.scrollToItem(idx)
                 delay(120)
-                channelFocusRequesters[targetId]?.requestFocus()
+                runCatching { channelFocusRequesters[targetId]?.requestFocus() }
                 restoredChannelId = targetId
             }
         }
@@ -298,37 +299,76 @@ private fun LiveTvContent(
             if (state.recentChannelIds.isNotEmpty()) {
                 // Có lịch sử xem → hiển thị Recent
                 activeFilter = FilterType.RECENT
-                recentChipFocusRequester.requestFocus()
+                runCatching { recentChipFocusRequester.requestFocus() }
             } else {
                 // Chưa có lịch sử → hiển thị All Channels
                 activeFilter = FilterType.ALL
-                playlistDropdownButtonFocusRequester.requestFocus()
+                runCatching { playlistDropdownButtonFocusRequester.requestFocus() }
             }
             isInitialEntry = false
         }
     }
 
-    // Helper navigate về chip hiện tại (chỉ focus, không scroll thủ công)
+    // Helper navigate về chip hiện tại với scroll an toàn, retry và fallback
     suspend fun navigateToActiveChip() {
         showPlaylistDropdown = false
-        delay(80)
-        when (activeFilter) {
-            FilterType.PLAYLIST, FilterType.ALL -> {
-                playlistDropdownButtonFocusRequester.requestFocus()
-            }
-            FilterType.FAVORITES -> {
-                favoritesChipFocusRequester.requestFocus()
-            }
-            FilterType.RECENT -> {
-                if (state.recentChannelIds.isNotEmpty()) {
-                    recentChipFocusRequester.requestFocus()
+        val hasRecent = state.recentChannelIds.isNotEmpty()
+
+        val targetIndex = when (activeFilter) {
+            FilterType.PLAYLIST, FilterType.ALL -> 0
+            FilterType.FAVORITES -> 1
+            FilterType.RECENT -> if (hasRecent) 2 else 1
+            FilterType.GROUP -> {
+                val groupIdx = selectedGroup?.let { allGroups.indexOf(it) } ?: -1
+                if (groupIdx >= 0) {
+                    (if (hasRecent) 3 else 2) + groupIdx
                 } else {
-                    favoritesChipFocusRequester.requestFocus()
+                    0
                 }
             }
-            FilterType.GROUP -> {
-                groupChipFocusRequesters[selectedGroup]?.requestFocus()
-                    ?: favoritesChipFocusRequester.requestFocus()
+        }
+
+        val getTargetRequester: () -> FocusRequester = {
+            when (activeFilter) {
+                FilterType.PLAYLIST, FilterType.ALL -> playlistDropdownButtonFocusRequester
+                FilterType.FAVORITES -> favoritesChipFocusRequester
+                FilterType.RECENT -> if (hasRecent) recentChipFocusRequester else favoritesChipFocusRequester
+                FilterType.GROUP -> {
+                    selectedGroup?.let { groupChipFocusRequesters.getOrPut(it) { FocusRequester() } }
+                        ?: playlistDropdownButtonFocusRequester
+                }
+            }
+        }
+
+        // 1. Kiểm tra nếu chip đã visible trong viewport của LazyRow, nếu chưa thì cuộn đến
+        val isVisible = filterChipsListState.layoutInfo.visibleItemsInfo.any { it.index == targetIndex }
+        if (!isVisible) {
+            runCatching {
+                filterChipsListState.scrollToItem(targetIndex)
+            }
+        }
+
+        // 2. Thử request focus (với retry để đảm bảo Composable modifier node đã attached sau khi scroll)
+        var focused = false
+        for (attempt in 0..4) {
+            val req = getTargetRequester()
+            focused = runCatching {
+                req.requestFocus()
+                true
+            }.getOrDefault(false)
+
+            if (focused) break
+            delay(30)
+        }
+
+        // 3. Fallback an toàn: nếu vẫn chưa focus được (do chip lỗi hoặc unattached), cuộn về đầu và focus nút playlist dropdown
+        if (!focused) {
+            runCatching {
+                filterChipsListState.scrollToItem(0)
+            }
+            delay(40)
+            runCatching {
+                playlistDropdownButtonFocusRequester.requestFocus()
             }
         }
     }
@@ -486,12 +526,11 @@ private fun LiveTvContent(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(filteredChannels, key = { it.id }) { channel ->
+                    itemsIndexed(items = filteredChannels, key = { _, channel -> channel.id }) { itemIndex, channel ->
                         val isFav = channel.id in state.favoriteChannelIds
                         val requester = remember(channel.id) {
                             channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
                         }
-                        val itemIndex = filteredChannels.indexOf(channel)
                         TvChannelCard(
                             channel = channel,
                             isFavorite = isFav,
@@ -505,7 +544,10 @@ private fun LiveTvContent(
                             },
                             onToggleFavorite = { onToggleFavorite(channel.id) },
                             onRequestNavigateToCategory = {
-                                coroutineScope.launch { navigateToActiveChip() }
+                                coroutineScope.launch {
+                                    runCatching { gridState.animateScrollToItem(0) }
+                                    navigateToActiveChip()
+                                }
                             }
                         )
                     }
@@ -956,7 +998,7 @@ private fun TvChannelCard(
                     }
                     action == AndroidKeyEvent.ACTION_DOWN &&
                     code == AndroidKeyEvent.KEYCODE_DPAD_DOWN && isLastRow -> {
-                        onRequestNavigateToCategory(); true
+                        true
                     }
                     action == AndroidKeyEvent.ACTION_UP && code in listOf(
                         AndroidKeyEvent.KEYCODE_MENU, AndroidKeyEvent.KEYCODE_STAR,
