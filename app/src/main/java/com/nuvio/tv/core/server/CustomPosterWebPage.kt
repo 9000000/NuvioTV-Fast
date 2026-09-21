@@ -47,34 +47,36 @@ internal object CustomPosterWebPage {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>$appName - $pageTitle</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-background:#0d0d0d;color:#e0e0e0;display:flex;justify-content:center;
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+background:#000;color:#fff;display:flex;justify-content:center;
 align-items:center;min-height:100vh;padding:16px}
-.card{background:#1a1a1a;border-radius:16px;padding:32px;max-width:560px;width:100%}
+.card{max-width:560px;width:100%;padding:32px 0}
 h1{font-size:20px;font-weight:600;margin-bottom:4px;color:#fff}
-.subtitle{font-size:13px;color:#888;margin-bottom:24px}
-label{display:block;font-size:13px;font-weight:500;color:#aaa;margin-bottom:6px}
-textarea{width:100%;min-height:100px;padding:12px;border-radius:10px;border:1px solid #333;
-background:#111;color:#e0e0e0;font-family:monospace;font-size:13px;resize:vertical;
-outline:none;transition:border-color .2s}
-textarea:focus{border-color:#7c5cfc}
-textarea::placeholder{color:#555}
+.subtitle{font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px}
+label{display:block;font-size:0.75rem;font-weight:500;color:rgba(255,255,255,0.35);
+letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px}
+textarea{width:100%;min-height:100px;padding:12px 1rem;border-radius:16px;
+border:1px solid rgba(255,255,255,0.14);background:transparent;color:#fff;
+font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.82rem;
+line-height:1.5;resize:vertical;outline:none;transition:border-color .2s}
+textarea:focus{border-color:rgba(255,255,255,0.42)}
+textarea::placeholder{color:rgba(255,255,255,0.25)}
 .actions{display:flex;gap:10px;margin-top:16px}
-button{flex:1;padding:12px;border:none;border-radius:10px;font-size:14px;
-font-weight:600;cursor:pointer;transition:opacity .15s}
+button{flex:1;padding:0.875rem 1.3rem;border:1px solid rgba(255,255,255,0.2);
+border-radius:100px;background:transparent;color:#fff;font-family:inherit;
+font-size:0.875rem;font-weight:500;cursor:pointer;transition:all .25s ease}
+button:hover{background:#fff;color:#000;border-color:#fff}
 button:active{opacity:.7}
-.save{background:#7c5cfc;color:#fff}
-.clear{background:#2a2a2a;color:#aaa}
 .status{margin-top:12px;font-size:13px;text-align:center;min-height:20px;
 transition:color .3s}
 .status.ok{color:#4caf50}
 .status.err{color:#ef5350}
-.current{margin-top:20px;padding:12px;background:#111;border-radius:8px;
-font-size:12px;font-family:monospace;color:#888;word-break:break-all;
-max-height:60px;overflow:auto}
-.current.empty{font-style:italic;color:#555}
-.info{margin-top:16px;font-size:11px;color:#666;line-height:1.5}
+.current{margin-top:20px;padding:12px;background:rgba(255,255,255,0.05);border-radius:12px;
+border:1px solid rgba(255,255,255,0.08);font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+color:rgba(255,255,255,0.5);word-break:break-all;max-height:60px;overflow:auto}
+.current.empty{font-style:italic;color:rgba(255,255,255,0.25)}
+.info{margin-top:16px;font-size:11px;color:rgba(255,255,255,0.3);line-height:1.5}
 </style>
 </head>
 <body>
@@ -84,8 +86,8 @@ max-height:60px;overflow:auto}
   <label for="pattern">$labelPattern</label>
   <textarea id="pattern" placeholder="${placeholder.replace("&", "&amp;")}" spellcheck="false"></textarea>
   <div class="actions">
-    <button class="save" onclick="save()">$saveAction</button>
-    <button class="clear" onclick="clear_()">$clearAction</button>
+    <button onclick="save()">$saveAction</button>
+    <button onclick="clear_()">$clearAction</button>
   </div>
   <div id="status" class="status"></div>
   <div id="current" class="current empty">$loadingLabel</div>
