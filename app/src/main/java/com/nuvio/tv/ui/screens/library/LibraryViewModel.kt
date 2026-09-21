@@ -19,6 +19,7 @@ import com.nuvio.tv.core.debrid.DebridProviders
 import com.nuvio.tv.core.debrid.supports
 import com.nuvio.tv.core.tracking.TrackingLibraryProviderRegistry
 import com.nuvio.tv.core.tracking.providerId
+import com.nuvio.tv.core.poster.withCustomPosterUrls
 import com.nuvio.tv.data.local.DebridSettingsDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.LibraryPreferences
@@ -145,7 +146,8 @@ data class LibraryUiState(
     val showManageDialog: Boolean = false,
     val manageSelectedListKey: String? = null,
     val listEditorState: LibraryListEditorState? = null,
-    val pendingOperation: Boolean = false
+    val pendingOperation: Boolean = false,
+    val customPosterUrlPattern: String = ""
 )
 
 @HiltViewModel
@@ -704,6 +706,16 @@ class LibraryViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.customPosterUrlPattern
+                .distinctUntilChanged()
+                .collectLatest { pattern ->
+                    _uiState.update { current ->
+                        if (current.customPosterUrlPattern == pattern) current
+                        else current.copy(customPosterUrlPattern = pattern).withVisibleItems()
+                    }
+                }
+        }
     }
 
     private fun observeCloudLibrarySettings() {
@@ -989,7 +1001,7 @@ class LibraryViewModel @Inject constructor(
         val validYear = selectedYear?.takeIf { y -> yearOptions.any { it.key == y } }
 
         return copy(
-            visibleItems = sorted,
+            visibleItems = sorted.withCustomPosterUrls(customPosterUrlPattern),
             availableTypeTabs = typeTabsWithCounts,
             availableGenres = genreOptions,
             availableYears = yearOptions,

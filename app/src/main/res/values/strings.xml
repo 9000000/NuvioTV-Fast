@@ -1073,7 +1073,7 @@
     <string name="layout_trailer_muted">Play Trailer Muted</string>
     <string name="layout_trailer_muted_sub_preview">Mute trailer audio during autoplay preview.</string>
     <string name="layout_trailer_muted_sub_expanded">Mute trailer audio in expanded cards.</string>
-    <string name="layout_section_card_style">Poster Card Style</string>
+    <string name="layout_section_card_style">Poster Card</string>
     <string name="layout_section_card_style_desc">Tune card width and corner radius.</string>
     <string name="settings_card_depth_title">Card Depth Effect</string>
     <string name="settings_card_depth_description">Adds a lit top edge and a soft sheen to image cards for a subtle sense of depth.</string>
@@ -1125,6 +1125,32 @@
     <string name="layout_card_radius">Corner Radius</string>
     <string name="layout_reset_default">Reset to Default</string>
     <string name="layout_custom">Custom</string>
+
+    <!-- Custom Poster URL -->
+    <string name="layout_custom_poster_title">Custom Poster Source</string>
+    <string name="layout_custom_poster_description">Provide a poster URL pattern from an external service. If a placeholder has no value for a given title, the original poster is used instead.</string>
+    <string name="layout_custom_poster_clear">Clear</string>
+    <string name="layout_custom_poster_active">✓ Custom poster source active</string>
+    <string name="layout_custom_poster_qr">Configure via Phone</string>
+    <string name="custom_poster_qr_instruction">Scan the QR code with your phone to paste a poster URL pattern</string>
+
+    <!-- Custom Poster Web Page -->
+    <string name="web_custom_poster_title">Custom Poster Source</string>
+    <string name="web_custom_poster_subtitle">Paste a poster URL pattern below and press Save.</string>
+    <string name="web_custom_poster_label">URL Pattern</string>
+    <string name="web_custom_poster_placeholder">https://example.com/poster?id={id}&amp;id_type={id_type}&amp;type={type}</string>
+    <string name="web_custom_poster_save">Save</string>
+    <string name="web_custom_poster_clear">Clear</string>
+    <string name="web_custom_poster_saved">Saved!</string>
+    <string name="web_custom_poster_cleared">Cleared</string>
+    <string name="web_custom_poster_error_empty">Enter a URL pattern</string>
+    <string name="web_custom_poster_error_save">Save failed</string>
+    <string name="web_custom_poster_error_clear">Clear failed</string>
+    <string name="web_custom_poster_error_connection">Connection error</string>
+    <string name="web_custom_poster_current">Current:</string>
+    <string name="web_custom_poster_none">No pattern set</string>
+    <string name="web_custom_poster_loading">Loading…</string>
+    <string name="web_custom_poster_placeholders_info">Placeholders: {id} passes all content IDs. {imdb_id}, {tmdb_id}, {tvdb_id}, {kitsu_id} target a single ID type - if unavailable, the original poster is kept. {imdb_id|tmdb_id|kitsu_id} declares supported ID types - the matching one is used, or the original poster is kept. Add ? to make a placeholder optional, resolving to empty instead of skipping: {imdb_id?}. Other placeholders: {id_type}, {typed_id}, {type}, {shape}.</string>
 
 
     <string name="mdblist_title">MDBList Ratings</string>
