@@ -408,7 +408,7 @@ private fun LiveTvContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
-                userScrollEnabled = true // Cho phép scroll bằng tay
+                userScrollEnabled = true
             ) {
                 // Playlist Dropdown Button — luôn hiển thị ở đầu tiên
                 item(key = "playlist_dropdown") {
@@ -424,16 +424,6 @@ private fun LiveTvContent(
                         onClick = {
                             showPlaylistDropdown = !showPlaylistDropdown
                             isInitialEntry = false
-                        },
-                        onFocusChanged = { isFocused ->
-                            if (isFocused && !showPlaylistDropdown) {
-                                // Focus vào playlist button → hiển thị All Channels
-                                if (activeFilter != FilterType.ALL && activeFilter != FilterType.PLAYLIST) {
-                                    activeFilter = FilterType.ALL
-                                    selectedGroup = null
-                                    selectedPlaylistId = null
-                                }
-                            }
                         }
                     )
                 }
@@ -447,15 +437,7 @@ private fun LiveTvContent(
                             selectedGroup = null; selectedPlaylistId = null
                             showPlaylistDropdown = false; isInitialEntry = false
                         },
-                        focusRequester = favoritesChipFocusRequester,
-                        onFocusChanged = { isFocused ->
-                            if (isFocused && activeFilter != FilterType.FAVORITES) {
-                                activeFilter = FilterType.FAVORITES
-                                selectedGroup = null
-                                selectedPlaylistId = null
-                                showPlaylistDropdown = false
-                            }
-                        }
+                        focusRequester = favoritesChipFocusRequester
                     )
                 }
                 // RECENT
@@ -469,15 +451,7 @@ private fun LiveTvContent(
                                 selectedGroup = null; selectedPlaylistId = null
                                 showPlaylistDropdown = false; isInitialEntry = false
                             },
-                            focusRequester = recentChipFocusRequester,
-                            onFocusChanged = { isFocused ->
-                                if (isFocused && activeFilter != FilterType.RECENT) {
-                                    activeFilter = FilterType.RECENT
-                                    selectedGroup = null
-                                    selectedPlaylistId = null
-                                    showPlaylistDropdown = false
-                                }
-                            }
+                            focusRequester = recentChipFocusRequester
                         )
                     }
                 }
@@ -492,15 +466,7 @@ private fun LiveTvContent(
                             selectedGroup = group; selectedPlaylistId = null
                             showPlaylistDropdown = false; isInitialEntry = false
                         },
-                        focusRequester = req,
-                        onFocusChanged = { isFocused ->
-                            if (isFocused && (activeFilter != FilterType.GROUP || selectedGroup != group)) {
-                                activeFilter = FilterType.GROUP
-                                selectedGroup = group
-                                selectedPlaylistId = null
-                                showPlaylistDropdown = false
-                            }
-                        }
+                        focusRequester = req
                     )
                 }
             }
@@ -595,8 +561,7 @@ private fun PlaylistDropdownButton(
     isActive: Boolean,
     isOpen: Boolean,
     focusRequester: FocusRequester,
-    onClick: () -> Unit,
-    onFocusChanged: (Boolean) -> Unit = {}
+    onClick: () -> Unit
 ) {
     // Mặc định hiển thị "All Channels" nếu chưa chọn gì
     val displayName = selectedName ?: stringResource(R.string.livetv_group_all)
@@ -609,9 +574,7 @@ private fun PlaylistDropdownButton(
         ),
         shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
         scale = CardDefaults.scale(focusedScale = 1.0f),
-        modifier = Modifier
-            .focusRequester(focusRequester)
-            .onFocusChanged { onFocusChanged(it.isFocused) }
+        modifier = Modifier.focusRequester(focusRequester)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
@@ -936,8 +899,7 @@ private fun FilterChipItem(
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    focusRequester: FocusRequester? = null,
-    onFocusChanged: (Boolean) -> Unit = {}
+    focusRequester: FocusRequester? = null
 ) {
     Card(
         onClick = onClick,
@@ -948,9 +910,7 @@ private fun FilterChipItem(
         ),
         shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
         scale = CardDefaults.scale(focusedScale = 1.0f),
-        modifier = Modifier
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { onFocusChanged(it.isFocused) }
+        modifier = if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
     ) {
         Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)) {
             Text(
