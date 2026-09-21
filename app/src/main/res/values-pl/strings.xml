@@ -455,7 +455,7 @@
     <string name="layout_trailer_muted">Odtwarzaj zwiastun bez dźwięku</string>
     <string name="layout_trailer_muted_sub_preview">Wycisz audio zwiastuna podczas podglądu auto-play.</string>
     <string name="layout_trailer_muted_sub_expanded">Wycisz audio zwiastuna w rozszerzonych kartach.</string>
-    <string name="layout_section_card_style">Styl karty plakatu</string>
+    <string name="layout_section_card_style">Karta plakatu</string>
     <string name="layout_section_card_style_desc">Dostosuj szerokość karty i promień narożnika.</string>
     <string name="layout_open">Otwarte</string>
     <string name="layout_closed">Zamknięte</string>

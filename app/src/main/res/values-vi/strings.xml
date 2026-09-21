@@ -1073,7 +1073,7 @@
     <string name="layout_trailer_muted">Phát trailer đã tắt tiếng</string>
     <string name="layout_trailer_muted_sub_preview">Tắt âm thanh trailer khi tự động phát bản xem trước.</string>
     <string name="layout_trailer_muted_sub_expanded">Tắt âm thanh trailer trong thẻ mở rộng.</string>
-    <string name="layout_section_card_style">Kiểu thẻ poster</string>
+    <string name="layout_section_card_style">Thẻ poster</string>
     <string name="layout_section_card_style_desc">Điều chỉnh độ rộng và bo tròn góc của thẻ.</string>
     <string name="settings_card_depth_title">Hiệu ứng chiều sâu thẻ</string>
     <string name="settings_card_depth_description">Thêm viền sáng phía trên và hiệu ứng bóng mờ để tăng độ sâu tinh tế cho thẻ ảnh.</string>
