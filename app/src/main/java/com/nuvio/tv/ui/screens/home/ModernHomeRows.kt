@@ -430,7 +430,6 @@ internal fun ModernRowSection(
     rowTitleBottom: Dp,
     defaultBringIntoViewSpec: BringIntoViewSpec,
     focusStateCatalogRowScrollIndex: Int,
-    focusStateCatalogRowScrollAnchor: String?,
     focusedItemByRow: StableRef<MutableMap<String, Int>>,
     rowListStates: StableRef<MutableMap<String, LazyListState>>,
     loadMoreRequestedTotals: StableRef<MutableMap<String, Int>>,
@@ -541,13 +540,8 @@ internal fun ModernRowSection(
         )
 
         val rowListState = rowListStates.getOrPut(row.key) {
-            // Resolved when the row is built, so a refresh that already moved the card is seen.
-            val restoredIndex = focusStateCatalogRowScrollAnchor
-                ?.let { anchor -> row.items.list.indexOfFirst { it.key == anchor } }
-                ?.takeIf { it >= 0 }
-                ?: focusStateCatalogRowScrollIndex
             LazyListState(
-                firstVisibleItemIndex = restoredIndex,
+                firstVisibleItemIndex = focusStateCatalogRowScrollIndex,
                 prefetchStrategy = LazyListPrefetchStrategy(nestedPrefetchItemCount = NESTED_PREFETCH_COUNT)
             )
         }
