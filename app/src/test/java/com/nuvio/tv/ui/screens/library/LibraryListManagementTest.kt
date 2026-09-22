@@ -163,6 +163,7 @@ class LibraryListManagementTest {
             layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore> {
                 every { posterCardWidthDp } returns flowOf(126)
                 every { posterCardCornerRadiusDp } returns flowOf(12)
+                every { customPosterUrlPattern } returns flowOf("")
             },
             libraryPreferences = mockk<LibraryPreferences>(relaxed = true) {
                 every { sortOption } returns flowOf(null)
