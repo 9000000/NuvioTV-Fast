@@ -1,11 +1,44 @@
 package com.nuvio.tv.ui.screens.player
 
+import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Base64
 
 class PlayerMediaSourceFactoryTest {
+
+    @Test
+    fun `media segment 404 with an alternative prefers another HLS track`() {
+        assertTrue(
+            shouldPreferAlternativeHlsTrack(
+                responseCode = 404,
+                dataType = C.DATA_TYPE_MEDIA,
+                alternativeTrackAvailable = true
+            )
+        )
+    }
+
+    @Test
+    fun `manifest errors and missing alternatives do not trigger rendition fallback`() {
+        assertFalse(
+            shouldPreferAlternativeHlsTrack(
+                responseCode = 404,
+                dataType = C.DATA_TYPE_MANIFEST,
+                alternativeTrackAvailable = true
+            )
+        )
+        assertFalse(
+            shouldPreferAlternativeHlsTrack(
+                responseCode = 404,
+                dataType = C.DATA_TYPE_MEDIA,
+                alternativeTrackAvailable = false
+            )
+        )
+    }
 
     @Test
     fun `inferMimeType prefers response content type for manifest urls without extension`() {
@@ -69,4 +102,152 @@ class PlayerMediaSourceFactoryTest {
 
         assertEquals(MimeTypes.VIDEO_MATROSKA, mimeType)
     }
+
+    @Test
+    fun `inferMimeType prefers URL extension for adaptive formats even if headers specify different type`() {
+        val mimeType = PlayerMediaSourceFactory.inferMimeType(
+            url = "https://example.com/stream.m3u8",
+            filename = null,
+            responseHeaders = mapOf("Content-Type" to "video/mp4")
+        )
+
+        assertEquals(MimeTypes.APPLICATION_M3U8, mimeType)
+    }
+
+    @Test
+    fun `inferMimeType prefers filename extension for adaptive formats even if headers specify different type`() {
+        val mimeType = PlayerMediaSourceFactory.inferMimeType(
+            url = "https://example.com/download?id=42",
+            filename = "movie.mpd",
+            responseHeaders = mapOf("Content-Type" to "video/mp4")
+        )
+
+        assertEquals(MimeTypes.APPLICATION_MPD, mimeType)
+    }
+
+    @Test
+    fun `inferMimeType recognizes playlist endpoints with numeric or token ids as HLS`() {
+        val urls = listOf(
+            "https://example.com/playlist/759755?token=mock_token_123&expires=1788170323&h=1&lang=it",
+            "https://example.com/playlist/123456",
+            "https://example.com/playlist/a1b2c3d4e5f6?h=1",
+            "https://example.com/hls/759755",
+            "https://example.com/manifest/abc123456",
+            "https://example.com/master/stream99",
+            "https://example.com/live/stream.m3u",
+            "https://example.com/playback?protocol=hls"
+        )
+
+        for (url in urls) {
+            val mimeType = PlayerMediaSourceFactory.inferMimeType(
+                url = url,
+                filename = null
+            )
+            assertEquals("Expected HLS mimeType for $url", MimeTypes.APPLICATION_M3U8, mimeType)
+        }
+    }
+
+    @Test
+    fun `normalizePlaybackRequest converts URL userinfo to authorization header`() {
+        val userInfo = "test-user:test-pass"
+        val request = PlayerMediaSourceFactory.normalizePlaybackRequest(
+            url = "https://" + userInfo + "@webdav.example.org/movies/title.mkv?download=1",
+            headers = mapOf("Range" to "bytes=0-1")
+        )
+
+        assertEquals("https://webdav.example.org/movies/title.mkv?download=1", request.url)
+        assertEquals(userInfo.basicAuthHeader(), request.headers["Authorization"])
+        assertFalse(request.headers.containsKey("Range"))
+    }
+
+    @Test
+    fun `normalizePlaybackRequest strips URL userinfo without replacing explicit authorization`() {
+        val explicitAuth = "explicit:value".basicAuthHeader()
+        val request = PlayerMediaSourceFactory.normalizePlaybackRequest(
+            url = "https://" + "test-user:test-pass" + "@webdav.example.org/movies/title.mkv",
+            headers = mapOf("Authorization" to explicitAuth)
+        )
+
+        assertEquals("https://webdav.example.org/movies/title.mkv", request.url)
+        assertEquals(explicitAuth, request.headers["Authorization"])
+    }
+
+    @Test
+    fun `normalizePlaybackRequest preserves encoded path query and fragment when stripping userinfo`() {
+        val userInfo = "user:p@ss"
+        val request = PlayerMediaSourceFactory.normalizePlaybackRequest(
+            url = "https://" + userInfo.replace("@", "%40") + "@webdav.example.org/files/Show%2FSeason%201/Episode%2001.mkv?name=a%2Fb#frag%2Fment",
+            headers = emptyMap()
+        )
+
+        assertEquals(
+            "https://webdav.example.org/files/Show%2FSeason%201/Episode%2001.mkv?name=a%2Fb#frag%2Fment",
+            request.url
+        )
+        assertEquals(userInfo.basicAuthHeader(), request.headers["Authorization"])
+    }
+
+    @Test
+    fun `normalizePlaybackRequest strips userinfo containing a literal at sign`() {
+        val userInfo = "user:p@ss"
+        val request = PlayerMediaSourceFactory.normalizePlaybackRequest(
+            url = "https://" + userInfo + "@webdav.example.org/files/title.mkv",
+            headers = emptyMap()
+        )
+
+        assertEquals("https://webdav.example.org/files/title.mkv", request.url)
+        assertEquals(userInfo.basicAuthHeader(), request.headers["Authorization"])
+    }
+
+    @Test
+    fun `isLoopbackNonTorrServerUrl returns true for Usenet or local proxy loopback streams`() {
+        assertTrue(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl("http://127.0.0.1:51234/stream/movie.mkv")
+        )
+        assertTrue(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl("http://localhost:51234/stream/movie.mkv")
+        )
+        assertTrue(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl("http://127.0.0.1:8080/stream/video.mkv?token=abc")
+        )
+    }
+
+    @Test
+    fun `isLoopbackNonTorrServerUrl returns false for TorrServer streams`() {
+        assertFalse(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl(
+                "http://127.0.0.1:8091/stream/title.mkv?link=magnet:?xt=urn:btih:123&index=1&play"
+            )
+        )
+        assertFalse(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl(
+                "http://127.0.0.1:8090/stream?play=1"
+            )
+        )
+        assertFalse(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl(
+                "http://127.0.0.1:9090/stream/title.mkv?link=magnet:?xt=urn:btih:123&index=1&play"
+            )
+        )
+    }
+
+    @Test
+    fun `isLoopbackNonTorrServerUrl returns false for external and non-loopback urls`() {
+        assertFalse(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl(
+                "https://debrid.example.com/stream/movie.mkv"
+            )
+        )
+        assertFalse(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl(
+                "http://192.168.1.100:8091/stream?link=123"
+            )
+        )
+        assertFalse(
+            PlayerMediaSourceFactory.isLoopbackNonTorrServerUrl("")
+        )
+    }
+
+    private fun String.basicAuthHeader(): String =
+        "Basic " + Base64.getEncoder().encodeToString(toByteArray(Charsets.UTF_8))
 }

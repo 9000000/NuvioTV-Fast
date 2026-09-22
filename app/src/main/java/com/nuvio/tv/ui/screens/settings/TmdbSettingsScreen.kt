@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,7 +74,7 @@ fun TmdbSettingsContent(
             LazyColumn(
                 state = tmdbListState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 8.dp),
+                contentPadding = PaddingValues(bottom = NuvioTheme.spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item(key = "tmdb_enabled") {
@@ -82,7 +84,7 @@ fun TmdbSettingsContent(
                         checked = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(!uiState.enabled)) },
                         modifier = Modifier
-                            .padding(top = 2.dp)
+                            .padding(top = NuvioTheme.spacing.xxs)
                             .then(
                                 if (initialFocusRequester != null) {
                                     Modifier.focusRequester(initialFocusRequester)
@@ -161,16 +163,6 @@ fun TmdbSettingsContent(
                         checked = uiState.useDetails,
                         enabled = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleDetails(!uiState.useDetails)) }
-                    )
-                }
-
-                item(key = "tmdb_release_dates") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_release_dates_title),
-                        subtitle = stringResource(R.string.tmdb_release_dates_subtitle),
-                        checked = uiState.useReleaseDates,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleReleaseDates(!uiState.useReleaseDates)) }
                     )
                 }
 

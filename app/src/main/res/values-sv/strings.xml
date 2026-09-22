@@ -45,7 +45,9 @@
     <string name="continue_watching">Fortsätt titta</string>
     <string name="cw_upcoming">Kommande</string>
     <string name="cw_next_up">Nästa</string>
+    <string name="cw_next_up_short">Nästa</string>
     <string name="cw_new_episode">Nytt avsnitt</string>
+    <string name="cw_new_episode_short">Nytt</string>
     <string name="cw_new_season">Ny säsong</string>
     <string name="cw_resume">Återuppta</string>
     <string name="cw_percent_watched">%1$d%% sedd</string>
@@ -53,6 +55,20 @@
     <string name="cw_min_left">%1$dm kvar</string>
     <string name="cw_almost_done">Nästan färdig</string>
     <string name="cw_airs_date">Sänds %1$s</string>
+    <string name="cw_airs_today">Sänds idag</string>
+    <string name="cw_airs_tomorrow">Sänds imorgon</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Sänds om %d dag</item>
+        <item quantity="other">Sänds om %d dagar</item>
+    </plurals>
+    <!-- Short versions for compact card styles (wide/poster) -->
+    <string name="cw_airs_date_short">%1$s</string>
+    <string name="cw_airs_today_short">Idag</string>
+    <string name="cw_airs_tomorrow_short">Imorgon</string>
+    <plurals name="cw_airs_in_days_short">
+        <item quantity="one">Om %d dag</item>
+        <item quantity="other">Om %d dagar</item>
+    </plurals>
     <string name="cw_action_go_to_details">Gå till detaljer</string>
     <string name="cw_action_start_from_beginning">Börja om från början</string>
     <string name="cw_action_remove">Ta bort</string>
@@ -219,7 +235,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio förblir gratis och öppen källkod. Om du vill stödja projektet kan du hjälpa till att täcka tiden och infrastrukturen bakom det.</string>
     <string name="supporters_contributors_donate_button">Donera till Nuvio</string>
     <string name="supporters_contributors_qr_title">Skanna för att donera</string>
-    <string name="supporters_contributors_qr_subtitle">Öppna länken på din telefon och stöd Nuvio via Ko-fi.</string>
+    <string name="supporters_contributors_qr_subtitle">Öppna länken på din telefon för att stödja Nuvio.</string>
     <string name="supporters_contributors_qr_hint">Rikta kameran mot QR-koden eller använd knappen nedan.</string>
     <string name="supporters_contributors_back_button">Tillbaka till detaljer</string>
     <string name="supporters_tab">Supportrar</string>
@@ -256,8 +272,8 @@
     <string name="playback_player_internal">Intern</string>
     <string name="playback_player_external">Extern</string>
     <string name="playback_player_ask">Fråga varje gång</string>
-    <string name="playback_section_audio">Ljud &amp; trailer</string>
-    <string name="playback_section_audio_desc">Trailerbeteende och ljudkontroller.</string>
+    <string name="playback_section_audio">Ljud &amp; video</string>
+    <string name="playback_section_audio_desc">Ljudkontroller och videokompatibilitet.</string>
     <string name="playback_section_subtitles">Undertexter</string>
     <string name="playback_section_subtitles_desc">Språk, stil och renderingsläge.</string>
     <string name="playback_afr_open">Öppen</string>
@@ -292,7 +308,6 @@
     <string name="audio_decoder_priority">Avkodarprioritet</string>
     <string name="audio_tunneled">Tunneluppspelning</string>
     <string name="audio_tunneled_sub">Ljud/video-synk på hårdvarunivå. Kan förbättra uppspelning på vissa Android TV-enheter</string>
-    <string name="audio_dv_sub">Mappa Dolby Vision Profil 7 till standard-HEVC för enheter utan DV-hårdvarustöd</string>
     <string name="audio_decoder_device_only_desc">Använd bara inbyggda hårdvaruavkodare. Mest kompatibelt men stödjer inte alla format.</string>
     <string name="audio_decoder_prefer_device_desc">Använd hårdvaruavkodare när tillgängliga, använd FFmpeg som reserv. Rekommenderas för de flesta enheter.</string>
     <string name="audio_decoder_prefer_app_desc">Använd FFmpeg-avkodare när tillgängliga. Bättre formatstöd men högre CPU-användning.</string>
@@ -337,13 +352,6 @@
     <string name="sub_org_none_desc">Visa undertexter i standardordning från tillägg.</string>
     <string name="sub_org_by_lang_desc">Gruppera undertexter efter språk.</string>
     <string name="sub_org_by_addon_desc">Gruppera undertexter efter tilläggskälla.</string>
-    <string name="sub_startup_mode_title">Laddning av tilläggsundertexter</string>
-    <string name="sub_startup_mode_fast">Snabb start</string>
-    <string name="sub_startup_mode_preferred">Föredragna språk</string>
-    <string name="sub_startup_mode_all">Alla tilläggsundertexter</string>
-    <string name="sub_startup_mode_fast_desc">Starta uppspelning direkt. Att välja tilläggsundertexter kan ladda om spelaren en gång.</string>
-    <string name="sub_startup_mode_preferred_desc">Hämta tilläggsundertexter före uppspelning och koppla föredragna/sekundära språkspår.</string>
-    <string name="sub_startup_mode_all_desc">Hämta och koppla alla tilläggsundertexter före uppspelning. Långsammast start.</string>
 
     <!-- PlaybackAutoPlaySettings -->
     <string name="autoplay_reuse_last_link">Återanvänd senaste länk</string>
@@ -449,7 +457,7 @@
     <string name="layout_trailer_muted">Spela trailer tyst</string>
     <string name="layout_trailer_muted_sub_preview">Tysta trailerljud under automatisk förhandsvisning.</string>
     <string name="layout_trailer_muted_sub_expanded">Tysta trailerljud i expanderade kort.</string>
-    <string name="layout_section_card_style">Affischkortstil</string>
+    <string name="layout_section_card_style">Affischkort</string>
     <string name="layout_section_card_style_desc">Justera kortbredd och hörnradie.</string>
     <string name="layout_open">Öppen</string>
     <string name="layout_closed">Stängd</string>
@@ -911,11 +919,9 @@
 
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Logga in med QR</string>
-    <string name="auth_qr_account_login">Kontoinloggning</string>
     <string name="auth_qr_finishing">Slutför inloggning\u2026</string>
     <string name="auth_qr_code_label">Kod: %1$s</string>
     <string name="auth_qr_expires">Går ut om %1$s</string>
-    <string name="auth_qr_phone_hint">Använd din telefon för att logga in med e-post/lösenord. TV:n använder enbart QR för snabbare inloggning.</string>
     <string name="auth_qr_scan_instruction">Skanna QR, godkänn i webbläsaren och återkom sedan hit.</string>
     <string name="auth_qr_code_display">Kod: %1$s</string>
     <string name="auth_qr_refresh">Uppdatera QR</string>
@@ -1050,7 +1056,6 @@
 
     <!-- PlaybackAudioSettings -->
     <string name="audio_passthrough_info">Ljudgenomströmning (TrueHD, DTS, AC-3, etc.) är automatisk. När enheten är ansluten till en kompatibel AV-receiver eller soundbar via HDMI skickas förlustfritt ljud som det är utan avkodning.</string>
-    <string name="audio_dv_title">DV7 - HEVC-reserv</string>
 
     <!-- SidebarNavigation / MainActivity -->
     <string name="nav_home">Hem</string>

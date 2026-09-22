@@ -49,6 +49,22 @@ class AndroidTvChannelSyncService @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // The launcher channel is only visible while the app is in the background. Reconciling on
+    // every in-playback cache bump (~10s) thrashes the TvProvider and stops launchers like
+    // Projectivy from repainting. We instead reconcile once when the app goes to background
+    // (user returns to the launcher) — see [onForegroundChanged].
+    @Volatile private var appInForeground = false
+
+    /** Called from the host Activity's onStart/onStop. On background we reconcile once so the
+     *  channel reflects the latest watch progress exactly as the launcher regains foreground. */
+    fun onForegroundChanged(foreground: Boolean) {
+        val wasForeground = appInForeground
+        appInForeground = foreground
+        if (wasForeground && !foreground) {
+            scope.launch { reconcileFromCache() }
+        }
+    }
+
     @OptIn(FlowPreview::class)
     fun start() {
         if (!manager.isSupported()) {
@@ -73,6 +89,11 @@ class AndroidTvChannelSyncService @Inject constructor(
             }
                 .debounce(DEBOUNCE_MS)
                 .collect { settings ->
+                    // Skip while the app is foregrounded — the launcher channel isn't visible
+                    // then, and reconciling on every ~10s in-playback cache bump thrashes the
+                    // provider (and stops launchers like Projectivy from repainting). The
+                    // background transition (onForegroundChanged) + periodic job cover it.
+                    if (appInForeground) return@collect
                     reconcileFromCache(settings)
                 }
         }
@@ -104,20 +125,8 @@ class AndroidTvChannelSyncService @Inject constructor(
         )
         manager.reconcile(channelItems)
 
-        val cutoffMs = if (resolvedSettings.daysCap == TraktSettingsDataStore.CONTINUE_WATCHING_DAYS_CAP_ALL) {
-            null
-        } else {
-            val windowMs = resolvedSettings.daysCap.toLong() * 24L * 60L * 60L * 1000L
-            System.currentTimeMillis() - windowMs
-        }
-        val watchNextInProgress = inProgressItems
-            .filter { cutoffMs == null || it.lastWatched >= cutoffMs }
-
         runCatching {
-            val cwItems = watchNextInProgress.map {
-                ContinueWatchingItem.InProgress(it.toWatchProgress(resolvedSettings.useEpisodeThumbnails))
-            }
-            tvRecommendationManager.updateWatchNextFromCwItems(cwItems)
+            tvRecommendationManager.updateWatchNext(channelItems)
         }
     }
 
@@ -173,6 +182,7 @@ class AndroidTvChannelSyncService @Inject constructor(
         return (inProgressSorted + nextUpSorted)
             .sortedByDescending { it.sortKey }
             .map { it.watchProgress }
+            .distinctBy { it.contentId }
     }
 
     private fun nextUpDismissKey(item: CachedNextUpItem): String {

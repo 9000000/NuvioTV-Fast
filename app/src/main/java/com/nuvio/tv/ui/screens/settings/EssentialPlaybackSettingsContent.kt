@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.settings
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.R
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.StreamAutoPlayMode
+import com.nuvio.tv.data.local.SubtitleLanguageOption
 import com.nuvio.tv.ui.components.P2pConsentDialog
 import kotlinx.coroutines.launch
 
@@ -49,7 +52,7 @@ fun EssentialPlaybackSettingsContent(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
             item(key = "header") {
                 SettingsDetailHeader(
@@ -98,6 +101,18 @@ fun EssentialPlaybackSettingsContent(
                         enabled = settings != null
                     )
                     SettingsToggleRow(
+                        title = stringResource(R.string.autoplay_post_play_recommendations),
+                        subtitle = stringResource(R.string.autoplay_post_play_recommendations_sub),
+                        checked = settings?.postPlayRecommendationsEnabled == true,
+                        onToggle = {
+                            val current = settings ?: return@SettingsToggleRow
+                            coroutineScope.launch {
+                                viewModel.setPostPlayRecommendationsEnabled(!current.postPlayRecommendationsEnabled)
+                            }
+                        },
+                        enabled = settings != null
+                    )
+                    SettingsToggleRow(
                         title = stringResource(R.string.essential_p2p_streams),
                         subtitle = stringResource(R.string.essential_p2p_streams_subtitle),
                         checked = torrentSettings?.p2pEnabled == true,
@@ -118,9 +133,23 @@ fun EssentialPlaybackSettingsContent(
                     SettingsActionRow(
                         title = stringResource(R.string.essential_subtitle_language),
                         subtitle = stringResource(R.string.essential_subtitle_language_subtitle),
-                        value = settings?.subtitleStyle?.preferredLanguage.orEmpty(),
+                        value = when {
+                            settings?.subtitleStyle?.preferredLanguage == "none" -> stringResource(R.string.action_none)
+                            settings?.subtitleStyle?.isPreferredLanguageSystemDefault == true -> stringResource(R.string.appearance_language_system)
+                            else -> settings?.subtitleStyle?.preferredLanguage.orEmpty()
+                        },
                         trailingIcon = Icons.Default.VideoSettings,
                         onClick = { showSubtitleLanguageDialog = true },
+                        enabled = settings != null
+                    )
+                    SettingsToggleRow(
+                        title = stringResource(R.string.sub_use_forced_subtitles),
+                        subtitle = stringResource(R.string.sub_use_forced_subtitles_desc),
+                        checked = settings?.subtitleStyle?.useForcedSubtitles == true,
+                        onToggle = {
+                            val current = settings ?: return@SettingsToggleRow
+                            coroutineScope.launch { viewModel.setUseForcedSubtitles(!current.subtitleStyle.useForcedSubtitles) }
+                        },
                         enabled = settings != null
                     )
                     SettingsActionRow(
@@ -153,12 +182,15 @@ fun EssentialPlaybackSettingsContent(
     if (showSubtitleLanguageDialog && settings != null) {
         LanguageSelectionDialog(
             title = stringResource(R.string.essential_subtitle_language),
-            selectedLanguage = settings.subtitleStyle.preferredLanguage,
-            showNoneOption = false,
+            selectedLanguage = when {
+                settings.subtitleStyle.preferredLanguage == "none" -> null
+                settings.subtitleStyle.isPreferredLanguageSystemDefault -> SubtitleLanguageOption.DEVICE
+                else -> settings.subtitleStyle.preferredLanguage
+            },
+            showNoneOption = true,
+            extraOptions = listOf(SubtitleLanguageOption.DEVICE to stringResource(R.string.appearance_language_system)),
             onLanguageSelected = { language ->
-                if (language != null) {
-                    coroutineScope.launch { viewModel.setSubtitlePreferredLanguage(language) }
-                }
+                coroutineScope.launch { viewModel.setSubtitlePreferredLanguage(language ?: "none") }
                 showSubtitleLanguageDialog = false
             },
             onDismiss = { showSubtitleLanguageDialog = false }

@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.profile
 
 import android.content.Context
+import com.nuvio.tv.R
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
 import com.nuvio.tv.domain.model.UserProfile
@@ -11,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.io.File
@@ -21,10 +23,11 @@ import javax.inject.Singleton
 class ProfileManager @Inject constructor(
     private val profileDataStore: ProfileDataStore,
     private val factory: ProfileDataStoreFactory,
+    private val credentialStores: Set<@JvmSuppressWildcards ProfileScopedCredentialStore>,
     @ApplicationContext private val context: Context
 ) {
     companion object {
-        const val MAX_PROFILES = 5
+        const val MAX_PROFILES = 6
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -42,9 +45,15 @@ class ProfileManager @Inject constructor(
     val rememberLastProfileEnabled: StateFlow<Boolean> = profileDataStore.rememberLastProfileEnabled
         .stateIn(scope, SharingStarted.Eagerly, false)
 
+    val confirmExitEnabled: StateFlow<Boolean> = profileDataStore.confirmExitEnabled
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    val startupSplashEnabled: StateFlow<Boolean> = profileDataStore.startupSplashEnabled
+        .stateIn(scope, SharingStarted.Eagerly, true)
+
     val profiles: StateFlow<List<UserProfile>> = profileDataStore.profilesList
         .stateIn(scope, SharingStarted.Eagerly, listOf(
-            UserProfile(id = 1, name = "Profile 1", avatarColorHex = "#1E88E5")
+            UserProfile(id = 1, name = context.getString(R.string.profile_default_name, 1), avatarColorHex = "#1E88E5")
         ))
 
     val activeProfile: UserProfile?
@@ -67,22 +76,30 @@ class ProfileManager @Inject constructor(
         profileDataStore.setRememberLastProfileEnabled(enabled)
     }
 
+    suspend fun setConfirmExitEnabled(enabled: Boolean) {
+        profileDataStore.setConfirmExitEnabled(enabled)
+    }
+
+    suspend fun setStartupSplashEnabled(enabled: Boolean) {
+        profileDataStore.setStartupSplashEnabled(enabled)
+    }
+
     suspend fun createProfile(
         name: String,
         avatarColorHex: String,
         usesPrimaryAddons: Boolean = false,
         usesPrimaryPlugins: Boolean = false,
         avatarId: String? = null
-    ): Boolean {
+    ): UserProfile? {
         val current = profiles.value
-        if (current.size >= MAX_PROFILES) return false
+        if (current.size >= MAX_PROFILES) return null
 
         val usedIds = current.map { it.id }.toSet()
-        val nextId = (2..MAX_PROFILES).firstOrNull { it !in usedIds } ?: return false
+        val nextId = (2..MAX_PROFILES).firstOrNull { it !in usedIds } ?: return null
 
         val profile = UserProfile(
             id = nextId,
-            name = name.trim().ifEmpty { "Profile $nextId" },
+            name = name.trim().ifEmpty { context.getString(R.string.profile_default_name, nextId) },
             avatarColorHex = avatarColorHex,
             usesPrimaryAddons = usesPrimaryAddons,
             usesPrimaryPlugins = usesPrimaryPlugins,
@@ -90,12 +107,14 @@ class ProfileManager @Inject constructor(
         )
         factory.markProfileCreated(nextId)
         profileDataStore.upsertProfile(profile)
-        return true
+        profiles.first { entries -> entries.any { it.id == nextId } }
+        return profile
     }
 
     suspend fun deleteProfile(id: Int): Boolean {
         if (id == 1) return false
         if (profiles.value.none { it.id == id }) return false
+        credentialStores.forEach { store -> store.removeProfile(id) }
         deleteProfileDataAsync(id)
         profileDataStore.deleteProfile(id)
         return true

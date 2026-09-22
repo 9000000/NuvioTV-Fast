@@ -78,6 +78,18 @@
 -keep interface com.google.android.exoplayer2.** { *; }
 -keep class com.google.android.exoplayer2.ext.** { *; }
 
+# Keep native interfaces and handles for Nuvio Engine JNI
+-keep class androidx.media3.exoplayer.upstream.DefaultAllocatorNative {
+    native <methods>;
+}
+-keep class androidx.media3.exoplayer.source.SampleDataQueueNative {
+    native <methods>;
+}
+-keep class androidx.media3.exoplayer.upstream.Allocation {
+    <init>(java.nio.ByteBuffer, int, long);
+    public long nativeHandle;
+}
+
 # ── Supabase / Ktor / Kotlinx Serialization ───────────────────────────────────
 -keep class io.github.jan.supabase.** { *; }
 -keep class io.ktor.** { *; }
@@ -128,5 +140,10 @@
 -keepclassmembers class org.jsoup.** { *; }
 -keep class com.fasterxml.jackson.** { *; }
 -keepclassmembers class com.fasterxml.jackson.** { *; }
+
+# AndroidX components referenced by extensions
+-keep class androidx.fragment.app.** { *; }
+-keep interface androidx.fragment.app.** { *; }
+
 -dontwarn java.beans.ConstructorProperties
 -dontwarn java.beans.Transient

@@ -8,8 +8,10 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -27,6 +29,9 @@ class TraktEpisodeMappingService @Inject constructor(
     companion object {
         private const val TAG = "TraktEpMapSvc"
     }
+
+    internal suspend fun isTraktAuthenticated(): Boolean =
+        traktAuthService.getCurrentAuthState().isAuthenticated
 
     private val cacheMutex = Mutex()
     private val mappingCache = mutableMapOf<String, EpisodeMappingEntry>()
@@ -59,11 +64,16 @@ class TraktEpisodeMappingService @Inject constructor(
         val unique = contentIds.distinct()
         if (unique.isEmpty()) return
         val semaphore = Semaphore(concurrency)
-        coroutineScope {
+        supervisorScope {
             unique.forEach { contentId ->
                 launch {
-                    semaphore.withPermit {
-                        getAddonEpisodes(contentId, "series")
+                    try {
+                        semaphore.withPermit {
+                            getAddonEpisodes(contentId, "series")
+                        }
+                    } catch (_: Exception) {
+                        // Individual prefetch failures are non-fatal. The mapping phase
+                        // will retry or proceed without cached data for this show.
                     }
                 }
             }
@@ -77,6 +87,8 @@ class TraktEpisodeMappingService @Inject constructor(
         episode: Int?,
         episodeTitle: String? = null
     ): EpisodeMappingEntry? {
+        if (!traktAuthService.getCurrentAuthState().isAuthenticated) return null
+
         val requestedSeason = season ?: return null
         val requestedEpisode = episode ?: return null
         val resolvedContentId = contentId?.takeIf { it.isNotBlank() } ?: return null
@@ -152,6 +164,8 @@ class TraktEpisodeMappingService @Inject constructor(
         episode: Int?,
         episodeTitle: String? = null
     ): EpisodeMappingEntry? {
+        if (!traktAuthService.getCurrentAuthState().isAuthenticated) return null
+
         val key = cacheKey(contentId, contentType, videoId, season, episode) ?: return null
         cacheMutex.withLock {
             mappingCache[key]?.let { return it }
@@ -384,9 +398,14 @@ class TraktEpisodeMappingService @Inject constructor(
 
         for (type in typeCandidates) {
             for (candidateId in idCandidates) {
-                val result = withTimeoutOrNull(8000) {
-                    metaRepository.getMetaFromAllAddons(type = type, id = candidateId)
-                        .first { it !is NetworkResult.Loading }
+                val result = try {
+                    withTimeoutOrNull(8000) {
+                        metaRepository.getMetaFromAllAddons(type = type, id = candidateId)
+                            .dropWhile { it is NetworkResult.Loading }
+                            .firstOrNull()
+                    }
+                } catch (_: Exception) {
+                    null
                 } ?: continue
                 val meta = (result as? NetworkResult.Success)?.data ?: continue
                 if (meta.videos.any { it.season != null && it.episode != null }) {

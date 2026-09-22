@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,9 +36,8 @@ import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.displayName
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
-import com.nuvio.tv.data.local.AddonSubtitleStartupMode
+import com.nuvio.tv.data.local.SubtitleLanguageOption
 import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
 
 private val subtitleColors = listOf(
     Color.White,
@@ -69,7 +70,6 @@ internal fun LazyListScope.subtitleSettingsItems(
     playerSettings: PlayerSettings,
     onShowLanguageDialog: () -> Unit,
     onShowSecondaryLanguageDialog: () -> Unit,
-    onShowSubtitleStartupModeDialog: () -> Unit,
     onShowTextColorDialog: () -> Unit,
     onShowBackgroundColorDialog: () -> Unit,
     onShowOutlineColorDialog: () -> Unit,
@@ -78,29 +78,23 @@ internal fun LazyListScope.subtitleSettingsItems(
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetUseForcedSubtitles: (Boolean) -> Unit,
     onSetSubtitleShowOnlyPreferredLanguages: (Boolean) -> Unit,
+    onSetSubtitleStripSdh: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
     onSetUseLibass: (Boolean) -> Unit,
     onSetLibassRenderType: (LibassRenderType) -> Unit,
     onItemFocused: () -> Unit = {},
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    languageSelectionEnabled: Boolean = enabled
 ) {
-    item(key = "subtitle_header") {
-        Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-        Text(
-            text = stringResource(R.string.sub_section),
-            style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextSecondary,
-            modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
-        )
-    }
+
 
     item(key = "subtitle_preferred_language") {
-        val languageName = if (playerSettings.subtitleStyle.preferredLanguage == "none") {
-            stringResource(R.string.action_none)
-        } else {
-            AVAILABLE_SUBTITLE_LANGUAGES.find {
+        val languageName = when {
+            playerSettings.subtitleStyle.preferredLanguage == "none" -> stringResource(R.string.action_none)
+            playerSettings.subtitleStyle.isPreferredLanguageSystemDefault -> stringResource(R.string.appearance_language_system)
+            else -> AVAILABLE_SUBTITLE_LANGUAGES.find {
                 it.code == playerSettings.subtitleStyle.preferredLanguage
-            }?.displayName ?: stringResource(R.string.language_english)
+            }?.displayName ?: stringResource(R.string.appearance_language_system)
         }
 
         NavigationSettingsItem(
@@ -109,7 +103,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             subtitle = languageName,
             onClick = onShowLanguageDialog,
             onFocused = onItemFocused,
-            enabled = enabled
+            enabled = languageSelectionEnabled
         )
     }
 
@@ -124,7 +118,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             subtitle = secondaryLanguageName,
             onClick = onShowSecondaryLanguageDialog,
             onFocused = onItemFocused,
-            enabled = enabled
+            enabled = languageSelectionEnabled
         )
     }
 
@@ -152,12 +146,13 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item(key = "subtitle_startup_mode") {
-        NavigationSettingsItem(
-            icon = Icons.Default.Subtitles,
-            title = stringResource(R.string.sub_startup_mode_title),
-            subtitle = subtitleStartupModeLabel(playerSettings.addonSubtitleStartupMode),
-            onClick = onShowSubtitleStartupModeDialog,
+    item(key = "subtitle_strip_sdh") {
+        ToggleSettingsItem(
+            icon = Icons.Default.ClosedCaption,
+            title = stringResource(R.string.sub_strip_sdh),
+            subtitle = stringResource(R.string.sub_strip_sdh_desc),
+            isChecked = playerSettings.subtitleStyle.stripSdh,
+            onCheckedChange = onSetSubtitleStripSdh,
             onFocused = onItemFocused,
             enabled = enabled
         )
@@ -254,12 +249,12 @@ internal fun LazyListScope.subtitleSettingsItems(
     }
 
     item(key = "subtitle_advanced_header") {
-        Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+        Spacer(modifier = androidx.compose.ui.Modifier.height(NuvioTheme.spacing.lg))
         Text(
             text = stringResource(R.string.sub_advanced_section),
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextSecondary,
-            modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
+            color = NuvioTheme.colors.TextSecondary,
+            modifier = androidx.compose.ui.Modifier.padding(vertical = NuvioTheme.spacing.sm)
         )
     }
 
@@ -280,8 +275,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             Text(
                 text = stringResource(R.string.sub_libass_mode),
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextSecondary,
-                modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = androidx.compose.ui.Modifier.padding(vertical = NuvioTheme.spacing.sm)
             )
         }
 
@@ -341,20 +336,17 @@ internal fun LazyListScope.subtitleSettingsItems(
 internal fun SubtitleSettingsDialogs(
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
-    showSubtitleStartupModeDialog: Boolean,
     showTextColorDialog: Boolean,
     showBackgroundColorDialog: Boolean,
     showOutlineColorDialog: Boolean,
     playerSettings: PlayerSettings,
     onSetPreferredLanguage: (String?) -> Unit,
     onSetSecondaryLanguage: (String?) -> Unit,
-    onSetAddonSubtitleStartupMode: (AddonSubtitleStartupMode) -> Unit,
     onSetTextColor: (Color) -> Unit,
     onSetBackgroundColor: (Color) -> Unit,
     onSetOutlineColor: (Color) -> Unit,
     onDismissLanguageDialog: () -> Unit,
     onDismissSecondaryLanguageDialog: () -> Unit,
-    onDismissSubtitleStartupModeDialog: () -> Unit,
     onDismissTextColorDialog: () -> Unit,
     onDismissBackgroundColorDialog: () -> Unit,
     onDismissOutlineColorDialog: () -> Unit
@@ -362,8 +354,13 @@ internal fun SubtitleSettingsDialogs(
     if (showLanguageDialog) {
         LanguageSelectionDialog(
             title = stringResource(R.string.sub_preferred_lang),
-            selectedLanguage = if (playerSettings.subtitleStyle.preferredLanguage == "none") null else playerSettings.subtitleStyle.preferredLanguage,
+            selectedLanguage = when {
+                playerSettings.subtitleStyle.preferredLanguage == "none" -> null
+                playerSettings.subtitleStyle.isPreferredLanguageSystemDefault -> SubtitleLanguageOption.DEVICE
+                else -> playerSettings.subtitleStyle.preferredLanguage
+            },
             showNoneOption = true,
+            extraOptions = listOf(SubtitleLanguageOption.DEVICE to stringResource(R.string.appearance_language_system)),
             onLanguageSelected = {
                 onSetPreferredLanguage(it)
                 onDismissLanguageDialog()
@@ -382,17 +379,6 @@ internal fun SubtitleSettingsDialogs(
                 onDismissSecondaryLanguageDialog()
             },
             onDismiss = onDismissSecondaryLanguageDialog
-        )
-    }
-
-    if (showSubtitleStartupModeDialog) {
-        AddonSubtitleStartupModeDialog(
-            selectedMode = playerSettings.addonSubtitleStartupMode,
-            onModeSelected = {
-                onSetAddonSubtitleStartupMode(it)
-                onDismissSubtitleStartupModeDialog()
-            },
-            onDismiss = onDismissSubtitleStartupModeDialog
         )
     }
 
@@ -434,77 +420,5 @@ internal fun SubtitleSettingsDialogs(
             },
             onDismiss = onDismissOutlineColorDialog
         )
-    }
-}
-
-@Composable
-private fun subtitleStartupModeLabel(mode: AddonSubtitleStartupMode): String {
-    return when (mode) {
-        AddonSubtitleStartupMode.FAST_STARTUP -> stringResource(R.string.sub_startup_mode_fast)
-        AddonSubtitleStartupMode.PREFERRED_ONLY -> stringResource(R.string.sub_startup_mode_preferred)
-        AddonSubtitleStartupMode.ALL_SUBTITLES -> stringResource(R.string.sub_startup_mode_all)
-    }
-}
-
-@Composable
-private fun AddonSubtitleStartupModeDialog(
-    selectedMode: AddonSubtitleStartupMode,
-    onModeSelected: (AddonSubtitleStartupMode) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val options = listOf(
-        Triple(
-            AddonSubtitleStartupMode.FAST_STARTUP,
-            stringResource(R.string.sub_startup_mode_fast),
-            stringResource(R.string.sub_startup_mode_fast_desc)
-        ),
-        Triple(
-            AddonSubtitleStartupMode.PREFERRED_ONLY,
-            stringResource(R.string.sub_startup_mode_preferred),
-            stringResource(R.string.sub_startup_mode_preferred_desc)
-        ),
-        Triple(
-            AddonSubtitleStartupMode.ALL_SUBTITLES,
-            stringResource(R.string.sub_startup_mode_all),
-            stringResource(R.string.sub_startup_mode_all_desc)
-        )
-    )
-
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        androidx.compose.foundation.layout.Box(
-            modifier = androidx.compose.ui.Modifier
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundCard)
-        ) {
-            androidx.compose.foundation.layout.Column(
-                modifier = androidx.compose.ui.Modifier
-                    .width(460.dp)
-                    .padding(24.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.sub_startup_mode_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary
-                )
-                Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-
-                androidx.compose.foundation.lazy.LazyColumn(
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
-                ) {
-                    items(
-                        items = options,
-                        key = { it.first.name }
-                    ) { (mode, title, description) ->
-                        RenderTypeSettingsItem(
-                            title = title,
-                            subtitle = description,
-                            isSelected = mode == selectedMode,
-                            onClick = { onModeSelected(mode) },
-                            onFocused = {}
-                        )
-                    }
-                }
-            }
-        }
     }
 }

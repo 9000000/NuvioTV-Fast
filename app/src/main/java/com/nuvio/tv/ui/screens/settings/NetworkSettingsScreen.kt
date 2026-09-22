@@ -1,6 +1,9 @@
 @file:OptIn(ExperimentalTvMaterial3Api::class)
 
+
 package com.nuvio.tv.ui.screens.settings
+
+import com.nuvio.tv.ui.theme.NuvioTheme
 
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -61,8 +64,9 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
+import com.nuvio.tv.data.local.Dv7HandlingMode
+import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.domain.model.ExperienceMode
-import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -104,22 +108,22 @@ private fun getConnectionType(context: android.content.Context): ConnectionType 
 @Composable
 private fun ConnectionStatusBadge(type: ConnectionType) {
     val (icon, label, color) = when (type) {
-        ConnectionType.WiFi -> Triple(Icons.Default.Wifi, stringResource(R.string.network_connection_wifi), NuvioColors.Success)
-        ConnectionType.Ethernet -> Triple(Icons.Default.Wifi, stringResource(R.string.network_connection_ethernet), NuvioColors.Success)
-        ConnectionType.Offline -> Triple(Icons.Default.SignalWifiOff, stringResource(R.string.network_connection_offline), NuvioColors.Error)
+        ConnectionType.WiFi -> Triple(Icons.Default.Wifi, stringResource(R.string.network_connection_wifi), NuvioTheme.colors.Success)
+        ConnectionType.Ethernet -> Triple(Icons.Default.Wifi, stringResource(R.string.network_connection_ethernet), NuvioTheme.colors.Success)
+        ConnectionType.Offline -> Triple(Icons.Default.SignalWifiOff, stringResource(R.string.network_connection_offline), NuvioTheme.colors.Error)
     }
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = NuvioTheme.spacing.md, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(NuvioTheme.spacing.lg),
             tint = color
         )
         Text(
@@ -179,6 +183,126 @@ fun AdvancedSettingsContent(
 
     val scope = rememberCoroutineScope()
     val unknownError = stringResource(R.string.error_unknown)
+
+    // DV Diagnostics: reuse the playback settings store for the conversion-mode
+    // override and the last-playback diagnostics card.
+    val playbackVm: PlaybackSettingsViewModel = hiltViewModel()
+    val dvPlayerSettings by playbackVm.playerSettings.collectAsStateWithLifecycle(
+        initialValue = com.nuvio.tv.data.local.PlayerSettings()
+    )
+    val dvDiagnostics by playbackVm.lastPlaybackDiagnostics.collectAsStateWithLifecycle(
+        initialValue = com.nuvio.tv.core.player.LastPlaybackDiagnostics.EMPTY
+    )
+
+    // Stream Speed Test States
+    var streamTestState by remember { mutableStateOf("Idle") }
+    var streamBaselineSpeed by remember { mutableStateOf<Double?>(null) }
+    var streamParallel1Speed by remember { mutableStateOf<Double?>(null) }
+    var streamParallel4Speed by remember { mutableStateOf<Double?>(null) }
+    var streamParallel8Speed by remember { mutableStateOf<Double?>(null) }
+    var streamParallel16Speed by remember { mutableStateOf<Double?>(null) }
+    var streamErrorMessage by remember { mutableStateOf<String?>(null) }
+
+    val lastStreamUrl = dvDiagnostics.streamUrl
+    val lastHeadersJson = dvDiagnostics.headersJson
+
+    val lastHeadersMap = remember(lastHeadersJson) {
+        if (!lastHeadersJson.isNullOrBlank()) {
+            runCatching {
+                val json = org.json.JSONObject(lastHeadersJson)
+                val map = mutableMapOf<String, String>()
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    map[key] = json.getString(key)
+                }
+                map
+            }.getOrDefault(emptyMap())
+        } else {
+            emptyMap()
+        }
+    }
+
+    var estimatedBitrate by remember { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(dvDiagnostics) {
+        val formatBitrate = dvDiagnostics.videoBitrate.takeIf { it > 0 }?.toLong()
+        if (formatBitrate != null) {
+            estimatedBitrate = formatBitrate
+        } else if (!lastStreamUrl.isNullOrBlank() && dvDiagnostics.durationMs > 0) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val size = com.nuvio.tv.core.network.StreamSpeedTester.getStreamContentLength(lastStreamUrl, lastHeadersMap)
+                if (size > 0) {
+                    val durationSecs = dvDiagnostics.durationMs / 1000.0
+                    if (durationSecs > 0) {
+                        estimatedBitrate = ((size * 8.0) / durationSecs).toLong()
+                    }
+                }
+            }
+        } else {
+            estimatedBitrate = null
+        }
+    }
+
+    fun runStreamDiagnostics() {
+        if (lastStreamUrl.isNullOrBlank()) return
+        scope.launch {
+            streamBaselineSpeed = null
+            streamParallel1Speed = null
+            streamParallel4Speed = null
+            streamParallel8Speed = null
+            streamParallel16Speed = null
+            streamErrorMessage = null
+
+            try {
+                streamTestState = "Baseline"
+                val baseline = com.nuvio.tv.core.network.StreamSpeedTester.runBaselineTest(
+                    lastStreamUrl,
+                    lastHeadersMap
+                )
+                streamBaselineSpeed = baseline
+
+                if (baseline <= 0.0) {
+                    streamErrorMessage = context.getString(R.string.stream_test_error_connection)
+                    streamTestState = "Error"
+                    return@launch
+                }
+
+                streamTestState = "Parallel1"
+                streamParallel1Speed = com.nuvio.tv.core.network.StreamSpeedTester.runParallelChunkTest(
+                    lastStreamUrl,
+                    lastHeadersMap,
+                    1 * 1024 * 1024L
+                )
+
+                streamTestState = "Parallel4"
+                streamParallel4Speed = com.nuvio.tv.core.network.StreamSpeedTester.runParallelChunkTest(
+                    lastStreamUrl,
+                    lastHeadersMap,
+                    4 * 1024 * 1024L
+                )
+
+                streamTestState = "Parallel8"
+                streamParallel8Speed = com.nuvio.tv.core.network.StreamSpeedTester.runParallelChunkTest(
+                    lastStreamUrl,
+                    lastHeadersMap,
+                    8 * 1024 * 1024L
+                )
+
+                streamTestState = "Parallel16"
+                streamParallel16Speed = com.nuvio.tv.core.network.StreamSpeedTester.runParallelChunkTest(
+                    lastStreamUrl,
+                    lastHeadersMap,
+                    16 * 1024 * 1024L
+                )
+
+                streamTestState = "Done"
+            } catch (e: java.lang.Exception) {
+                streamErrorMessage = e.localizedMessage ?: unknownError
+                streamTestState = "Error"
+            }
+        }
+    }
 
     fun runSpeedTest() {
         scope.launch {
@@ -254,8 +378,8 @@ fun AdvancedSettingsContent(
     }
 
     val networkListState = rememberLazyListState()
-    val performanceFocusRequester = remember { initialFocusRequester ?: FocusRequester() }
     var showExperienceModeConfirmation by remember { mutableStateOf(false) }
+    var showSentryDialog by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         state = networkListState,
@@ -292,7 +416,12 @@ fun AdvancedSettingsContent(
                     title = stringResource(R.string.experience_mode_switch_to_essential),
                     subtitle = stringResource(R.string.experience_mode_switch_to_essential_subtitle),
                     value = stringResource(R.string.experience_mode_advanced),
-                    onClick = { showExperienceModeConfirmation = true }
+                    onClick = { showExperienceModeConfirmation = true },
+                    modifier = if (initialFocusRequester != null) {
+                        Modifier.focusRequester(initialFocusRequester)
+                    } else {
+                        Modifier
+                    }
                 )
             }
         }
@@ -301,18 +430,13 @@ fun AdvancedSettingsContent(
             Text(
                 text = stringResource(R.string.advanced_section_performance),
                 style = MaterialTheme.typography.titleSmall,
-                color = NuvioColors.TextTertiary,
-                modifier = Modifier.padding(top = 4.dp)
+                color = NuvioTheme.colors.TextTertiary,
+                modifier = Modifier.padding(top = NuvioTheme.spacing.xs)
             )
         }
 
         item(key = "performance_settings") {
             SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
-                LaunchedEffect(Unit) {
-                    if (initialFocusRequester != null) {
-                        runCatching { performanceFocusRequester.requestFocus() }
-                    }
-                }
                 SettingsToggleRow(
                     title = stringResource(R.string.advanced_fast_horizontal_navigation),
                     subtitle = stringResource(R.string.advanced_fast_horizontal_navigation_subtitle),
@@ -323,8 +447,7 @@ fun AdvancedSettingsContent(
                                 !uiState.fastHorizontalNavigationEnabled
                             )
                         )
-                    },
-                    modifier = Modifier.focusRequester(performanceFocusRequester)
+                    }
                 )
                 SettingsToggleRow(
                     title = stringResource(R.string.advanced_nuvio_focus_scroll),
@@ -339,13 +462,13 @@ fun AdvancedSettingsContent(
                     }
                 )
                 SettingsToggleRow(
-                    title = stringResource(R.string.advanced_memory_only_vertical_scroll),
-                    subtitle = stringResource(R.string.advanced_memory_only_vertical_scroll_subtitle),
-                    checked = uiState.memoryOnlyVerticalScroll,
+                    title = stringResource(R.string.advanced_rgb565),
+                    subtitle = stringResource(R.string.advanced_rgb565_subtitle),
+                    checked = uiState.rgb565Enabled,
                     onToggle = {
                         viewModel.onEvent(
-                            AdvancedSettingsEvent.SetMemoryOnlyVerticalScroll(
-                                !uiState.memoryOnlyVerticalScroll
+                            AdvancedSettingsEvent.SetRgb565Enabled(
+                                !uiState.rgb565Enabled
                             )
                         )
                     }
@@ -356,6 +479,17 @@ fun AdvancedSettingsContent(
                         ProfileManagerEntryPoint::class.java
                     ).profileManager()
                 }
+                val startupSplashEnabled by profileManager.startupSplashEnabled.collectAsState()
+                SettingsToggleRow(
+                    title = stringResource(R.string.appearance_startup_splash),
+                    subtitle = stringResource(R.string.appearance_startup_splash_subtitle),
+                    checked = startupSplashEnabled,
+                    onToggle = {
+                        scope.launch {
+                            profileManager.setStartupSplashEnabled(!startupSplashEnabled)
+                        }
+                    }
+                )
                 val rememberLastProfileEnabled by profileManager.rememberLastProfileEnabled.collectAsState()
                 SettingsToggleRow(
                     title = stringResource(R.string.advanced_remember_last_profile),
@@ -367,6 +501,18 @@ fun AdvancedSettingsContent(
                         }
                     }
                 )
+
+                val confirmExitEnabled by profileManager.confirmExitEnabled.collectAsState()
+                SettingsToggleRow(
+                    title = stringResource(R.string.advanced_confirm_exit),
+                    subtitle = stringResource(R.string.advanced_confirm_exit_subtitle),
+                    checked = confirmExitEnabled,
+                    onToggle = {
+                        scope.launch {
+                            profileManager.setConfirmExitEnabled(!confirmExitEnabled)
+                        }
+                    }
+                )
             }
         }
 
@@ -374,9 +520,44 @@ fun AdvancedSettingsContent(
             Text(
                 text = stringResource(R.string.advanced_section_diagnostics),
                 style = MaterialTheme.typography.titleSmall,
-                color = NuvioColors.TextTertiary,
-                modifier = Modifier.padding(top = 4.dp)
+                color = NuvioTheme.colors.TextTertiary,
+                modifier = Modifier.padding(top = NuvioTheme.spacing.xs)
             )
+        }
+
+        item(key = "playback_issue_reports") {
+            SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+                SettingsToggleRow(
+                    title = stringResource(R.string.advanced_sentry_reports),
+                    subtitle = stringResource(R.string.advanced_sentry_reports_subtitle),
+                    checked = uiState.sentryEnabled,
+                    onToggle = { showSentryDialog = true }
+                )
+                SettingsToggleRow(
+                    title = stringResource(R.string.advanced_playback_issue_reports),
+                    subtitle = stringResource(R.string.advanced_playback_issue_reports_subtitle),
+                    checked = uiState.playbackIssueReportsEnabled,
+                    onToggle = {
+                        viewModel.onEvent(
+                            AdvancedSettingsEvent.SetPlaybackIssueReportsEnabled(
+                                !uiState.playbackIssueReportsEnabled
+                            )
+                        )
+                    }
+                )
+                SettingsToggleRow(
+                    title = stringResource(R.string.advanced_player_stats_hud),
+                    subtitle = stringResource(R.string.advanced_player_stats_hud_subtitle),
+                    checked = uiState.playerStatsHudEnabled,
+                    onToggle = {
+                        viewModel.onEvent(
+                            AdvancedSettingsEvent.SetPlayerStatsHudEnabled(
+                                !uiState.playerStatsHudEnabled
+                            )
+                        )
+                    }
+                )
+            }
         }
 
         item(key = "speed_test") {
@@ -404,18 +585,18 @@ fun AdvancedSettingsContent(
             item(key = "speed_results") {
                 SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
-                        modifier = Modifier.padding(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        modifier = Modifier.padding(NuvioTheme.spacing.xs),
+                        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
                     ) {
                         Text(
                             text = stringResource(R.string.network_results_title),
                             style = MaterialTheme.typography.titleSmall,
-                            color = NuvioColors.TextSecondary
+                            color = NuvioTheme.colors.TextSecondary
                         )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(24.dp)
+                            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xl)
                         ) {
                             NetworkMetricCard(
                                 modifier = Modifier.weight(1f),
@@ -437,15 +618,115 @@ fun AdvancedSettingsContent(
                             Text(
                                 text = stringResource(R.string.network_error_prefix, errorMessage!!),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = NuvioColors.Error
+                                color = NuvioTheme.colors.Error
                             )
                         }
 
                         Text(
                             text = stringResource(R.string.network_powered_by_fast),
                             style = MaterialTheme.typography.labelSmall,
-                            color = NuvioColors.TextSecondary.copy(alpha = 0.45f)
+                            color = NuvioTheme.colors.TextSecondary.copy(alpha = 0.45f)
                         )
+                    }
+                }
+            }
+        }
+
+        item(key = "stream_speed_test") {
+            SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+                val isStreamRunning = streamTestState != "Idle" && streamTestState != "Done" && streamTestState != "Error"
+                val hasStream = !lastStreamUrl.isNullOrBlank()
+                SettingsActionRow(
+                    title = stringResource(
+                        if (isStreamRunning) R.string.stream_test_btn_running
+                        else R.string.stream_test_card_title
+                    ),
+                    subtitle = if (hasStream) {
+                        stringResource(R.string.stream_test_server_label, lastStreamUrl.let { android.net.Uri.parse(it).host } ?: stringResource(R.string.stream_quality_unknown))
+                    } else {
+                        stringResource(R.string.stream_test_no_stream)
+                    },
+                    value = if (isStreamRunning) {
+                        when (streamTestState) {
+                            "Baseline" -> stringResource(R.string.stream_test_btn_measuring_baseline)
+                            "Parallel1" -> stringResource(R.string.stream_test_btn_measuring_parallel1)
+                            "Parallel4" -> stringResource(R.string.stream_test_btn_measuring_parallel4)
+                            "Parallel8" -> stringResource(R.string.stream_test_btn_measuring_parallel8)
+                            "Parallel16" -> stringResource(R.string.stream_test_btn_measuring_parallel16)
+                            else -> stringResource(R.string.stream_test_btn_running)
+                        }
+                    } else null,
+                    enabled = hasStream && !isStreamRunning,
+                    onClick = { if (hasStream && !isStreamRunning) runStreamDiagnostics() }
+                )
+            }
+        }
+
+        if (streamTestState != "Idle") {
+            item(key = "stream_speed_results") {
+                SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(NuvioTheme.spacing.xs),
+                        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.stream_test_section_header),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = NuvioTheme.colors.TextSecondary
+                            )
+
+                            val bitrateMbps = estimatedBitrate?.takeIf { it > 0 }?.let { it.toDouble() / 1_000_000.0 }
+                            if (bitrateMbps != null) {
+                                Text(
+                                    text = stringResource(R.string.stream_test_video_bitrate, "%.1f Mbps".format(bitrateMbps)),
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = NuvioTheme.colors.TextPrimary
+                                )
+                            }
+                        }
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)
+                        ) {
+                            StreamTestResultRow(
+                                label = stringResource(R.string.stream_test_label_baseline),
+                                speed = streamBaselineSpeed,
+                                isRunning = streamTestState == "Baseline"
+                            )
+                            StreamTestResultRow(
+                                label = stringResource(R.string.stream_test_label_parallel1),
+                                speed = streamParallel1Speed,
+                                isRunning = streamTestState == "Parallel1"
+                            )
+                            StreamTestResultRow(
+                                label = stringResource(R.string.stream_test_label_parallel4),
+                                speed = streamParallel4Speed,
+                                isRunning = streamTestState == "Parallel4"
+                            )
+                            StreamTestResultRow(
+                                label = stringResource(R.string.stream_test_label_parallel8),
+                                speed = streamParallel8Speed,
+                                isRunning = streamTestState == "Parallel8"
+                            )
+                            StreamTestResultRow(
+                                label = stringResource(R.string.stream_test_label_parallel16),
+                                speed = streamParallel16Speed,
+                                isRunning = streamTestState == "Parallel16"
+                            )
+
+                            if (streamTestState == "Error" && streamErrorMessage != null) {
+                                Text(
+                                    text = stringResource(R.string.stream_test_error_prefix, streamErrorMessage!!),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NuvioTheme.colors.Error
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -455,8 +736,8 @@ fun AdvancedSettingsContent(
             Text(
                 text = stringResource(R.string.advanced_section_cache),
                 style = MaterialTheme.typography.titleSmall,
-                color = NuvioColors.TextTertiary,
-                modifier = Modifier.padding(top = 4.dp)
+                color = NuvioTheme.colors.TextTertiary,
+                modifier = Modifier.padding(top = NuvioTheme.spacing.xs)
             )
         }
 
@@ -486,6 +767,69 @@ fun AdvancedSettingsContent(
                 )
             }
         }
+
+        if (dvPlayerSettings.internalPlayerEngine == InternalPlayerEngine.EXOPLAYER ||
+            dvPlayerSettings.internalPlayerEngine == InternalPlayerEngine.AUTO) {
+            item(key = "dv_diagnostics_header") {
+                Text(
+                    text = stringResource(R.string.advanced_section_dv_diagnostics),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = NuvioTheme.colors.TextTertiary,
+                    modifier = Modifier.padding(top = NuvioTheme.spacing.xs)
+                )
+            }
+
+            item(key = "dv_conversion_mode") {
+                val overrideEnabled = dvPlayerSettings.dv7HandlingMode == Dv7HandlingMode.DV81_LIBDOVI
+                var showModeDialog by remember { mutableStateOf(false) }
+                val modeOptions = listOf(
+                    SettingsPickerOption(
+                        -1,
+                        stringResource(R.string.dv7_libdovi_mode_none_title),
+                        stringResource(R.string.dv7_libdovi_mode_none_sub)
+                    ),
+                    SettingsPickerOption(0, stringResource(R.string.dv7_libdovi_mode_0_title), stringResource(R.string.dv7_libdovi_mode_0_sub)),
+                    SettingsPickerOption(1, stringResource(R.string.dv7_libdovi_mode_1_title), stringResource(R.string.dv7_libdovi_mode_1_sub)),
+                    SettingsPickerOption(2, stringResource(R.string.dv7_libdovi_mode_2_title), stringResource(R.string.dv7_libdovi_mode_2_sub)),
+                    SettingsPickerOption(3, stringResource(R.string.dv7_libdovi_mode_3_title), stringResource(R.string.dv7_libdovi_mode_3_sub)),
+                    SettingsPickerOption(4, stringResource(R.string.dv7_libdovi_mode_4_title), stringResource(R.string.dv7_libdovi_mode_4_sub))
+                )
+                // Show None whenever the row is disabled so a stale stored override
+                // never displays as a selected mode.
+                val effectiveOverride = if (overrideEnabled) dvPlayerSettings.dv7LibdoviModeOverride else -1
+                val currentLabel = modeOptions.firstOrNull { it.value == effectiveOverride }?.title
+                    ?: modeOptions.first().title
+                SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+                    SettingsActionRow(
+                        title = stringResource(R.string.dv7_libdovi_mode_row_title),
+                        subtitle = stringResource(R.string.dv7_libdovi_mode_caption),
+                        value = currentLabel,
+                        onClick = { showModeDialog = true },
+                        enabled = overrideEnabled
+                    )
+                }
+                if (showModeDialog) {
+                    SettingsSingleChoiceDialog(
+                        title = stringResource(R.string.dv7_libdovi_mode_row_title),
+                        subtitle = stringResource(R.string.dv7_libdovi_mode_caption),
+                        options = modeOptions,
+                        selectedValue = effectiveOverride,
+                        onOptionSelected = { value ->
+                            scope.launch { playbackVm.setDv7LibdoviModeOverride(value) }
+                            showModeDialog = false
+                        },
+                        onDismiss = { showModeDialog = false },
+                        width = 460.dp,
+                        maxHeight = 360.dp
+                    )
+                }
+            }
+
+            diagnosticsCardItems(
+                diagnostics = dvDiagnostics,
+                dvCurrentlyEnabled = dvPlayerSettings.dv7HandlingMode != Dv7HandlingMode.OFF
+            )
+        }
     }
         SettingsVerticalScrollIndicators(state = networkListState)
     }
@@ -495,6 +839,18 @@ fun AdvancedSettingsContent(
             targetMode = ExperienceMode.ESSENTIAL,
             onConfirm = { experienceModeViewModel.setMode(ExperienceMode.ESSENTIAL) },
             onDismiss = { showExperienceModeConfirmation = false }
+        )
+    }
+
+    if (showSentryDialog) {
+        SentrySettingsDialog(
+            enabled = uiState.sentryEnabled,
+            onConfirm = {
+                viewModel.onEvent(
+                    AdvancedSettingsEvent.SetSentryEnabled(!uiState.sentryEnabled)
+                )
+            },
+            onDismiss = { showSentryDialog = false }
         )
     }
 }
@@ -519,9 +875,9 @@ private fun NetworkMetricCard(
     )
 
     Column(
-        modifier = modifier.padding(8.dp),
+        modifier = modifier.padding(NuvioTheme.spacing.sm),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
     ) {
         Icon(
             imageVector = if (loading) Icons.Default.Refresh else icon,
@@ -529,12 +885,12 @@ private fun NetworkMetricCard(
             modifier = Modifier
                 .size(28.dp)
                 .then(if (loading) Modifier.rotate(rotation) else Modifier),
-            tint = if (loading) NuvioColors.Secondary else NuvioColors.Primary
+            tint = if (loading) NuvioTheme.colors.Secondary else NuvioTheme.colors.Primary
         )
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextSecondary
+            color = NuvioTheme.colors.TextSecondary
         )
         Text(
             text = when {
@@ -543,7 +899,35 @@ private fun NetworkMetricCard(
                 else -> "–"
             },
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = if (value != null && !loading) NuvioColors.TextPrimary else NuvioColors.TextTertiary
+            color = if (value != null && !loading) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextTertiary
+        )
+    }
+}
+
+@Composable
+private fun StreamTestResultRow(
+    label: String,
+    speed: Double?,
+    isRunning: Boolean
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = NuvioTheme.colors.TextSecondary
+        )
+        Text(
+            text = when {
+                isRunning -> stringResource(R.string.stream_test_btn_running)
+                speed != null -> "%.1f Mbps".format(speed)
+                else -> "---"
+            },
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+            color = if (speed != null && !isRunning) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextTertiary
         )
     }
 }

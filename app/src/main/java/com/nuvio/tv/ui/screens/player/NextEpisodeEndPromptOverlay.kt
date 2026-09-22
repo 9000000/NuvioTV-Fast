@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -20,14 +22,17 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.tv.material3.MaterialTheme
@@ -63,9 +68,9 @@ fun NextEpisodeEndPromptOverlay(
             modifier = Modifier
                 .fillMaxWidth(0.78f)
                 .focusGroup()
-                .padding(horizontal = 32.dp),
+                .padding(horizontal = NuvioTheme.spacing.xxl),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
         ) {
             Text(
                 text = stringResource(R.string.player_next_episode_prompt_title),
@@ -81,7 +86,7 @@ fun NextEpisodeEndPromptOverlay(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(NuvioTheme.spacing.xxs))
 
             Text(
                 text = stringResource(R.string.next_episode_label),
@@ -102,25 +107,32 @@ fun NextEpisodeEndPromptOverlay(
             Spacer(modifier = Modifier.height(14.dp))
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                DialogButton(
+                val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                PlayerOverlayButton(
                     text = stringResource(R.string.player_next_episode_prompt_yes),
                     onClick = onContinue,
-                    isPrimary = true,
+                    primary = true,
                     modifier = Modifier
                         .focusRequester(continueFocusRequester)
-                        .focusProperties { right = returnFocusRequester }
+                        .focusProperties {
+                            if (isRtl) left = returnFocusRequester else right = returnFocusRequester
+                            if (isRtl) right = Cancel else left = Cancel
+                        }
                 )
 
-                DialogButton(
+                PlayerOverlayButton(
                     text = stringResource(R.string.player_next_episode_prompt_no),
                     onClick = onReturnToDetails,
-                    isPrimary = false,
+                    primary = false,
                     modifier = Modifier
                         .focusRequester(returnFocusRequester)
-                        .focusProperties { left = continueFocusRequester }
+                        .focusProperties {
+                            if (isRtl) right = continueFocusRequester else left = continueFocusRequester
+                            if (isRtl) left = Cancel else right = Cancel
+                        }
                 )
             }
         }

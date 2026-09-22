@@ -194,6 +194,7 @@ class TmdbCollectionSourceResolver @Inject constructor(
                     releaseInfo = it.releaseDate?.take(4),
                     released = it.releaseDate?.takeIf { value -> value.isNotBlank() },
                     imdbRating = it.voteAverage?.toFloat(),
+                    voteCount = it.voteCount,
                     genres = emptyList()
                 )
             }
@@ -253,12 +254,16 @@ class TmdbCollectionSourceResolver @Inject constructor(
                 withOriginalLanguage = filters.withOriginalLanguage,
                 withOriginCountry = filters.withOriginCountry,
                 withKeywords = filters.withKeywords,
+                withoutKeywords = filters.withoutKeywords,
                 year = filters.year,
-                watchRegion = if (!filters.withWatchProviders.isNullOrBlank()) {
+                watchRegion = if (!filters.withWatchProviders.isNullOrBlank() || !filters.withoutWatchProviders.isNullOrBlank()) {
                     filters.watchRegion?.takeIf { it.isNotBlank() } ?: "US"
                 } else null,
                 withWatchProviders = filters.withWatchProviders,
-                withWatchMonetizationTypes = if (!filters.withWatchProviders.isNullOrBlank()) "flatrate|free|ads|rent|buy" else null
+                withWatchMonetizationTypes = if (!filters.withWatchProviders.isNullOrBlank()) "flatrate|free|ads|rent|buy" else null,
+                withoutCompanies = filters.withoutCompanies,
+                withoutGenres = filters.withoutGenres,
+                withoutWatchProviders = filters.withoutWatchProviders
             ).body()
             TmdbCollectionMediaType.TV -> tmdbApi.discoverTv(
                 apiKey = BuildConfig.TMDB_API_KEY,
@@ -283,12 +288,16 @@ class TmdbCollectionSourceResolver @Inject constructor(
                 withOriginalLanguage = filters.withOriginalLanguage,
                 withOriginCountry = filters.withOriginCountry,
                 withKeywords = filters.withKeywords,
+                withoutKeywords = filters.withoutKeywords,
                 firstAirDateYear = filters.year,
-                watchRegion = if (!filters.withWatchProviders.isNullOrBlank()) {
+                watchRegion = if (!filters.withWatchProviders.isNullOrBlank() || !filters.withoutWatchProviders.isNullOrBlank()) {
                     filters.watchRegion?.takeIf { it.isNotBlank() } ?: "US"
                 } else null,
                 withWatchProviders = filters.withWatchProviders,
-                withWatchMonetizationTypes = if (!filters.withWatchProviders.isNullOrBlank()) "flatrate|free|ads|rent|buy" else null
+                withWatchMonetizationTypes = if (!filters.withWatchProviders.isNullOrBlank()) "flatrate|free|ads|rent|buy" else null,
+                withoutCompanies = filters.withoutCompanies,
+                withoutGenres = filters.withoutGenres,
+                withoutWatchProviders = filters.withoutWatchProviders
             ).body()
         } ?: error(string(R.string.tmdb_error_discover_no_data))
         val items = response.results.orEmpty().mapNotNull { it.toPreview(mediaType) }.distinctBy { it.id }
@@ -326,7 +335,10 @@ class TmdbCollectionSourceResolver @Inject constructor(
                 compareByDescending<MetaPreview> { it.imdbRating ?: -1f }
                     .thenByDescending { it.releaseInfo ?: "" }
             )
-            TmdbCollectionSort.VOTE_COUNT_DESC.value -> this
+            TmdbCollectionSort.VOTE_COUNT_DESC.value -> sortedWith(
+                compareByDescending<MetaPreview> { it.voteCount ?: -1 }
+                    .thenByDescending { it.imdbRating ?: -1f }
+            )
             TmdbCollectionSort.RELEASE_DATE_DESC.value,
             TmdbCollectionSort.FIRST_AIR_DATE_DESC.value -> sortedByDescending { it.releaseInfo ?: "" }
             TmdbCollectionSort.POPULAR_DESC.value -> this
@@ -359,6 +371,7 @@ class TmdbCollectionSourceResolver @Inject constructor(
             releaseInfo = (releaseDate ?: firstAirDate)?.take(4),
             released = (releaseDate ?: firstAirDate)?.takeIf { it.isNotBlank() },
             imdbRating = voteAverage?.toFloat(),
+            voteCount = voteCount,
             genres = emptyList()
         )
     }
@@ -390,6 +403,7 @@ class TmdbCollectionSourceResolver @Inject constructor(
                 TmdbCollectionMediaType.TV -> firstAirDate?.takeIf { it.isNotBlank() }
             },
             imdbRating = voteAverage?.toFloat(),
+            voteCount = voteCount,
             genres = emptyList()
         )
     }
@@ -420,6 +434,7 @@ class TmdbCollectionSourceResolver @Inject constructor(
                 TmdbCollectionMediaType.TV -> firstAirDate?.takeIf { it.isNotBlank() }
             },
             imdbRating = voteAverage?.toFloat(),
+            voteCount = voteCount,
             genres = emptyList()
         )
     }
@@ -450,6 +465,7 @@ class TmdbCollectionSourceResolver @Inject constructor(
                 TmdbCollectionMediaType.TV -> firstAirDate?.takeIf { it.isNotBlank() }
             },
             imdbRating = voteAverage?.toFloat(),
+            voteCount = voteCount,
             genres = emptyList()
         )
     }

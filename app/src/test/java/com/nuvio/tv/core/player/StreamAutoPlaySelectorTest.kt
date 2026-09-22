@@ -6,6 +6,8 @@ import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBehaviorHints
+import com.nuvio.tv.domain.model.StreamDebridCacheState
+import com.nuvio.tv.domain.model.StreamDebridCacheStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -176,7 +178,9 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `manual mode remains manual even with matching bingeGroup`() {
+    fun `manual mode auto-selects matching bingeGroup when prefer enabled`() {
+        // Binge-group continuity is intentionally allowed in MANUAL mode so
+        // next-episode / resume can skip the picker when a group was locked in.
         val matched = stream(
             addonName = "AddonA",
             url = "https://example.com/match.m3u8",
@@ -195,21 +199,89 @@ class StreamAutoPlaySelectorTest {
             preferBingeGroupInSelection = true
         )
 
-        assertNull(selected)
+        assertEquals(matched, selected)
+    }
+
+    @Test
+    fun `first stream skips checking and not cached local debrid streams`() {
+        val checking = stream(
+            addonName = "AddonA",
+            name = "Checking",
+            infoHash = "abc123",
+            cacheState = StreamDebridCacheState.CHECKING
+        )
+        val notCached = stream(
+            addonName = "AddonA",
+            name = "Not cached",
+            infoHash = "def456",
+            cacheState = StreamDebridCacheState.NOT_CACHED
+        )
+        val unknown = stream(
+            addonName = "AddonA",
+            name = "Unknown",
+            infoHash = "unknown",
+            cacheState = StreamDebridCacheState.UNKNOWN
+        )
+        val cached = stream(
+            addonName = "AddonA",
+            name = "Cached",
+            infoHash = "ghi789",
+            cacheState = StreamDebridCacheState.CACHED
+        )
+
+        val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+            streams = listOf(checking, notCached, unknown, cached),
+            mode = StreamAutoPlayMode.FIRST_STREAM,
+            regexPattern = "",
+            source = StreamAutoPlaySource.ALL_SOURCES,
+            installedAddonNames = setOf("AddonA"),
+            selectedAddons = emptySet(),
+            selectedPlugins = emptySet()
+        )
+
+        assertEquals(cached, selected)
+    }
+
+    @Test
+    fun `orderAddonStreams keeps cached local torrent groups in installed addon order`() {
+        val regular = addonStreams(
+            "AddonA",
+            stream(
+                addonName = "AddonA",
+                url = "https://example.com/regular.m3u8"
+            )
+        )
+        val cachedDebrid = addonStreams(
+            "AddonB",
+            stream(
+                addonName = "AddonB",
+                infoHash = "abc123",
+                cacheState = StreamDebridCacheState.CACHED
+            )
+        )
+
+        val ordered = StreamAutoPlaySelector.orderAddonStreams(
+            streams = listOf(regular, cachedDebrid),
+            installedOrder = listOf("AddonA", "AddonB")
+        )
+
+        assertEquals(listOf(regular, cachedDebrid), ordered)
     }
 
     private fun stream(
         addonName: String,
         url: String? = null,
         name: String? = null,
-        bingeGroup: String? = null
+        bingeGroup: String? = null,
+        infoHash: String? = null,
+        cacheState: StreamDebridCacheState? = null
     ): Stream = Stream(
         name = name,
         title = null,
         description = null,
         url = url,
         ytId = null,
-        infoHash = null,
+        infoHash = infoHash,
         fileIdx = null,
         externalUrl = null,
         behaviorHints = StreamBehaviorHints(
@@ -219,12 +291,22 @@ class StreamAutoPlaySelectorTest {
             proxyHeaders = null
         ),
         addonName = addonName,
-        addonLogo = null
+        addonLogo = null,
+        debridCacheStatus = cacheState?.let {
+            StreamDebridCacheStatus(
+                providerId = "torbox",
+                providerName = "Torbox",
+                state = it
+            )
+        }
     )
 
-    private fun addonStreams(addonName: String): AddonStreams = AddonStreams(
+    private fun addonStreams(
+        addonName: String,
+        vararg streams: Stream
+    ): AddonStreams = AddonStreams(
         addonName = addonName,
         addonLogo = null,
-        streams = emptyList()
+        streams = streams.toList()
     )
 }

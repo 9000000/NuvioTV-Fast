@@ -20,6 +20,13 @@
     <string name="cw_min_left">%1$dm rămase</string>
     <string name="cw_almost_done">Aproape gata</string>
     <string name="cw_airs_date">Difuzat %1$s</string>
+    <string name="cw_airs_today">Difuzat astăzi</string>
+    <string name="cw_airs_tomorrow">Difuzat mâine</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Difuzat în %d zi</item>
+        <item quantity="few">Difuzat în %d zile</item>
+        <item quantity="other">Difuzat în %d de zile</item>
+    </plurals>
     <string name="cw_action_go_to_details">Accesează detalii</string>
     <string name="cw_action_start_from_beginning">Începe de la început</string>
     <string name="cw_action_remove">Elimină</string>
@@ -170,8 +177,8 @@
     <string name="playback_player_ask">Întreabă de fiecare dată</string>
 
     <!-- PlaybackAudioSettings -->
-    <string name="playback_section_audio">Audio și trailer</string>
-    <string name="playback_section_audio_desc">Comportament trailer și controale audio.</string>
+    <string name="playback_section_audio">Audio și video</string>
+    <string name="playback_section_audio_desc">Controale audio și compatibilitate video.</string>
     <string name="playback_section_subtitles">Subtitrări</string>
     <string name="playback_section_subtitles_desc">Limbă, stil și mod de randare.</string>
     <string name="playback_afr_open">Deschis</string>
@@ -202,7 +209,6 @@
     <string name="audio_decoder_priority">Prioritate decodor</string>
     <string name="audio_tunneled">Redare prin tunel</string>
     <string name="audio_tunneled_sub">Sincronizare audio/video la nivel hardware. Poate îmbunătăți redarea pe unele dispozitive Android TV</string>
-    <string name="audio_dv_sub">Mapează Dolby Vision Profil 7 la HEVC standard pentru dispozitivele fără suport hardware DV</string>
     <string name="audio_decoder_device_only_desc">Folosește doar decodoarele hardware încorporate. Cele mai compatibile, dar s-ar putea să nu suporte toate formatele.</string>
     <string name="audio_decoder_prefer_device_desc">Folosește decodoarele hardware când sunt disponibile, revine la FFmpeg dacă nu. Recomandat pentru majoritatea dispozitivelor.</string>
     <string name="audio_decoder_prefer_app_desc">Folosește decodoarele FFmpeg când sunt disponibile. Compatibilitate mai bună a formatelor, dar consumă mai mult CPU.</string>
@@ -346,7 +352,7 @@
     <string name="layout_trailer_muted">Redă trailerul pe mut</string>
     <string name="layout_trailer_muted_sub_preview">Amuțește sunetul trailerului în timpul previzualizării automate.</string>
     <string name="layout_trailer_muted_sub_expanded">Amuțește sunetul trailerului în cardurile extinse.</string>
-    <string name="layout_section_card_style">Stil card poster</string>
+    <string name="layout_section_card_style">Card poster</string>
     <string name="layout_section_card_style_desc">Ajustează lățimea cardului și raza colțurilor.</string>
     <string name="layout_open">Deschis</string>
     <string name="layout_closed">Închis</string>
@@ -700,11 +706,9 @@
 
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Autentificare cu QR</string>
-    <string name="auth_qr_account_login">Autentificare Cont</string>
     <string name="auth_qr_finishing">Se finalizează autentificarea\u2026</string>
     <string name="auth_qr_code_label">Cod: %1$s</string>
     <string name="auth_qr_expires">Expiră în %1$s</string>
-    <string name="auth_qr_phone_hint">Folosiți telefonul pentru a vă autentifica cu e‑mail/parolă. TV rămâne doar QR pentru o autentificare mai rapidă.</string>
     <string name="auth_qr_scan_instruction">Scanați QR, aprobați în browser, apoi reveniți aici.</string>
     <string name="auth_qr_code_display">Cod: %1$s</string>
     <string name="auth_qr_refresh">Reîmprospătează QR</string>
@@ -831,7 +835,6 @@
 
     <!-- PlaybackAudioSettings -->
     <string name="audio_passthrough_info">Passthrough audio (TrueHD, DTS, AC-3, etc.) este automat. Când este conectat la un receptor AV compatibil sau soundbar prin HDMI, audio lossless este trimis așa cum este, fără decodare.</string>
-    <string name="audio_dv_title">DV7 - HEVC rezervă</string>
 
     <!-- SidebarNavigation / MainActivity -->
     <string name="nav_home">Acasă</string>

@@ -1,54 +1,51 @@
 package com.nuvio.tv.data.repository
 
-import com.nuvio.tv.data.remote.api.DonationsApi
-import java.time.Instant
+import com.nuvio.tv.data.remote.api.SupportersApi
+import com.nuvio.tv.domain.model.MemberTier
 import javax.inject.Inject
 import javax.inject.Singleton
 
-data class SupporterDonation(
+data class SupporterMember(
     val key: String,
     val name: String,
-    val date: String,
-    val message: String?,
-    val sortTimestamp: Long
+    val avatarUrl: String?,
+    val membershipLevel: MemberTier,
+    val supporterSince: String?
 )
 
 @Singleton
 class SupportersRepository @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
-    private val donationsApi: DonationsApi
+    private val supportersApi: SupportersApi
 ) {
 
-    suspend fun getSupporters(limit: Int = 200): Result<List<SupporterDonation>> = runCatching {
-        val response = donationsApi.getDonations(limit = limit)
+    suspend fun getSupporters(): Result<List<SupporterMember>> = runCatching {
+        val response = supportersApi.getSupportersWall()
         if (!response.isSuccessful) {
             error(appContext.getString(com.nuvio.tv.R.string.supporters_error_api_http, response.code()))
         }
 
         response.body()
-            ?.donations
+            ?.top
+            ?.members
             .orEmpty()
-            .mapNotNull { donation ->
-                val name = donation.name?.trim().orEmpty()
-                val date = donation.date?.trim().orEmpty()
-                if (name.isBlank() || date.isBlank()) return@mapNotNull null
+            .mapNotNull { member ->
+                val name = member.displayName?.trim().orEmpty()
+                val membershipLevel = MemberTier.entries.firstOrNull {
+                    it.name == member.membershipLevel?.trim()
+                }
+                if (name.isBlank() || membershipLevel == null) return@mapNotNull null
 
-                SupporterDonation(
-                    key = "$name|$date",
+                SupporterMember(
+                    key = "$name|${member.supporterSince.orEmpty()}",
                     name = name,
-                    date = date,
-                    message = donation.message?.trim()?.takeIf { it.isNotBlank() },
-                    sortTimestamp = parseTimestamp(date)
+                    avatarUrl = member.avatarUrl?.trim()?.takeIf { it.isNotBlank() },
+                    membershipLevel = membershipLevel,
+                    supporterSince = member.supporterSince?.trim()?.takeIf { it.isNotBlank() }
                 )
             }
-            .sortedByDescending { it.sortTimestamp }
-            .mapIndexed { index, donation ->
-                donation.copy(key = "${donation.key}#$index")
+            .mapIndexed { index, supporter ->
+                supporter.copy(key = "${supporter.key}#$index")
             }
-    }
-
-    private fun parseTimestamp(rawDate: String): Long {
-        return runCatching { Instant.parse(rawDate).toEpochMilli() }
-            .getOrDefault(Long.MIN_VALUE)
     }
 }

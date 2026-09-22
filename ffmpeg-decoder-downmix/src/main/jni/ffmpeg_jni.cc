@@ -41,6 +41,7 @@ extern "C" {
 #include <libavutil/error.h>
 #include <libavutil/opt.h>
 #include <libswresample/swresample.h>
+#include <libavutil/audio_fifo.h>
 }
 
 #define LOG_TAG "ffmpeg_jni"
@@ -78,11 +79,23 @@ static const AVSampleFormat OUTPUT_FORMAT_PCM_16BIT = AV_SAMPLE_FMT_S16;
 static const AVSampleFormat OUTPUT_FORMAT_PCM_FLOAT = AV_SAMPLE_FMT_FLT;
 // Default center level when no downmix metadata is present (-3 dB).
 static const double DEFAULT_CENTER_MIX_LEVEL = M_SQRT1_2;
+// Kodi AudioEngine limiter defaults. The limiter sits after rematrixing and
+// catches decoded/remixed float peaks without permanently lowering the mix.
+static const float LIMITER_DEFAULT_SAMPLE_RATE = 48000.0f;
+static const float LIMITER_HOLD_SECONDS = 0.025f;
+static const float LIMITER_RELEASE_SECONDS = 0.1f;
 
 // LINT.IfChange
 static const int AUDIO_DECODER_ERROR_INVALID_DATA = -1;
 static const int AUDIO_DECODER_ERROR_OTHER = -2;
 // LINT.ThenChange(../java/androidx/media3/decoder/ffmpeg/FfmpegAudioDecoder.java)
+
+struct AudioLimiter {
+  float attenuation;
+  float sample_rate;
+  int hold_counter;
+  float increase;
+};
 
 struct DecoderContext {
   AVCodecContext* codec_context;
@@ -97,6 +110,16 @@ struct DecoderContext {
   bool has_input_layout;
   bool has_output_layout;
   bool has_center_mix_level;
+  bool downmix_active;
+  AudioLimiter limiter;
+
+  // AC3 Encoder fields
+  bool transcode_to_ac3;
+  AVCodecContext* encoder_context;
+  AVAudioFifo* fifo;
+  AVFrame* encoder_frame;
+  AVPacket* encoder_packet;
+  bool encoder_initialized;
 };
 
 static jmethodID growOutputBufferMethod;
@@ -114,7 +137,8 @@ DecoderContext* createContext(JNIEnv* env, const AVCodec* codec,
                               jint rawSampleRate, jint rawChannelCount,
                               jint outputChannelCount,
                               jstring requestedOutputLayoutName,
-                              jboolean outputFloat);
+                              jboolean outputFloat,
+                              jboolean transcodeToAc3);
 
 struct GrowOutputBufferCallback {
   uint8_t* operator()(int requiredSize) const;
@@ -158,6 +182,17 @@ void logError(const char* functionName, int errorNumber);
 void releaseContext(DecoderContext* decoderContext);
 
 void clearResampler(DecoderContext* decoderContext);
+
+void resetLimiter(AudioLimiter* limiter);
+
+float getLimiterGain(AudioLimiter* limiter, float highestSample);
+
+void limitInterleavedFloat(AudioLimiter* limiter, float* samples,
+                           int frameCount, int channelCount,
+                           int sampleRate);
+
+void limitPlanarFloat(AudioLimiter* limiter, uint8_t** samples,
+                      int frameCount, int channelCount, int sampleRate);
 
 bool copyChannelLayout(const AVChannelLayout* source, AVChannelLayout* destination);
 
@@ -216,7 +251,8 @@ AUDIO_DECODER_FUNC(jlong, ffmpegInitialize, jstring codecName,
                    jint rawSampleRate, jint rawChannelCount,
                    jint outputChannelCount,
                    jstring requestedOutputLayoutName,
-                   jboolean outputFloat) {
+                   jboolean outputFloat,
+                   jboolean transcodeToAc3) {
   const AVCodec* codec = getCodecByName(env, codecName);
   if (!codec) {
     LOGE("Codec not found.");
@@ -224,7 +260,8 @@ AUDIO_DECODER_FUNC(jlong, ffmpegInitialize, jstring codecName,
   }
   return (jlong)createContext(env, codec, extraData, rawSampleRate,
                               rawChannelCount, outputChannelCount,
-                              requestedOutputLayoutName, outputFloat);
+                              requestedOutputLayoutName, outputFloat,
+                              transcodeToAc3);
 }
 
 AUDIO_DECODER_FUNC(jint, ffmpegDecode, jlong context, jobject inputData,
@@ -313,6 +350,7 @@ AUDIO_DECODER_FUNC(jlong, ffmpegReset, jlong jContext, jbyteArray extraData) {
     jint outputChannelCount = decoderContext->requested_output_channel_count;
     jboolean outputFloat =
         decoderContext->output_sample_format == OUTPUT_FORMAT_PCM_FLOAT;
+    jboolean transcodeToAc3 = decoderContext->transcode_to_ac3;
     jstring requestedOutputLayoutName = NULL;
     if (decoderContext->requested_output_layout_name) {
       requestedOutputLayoutName =
@@ -329,7 +367,8 @@ AUDIO_DECODER_FUNC(jlong, ffmpegReset, jlong jContext, jbyteArray extraData) {
                                          /* rawChannelCount= */ -1,
                                          outputChannelCount,
                                          requestedOutputLayoutName,
-                                         outputFloat);
+                                         outputFloat,
+                                         transcodeToAc3);
     if (requestedOutputLayoutName) {
       env->DeleteLocalRef(requestedOutputLayoutName);
     }
@@ -338,6 +377,7 @@ AUDIO_DECODER_FUNC(jlong, ffmpegReset, jlong jContext, jbyteArray extraData) {
 
   avcodec_flush_buffers(codecContext);
   clearResampler(decoderContext);
+  resetLimiter(&decoderContext->limiter);
   return (jlong)decoderContext;
 }
 
@@ -362,13 +402,16 @@ DecoderContext* createContext(JNIEnv* env, const AVCodec* codec,
                               jint rawSampleRate, jint rawChannelCount,
                               jint outputChannelCount,
                               jstring requestedOutputLayoutName,
-                              jboolean outputFloat) {
+                              jboolean outputFloat,
+                              jboolean transcodeToAc3) {
   DecoderContext* decoderContext =
       static_cast<DecoderContext*>(calloc(1, sizeof(DecoderContext)));
   if (!decoderContext) {
     LOGE("Failed to allocate decoder context.");
     return NULL;
   }
+  decoderContext->transcode_to_ac3 = transcodeToAc3;
+  resetLimiter(&decoderContext->limiter);
 
   AVCodecContext* codecContext = avcodec_alloc_context3(codec);
   if (!codecContext) {
@@ -455,38 +498,124 @@ int decodePacket(DecoderContext* decoderContext, AVPacket* packet,
 
     int sampleRate =
         frame->sample_rate > 0 ? frame->sample_rate : codecContext->sample_rate;
-    int outputChannelCount = decoderContext->output_layout.nb_channels;
-    int outSampleSize =
-        av_get_bytes_per_sample(decoderContext->output_sample_format);
-    int outSamples =
-        swr_get_out_samples(decoderContext->resample_context, frame->nb_samples);
-    int bufferOutSize = outSampleSize * outputChannelCount * outSamples;
-    if (outSize + bufferOutSize > outputSize) {
-      LOGD(
-          "Output buffer size (%d) too small for output data (%d), "
-          "reallocating buffer.",
-          outputSize, outSize + bufferOutSize);
-      outputSize = outSize + bufferOutSize;
-      outputBuffer = growBuffer(outputSize);
-      if (!outputBuffer) {
-        LOGE("Failed to reallocate output buffer.");
-        av_frame_free(&frame);
-        return AUDIO_DECODER_ERROR_OTHER;
+    if (decoderContext->transcode_to_ac3) {
+      int outSamples = swr_get_out_samples(decoderContext->resample_context, frame->nb_samples);
+      int nb_channels = decoderContext->output_layout.nb_channels;
+      uint8_t** converted_data = (uint8_t**)calloc(nb_channels, sizeof(uint8_t*));
+      for (int i = 0; i < nb_channels; i++) {
+        converted_data[i] = (uint8_t*)malloc(outSamples * sizeof(float));
       }
-    }
 
-    int convertedSamples =
-        swr_convert(decoderContext->resample_context, &outputBuffer, outSamples,
-                    (const uint8_t**)frame->data, frame->nb_samples);
-    av_frame_free(&frame);
-    if (convertedSamples < 0) {
-      logError("swr_convert", convertedSamples);
-      return AUDIO_DECODER_ERROR_INVALID_DATA;
+      int convertedSamples =
+          swr_convert(decoderContext->resample_context, converted_data, outSamples,
+                      (const uint8_t**)frame->data, frame->nb_samples);
+      av_frame_free(&frame);
+
+      if (convertedSamples < 0) {
+        logError("swr_convert", convertedSamples);
+        for (int i = 0; i < nb_channels; i++) {
+          free(converted_data[i]);
+        }
+        free(converted_data);
+        return AUDIO_DECODER_ERROR_INVALID_DATA;
+      }
+
+      if (decoderContext->downmix_active) {
+        limitPlanarFloat(&decoderContext->limiter, converted_data,
+                         convertedSamples, nb_channels, sampleRate);
+      }
+
+      av_audio_fifo_write(decoderContext->fifo, (void**)converted_data, convertedSamples);
+
+      for (int i = 0; i < nb_channels; i++) {
+        free(converted_data[i]);
+      }
+      free(converted_data);
+
+      while (av_audio_fifo_size(decoderContext->fifo) >= decoderContext->encoder_context->frame_size) {
+        av_audio_fifo_read(decoderContext->fifo, (void**)decoderContext->encoder_frame->data,
+                            decoderContext->encoder_context->frame_size);
+
+        int ret = avcodec_send_frame(decoderContext->encoder_context, decoderContext->encoder_frame);
+        if (ret < 0) {
+          logError("avcodec_send_frame", ret);
+          return AUDIO_DECODER_ERROR_OTHER;
+        }
+
+        while (true) {
+          ret = avcodec_receive_packet(decoderContext->encoder_context, decoderContext->encoder_packet);
+          if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            break;
+          } else if (ret < 0) {
+            logError("avcodec_receive_packet", ret);
+            return AUDIO_DECODER_ERROR_OTHER;
+          }
+
+          int packetSize = decoderContext->encoder_packet->size;
+          if (outSize + packetSize > outputSize) {
+            outputSize = outSize + packetSize;
+            uint8_t* newBase = growBuffer(outputSize);
+            if (!newBase) {
+              LOGE("Failed to grow output buffer during encoding.");
+              av_packet_unref(decoderContext->encoder_packet);
+              return AUDIO_DECODER_ERROR_OTHER;
+            }
+            outputBuffer = newBase + outSize;
+          }
+
+          memcpy(outputBuffer, decoderContext->encoder_packet->data, packetSize);
+          outputBuffer += packetSize;
+          outSize += packetSize;
+
+          av_packet_unref(decoderContext->encoder_packet);
+        }
+      }
+      codecContext->sample_rate = sampleRate;
+    } else {
+      int outputChannelCount = decoderContext->output_layout.nb_channels;
+      int outSampleSize =
+          av_get_bytes_per_sample(decoderContext->output_sample_format);
+      int outSamples =
+          swr_get_out_samples(decoderContext->resample_context, frame->nb_samples);
+      int bufferOutSize = outSampleSize * outputChannelCount * outSamples;
+      if (outSize + bufferOutSize > outputSize) {
+        LOGD(
+            "Output buffer size (%d) too small for output data (%d), "
+            "reallocating buffer.",
+            outputSize, outSize + bufferOutSize);
+        outputSize = outSize + bufferOutSize;
+        uint8_t* newBase = growBuffer(outputSize);
+        if (!newBase) {
+          LOGE("Failed to reallocate output buffer.");
+          av_frame_free(&frame);
+          return AUDIO_DECODER_ERROR_OTHER;
+        }
+        // growBuffer() returns the base address of the replacement buffer.
+        // Preserve any frames already written during this decode call and
+        // append the current frame after them.
+        outputBuffer = newBase + outSize;
+      }
+
+      int convertedSamples =
+          swr_convert(decoderContext->resample_context, &outputBuffer, outSamples,
+                      (const uint8_t**)frame->data, frame->nb_samples);
+      av_frame_free(&frame);
+      if (convertedSamples < 0) {
+        logError("swr_convert", convertedSamples);
+        return AUDIO_DECODER_ERROR_INVALID_DATA;
+      }
+      if (decoderContext->downmix_active &&
+          decoderContext->output_sample_format == AV_SAMPLE_FMT_FLT) {
+        limitInterleavedFloat(
+            &decoderContext->limiter,
+            reinterpret_cast<float*>(outputBuffer), convertedSamples,
+            outputChannelCount, sampleRate);
+      }
+      int writtenSize = outSampleSize * outputChannelCount * convertedSamples;
+      outputBuffer += writtenSize;
+      outSize += writtenSize;
+      codecContext->sample_rate = sampleRate;
     }
-    int writtenSize = outSampleSize * outputChannelCount * convertedSamples;
-    outputBuffer += writtenSize;
-    outSize += writtenSize;
-    codecContext->sample_rate = sampleRate;
   }
   return outSize;
 }
@@ -502,10 +631,15 @@ int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
   }
 
   AVChannelLayout outputLayout = {};
-  if (!getOutputChannelLayout(decoderContext, &inputLayout, &outputLayout)) {
-    av_channel_layout_uninit(&inputLayout);
-    LOGE("Unable to resolve output channel layout.");
-    return AUDIO_DECODER_ERROR_OTHER;
+  if (decoderContext->transcode_to_ac3) {
+    av_channel_layout_default(&outputLayout, 6);
+    decoderContext->output_sample_format = AV_SAMPLE_FMT_FLTP;
+  } else {
+    if (!getOutputChannelLayout(decoderContext, &inputLayout, &outputLayout)) {
+      av_channel_layout_uninit(&inputLayout);
+      LOGE("Unable to resolve output channel layout.");
+      return AUDIO_DECODER_ERROR_OTHER;
+    }
   }
 
   int inputSampleRate =
@@ -584,6 +718,85 @@ int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
   decoderContext->center_mix_level = centerMixLevel;
   decoderContext->downmix_normalization_enabled = applyNormalization;
   decoderContext->has_center_mix_level = isDownmixActive;
+  decoderContext->downmix_active = isDownmixActive;
+  decoderContext->limiter.sample_rate =
+      inputSampleRate > 0 ? static_cast<float>(inputSampleRate)
+                          : LIMITER_DEFAULT_SAMPLE_RATE;
+
+  if (decoderContext->transcode_to_ac3 && !decoderContext->encoder_initialized) {
+    const AVCodec* encoder = avcodec_find_encoder(AV_CODEC_ID_AC3);
+    if (!encoder) {
+      LOGE("AC3 encoder not found. Check FFmpeg build options.");
+      av_channel_layout_uninit(&inputLayout);
+      av_channel_layout_uninit(&outputLayout);
+      return AUDIO_DECODER_ERROR_OTHER;
+    }
+    AVCodecContext* enc_ctx = avcodec_alloc_context3(encoder);
+    if (!enc_ctx) {
+      LOGE("Failed to allocate encoder context.");
+      av_channel_layout_uninit(&inputLayout);
+      av_channel_layout_uninit(&outputLayout);
+      return AUDIO_DECODER_ERROR_OTHER;
+    }
+    enc_ctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
+    enc_ctx->sample_rate = inputSampleRate;
+    av_channel_layout_copy(&enc_ctx->ch_layout, &outputLayout);
+    enc_ctx->bit_rate = 640000;
+    
+    int ret = avcodec_open2(enc_ctx, encoder, NULL);
+    if (ret < 0) {
+      logError("avcodec_open2 (encoder)", ret);
+      avcodec_free_context(&enc_ctx);
+      av_channel_layout_uninit(&inputLayout);
+      av_channel_layout_uninit(&outputLayout);
+      return AUDIO_DECODER_ERROR_OTHER;
+    }
+    decoderContext->encoder_context = enc_ctx;
+
+    decoderContext->fifo = av_audio_fifo_alloc(enc_ctx->sample_fmt, enc_ctx->ch_layout.nb_channels, 1);
+    if (!decoderContext->fifo) {
+      LOGE("Failed to allocate AVAudioFifo.");
+      avcodec_free_context(&enc_ctx);
+      av_channel_layout_uninit(&inputLayout);
+      av_channel_layout_uninit(&outputLayout);
+      return AUDIO_DECODER_ERROR_OTHER;
+    }
+
+    decoderContext->encoder_frame = av_frame_alloc();
+    if (!decoderContext->encoder_frame) {
+      LOGE("Failed to allocate encoder frame.");
+      av_audio_fifo_free(decoderContext->fifo);
+      avcodec_free_context(&enc_ctx);
+      av_channel_layout_uninit(&inputLayout);
+      av_channel_layout_uninit(&outputLayout);
+      return AUDIO_DECODER_ERROR_OTHER;
+    }
+    decoderContext->encoder_frame->nb_samples = enc_ctx->frame_size;
+    decoderContext->encoder_frame->format = enc_ctx->sample_fmt;
+    av_channel_layout_copy(&decoderContext->encoder_frame->ch_layout, &enc_ctx->ch_layout);
+    ret = av_frame_get_buffer(decoderContext->encoder_frame, 0);
+    if (ret < 0) {
+      logError("av_frame_get_buffer (encoder)", ret);
+      av_frame_free(&decoderContext->encoder_frame);
+      av_audio_fifo_free(decoderContext->fifo);
+      avcodec_free_context(&enc_ctx);
+      av_channel_layout_uninit(&inputLayout);
+      av_channel_layout_uninit(&outputLayout);
+      return AUDIO_DECODER_ERROR_OTHER;
+    }
+
+    decoderContext->encoder_packet = av_packet_alloc();
+    if (!decoderContext->encoder_packet) {
+      LOGE("Failed to allocate encoder packet.");
+      av_frame_free(&decoderContext->encoder_frame);
+      av_audio_fifo_free(decoderContext->fifo);
+      avcodec_free_context(&enc_ctx);
+      av_channel_layout_uninit(&inputLayout);
+      av_channel_layout_uninit(&outputLayout);
+      return AUDIO_DECODER_ERROR_OTHER;
+    }
+    decoderContext->encoder_initialized = true;
+  }
 
   av_channel_layout_uninit(&inputLayout);
   av_channel_layout_uninit(&outputLayout);
@@ -619,6 +832,113 @@ void clearResampler(DecoderContext* decoderContext) {
   }
   decoderContext->downmix_normalization_enabled = false;
   decoderContext->has_center_mix_level = false;
+  decoderContext->downmix_active = false;
+
+  // Free encoder resources on reset to allow reconfiguration with correct parameters
+  if (decoderContext->encoder_context) {
+    avcodec_free_context(&decoderContext->encoder_context);
+    decoderContext->encoder_context = nullptr;
+  }
+  if (decoderContext->fifo) {
+    av_audio_fifo_free(decoderContext->fifo);
+    decoderContext->fifo = nullptr;
+  }
+  if (decoderContext->encoder_frame) {
+    av_frame_free(&decoderContext->encoder_frame);
+    decoderContext->encoder_frame = nullptr;
+  }
+  if (decoderContext->encoder_packet) {
+    av_packet_free(&decoderContext->encoder_packet);
+    decoderContext->encoder_packet = nullptr;
+  }
+  decoderContext->encoder_initialized = false;
+}
+
+void resetLimiter(AudioLimiter* limiter) {
+  if (!limiter) {
+    return;
+  }
+  limiter->attenuation = 1.0f;
+  limiter->sample_rate = LIMITER_DEFAULT_SAMPLE_RATE;
+  limiter->hold_counter = 0;
+  limiter->increase = 0.0f;
+}
+
+float getLimiterGain(AudioLimiter* limiter, float highestSample) {
+  if (!limiter) {
+    return 1.0f;
+  }
+
+  if (highestSample * limiter->attenuation > 1.0f) {
+    limiter->attenuation = 1.0f / highestSample;
+    limiter->hold_counter =
+        static_cast<int>(lroundf(limiter->sample_rate * LIMITER_HOLD_SECONDS));
+    limiter->increase = powf(
+        fminf(highestSample, 10000.0f),
+        1.0f / (LIMITER_RELEASE_SECONDS * limiter->sample_rate));
+  }
+
+  const float gain = limiter->attenuation;
+  if (limiter->hold_counter > 0) {
+    --limiter->hold_counter;
+  } else if (limiter->increase > 0.0f) {
+    limiter->attenuation *= limiter->increase;
+    if (limiter->attenuation > 1.0f) {
+      limiter->increase = 0.0f;
+      limiter->attenuation = 1.0f;
+    }
+  }
+  return gain;
+}
+
+void limitInterleavedFloat(AudioLimiter* limiter, float* samples,
+                           int frameCount, int channelCount,
+                           int sampleRate) {
+  if (!limiter || !samples || frameCount <= 0 || channelCount <= 0) {
+    return;
+  }
+  if (sampleRate > 0) {
+    limiter->sample_rate = static_cast<float>(sampleRate);
+  }
+
+  for (int frame = 0; frame < frameCount; ++frame) {
+    float* frameSamples = samples + frame * channelCount;
+    float highest = 0.0f;
+    for (int channel = 0; channel < channelCount; ++channel) {
+      highest = fmaxf(highest, fabsf(frameSamples[channel]));
+    }
+    const float gain = getLimiterGain(limiter, highest);
+    if (gain < 1.0f) {
+      for (int channel = 0; channel < channelCount; ++channel) {
+        frameSamples[channel] *= gain;
+      }
+    }
+  }
+}
+
+void limitPlanarFloat(AudioLimiter* limiter, uint8_t** samples,
+                      int frameCount, int channelCount, int sampleRate) {
+  if (!limiter || !samples || frameCount <= 0 || channelCount <= 0) {
+    return;
+  }
+  if (sampleRate > 0) {
+    limiter->sample_rate = static_cast<float>(sampleRate);
+  }
+
+  for (int frame = 0; frame < frameCount; ++frame) {
+    float highest = 0.0f;
+    for (int channel = 0; channel < channelCount; ++channel) {
+      float* channelSamples = reinterpret_cast<float*>(samples[channel]);
+      highest = fmaxf(highest, fabsf(channelSamples[frame]));
+    }
+    const float gain = getLimiterGain(limiter, highest);
+    if (gain < 1.0f) {
+      for (int channel = 0; channel < channelCount; ++channel) {
+        float* channelSamples = reinterpret_cast<float*>(samples[channel]);
+        channelSamples[frame] *= gain;
+      }
+    }
+  }
 }
 
 void releaseContext(DecoderContext* decoderContext) {
@@ -629,6 +949,18 @@ void releaseContext(DecoderContext* decoderContext) {
   if (decoderContext->requested_output_layout_name) {
     free(decoderContext->requested_output_layout_name);
     decoderContext->requested_output_layout_name = NULL;
+  }
+  if (decoderContext->encoder_context) {
+    avcodec_free_context(&decoderContext->encoder_context);
+  }
+  if (decoderContext->fifo) {
+    av_audio_fifo_free(decoderContext->fifo);
+  }
+  if (decoderContext->encoder_frame) {
+    av_frame_free(&decoderContext->encoder_frame);
+  }
+  if (decoderContext->encoder_packet) {
+    av_packet_free(&decoderContext->encoder_packet);
   }
   if (decoderContext->codec_context) {
     avcodec_free_context(&decoderContext->codec_context);

@@ -22,6 +22,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.app
 import com.nuvio.tv.core.plugin.TestDiagnostics
+import com.nuvio.tv.core.plugin.matchPluginEpisodeIndex
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.domain.model.ContentType
@@ -194,7 +195,8 @@ class ExternalExtensionRunner @Inject constructor(
             diagnostics.addStep("Missing extractors: ${missing.take(5).joinToString()}")
         }
 
-        return links.filterValid().map { it.toLocalScraperResult(api.name) }
+        val domainSubtitles = subtitles.toDomainSubtitles(api.name)
+        return links.filterValid().map { it.toLocalScraperResult(api.name, domainSubtitles) }
     }
 
     private suspend fun executeSearchBasedWithDiagnostics(
@@ -330,7 +332,8 @@ class ExternalExtensionRunner @Inject constructor(
         )
 
         diagnostics.addStep("loadLinks returned: success=$success, ${links.size} links, ${subtitles.size} subs")
-        return links.filterValid().map { it.toLocalScraperResult(api.name) }
+        val domainSubtitles = subtitles.toDomainSubtitles(api.name)
+        return links.filterValid().map { it.toLocalScraperResult(api.name, domainSubtitles) }
     }
 
     private fun extractMissingClass(e: Error): String? {
@@ -467,7 +470,8 @@ class ExternalExtensionRunner @Inject constructor(
         }
 
         Log.d(TAG, "TmdbProvider ${api.name}: ${links.size} links, ${subtitles.size} subs")
-        return links.filterValid().map { link -> link.toLocalScraperResult(api.name) }
+        val domainSubtitles = subtitles.toDomainSubtitles(api.name)
+        return links.filterValid().map { link -> link.toLocalScraperResult(api.name, domainSubtitles) }
     }
 
     private suspend fun executeSearchBased(
@@ -620,7 +624,8 @@ class ExternalExtensionRunner @Inject constructor(
         }
 
         Log.d(TAG, "SearchBased ${api.name}: ${links.size} links, ${subtitles.size} subs")
-        return links.filterValid().map { link -> link.toLocalScraperResult(api.name) }
+        val domainSubtitles = subtitles.toDomainSubtitles(api.name)
+        return links.filterValid().map { link -> link.toLocalScraperResult(api.name, domainSubtitles) }
     }
 
     /** Extract year from SearchResponse concrete types (not in the interface). */
@@ -754,25 +759,12 @@ class ExternalExtensionRunner @Inject constructor(
     }
 
     private fun findEpisode(episodes: List<Episode>, season: Int?, episode: Int?): Episode? {
-        if (episodes.isEmpty()) return null
-
-        if (season != null && episode != null) {
-            episodes.firstOrNull { it.season == season && it.episode == episode }?.let { return it }
-        }
-
-        if (episode != null) {
-            episodes.firstOrNull { it.episode == episode && (it.season == null || it.season == season) }
-                ?.let { return it }
-        }
-
-        if (season != null && episode != null) {
-            val absoluteEpisode = episodes.indexOfFirst {
-                (it.season == season || it.season == null) && it.episode == episode
-            }
-            if (absoluteEpisode >= 0) return episodes[absoluteEpisode]
-        }
-
-        return null
+        val index = matchPluginEpisodeIndex(
+            entries = episodes.map { it.season to it.episode },
+            season = season,
+            episode = episode
+        ) ?: return null
+        return episodes.getOrNull(index)
     }
 
     private fun calculateSimilarity(s1: String, s2: String): Double {
@@ -858,7 +850,32 @@ class ExternalExtensionRunner @Inject constructor(
         }
     }
 
-    private fun ExtractorLink.toLocalScraperResult(providerName: String): LocalScraperResult {
+    private fun List<SubtitleFile>.toDomainSubtitles(addonName: String): List<com.nuvio.tv.domain.model.Subtitle> {
+        return this.mapNotNull { file ->
+            val subUrl = file.url.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val lang = file.lang.takeIf { it.isNotBlank() } ?: "Unknown"
+            val fileHeaders = runCatching {
+                val prop = file.javaClass.methods.find { it.name == "getHeaders" }
+                @Suppress("UNCHECKED_CAST")
+                prop?.invoke(file) as? Map<String, String>
+            }.getOrNull()?.ifEmpty { null }
+
+            com.nuvio.tv.domain.model.Subtitle(
+                id = "$lang-$subUrl",
+                url = subUrl,
+                lang = lang,
+                addonName = addonName,
+                addonLogo = null,
+                isStreamProvided = true,
+                headers = fileHeaders
+            )
+        }
+    }
+
+    private fun ExtractorLink.toLocalScraperResult(
+        providerName: String,
+        subtitles: List<com.nuvio.tv.domain.model.Subtitle> = emptyList()
+    ): LocalScraperResult {
         val qualityStr = Qualities.getStringByInt(quality).ifEmpty { null }
         val streamType = when (type) {
             ExtractorLinkType.M3U8 -> "hls"
@@ -877,7 +894,8 @@ class ExternalExtensionRunner @Inject constructor(
             quality = qualityStr,
             type = streamType,
             headers = allHeaders.ifEmpty { null },
-            provider = providerName
+            provider = providerName,
+            subtitles = subtitles
         )
     }
 }

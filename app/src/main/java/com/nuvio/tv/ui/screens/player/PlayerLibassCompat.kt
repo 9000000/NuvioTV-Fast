@@ -12,10 +12,10 @@ import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ExtractorsFactory
-import androidx.media3.extractor.mkv.MatroskaExtractor
+import androidx.media3.extractor.mkv.MatroskaExtractor as StockMatroskaExtractor
 import androidx.media3.extractor.text.SubtitleParser
+import com.nuvio.tv.core.player.dvmkv.MatroskaExtractor as DvMatroskaExtractor
 import io.github.peerless2012.ass.media.AssHandler
-import io.github.peerless2012.ass.media.extractor.AssMatroskaExtractor
 import io.github.peerless2012.ass.media.kt.withAssSupport
 import io.github.peerless2012.ass.media.parser.AssSubtitleParserFactory
 import io.github.peerless2012.ass.media.type.AssRenderType
@@ -97,11 +97,23 @@ private fun ExtractorsFactory.withAssMkvSupportCompat(
     subtitleParserFactory: SubtitleParser.Factory,
     assHandler: AssHandler
 ): ExtractorsFactory {
+    val delegate = this
     return ExtractorsFactory {
-        val extractors = createExtractors()
+        val extractors = delegate.createExtractors()
         extractors.forEachIndexed { index, extractor ->
-            if (extractor is MatroskaExtractor) {
-                extractors[index] = AssMatroskaExtractor(subtitleParserFactory, assHandler)
+            // Stock MatroskaExtractor: replace with ASS-aware variant for libass support.
+            if (extractor is StockMatroskaExtractor) {
+                extractors[index] = NuvioAssMatroskaExtractor(subtitleParserFactory, assHandler)
+            }
+            // The DV7 factory swaps in a vendored DvMatroskaExtractor for DV conversion.
+            // Preserve its Dolby Vision transformer while enabling libass and zlib subtitle
+            // decompression from the same vendored Matroska extractor base class.
+            if (extractor is DvMatroskaExtractor) {
+                extractors[index] = NuvioAssMatroskaExtractor(
+                    subtitleParserFactory = subtitleParserFactory,
+                    assHandler = assHandler,
+                    dolbyVisionSampleTransformer = extractor.dolbyVisionSampleTransformer
+                )
             }
         }
         extractors

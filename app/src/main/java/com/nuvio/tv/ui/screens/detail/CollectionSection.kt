@@ -1,68 +1,102 @@
 package com.nuvio.tv.ui.screens.detail
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.relocation.BringIntoViewResponder
+import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.PosterCardStyle
-import com.nuvio.tv.ui.theme.NuvioColors
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun CollectionSection(
     items: List<MetaPreview>,
+    listState: LazyListState,
     title: String? = null,
+    posterCardCornerRadius: Dp = NuvioTheme.spacing.md,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     sectionFocusRequester: FocusRequester? = null,
     restoreItemId: String? = null,
     restoreFocusToken: Int = 0,
+    lastFocusedItemId: String? = null,
+    onLastFocusedItemIdChange: (String) -> Unit = {},
     onRestoreFocusHandled: () -> Unit = {},
     onItemFocused: (MetaPreview) -> Unit = {},
     onItemClick: (MetaPreview) -> Unit,
-    onItemLongPress: (MetaPreview) -> Unit = {}
+    onItemLongPress: (MetaPreview) -> Unit = {},
+    isItemWatched: (MetaPreview) -> Boolean = { false }
 ) {
     if (items.isEmpty()) return
 
     val firstItemFocusRequester = remember { FocusRequester() }
     val restoreFocusRequester = remember { FocusRequester() }
     val itemFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val lastFocusedRequester = remember(lastFocusedItemId, items, restoreItemId) {
+        when {
+            lastFocusedItemId == null -> firstItemFocusRequester
+            lastFocusedItemId == restoreItemId -> restoreFocusRequester
+            lastFocusedItemId == items.firstOrNull()?.id -> firstItemFocusRequester
+            else -> itemFocusRequesters.getOrPut(lastFocusedItemId) { FocusRequester() }
+        }
+    }
+
+    val suppressRestoreScroll = restoreFocusToken > 0 && !restoreItemId.isNullOrBlank()
+    var restorePending by remember(restoreFocusToken, restoreItemId) { mutableStateOf(suppressRestoreScroll) }
+    var placedFocused by remember(restoreFocusToken, restoreItemId) { mutableStateOf(false) }
+    val restoreNoScrollResponder = remember {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) {}
+        }
+    }
+    val restoreItemModifier = if (suppressRestoreScroll) {
+        Modifier.bringIntoViewResponder(restoreNoScrollResponder)
+    } else {
+        Modifier
+    }
 
     LaunchedEffect(items) {
         val validIds = items.mapTo(mutableSetOf()) { it.id }
         itemFocusRequesters.keys.retainAll(validIds)
     }
 
-    LaunchedEffect(restoreFocusToken, restoreItemId, items) {
-        if (restoreFocusToken <= 0 || restoreItemId.isNullOrBlank()) return@LaunchedEffect
-        if (items.none { it.id == restoreItemId }) return@LaunchedEffect
-        restoreFocusRequester.requestFocusAfterFrames()
-    }
-
-    val landscapeStyle = remember {
+    val landscapeStyle = remember(posterCardCornerRadius) {
         PosterCardStyle(
             width = 260.dp,
             height = 146.dp,
-            cornerRadius = 12.dp,
-            focusedBorderWidth = 2.dp,
+            cornerRadius = posterCardCornerRadius,
+            focusedBorderWidth = NuvioTheme.spacing.xxs,
             focusedScale = 1.02f
         )
     }
@@ -70,24 +104,26 @@ fun CollectionSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = if (title.isNullOrBlank()) 8.dp else 20.dp, bottom = 8.dp)
+            .padding(top = if (title.isNullOrBlank()) NuvioTheme.spacing.sm else 20.dp, bottom = NuvioTheme.spacing.sm)
     ) {
         if (!title.isNullOrBlank()) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
-                color = NuvioColors.TextPrimary,
+                color = NuvioTheme.colors.TextPrimary,
                 modifier = Modifier
-                    .padding(start = 48.dp, end = 48.dp, bottom = 8.dp)
+                    .padding(start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl, bottom = NuvioTheme.spacing.sm)
             )
         }
         LazyRow(
+            state = listState,
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (sectionFocusRequester != null) Modifier.focusRequester(sectionFocusRequester) else Modifier)
-                .focusRestorer { firstItemFocusRequester },
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .focusRestorer { if (restorePending) restoreFocusRequester else lastFocusedRequester }
+                .focusGroup(),
+            contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.xxxl, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
             itemsIndexed(
                 items = items,
@@ -101,7 +137,19 @@ fun CollectionSection(
                     else -> remember(item.id) { itemFocusRequesters.getOrPut(item.id) { FocusRequester() } }
                 }
 
-                Column {
+                Column(
+                    modifier = restoreItemModifier.then(
+                        if (isRestoreTarget && suppressRestoreScroll) {
+                            Modifier.onPlaced {
+                                if (placedFocused) return@onPlaced
+                                placedFocused = true
+                                runCatching { focusRequester.requestFocus() }
+                            }
+                        } else {
+                            Modifier
+                        }
+                    )
+                ) {
                     GridContentCard(
                         item = item,
                         onClick = { onItemClick(item) },
@@ -109,12 +157,15 @@ fun CollectionSection(
                         posterCardStyle = landscapeStyle,
                         showLabel = true,
                         imageCrossfade = true,
+                        isWatched = isItemWatched(item),
                         focusRequester = focusRequester,
                         upFocusRequester = upFocusRequester,
                         downFocusRequester = downFocusRequester,
                         onFocused = {
+                            onLastFocusedItemIdChange(item.id)
                             onItemFocused(item)
                             if (isRestoreTarget && restoreFocusToken > 0) {
+                                restorePending = false
                                 onRestoreFocusHandled()
                             }
                         }
@@ -124,12 +175,12 @@ fun CollectionSection(
                         Text(
                             text = year,
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.TextTertiary,
+                            color = NuvioTheme.colors.TextTertiary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
                                 .width(landscapeStyle.width)
-                                .padding(start = 2.dp, end = 2.dp, top = 2.dp)
+                                .padding(start = NuvioTheme.spacing.xxs, end = NuvioTheme.spacing.xxs, top = NuvioTheme.spacing.xxs)
                         )
                     }
                 }

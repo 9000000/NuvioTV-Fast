@@ -29,7 +29,7 @@ private const val EXTRACTOR_TIMEOUT_MS = 30_000L
 private const val DEFAULT_USER_AGENT =
     "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
-private const val PREFERRED_SEPARATE_CLIENT = "android_vr"
+private const val PREFERRED_SEPARATE_CLIENT = "visionos"
 
 private val VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 private val API_KEY_REGEX = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"")
@@ -50,7 +50,7 @@ private data class WatchConfig(
     val visitorData: String?
 )
 
-private data class StreamCandidate(
+internal data class StreamCandidate(
     val client: String,
     val priority: Int,
     val url: String,
@@ -59,7 +59,11 @@ private data class StreamCandidate(
     val itag: String,
     val height: Int,
     val fps: Int,
-    val ext: String
+    val ext: String,
+    // Only meaningful for audio candidates: false means this format is an
+    // alternate-language dub track, not the video's original/default audio.
+    // Always true for video/progressive candidates, so it never affects them.
+    val isDefaultAudioTrack: Boolean = true
 )
 
 private data class ManifestBestVariant(
@@ -85,20 +89,18 @@ private val DEFAULT_HEADERS = mapOf(
 
 private val CLIENTS = listOf(
     YouTubeClient(
-        key = "android_vr",
-        id = "28",
-        version = "1.56.21",
-        userAgent = "com.google.android.apps.youtube.vr.oculus/1.56.21 " +
-            "(Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1) gzip",
+        key = "visionos",
+        id = "101",
+        version = "1.02",
+        userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 " +
+            "(KHTML, like Gecko) Version/26.0 Safari/605.1.15",
         context = mapOf(
-            "clientName" to "ANDROID_VR",
-            "clientVersion" to "1.56.21",
-            "deviceMake" to "Oculus",
-            "deviceModel" to "Quest 3",
-            "osName" to "Android",
-            "osVersion" to "12",
-            "platform" to "MOBILE",
-            "androidSdkVersion" to 32,
+            "clientName" to "VISIONOS",
+            "clientVersion" to "1.02",
+            "deviceMake" to "Apple",
+            "deviceModel" to "RealityDevice17,1",
+            "osName" to "visionOS",
+            "osVersion" to "26.5.23O471",
             "hl" to "en",
             "gl" to "US"
         ),
@@ -378,6 +380,12 @@ class InAppYouTubeExtractor @Inject constructor() {
                             ?: format.numberValue("averageBitrate")
                             ?: 0.0
                         val asr = format.numberValue("audioSampleRate") ?: 0.0
+                        // Multi-language uploads (common for major-studio trailers)
+                        // expose each dub as a separate adaptiveFormats entry with an
+                        // audioTrack.audioIsDefault flag. Formats with no audioTrack
+                        // are the only audio for that video, so treat them as default.
+                        val isDefaultAudioTrack = format.mapValue("audioTrack")
+                            ?.booleanValue("audioIsDefault") ?: true
 
                         adaptiveAudio += StreamCandidate(
                             client = client.key,
@@ -388,7 +396,8 @@ class InAppYouTubeExtractor @Inject constructor() {
                             itag = format.stringValue("itag").orEmpty(),
                             height = 0,
                             fps = 0,
-                            ext = if (mimeType.contains("webm")) "webm" else "m4a"
+                            ext = if (mimeType.contains("webm")) "webm" else "m4a",
+                            isDefaultAudioTrack = isDefaultAudioTrack
                         )
                     }
                 }
@@ -682,9 +691,10 @@ class InAppYouTubeExtractor @Inject constructor() {
         return bitrate * 1_000_000.0 + audioSampleRate
     }
 
-    private fun sortCandidates(items: List<StreamCandidate>): List<StreamCandidate> {
+    internal fun sortCandidates(items: List<StreamCandidate>): List<StreamCandidate> {
         return items.sortedWith(
-            compareByDescending<StreamCandidate> { it.score }
+            compareBy<StreamCandidate> { if (it.isDefaultAudioTrack) 0 else 1 }
+                .thenByDescending { it.score }
                 .thenBy { if (it.hasN) 1 else 0 }
                 .thenBy { containerPreference(it.ext) }
                 .thenBy { it.priority }
@@ -853,6 +863,10 @@ private fun Map<*, *>.listMapValue(key: String): List<Map<*, *>> {
 private fun Map<*, *>.stringValue(key: String): String? {
     val value = this[key] ?: return null
     return value.toString()
+}
+
+private fun Map<*, *>.booleanValue(key: String): Boolean? {
+    return this[key] as? Boolean
 }
 
 private fun Map<*, *>.numberValue(key: String): Double? {

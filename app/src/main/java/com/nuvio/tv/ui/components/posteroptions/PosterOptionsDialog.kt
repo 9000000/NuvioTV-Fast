@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.components.posteroptions
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,10 +26,14 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
+import com.nuvio.tv.core.tracking.TrackingMembershipRemovalImpact
+import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
+import com.nuvio.tv.core.tracking.LOCAL_LIBRARY_LIST_KEY
+import com.nuvio.tv.core.tracking.supportsMembershipFor
 import com.nuvio.tv.domain.model.LibraryListTab
+import com.nuvio.tv.domain.model.localizedTitle
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -37,6 +43,7 @@ fun PosterOptionsDialog(
     isLibraryPending: Boolean,
     showManageLists: Boolean,
     isMovie: Boolean,
+    isSeries: Boolean = false,
     isWatched: Boolean,
     isWatchedPending: Boolean,
     onDismiss: () -> Unit,
@@ -61,8 +68,8 @@ fun PosterOptionsDialog(
                 .fillMaxWidth()
                 .focusRequester(primaryFocusRequester),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
             )
         ) {
             Text(stringResource(R.string.cw_action_go_to_details))
@@ -73,8 +80,8 @@ fun PosterOptionsDialog(
             enabled = !isLibraryPending,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
             )
         ) {
             Text(
@@ -90,14 +97,14 @@ fun PosterOptionsDialog(
             )
         }
 
-        if (isMovie) {
+        if (isMovie || isSeries) {
             Button(
                 onClick = onToggleWatched,
                 enabled = !isWatchedPending,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
                 )
             ) {
                 Text(
@@ -152,7 +159,7 @@ fun PosterListPickerDialog(
         ) {
             items(tabs, key = { it.key }) { tab ->
                 val selected = membership[tab.key] == true
-                val titleText = if (selected) "✓ ${tab.title}" else tab.title
+                val titleText = if (selected) "✓ ${tab.localizedTitle()}" else tab.localizedTitle()
                 Button(
                     onClick = { onToggle(tab.key) },
                     enabled = !isPending,
@@ -164,8 +171,8 @@ fun PosterListPickerDialog(
                         Modifier.fillMaxWidth()
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = if (selected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
                     )
                 ) {
                     Text(
@@ -177,15 +184,15 @@ fun PosterListPickerDialog(
             }
         }
 
-        Divider(color = NuvioColors.Border, thickness = 1.dp)
+        Divider(color = NuvioTheme.colors.Border, thickness = NuvioTheme.spacing.hairline)
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Button(
                 onClick = onSave,
                 enabled = !isPending,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
                 )
             ) {
                 Text(if (isPending) stringResource(R.string.action_saving) else stringResource(R.string.action_save))
@@ -202,12 +209,17 @@ fun PosterOptionsHost(
 ) {
     val target = state.target
     if (target != null) {
+        val isMovie = target.apiType.equals("movie", ignoreCase = true)
+        val isSeries = target.apiType.equals("series", ignoreCase = true) ||
+            target.apiType.equals("tv", ignoreCase = true) ||
+            target.apiType.equals("anime", ignoreCase = true)
         PosterOptionsDialog(
             title = target.name,
             isInLibrary = state.isInLibrary,
             isLibraryPending = state.isLibraryPending,
-            showManageLists = state.librarySourceMode == LibrarySourceMode.TRAKT,
-            isMovie = target.apiType.equals("movie", ignoreCase = true),
+            showManageLists = state.librarySourceMode != LibrarySourceMode.LOCAL,
+            isMovie = isMovie,
+            isSeries = isSeries,
             isWatched = state.isWatched,
             isWatchedPending = state.isWatchedPending,
             onDismiss = { controller.dismiss() },
@@ -216,7 +228,7 @@ fun PosterOptionsHost(
                 controller.dismiss()
             },
             onToggleLibrary = {
-                if (state.librarySourceMode == LibrarySourceMode.TRAKT) {
+                if (state.librarySourceMode != LibrarySourceMode.LOCAL) {
                     controller.openListPicker()
                 } else {
                     controller.toggleLibrary()
@@ -224,16 +236,29 @@ fun PosterOptionsHost(
                 }
             },
             onToggleWatched = {
-                controller.toggleMovieWatched()
+                if (isMovie) {
+                    controller.toggleMovieWatched()
+                } else {
+                    controller.toggleSeriesWatched()
+                }
                 controller.dismiss()
             }
         )
     }
 
     if (state.listPickerActive) {
+        val localTab = LibraryListTab(
+            key = LOCAL_LIBRARY_LIST_KEY,
+            title = stringResource(R.string.trakt_library_source_nuvio),
+            type = LibraryListTab.Type.WATCHLIST
+        )
+        val contentType = state.listPickerContentType.orEmpty()
+        val destinationTabs = state.libraryListTabs.filter { tab ->
+            tab.supportsMembershipFor(contentType)
+        }
         PosterListPickerDialog(
             title = state.listPickerTitle.orEmpty(),
-            tabs = state.libraryListTabs,
+            tabs = listOf(localTab) + destinationTabs,
             membership = state.listPickerMembership,
             isPending = state.listPickerPending,
             error = state.listPickerError,
@@ -241,5 +266,62 @@ fun PosterOptionsHost(
             onSave = { controller.saveListPicker() },
             onDismiss = { controller.dismissListPicker() }
         )
+    }
+
+    val confirmations = state.removalConfirmations
+    if (confirmations.isNotEmpty()) {
+        TrackingRemovalConfirmationDialog(
+            itemTitle = state.listPickerTitle.orEmpty(),
+            confirmations = confirmations,
+            isPending = state.listPickerPending,
+            onConfirm = controller::confirmDestructiveRemoval,
+            onDismiss = controller::cancelDestructiveRemoval
+        )
+    }
+}
+
+@Composable
+fun TrackingRemovalConfirmationDialog(
+    itemTitle: String,
+    confirmations: List<TrackingMembershipRemovalConfirmation>,
+    isPending: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val providers = confirmations.joinToString { confirmation ->
+        confirmation.providerId.storageId.replaceFirstChar(Char::uppercase)
+    }
+    val impacts = confirmations.flatMapTo(linkedSetOf()) { confirmation -> confirmation.impacts }
+    val impact = when (impacts) {
+        setOf(TrackingMembershipRemovalImpact.WATCHED_HISTORY) ->
+            stringResource(R.string.tracking_removal_impact_history)
+        setOf(TrackingMembershipRemovalImpact.RATING) ->
+            stringResource(R.string.tracking_removal_impact_rating)
+        else -> stringResource(R.string.tracking_removal_impact_history_rating)
+    }
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.tracking_removal_title, providers),
+        subtitle = stringResource(R.string.tracking_removal_message, itemTitle, providers, impact),
+        width = 560.dp,
+        suppressFirstKeyUp = false
+    ) {
+        Button(
+            onClick = onConfirm,
+            enabled = !isPending,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.action_remove_anyway))
+        }
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
+            )
+        ) {
+            Text(stringResource(R.string.action_cancel))
+        }
     }
 }

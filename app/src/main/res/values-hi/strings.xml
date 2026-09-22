@@ -44,12 +44,29 @@
     <string name="continue_watching">देखना जारी रखें</string>
     <string name="cw_upcoming">आने वाला</string>
     <string name="cw_next_up">अगला</string>
+    <string name="cw_next_up_short">अगला</string>
+    <string name="cw_new_episode">नया एपिसोड</string>
+    <string name="cw_new_episode_short">नया</string>
     <string name="cw_resume">जारी रखें</string>
     <string name="cw_percent_watched">%1$d%% देखा गया</string>
     <string name="cw_hours_min_left">%1$dh %2$dm बाकी</string>
     <string name="cw_min_left">%1$dm बाकी</string>
     <string name="cw_almost_done">लगभग पूरा</string>
     <string name="cw_airs_date">%1$s को प्रसारित होगा</string>
+    <string name="cw_airs_today">आज प्रसारित होगा</string>
+    <string name="cw_airs_tomorrow">कल प्रसारित होगा</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">%d दिन में प्रसारित होगा</item>
+        <item quantity="other">%d दिनों में प्रसारित होगा</item>
+    </plurals>
+    <!-- Short versions for compact card styles (wide/poster) -->
+    <string name="cw_airs_date_short">%1$s</string>
+    <string name="cw_airs_today_short">आज</string>
+    <string name="cw_airs_tomorrow_short">कल</string>
+    <plurals name="cw_airs_in_days_short">
+        <item quantity="one">%d दिन में</item>
+        <item quantity="other">%d दिनों में</item>
+    </plurals>
     <string name="cw_action_go_to_details">विवरण देखें</string>
     <string name="cw_action_start_from_beginning">शुरुआत से चलाएँ</string>
     <string name="cw_action_remove">हटाएँ</string>
@@ -216,7 +233,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio हमेशा मुफ्त और ओपन सोर्स रहेगा। यदि आप प्रोजेक्ट का समर्थन करना चाहते हैं, तो आप इसके विकास और इंफ्रास्ट्रक्चर में मदद कर सकते हैं।</string>
     <string name="supporters_contributors_donate_button">Nuvio को डोनेट करें</string>
     <string name="supporters_contributors_qr_title">डोनेट करने के लिए स्कैन करें</string>
-    <string name="supporters_contributors_qr_subtitle">अपने फोन पर लिंक खोलें और Ko-fi के माध्यम से Nuvio को सपोर्ट करें।</string>
+    <string name="supporters_contributors_qr_subtitle">Nuvio को सपोर्ट करने के लिए अपने फोन पर लिंक खोलें।</string>
     <string name="supporters_contributors_qr_hint">QR कोड स्कैन करने के लिए कैमरा इस्तेमाल करें या नीचे दिए बटन का उपयोग करें।</string>
     <string name="supporters_contributors_back_button">डिटेल्स पर वापस जाएँ</string>
     <string name="supporters_tab">समर्थक</string>
@@ -253,8 +270,8 @@
     <string name="playback_player_internal">इंटरनल</string>
     <string name="playback_player_external">एक्सटर्नल</string>
     <string name="playback_player_ask">हर बार पूछें</string>
-    <string name="playback_section_audio">ऑडियो और ट्रेलर</string>
-    <string name="playback_section_audio_desc">ट्रेलर व्यवहार और ऑडियो नियंत्रण।</string>
+    <string name="playback_section_audio">ऑडियो और वीडियो</string>
+    <string name="playback_section_audio_desc">ऑडियो नियंत्रण और वीडियो संगतता।</string>
     <string name="playback_section_subtitles">सबटाइटल</string>
     <string name="playback_section_subtitles_desc">भाषा, स्टाइल और रेंडर मोड।</string>
     <string name="playback_afr_open">खुला</string>
@@ -289,7 +306,6 @@
     <string name="audio_decoder_priority">डिकोडर प्राथमिकता</string>
     <string name="audio_tunneled">टनल्ड प्लेबैक</string>
     <string name="audio_tunneled_sub">हार्डवेयर स्तर का ऑडियो/वीडियो सिंक। कुछ Android TV डिवाइस पर प्लेबैक बेहतर हो सकता है</string>
-    <string name="audio_dv_sub">Dolby Vision Profile 7 को मानक HEVC में मैप करें उन डिवाइस के लिए जिनमें DV हार्डवेयर सपोर्ट नहीं है</string>
     <string name="audio_decoder_device_only_desc">केवल बिल्ट-इन हार्डवेयर डिकोडर का उपयोग करें। सबसे अधिक संगत लेकिन सभी फॉर्मेट सपोर्ट नहीं हो सकते।</string>
     <string name="audio_decoder_prefer_device_desc">जहाँ उपलब्ध हो हार्डवेयर डिकोडर उपयोग करें, अन्यथा FFmpeg पर जाएँ। अधिकांश डिवाइस के लिए अनुशंसित।</string>
     <string name="audio_decoder_prefer_app_desc">जहाँ उपलब्ध हो FFmpeg डिकोडर उपयोग करें। बेहतर फॉर्मेट सपोर्ट लेकिन अधिक CPU उपयोग।</string>
@@ -334,13 +350,6 @@
     <string name="sub_org_none_desc">सबटाइटल को ऐडऑन के डिफ़ॉल्ट परिणाम क्रम में दिखाएँ।</string>
     <string name="sub_org_by_lang_desc">सबटाइटल को भाषा के अनुसार समूहित करें।</string>
     <string name="sub_org_by_addon_desc">सबटाइटल को ऐडऑन स्रोत के अनुसार समूहित करें।</string>
-    <string name="sub_startup_mode_title">ऐडऑन सबटाइटल लोडिंग</string>
-    <string name="sub_startup_mode_fast">तेज़ स्टार्टअप</string>
-    <string name="sub_startup_mode_preferred">पसंदीदा भाषाएँ</string>
-    <string name="sub_startup_mode_all">सभी ऐडऑन सबटाइटल</string>
-    <string name="sub_startup_mode_fast_desc">प्लेबैक तुरंत शुरू करें। ऐडऑन सबटाइटल चुनने पर प्लेयर एक बार फिर से लोड हो सकता है।</string>
-    <string name="sub_startup_mode_preferred_desc">प्लेबैक से पहले ऐडऑन सबटाइटल प्रीफेच करें और पसंदीदा/दूसरी भाषा ट्रैक जोड़ें।</string>
-    <string name="sub_startup_mode_all_desc">प्लेबैक से पहले सभी ऐडऑन सबटाइटल प्रीफेच और जोड़ें। सबसे धीमा स्टार्टअप।</string>
 
     <!-- PlaybackAutoPlaySettings -->
     <string name="autoplay_reuse_last_link">पिछला लिंक फिर उपयोग करें</string>
@@ -446,7 +455,7 @@
     <string name="layout_trailer_muted">म्यूट ट्रेलर चलाएँ</string>
     <string name="layout_trailer_muted_sub_preview">ऑटो-प्ले प्रिव्यू के दौरान ट्रेलर ऑडियो म्यूट करें।</string>
     <string name="layout_trailer_muted_sub_expanded">विस्तारित कार्ड में ट्रेलर ऑडियो म्यूट करें।</string>
-    <string name="layout_section_card_style">पोस्टर कार्ड स्टाइल</string>
+    <string name="layout_section_card_style">पोस्टर कार्ड</string>
     <string name="layout_section_card_style_desc">कार्ड चौड़ाई और कॉर्नर रेडियस समायोजित करें।</string>
     <string name="layout_open">खुला</string>
     <string name="layout_closed">बंद</string>
@@ -856,11 +865,9 @@
 
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">QR से साइन इन</string>
-    <string name="auth_qr_account_login">अकाउंट लॉगिन</string>
     <string name="auth_qr_finishing">साइन इन पूरा किया जा रहा है\u2026</string>
     <string name="auth_qr_code_label">कोड: %1$s</string>
     <string name="auth_qr_expires">%1$s में समाप्त</string>
-    <string name="auth_qr_phone_hint">ईमेल/पासवर्ड से साइन इन करने के लिए फोन का उपयोग करें। तेज लॉगिन के लिए टीवी QR-केवल रहता है।</string>
     <string name="auth_qr_scan_instruction">QR स्कैन करें, ब्राउज़र में अनुमति दें, फिर यहाँ लौटें।</string>
     <string name="auth_qr_code_display">कोड: %1$s</string>
     <string name="auth_qr_refresh">QR रीफ्रेश करें</string>
@@ -995,7 +1002,6 @@
 
     <!-- PlaybackAudioSettings -->
     <string name="audio_passthrough_info">ऑडियो पासथ्रू (TrueHD, DTS, AC-3 आदि) स्वचालित है। HDMI के माध्यम से संगत AV रिसीवर या साउंडबार से जुड़ने पर लॉसलेस ऑडियो बिना डिकोड किए सीधे भेजा जाता है।</string>
-    <string name="audio_dv_title">DV7 - HEVC फ़ॉलबैक</string>
 
     <!-- SidebarNavigation / MainActivity -->
     <string name="nav_home">होम</string>

@@ -21,8 +21,19 @@ data class LibraryEntry(
     val traktRank: Int? = null,
     val imdbId: String? = null,
     val tmdbId: Int? = null,
-    val traktId: Int? = null
-) {
+    val traktId: Int? = null,
+    val simklId: Long? = null,
+    /** Original media category from the tracking provider (e.g. "anime").
+     *  Used for UI filtering while [type] stays as "movie"/"series" for meta addon compatibility. */
+    val mediaCategory: String? = null,
+    val rawPosterUrl: String? = null,
+    override val trackingProviderId: String? = null,
+    override val trackingProviderItemId: String? = null,
+    override val trackingSourceUrl: String? = null
+) : TrackingAttributedItem {
+    override val trackingContentId: String
+        get() = id
+
     fun toMetaPreview(): MetaPreview {
         return MetaPreview(
             id = id,
@@ -36,14 +47,16 @@ data class LibraryEntry(
             description = description,
             releaseInfo = releaseInfo,
             imdbRating = imdbRating,
-            genres = genres
+            genres = genres,
+            rawPosterUrl = rawPosterUrl
         )
     }
 }
 
 enum class LibrarySourceMode {
     LOCAL,
-    TRAKT
+    TRAKT,
+    SIMKL
 }
 
 enum class TraktListPrivacy(val apiValue: String) {
@@ -69,11 +82,16 @@ data class LibraryListTab(
     val description: String? = null,
     val privacy: TraktListPrivacy? = null,
     val sortBy: String? = null,
-    val sortHow: String? = null
+    val sortHow: String? = null,
+    val trackingProviderId: String? = null,
+    val selectionGroup: String? = null,
+    val supportedContentTypes: Set<String>? = null,
+    val isMembershipDestination: Boolean = true
 ) {
     enum class Type {
         WATCHLIST,
-        PERSONAL
+        PERSONAL,
+        STATUS
     }
 }
 
@@ -94,6 +112,7 @@ data class LibraryEntryInput(
     val title: String,
     val year: Int? = null,
     val traktId: Int? = null,
+    val simklId: Long? = null,
     val imdbId: String? = null,
     val tmdbId: Int? = null,
     val poster: String? = null,

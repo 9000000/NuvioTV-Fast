@@ -4,6 +4,7 @@ import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.stableKey
 import kotlinx.coroutines.Job
 
 internal fun HomeViewModel.catalogKey(addonId: String, type: String, catalogId: String): String {
@@ -14,7 +15,40 @@ internal fun HomeViewModel.buildHomeCatalogLoadSignature(addons: List<Addon>): S
     val addonCatalogSignature = addons
         .flatMap { addon ->
             addon.catalogs.map { catalog ->
-                "${addon.id}|${addon.baseUrl}|${catalog.apiType}|${catalog.id}|${catalog.name}|${catalog.showInHome}|${catalog.hasExplicitShowInHome}"
+                val extraSignature = catalog.extra.joinToString(";") { extra ->
+                    listOf(
+                        extra.name,
+                        extra.isRequired.toString(),
+                        extra.options.orEmpty().joinToString("|"),
+                        extra.defaultValue.orEmpty(),
+                        extra.optionsLimit?.toString().orEmpty()
+                    ).joinToString(":")
+                }
+                listOf(
+                    addon.id,
+                    addon.baseUrl,
+                    addon.version,
+                    addon.configVersion?.toString().orEmpty(),
+                    addon.manifestLanguage.orEmpty(),
+                    addon.rawTypes.joinToString("|"),
+                    addon.resources.joinToString("|") { resource ->
+                        listOf(
+                            resource.name,
+                            resource.types.joinToString("/"),
+                            resource.idPrefixes.orEmpty().joinToString("/")
+                        ).joinToString(":")
+                    },
+                    addon.idPrefixes.joinToString("|"),
+                    catalog.apiType,
+                    catalog.id,
+                    catalog.name,
+                    catalog.showInHome.toString(),
+                    catalog.hasExplicitShowInHome.toString(),
+                    catalog.pageSize?.toString().orEmpty(),
+                    catalog.extraSupported.joinToString("|"),
+                    catalog.extraRequired.joinToString("|"),
+                    extraSignature
+                ).joinToString("|")
             }
         }
         .sorted()
@@ -119,10 +153,12 @@ internal fun HomeViewModel.snapshotCatalogState(): Pair<List<String>, Map<String
     catalogOrder.toList() to catalogsMap.toMap()
 }
 
+// A title can be in several rows with different data: prefer the row the user is on.
 internal fun HomeViewModel.findCatalogItemById(itemId: String): MetaPreview? = synchronized(catalogStateLock) {
-    val rowKeys = catalogItemKeyIndex[itemId]?.toList().orEmpty()
-    rowKeys.firstNotNullOfOrNull { key ->
-        catalogsMap[key]?.items?.firstOrNull { it.id == itemId }
+    val rows = catalogItemKeyIndex[itemId]?.toList().orEmpty().mapNotNull { catalogsMap[it] }
+    val focusedRow = liveFocusedRowKey?.let { key -> rows.firstOrNull { it.stableKey() == key } }
+    (listOfNotNull(focusedRow) + rows).firstNotNullOfOrNull { row ->
+        row.items.firstOrNull { it.id == itemId }
     }
 }
 

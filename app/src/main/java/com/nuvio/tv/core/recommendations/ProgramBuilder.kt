@@ -49,8 +49,18 @@ class ProgramBuilder @Inject constructor(
         }
 
         if (progress.duration > 0) {
-            builder.setLastPlaybackPositionMillis(progress.position.toInt())
+            val positionMs = if (progress.position > 0) {
+                progress.position.toInt()
+            } else {
+                (progress.progressPercent?.let { it / 100f * progress.duration }?.toLong() ?: 0L).toInt()
+            }
+            builder.setLastPlaybackPositionMillis(positionMs)
             builder.setDurationMillis(progress.duration.toInt())
+        } else if (progress.progressPercent != null && progress.progressPercent > 0f) {
+            val syntheticDuration = 100_000
+            val syntheticPosition = (progress.progressPercent / 100f * syntheticDuration).toInt()
+            builder.setDurationMillis(syntheticDuration)
+            builder.setLastPlaybackPositionMillis(syntheticPosition)
         }
 
         if (!isMovie) {
@@ -104,7 +114,7 @@ class ProgramBuilder @Inject constructor(
                     )
                     if (idIdx >= 0) {
                         val providerId = it.getString(idIdx)
-                        if (providerId != null && providerId.startsWith("wn_${contentId}")) {
+                        if (watchNextIdMatchesContentId(providerId, contentId)) {
                             val pkIdx = it.getColumnIndex(TvContractCompat.WatchNextPrograms._ID)
                             if (pkIdx >= 0) {
                                 val uri = TvContractCompat.buildWatchNextProgramUri(it.getLong(pkIdx))
@@ -116,6 +126,30 @@ class ProgramBuilder @Inject constructor(
             }
         } catch (_: Exception) {
         }
+    }
+
+    fun getAllWatchNextInternalIds(): Set<String> {
+        val result = mutableSetOf<String>()
+        try {
+            val cursor = context.contentResolver.query(
+                TvContractCompat.WatchNextPrograms.CONTENT_URI,
+                arrayOf(TvContractCompat.WatchNextPrograms.COLUMN_INTERNAL_PROVIDER_ID),
+                null, null, null
+            )
+            cursor?.use {
+                val idIdx = it.getColumnIndex(TvContractCompat.WatchNextPrograms.COLUMN_INTERNAL_PROVIDER_ID)
+                if (idIdx >= 0) {
+                    while (it.moveToNext()) {
+                        val providerId = it.getString(idIdx)
+                        if (providerId?.startsWith("wn_") == true) {
+                            result.add(providerId)
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return result
     }
 
     fun clearAllWatchNextPrograms() {
@@ -194,7 +228,28 @@ class ProgramBuilder @Inject constructor(
                 action = Intent.ACTION_VIEW
                 putExtra("contentId", progress.contentId)
                 putExtra("contentType", progress.contentType)
+                putExtra("videoId", progress.videoId)
+                putExtra("name", progress.name)
+                putExtra("poster", progress.poster)
+                putExtra("backdrop", progress.backdrop)
+                putExtra("logo", progress.logo)
+                progress.season?.let { putExtra("season", it) }
+                progress.episode?.let { putExtra("episode", it) }
+                progress.episodeTitle?.let { putExtra("episodeTitle", it) }
+                putExtra("launchMode", "stream")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }.toUri(Intent.URI_INTENT_SCHEME)
         )
+}
+
+internal fun watchNextIdMatchesContentId(providerId: String?, contentId: String): Boolean {
+    val baseId = "wn_$contentId"
+    if (providerId == baseId) return true
+    if (providerId?.startsWith("${baseId}_s") != true) return false
+
+    val episodeSeparator = providerId.indexOf('e', startIndex = baseId.length + 2)
+    return episodeSeparator > baseId.length + 2 &&
+        episodeSeparator < providerId.lastIndex &&
+        (baseId.length + 2 until episodeSeparator).all { providerId[it].isDigit() } &&
+        (episodeSeparator + 1..providerId.lastIndex).all { providerId[it].isDigit() }
 }

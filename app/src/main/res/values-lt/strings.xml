@@ -50,6 +50,14 @@
     <string name="cw_min_left">Liko %1$dm</string>
     <string name="cw_almost_done">Beveik baigta</string>
     <string name="cw_airs_date">Pasirodo %1$s</string>
+    <string name="cw_airs_today">Pasirodo šiandien</string>
+    <string name="cw_airs_tomorrow">Pasirodo rytoj</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Pasirodo po %d dienos</item>
+        <item quantity="few">Pasirodo po %d dienų</item>
+        <item quantity="many">Pasirodo po %d dienos</item>
+        <item quantity="other">Pasirodo po %d dienų</item>
+    </plurals>
     <string name="cw_action_go_to_details">Eiti į informaciją</string>
     <string name="cw_action_start_from_beginning">Pradėti iš pradžių</string>
     <string name="cw_action_remove">Pašalinti</string>
@@ -216,7 +224,7 @@
     <string name="supporters_contributors_donate_copy">„Nuvio“ išliks nemokama ir atviro kodo sistema. Jei norite paremti projektą, galite padėti padengti laiką ir infrastruktūrą už jo.</string>
     <string name="supporters_contributors_donate_button">Paaukoti „Nuvio“</string>
     <string name="supporters_contributors_qr_title">Skenuoti, kad paaukotumėte</string>
-    <string name="supporters_contributors_qr_subtitle">Atidarykite nuorodą telefone ir paremkite „Nuvio“ per „Ko-fi“.</string>
+    <string name="supporters_contributors_qr_subtitle">Atidarykite nuorodą telefone ir paremkite „Nuvio“.</string>
     <string name="supporters_contributors_qr_hint">Nukreipkite kamerą į QR kodą arba naudokite žemiau esantį mygtuką.</string>
     <string name="supporters_contributors_back_button">Grįžti į informaciją</string>
     <string name="supporters_tab">Rėmėjai</string>
@@ -253,8 +261,8 @@
     <string name="playback_player_internal">Vidinis</string>
     <string name="playback_player_external">Išorinis</string>
     <string name="playback_player_ask">Klausti kiekvieną kartą</string>
-    <string name="playback_section_audio">Garsas ir anonsas</string>
-    <string name="playback_section_audio_desc">Anonso elgsena ir garso valdikliai.</string>
+    <string name="playback_section_audio">Garsas ir vaizdo įrašas</string>
+    <string name="playback_section_audio_desc">Garso valdikliai ir vaizdo suderinamumas.</string>
     <string name="playback_section_subtitles">Subtitrai</string>
     <string name="playback_section_subtitles_desc">Kalba, stilius ir atvaizdavimo režimas.</string>
     <string name="playback_afr_open">Atidaryti</string>
@@ -289,7 +297,6 @@
     <string name="audio_decoder_priority">Dekoderio prioritetas</string>
     <string name="audio_tunneled">Tunelinis atkūrimas (Tunneled Playback)</string>
     <string name="audio_tunneled_sub">Aparatūros lygio garso / vaizdo sinchronizavimas. Gali pagerinti atkūrimą kai kuriuose „Android TV“ įrenginiuose.</string>
-    <string name="audio_dv_sub">Susieti „Dolby Vision 7“ profilį su standartiniu HEVC įrenginiams be DV aparatūros palaikymo</string>
     <string name="audio_decoder_device_only_desc">Naudoti tik integruotus aparatūros dekoderius. Labiausiai suderinama, bet gali palaikyti ne visus formatus.</string>
     <string name="audio_decoder_prefer_device_desc">Naudoti aparatūros dekoderius, kai jie prieinami, kitu atveju — FFmpeg. Rekomenduojama daugumai įrenginių.</string>
     <string name="audio_decoder_prefer_app_desc">Naudoti FFmpeg dekoderius, kai jie prieinami. Geresnis formatų palaikymas, bet didesnis CPU naudojimas.</string>
@@ -334,13 +341,6 @@
     <string name="sub_org_none_desc">Rodyti subtitrus numatytąja priedo rezultato tvarka.</string>
     <string name="sub_org_by_lang_desc">Grupuoti subtitrus pagal kalbą.</string>
     <string name="sub_org_by_addon_desc">Grupuoti subtitrus pagal priedą.</string>
-    <string name="sub_startup_mode_title">Priedo subtitrų įkėlimas</string>
-    <string name="sub_startup_mode_fast">Greitas paleidimas</string>
-    <string name="sub_startup_mode_preferred">Pageidaujamos kalbos</string>
-    <string name="sub_startup_mode_all">Visi priedo subtitrai</string>
-    <string name="sub_startup_mode_fast_desc">Pradėti atkūrimą nedelsiant. Pasirinkus priedo subtitrus, grotuvas gali vieną kartą persikrauti.</string>
-    <string name="sub_startup_mode_preferred_desc">Iš anksto įkelti priedų subtitrus prieš atkūrimą ir prijungti pageidaujamos/antrinės kalbos takelius.</string>
-    <string name="sub_startup_mode_all_desc">Iš anksto įkelti ir prijungti visus priedų subtitrus prieš atkūrimą. Lėčiausias paleidimas.</string>
 
     <!-- PlaybackAutoPlaySettings -->
     <string name="autoplay_reuse_last_link">Naudoti paskutinę nuorodą</string>
@@ -446,7 +446,7 @@
     <string name="layout_trailer_muted">Paleisti anonsą be garso</string>
     <string name="layout_trailer_muted_sub_preview">Nutildyti anonso garsą automatinio paleidimo peržiūros metu.</string>
     <string name="layout_trailer_muted_sub_expanded">Nutildyti anonso garsą išskleistose kortelėse.</string>
-    <string name="layout_section_card_style">Plakato kortelės stilius</string>
+    <string name="layout_section_card_style">Plakato kortelė</string>
     <string name="layout_section_card_style_desc">Reguliuoti kortelės plotį ir kampo spindulį.</string>
     <string name="layout_open">Atidaryta</string>
     <string name="layout_closed">Uždaryta</string>
@@ -867,11 +867,9 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
 
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Prisijungti per telefoną</string>
-    <string name="auth_qr_account_login">Paskyros prisijungimas</string>
     <string name="auth_qr_finishing">Užbaigiama…</string>
     <string name="auth_qr_code_label">Skenuokite QR kodą</string>
     <string name="auth_qr_expires">Kodas baigsis po %1$d s</string>
-    <string name="auth_qr_phone_hint">Naudokite savo telefoną sinchronizavimui</string>
     <string name="auth_qr_scan_instruction">Nukreipkite kamerą į kodą</string>
     <string name="auth_qr_code_display">QR kodo rodymas</string>
     <string name="auth_qr_refresh">Atnaujinti kodą</string>
@@ -1006,7 +1004,6 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
 
     <!-- PlaybackAudioSettings -->
     <string name="audio_passthrough_info">Garso pralaidumas tiesiogiai į jūsų garso sistemą</string>
-    <string name="audio_dv_title">„Dolby Vision“ apdorojimas</string>
 
     <!-- SidebarNavigation / MainActivity -->
     <string name="nav_home">Pagrindinis</string>

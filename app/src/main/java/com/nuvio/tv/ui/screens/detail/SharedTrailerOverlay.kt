@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.detail
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -42,7 +44,6 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.TrailerPlayer
-import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 import android.view.KeyEvent
 
@@ -192,7 +193,7 @@ fun SharedTrailerOverlay(
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(horizontal = 32.dp, vertical = 24.dp),
+                    .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
@@ -220,9 +221,9 @@ fun SharedTrailerOverlay(
                 Column(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .padding(horizontal = 32.dp),
+                        .padding(horizontal = NuvioTheme.spacing.xxl),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
                 ) {
                     Text(
                         text = errorMessage,
@@ -279,41 +280,45 @@ fun TrailerSeekOverlay(
         label = "trailerSeekProgress"
     )
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 32.dp, vertical = 24.dp)
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Color.White.copy(alpha = 0.3f))
+                .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl)
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animatedProgress)
+                    .fillMaxWidth()
+                    .height(6.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(NuvioColors.Secondary)
-            )
+                    .background(Color.White.copy(alpha = 0.3f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(animatedProgress)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(NuvioTheme.colors.Secondary)
+                )
+            }
+    
+            Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
+    
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${formatPlaybackTime(currentPosition)} / ${formatPlaybackTime(duration)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+            }
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${formatPlaybackTime(currentPosition)} / ${formatPlaybackTime(duration)}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.9f)
-            )
-        }
-    }
+    }  
 }
 
 fun formatPlaybackTime(milliseconds: Long): String {

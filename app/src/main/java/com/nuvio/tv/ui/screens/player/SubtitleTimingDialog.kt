@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,10 +34,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
 import androidx.tv.material3.Border
@@ -54,8 +59,8 @@ private enum class SyncStage {
 }
 
 private const val VISIBLE_CUE_ROWS = 6
-private val CUE_ROW_HEIGHT = 56.dp
-private val CUE_ROW_SPACING = 8.dp
+private val CUE_ROW_HEIGHT = NuvioTheme.spacing.huge
+private val CUE_ROW_SPACING = NuvioTheme.spacing.sm
 private val ASS_OVERRIDE_TAG_REGEX = Regex("""\{\\[^{}]*\}""")
 
 @Composable
@@ -101,7 +106,7 @@ internal fun SubtitleTimingDialog(
     Box(
         modifier = modifier
             .fillMaxWidth(if (stage == SyncStage.PICK_LINE) 0.94f else 0.6f)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(NuvioTheme.spacing.xl))
             .background(
                 if (stage == SyncStage.PICK_LINE) {
                     Color(0x2E090909)
@@ -171,7 +176,7 @@ private fun SyncPromptPanel(
                 text = stringResource(R.string.subtitle_timing_sync_button),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = Color.White,
-                modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp)
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = NuvioTheme.spacing.md)
             )
         }
     }
@@ -208,7 +213,7 @@ private fun CueSelectionPanel(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -271,7 +276,7 @@ private fun CueSelectionPanel(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    LoadingIndicator(modifier = Modifier.size(24.dp))
+                    LoadingIndicator(modifier = Modifier.size(NuvioTheme.spacing.xl))
                     Text(
                         text = stringResource(R.string.subtitle_timing_loading),
                         style = MaterialTheme.typography.bodyMedium,
@@ -295,15 +300,15 @@ private fun CueSelectionPanel(
             modifier = Modifier.height(
                 (CUE_ROW_HEIGHT * VISIBLE_CUE_ROWS) +
                     (CUE_ROW_SPACING * (VISIBLE_CUE_ROWS - 1)) +
-                    8.dp
+                    NuvioTheme.spacing.sm
             ),
             state = cueListState,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs),
             verticalArrangement = Arrangement.spacedBy(CUE_ROW_SPACING)
         ) {
             itemsIndexed(
                 items = cues,
-                key = { _, cue -> "${cue.startTimeMs}:${cue.text.hashCode()}" }
+                key = { index, cue -> subtitleCueListItemKey(index, cue) }
             ) { index, cue ->
                 CueRow(
                     cue = cue,
@@ -347,15 +352,15 @@ private fun CueRow(
             },
             focusedContainerColor = focusedContainer
         ),
-        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+        shape = CardDefaults.shape(RoundedCornerShape(NuvioTheme.radii.md)),
         border = CardDefaults.border(
             border = Border(
-                border = BorderStroke(1.dp, Color.Transparent),
-                shape = RoundedCornerShape(12.dp)
+                border = BorderStroke(NuvioTheme.spacing.hairline, Color.Transparent),
+                shape = RoundedCornerShape(NuvioTheme.radii.md)
             ),
             focusedBorder = Border(
-                border = BorderStroke(1.dp, Color.Transparent),
-                shape = RoundedCornerShape(12.dp)
+                border = BorderStroke(NuvioTheme.spacing.hairline, Color.Transparent),
+                shape = RoundedCornerShape(NuvioTheme.radii.md)
             )
         ),
         scale = CardDefaults.scale(focusedScale = 1.015f, pressedScale = 1f)
@@ -364,8 +369,8 @@ private fun CueRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(rowHeight)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = NuvioTheme.spacing.lg, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
             verticalAlignment = Alignment.Top
         ) {
             Text(
@@ -374,13 +379,15 @@ private fun CueRow(
                 color = if (isFocused) focusedTextColor.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.78f),
                 modifier = Modifier.width(72.dp)
             )
-            Text(
-                text = sanitizeCuePreviewText(cue.text),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isFocused) focusedTextColor else Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Text(
+                    text = sanitizeCuePreviewText(cue.text),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isFocused) focusedTextColor else Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -396,7 +403,11 @@ private fun sanitizeCuePreviewText(text: String): String {
     return if (cleaned.isNotBlank()) cleaned else text.trim()
 }
 
-private fun selectAutoSyncVisibleCues(
+internal fun subtitleCueListItemKey(index: Int, cue: SubtitleSyncCue): String {
+    return "$index:${cue.startTimeMs}:${cue.endTimeMs}:${cue.text.hashCode()}"
+}
+
+internal fun selectAutoSyncVisibleCues(
     cues: List<SubtitleSyncCue>,
     anchorTimeMs: Long,
     marginMs: Long = 180_000L,

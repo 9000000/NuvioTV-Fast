@@ -4,19 +4,21 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.R
 import com.nuvio.tv.updater.model.AppUpdate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import javax.inject.Inject
 
 data class UpdateUiState(
     val isChecking: Boolean = false,
@@ -25,10 +27,12 @@ data class UpdateUiState(
     val isDownloading: Boolean = false,
     val downloadProgress: Float? = null,
     val downloadedApkPath: String? = null,
-    val showDialog: Boolean = false,
-    val showNoUpdateToastHint: Boolean = false,
+    val showBanner: Boolean = false,
     val showUnknownSourcesDialog: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val feedbackMessage: String? = null,
+    val updateBannerEnabled: Boolean = true,
+    val updateChannel: UpdateChannel = UpdateChannel.STABLE
 )
 
 @HiltViewModel
@@ -41,60 +45,178 @@ class UpdateViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(UpdateUiState())
     val uiState: StateFlow<UpdateUiState> = _uiState.asStateFlow()
+    private var updateCheckJob: Job? = null
 
     init {
-        // Lightweight check on app start.
-        checkForUpdates(force = false, showNoUpdateFeedback = false)
+        viewModelScope.launch {
+            val enabled = updatePreferences.updateBannerEnabled.first()
+            val channel = updatePreferences.getOrInitializeUpdateChannel()
+            _uiState.update {
+                it.copy(
+                    updateBannerEnabled = enabled,
+                    updateChannel = channel
+                )
+            }
+            if (enabled && !BuildConfig.IS_DEBUG_BUILD) {
+                checkForUpdates(force = false, showNoUpdateFeedback = false)
+            }
+        }
     }
 
     fun checkForUpdates(force: Boolean, showNoUpdateFeedback: Boolean) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isChecking = true, errorMessage = null, showNoUpdateToastHint = false) }
+        if (!force && !_uiState.value.updateBannerEnabled) return
 
-            val ignoredTag = updatePreferences.ignoredTag.first()
+        updateCheckJob?.cancel()
+        updateCheckJob = viewModelScope.launch {
+            val channel = _uiState.value.updateChannel
+            _uiState.update {
+                it.copy(
+                    isChecking = true,
+                    showBanner = false,
+                    showUnknownSourcesDialog = false,
+                    errorMessage = null,
+                    feedbackMessage = null
+                )
+            }
 
-            val result = updateRepository.getLatestUpdate()
+            val dismissedTag = updatePreferences.ignoredTag.first()
+            val result = updateRepository.getLatestUpdate(channel)
             updatePreferences.setLastCheckAtMs(System.currentTimeMillis())
 
             result
                 .onSuccess { update ->
                     val remoteNewer = VersionUtils.isRemoteNewer(update.tag, BuildConfig.VERSION_NAME)
-                    val shouldShow = remoteNewer && (ignoredTag == null || ignoredTag != update.tag)
+                    val shouldShow = UpdateBannerPolicy.shouldShow(
+                        isRemoteNewer = remoteNewer,
+                        force = force,
+                        bannerEnabled = _uiState.value.updateBannerEnabled,
+                        dismissedTag = dismissedTag,
+                        updateTag = update.tag
+                    )
 
-                    _uiState.update {
-                        it.copy(
+                    _uiState.update { state ->
+                        state.copy(
                             isChecking = false,
-                            update = update,
+                            update = update.takeIf { remoteNewer },
                             isUpdateAvailable = remoteNewer,
-                            showDialog = shouldShow || force,
-                            showNoUpdateToastHint = showNoUpdateFeedback && !remoteNewer,
-                            errorMessage = null
+                            isDownloading = false,
+                            downloadProgress = null,
+                            downloadedApkPath = state.downloadedApkPath.takeIf {
+                                remoteNewer && state.update?.tag == update.tag
+                            },
+                            showBanner = shouldShow,
+                            showUnknownSourcesDialog = false,
+                            errorMessage = null,
+                            feedbackMessage = if (showNoUpdateFeedback && !remoteNewer) {
+                                noUpdateFeedback(channel)
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
-                .onFailure { e ->
+                .onFailure { error ->
                     _uiState.update {
                         it.copy(
                             isChecking = false,
                             update = null,
                             isUpdateAvailable = false,
-                            showDialog = force, // show error dialog if user forced a check
-                            errorMessage = e.message ?: "Update check failed"
+                            isDownloading = false,
+                            downloadProgress = null,
+                            downloadedApkPath = null,
+                            showBanner = false,
+                            showUnknownSourcesDialog = false,
+                            errorMessage = null,
+                            feedbackMessage = if (showNoUpdateFeedback) {
+                                if (error is NoEligibleUpdateException) {
+                                    noUpdateFeedback(channel)
+                                } else {
+                                    error.message ?: context.getString(R.string.update_error_check_failed)
+                                }
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
         }
     }
 
-    fun dismissDialog() {
-        _uiState.update { it.copy(showDialog = false, showUnknownSourcesDialog = false, errorMessage = null) }
+    private fun noUpdateFeedback(channel: UpdateChannel): String =
+        if (channel == UpdateChannel.STABLE && VersionUtils.isPrerelease(BuildConfig.VERSION_NAME)) {
+            context.getString(R.string.update_waiting_for_stable)
+        } else {
+            context.getString(R.string.update_latest_version)
+        }
+
+    fun dismissBanner() {
+        val state = _uiState.value
+        _uiState.update {
+            it.copy(
+                showBanner = false,
+                showUnknownSourcesDialog = false,
+                errorMessage = null
+            )
+        }
+        val tag = state.update?.tag
+        if (tag != null) {
+            viewModelScope.launch {
+                updatePreferences.setIgnoredTag(tag)
+            }
+        }
     }
 
-    fun ignoreThisVersion() {
+    fun dismissUnknownSourcesDialog() {
+        _uiState.update { it.copy(showUnknownSourcesDialog = false) }
+    }
+
+    fun consumeFeedbackMessage() {
+        _uiState.update { it.copy(feedbackMessage = null) }
+    }
+
+    fun setUpdateBannerEnabled(enabled: Boolean) {
+        val changed = _uiState.value.updateBannerEnabled != enabled
+        _uiState.update {
+            it.copy(
+                updateBannerEnabled = enabled,
+                showBanner = if (enabled) it.showBanner else false,
+                showUnknownSourcesDialog = if (enabled) it.showUnknownSourcesDialog else false
+            )
+        }
         viewModelScope.launch {
-            val tag = _uiState.value.update?.tag
-            updatePreferences.setIgnoredTag(tag)
-            _uiState.update { it.copy(showDialog = false) }
+            updatePreferences.setUpdateBannerEnabled(enabled)
+            if (enabled && changed && !BuildConfig.IS_DEBUG_BUILD) {
+                checkForUpdates(force = false, showNoUpdateFeedback = false)
+            }
+        }
+    }
+
+    fun setUpdateChannel(channel: UpdateChannel) {
+        val state = _uiState.value
+        if (state.updateChannel == channel) return
+
+        updateCheckJob?.cancel()
+        state.downloadedApkPath?.let { File(it).delete() }
+        _uiState.update {
+            it.copy(
+                updateChannel = channel,
+                isChecking = false,
+                update = null,
+                isUpdateAvailable = false,
+                isDownloading = false,
+                downloadProgress = null,
+                downloadedApkPath = null,
+                showBanner = false,
+                showUnknownSourcesDialog = false,
+                errorMessage = null,
+                feedbackMessage = null
+            )
+        }
+        viewModelScope.launch {
+            updatePreferences.setUpdateChannel(channel)
+            if (!BuildConfig.IS_DEBUG_BUILD) {
+                checkForUpdates(force = true, showNoUpdateFeedback = false)
+            }
         }
     }
 
@@ -102,13 +224,18 @@ class UpdateViewModel @Inject constructor(
         val update = _uiState.value.update ?: return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isDownloading = true, downloadProgress = 0f, errorMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isDownloading = true,
+                    downloadProgress = 0f,
+                    errorMessage = null
+                )
+            }
 
             val safeName = update.assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-            val dest = File(File(context.cacheDir, "updates"), safeName)
-
+            val destination = File(File(context.cacheDir, "updates"), safeName)
             val result = withContext(Dispatchers.IO) {
-                apkDownloader.download(update.assetUrl, dest) { downloaded, total ->
+                apkDownloader.download(update.assetUrl, destination) { downloaded, total ->
                     val progress = if (total != null && total > 0) {
                         (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f)
                     } else {
@@ -123,22 +250,21 @@ class UpdateViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isDownloading = false,
-                            downloadProgress = 1f,
+                            downloadProgress = null,
                             downloadedApkPath = file.absolutePath,
                             errorMessage = null
                         )
                     }
-                    // Auto-start installation flow immediately after successful download.
-                    // If unknown sources permission is missing, this will surface the settings prompt.
                     installUpdateOrRequestPermission()
                 }
-                .onFailure { e ->
+                .onFailure { error ->
                     _uiState.update {
                         it.copy(
                             isDownloading = false,
                             downloadProgress = null,
                             downloadedApkPath = null,
-                            errorMessage = e.message ?: "Download failed"
+                            errorMessage = error.message ?: context.getString(R.string.update_error_download_failed),
+                            showBanner = true
                         )
                     }
                 }
@@ -149,12 +275,17 @@ class UpdateViewModel @Inject constructor(
         val apkPath = _uiState.value.downloadedApkPath ?: return
         val apkFile = File(apkPath)
         if (!apkFile.exists()) {
-            _uiState.update { it.copy(errorMessage = "Downloaded file is missing") }
+            _uiState.update {
+                it.copy(
+                    errorMessage = context.getString(R.string.update_error_apk_missing),
+                    showBanner = true
+                )
+            }
             return
         }
 
         if (!ApkInstaller.canRequestPackageInstalls(context)) {
-            _uiState.update { it.copy(showUnknownSourcesDialog = true) }
+            _uiState.update { it.copy(showUnknownSourcesDialog = true, showBanner = true) }
             return
         }
 
@@ -163,8 +294,6 @@ class UpdateViewModel @Inject constructor(
     }
 
     fun openUnknownSourcesSettings() {
-        ApkInstaller.buildUnknownSourcesSettingsIntent(context)?.let { intent ->
-            context.startActivity(intent)
-        }
+        ApkInstaller.buildUnknownSourcesSettingsIntent(context)?.let(context::startActivity)
     }
 }

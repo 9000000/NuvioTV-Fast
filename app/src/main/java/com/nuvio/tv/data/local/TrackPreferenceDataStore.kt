@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.local
 
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nuvio.tv.core.profile.ProfileManager
@@ -19,6 +20,7 @@ class TrackPreferenceDataStore @Inject constructor(
         private const val SUB_LANG = "sub_lang"
         private const val SUB_NAME = "sub_name"
         private const val SUB_TRACK_ID = "sub_track_id"
+        private const val SUB_IS_FORCED = "sub_is_forced"
         private const val SUB_ADDON_ID = "sub_addon_id"
         private const val SUB_ADDON_URL = "sub_addon_url"
         private const val SUB_ADDON_NAME = "sub_addon_name"
@@ -29,6 +31,7 @@ class TrackPreferenceDataStore @Inject constructor(
         // one episode is not blindly reapplied to the next episode where it is
         // almost certainly wrong.
         private const val SUB_DELAY_MS = "sub_delay_ms"
+        private const val PLAYBACK_SPEED = "playback_speed"
     }
 
     private fun store() = factory.get(profileManager.activeProfileId.value, FEATURE)
@@ -38,6 +41,9 @@ class TrackPreferenceDataStore @Inject constructor(
 
     private fun intKey(field: String, id: String) =
         intPreferencesKey("$field|$id")
+
+    private fun floatKey(field: String, id: String) =
+        floatPreferencesKey("$field|$id")
 
     suspend fun save(contentId: String, pref: PersistedTrackPreference) {
         store().edit { prefs ->
@@ -49,6 +55,7 @@ class TrackPreferenceDataStore @Inject constructor(
             set(SUB_LANG, pref.subtitleLanguage)
             set(SUB_NAME, pref.subtitleName)
             set(SUB_TRACK_ID, pref.subtitleTrackId)
+            set(SUB_IS_FORCED, pref.subtitleIsForced?.toString())
             set(SUB_ADDON_ID, pref.addonSubtitleId)
             set(SUB_ADDON_URL, pref.addonSubtitleUrl)
             set(SUB_ADDON_NAME, pref.addonSubtitleAddonName)
@@ -75,6 +82,7 @@ class TrackPreferenceDataStore @Inject constructor(
             subtitleLanguage = prefs[key(SUB_LANG, contentId)],
             subtitleName = prefs[key(SUB_NAME, contentId)],
             subtitleTrackId = prefs[key(SUB_TRACK_ID, contentId)],
+            subtitleIsForced = prefs[key(SUB_IS_FORCED, contentId)]?.toBooleanStrictOrNull(),
             addonSubtitleId = prefs[key(SUB_ADDON_ID, contentId)],
             addonSubtitleUrl = prefs[key(SUB_ADDON_URL, contentId)],
             addonSubtitleAddonName = prefs[key(SUB_ADDON_NAME, contentId)],
@@ -101,6 +109,17 @@ class TrackPreferenceDataStore @Inject constructor(
     suspend fun loadSubtitleDelayMs(videoId: String): Int? {
         return store().data.first()[intKey(SUB_DELAY_MS, videoId)]
     }
+
+    suspend fun savePlaybackSpeed(contentId: String, speed: Float?) {
+        store().edit { prefs ->
+            val k = floatKey(PLAYBACK_SPEED, contentId)
+            if (speed != null && speed != 1f) prefs[k] = speed else prefs.remove(k)
+        }
+    }
+
+    suspend fun loadPlaybackSpeed(contentId: String): Float? {
+        return store().data.first()[floatKey(PLAYBACK_SPEED, contentId)]
+    }
 }
 
 data class PersistedTrackPreference(
@@ -108,6 +127,7 @@ data class PersistedTrackPreference(
     val subtitleLanguage: String?,
     val subtitleName: String?,
     val subtitleTrackId: String?,
+    val subtitleIsForced: Boolean? = null,
     val addonSubtitleId: String?,
     val addonSubtitleUrl: String?,
     val addonSubtitleAddonName: String?,
@@ -130,7 +150,8 @@ internal fun PersistedTrackPreference.toTrackPreference(): com.nuvio.tv.ui.scree
             track = com.nuvio.tv.ui.screens.player.PlayerRuntimeController.RememberedTrackSelection(
                 language = subtitleLanguage,
                 name = subtitleName,
-                trackId = subtitleTrackId
+                trackId = subtitleTrackId,
+                isForcedHint = subtitleIsForced
             )
         )
         "ADDON" -> com.nuvio.tv.ui.screens.player.PlayerRuntimeController.RememberedSubtitleSelection.Addon(

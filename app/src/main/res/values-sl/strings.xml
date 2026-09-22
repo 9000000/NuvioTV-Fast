@@ -148,6 +148,14 @@
     <string name="cw_min_left">Še %1$dm</string>
     <string name="cw_almost_done">Skoraj pri koncu</string>														  												  
     <string name="cw_airs_date">Na sporedu %1$s</string>
+    <string name="cw_airs_today">Na sporedu danes</string>
+    <string name="cw_airs_tomorrow">Na sporedu jutri</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Na sporedu čez %d dan</item>
+        <item quantity="two">Na sporedu čez %d dneva</item>
+        <item quantity="few">Na sporedu čez %d dni</item>
+        <item quantity="other">Na sporedu čez %d dni</item>
+    </plurals>
     <string name="cw_action_go_to_details">Pojdi na podrobnosti</string>
     <string name="cw_action_start_from_beginning">Začni od začetka</string>											   
 	<string name="cw_action_remove">Odstrani</string>											   
@@ -489,7 +497,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio bo ostal brezplačen in odprtokoden. Če želite podpreti projekt, lahko pomagate pokriti porabljen čas in infrastrukturo, ki stoji za njim.</string>
     <string name="supporters_contributors_donate_button">Donirajte za Nuvio</string>
     <string name="supporters_contributors_qr_title">Skenirajte za donacijo</string>
-    <string name="supporters_contributors_qr_subtitle">Odprite povezavo na telefonu in podprite Nuvio prek Ko-fi.</string>
+    <string name="supporters_contributors_qr_subtitle">Odprite povezavo v telefonu in podprite Nuvio.</string>
     <string name="supporters_contributors_qr_hint">Usmerite kamero v QR kodo ali uporabite spodnji gumb.</string>
     <string name="supporters_contributors_back_button">Nazaj na podrobnosti</string>
     <string name="supporters_tab">Podporniki</string>
@@ -545,8 +553,8 @@
     <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
     <string name="playback_auto_switch_internal_player_on_error">Samodejno preklopi predvajalnik ob napaki pri zagonu</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Če zagon vira ne uspe, samodejno preklopi med ExoPlayer in libmpv.</string>																	   
-	<string name="playback_section_audio">Zvok in napovednik</string>
-    <string name="playback_section_audio_desc">Obnašanje napovednika in kontrole zvoka.</string>
+	<string name="playback_section_audio">Zvok in video</string>
+    <string name="playback_section_audio_desc">Kontrole zvoka in združljivost videa.</string>
     <string name="playback_section_subtitles">Podnapisi</string>
     <string name="playback_section_subtitles_desc">Jezik, slog in način izrisa.</string>
     <string name="playback_afr_open">Razširjeno</string>
@@ -596,7 +604,6 @@
     <string name="audio_decoder_priority">Prioriteta dekoderja</string>
     <string name="audio_tunneled">Tunelirano predvajanje</string>
     <string name="audio_tunneled_sub">Strojna sinhronizacija zvoka/videa. Lahko izboljša predvajanje na nekaterih napravah Android TV</string>
-    <string name="audio_dv_sub">Preslikaj Dolby Vision Profile 7 v standardni HEVC za naprave brez strojne podpore DV</string>
     <string name="audio_mpv_hwdec_title">Strojno dekodiranje (samo MPV)</string>
     <string name="audio_mpv_hwdec_dialog_subtitle">Izberite, kako naj libmpv uporablja strojne dekoderje.</string>
     <string name="audio_mpv_hwdec_legacy_direct_copy">Podedovano (direct -&gt; copy)</string>
@@ -653,13 +660,6 @@
     <string name="sub_org_none_desc">Prikaži podnapise v privzetem vrstnem redu dodatka.</string>
     <string name="sub_org_by_lang_desc">Združi podnapise po jeziku.</string>
     <string name="sub_org_by_addon_desc">Združi podnapise po viru dodatka.</string>
-	<string name="sub_startup_mode_title">Nalaganje podnapisov iz dodatkov</string>
-    <string name="sub_startup_mode_fast">Hiter zagon</string>
-    <string name="sub_startup_mode_preferred">Prednostni jeziki</string>
-    <string name="sub_startup_mode_all">Vsi podnapisi iz dodatkov</string>
-    <string name="sub_startup_mode_fast_desc">Takoj začni predvajanje. Izbira podnapisov iz dodatkov lahko enkrat znova naloži predvajalnik.</string>
-    <string name="sub_startup_mode_preferred_desc">Predhodno prenesi podnapise iz dodatkov pred predvajanjem in priloži sledi v prednostnem/sekundarnem jeziku.</string>
-    <string name="sub_startup_mode_all_desc">Predhodno prenesi in priloži vse podnapise iz dodatkov pred predvajanjem. Najpočasnejši zagon.</string>																	 
     <!-- PlaybackAutoPlaySettings -->
     <string name="autoplay_reuse_last_link">Ponovno uporabi zadnjo povezavo</string>
     <string name="autoplay_reuse_last_link_sub">Samodejno predvajaj zadnji delujoči prenos za isti film/epizodo, ko je predpomnilnik še veljaven</string>
@@ -796,7 +796,7 @@
     <string name="layout_trailer_muted">Predvajaj napovednik brez zvoka</string>
     <string name="layout_trailer_muted_sub_preview">Utišaj zvok napovednika med samodejnim predogledom.</string>
     <string name="layout_trailer_muted_sub_expanded">Utišaj zvok napovednika v razširjenih karticah.</string>
-    <string name="layout_section_card_style">Slog kartice plakata</string>
+    <string name="layout_section_card_style">Kartica plakata</string>
     <string name="layout_section_card_style_desc">Prilagodite širino kartice in radij vogalov.</string>
     <string name="layout_open">Razširjeno</string>
     <string name="layout_closed">Strnjeno</string>
@@ -1411,11 +1411,9 @@
     <string name="auth_signin_qr_btn">Nadaljuj s QR</string>
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Prijava s QR kodo</string>
-    <string name="auth_qr_account_login">Prijava v račun</string>
     <string name="auth_qr_finishing">Dokončanje prijave\u2026</string>
     <string name="auth_qr_code_label">Koda: %1$s</string>
     <string name="auth_qr_expires">Poteče v %1$s</string>
-	<string name="auth_qr_phone_hint">Uporabite telefon za prijavo z e-pošto/geslom. TV ostane na QR-prijavi za hitrejšo prijavo.</string>
     <string name="auth_qr_scan_instruction">Skenirajte QR kodo, potrdite v brskalniku in se nato vrnite sem.</string>
     <string name="auth_qr_code_display">Koda: %1$s</string>
     <string name="auth_qr_refresh">Osveži QR kodo</string>
@@ -1551,6 +1549,7 @@
     <!-- PlaybackAudioSettings -->
     <string name="audio_passthrough_info">Prehod zvoka (TrueHD, DTS, AC-3 itd.) je samodejen. Ob povezavi z združljivim AV sprejemnikom ali zvočno vrstico prek HDMI se zvok brez izgub pošlje nespremenjen, brez dekodiranja.</string>
     <string name="audio_dv_title">DV7 - HEVC Rezerva</string>
+
     <!-- SidebarNavigation / MainActivity -->
     <string name="nav_home">Domov</string>
     <string name="nav_discover">Odkrij</string>

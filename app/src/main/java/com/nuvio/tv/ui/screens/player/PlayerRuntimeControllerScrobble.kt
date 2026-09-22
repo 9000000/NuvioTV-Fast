@@ -1,8 +1,10 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import com.nuvio.tv.data.local.toTrackPreference
 
 internal fun PlayerRuntimeController.preparePlaybackBeforeStart(
@@ -10,15 +12,42 @@ internal fun PlayerRuntimeController.preparePlaybackBeforeStart(
     headers: Map<String, String>,
     loadSavedProgress: Boolean
 ) {
+    val playbackRequest = PlayerMediaSourceFactory.normalizePlaybackRequest(url, headers)
+    val playbackUrl = playbackRequest.url
+    val playbackHeaders = playbackRequest.headers
+    if (playbackUrl != currentStreamUrl || playbackHeaders != currentHeaders) {
+        currentStreamUrl = playbackUrl
+        currentHeaders = playbackHeaders
+        _uiState.update { it.copy(currentStreamUrl = playbackUrl) }
+    }
+
     logSwitchTrace(
         stage = "prepare-playback-before-start",
-        message = "urlHash=${url.hashCode().toUInt().toString(16)} loadSavedProgress=$loadSavedProgress " +
+        message = "urlHash=${playbackUrl.hashCode().toUInt().toString(16)} loadSavedProgress=$loadSavedProgress " +
             "clearPendingSwitchPref=true"
+    )
+    val clickElapsedMs = launchStartedAtElapsedMs
+        ?.let { (SystemClock.elapsedRealtime() - it).coerceAtLeast(0L) }
+        ?: -1L
+    queuePlaybackRawEventLine(
+        "PREPARE_PLAYBACK: clickElapsedMs=$clickElapsedMs host=${playbackUrl.safeScrobbleHost()} " +
+            "loadSavedProgress=$loadSavedProgress currentSeason=${currentSeason ?: -1} " +
+            "currentEpisode=${currentEpisode ?: -1} streamName=${_uiState.value.currentStreamName ?: "n/a"}"
     )
     clearPendingEngineSwitchTrackPreference()
     playbackPreparationJob?.cancel()
-    playbackPreparationJob = scope.launch {
+
+    // Fire-and-forget: warm the Trakt episode mapping in the background.
+    traktMappingJob?.cancel()
+    traktMappingJob = scope.launch {
         warmTraktEpisodeMappingForCurrentPlayback()
+    }
+
+    playbackPreparationJob = scope.launch {
+        setLoadingStatus(
+            phase = "preparing_metadata",
+            message = context.getString(com.nuvio.tv.R.string.player_loading_preparing)
+        )
         refreshScrobbleItem()
         if (persistedTrackPreference == null) {
             contentId?.let { id ->
@@ -64,19 +93,44 @@ internal fun PlayerRuntimeController.preparePlaybackBeforeStart(
                     "subtitle=${persistedTrackPreference?.subtitle?.javaClass?.simpleName ?: "none"}"
             )
         }
+        contentId?.takeIf { it.isNotBlank() }?.let { id ->
+            trackPreferenceDataStore.loadPlaybackSpeed(id)?.let { speed ->
+                _uiState.update { it.copy(playbackSpeed = speed) }
+            }
+        }
         // Load saved watch progress BEFORE player init.
         // This eliminates the race condition where ExoPlayer's STATE_READY
         // callback fired before the DB read completed, causing the resume
         // seek to be silently skipped — the player would start from 0:00
         // or hang in buffering after a late seek.
         if (loadSavedProgress) {
+            recordLoadingDiagnosticEvent(
+                phase = "loading_saved_progress",
+                message = context.getString(com.nuvio.tv.R.string.player_loading_preparing)
+            )
             loadSavedProgressSuspend(currentSeason, currentEpisode)
         }
-        initializePlayer(url, headers)
+        recordLoadingDiagnosticEvent(
+            phase = "initializing_player",
+            message = context.getString(com.nuvio.tv.R.string.player_loading_building)
+        )
+        initializePlayer(playbackUrl, playbackHeaders)
     }
 }
 
+private fun String.safeScrobbleHost(): String {
+    return runCatching {
+        android.net.Uri.parse(this).host ?: substringBefore("://").takeIf { it.isNotBlank() } ?: "unknown"
+    }.getOrDefault("unknown")
+}
+
 internal suspend fun PlayerRuntimeController.warmTraktEpisodeMappingForCurrentPlayback() {
+    if (!traktEpisodeMappingService.isTraktAuthenticated()) {
+        currentTraktEpisodeMapping = null
+        currentTraktEpisodeMappingKey = null
+        return
+    }
+
     val normalizedType = contentType?.lowercase()
     if (normalizedType !in listOf("series", "tv")) {
         currentTraktEpisodeMapping = null
@@ -100,13 +154,15 @@ internal suspend fun PlayerRuntimeController.warmTraktEpisodeMappingForCurrentPl
         return
     }
 
-    currentTraktEpisodeMapping = traktEpisodeMappingService.prefetchEpisodeMapping(
-        contentId = resolvedContentId,
-        contentType = contentType,
-        videoId = currentVideoId,
-        season = season,
-        episode = episode
-    )
+    currentTraktEpisodeMapping = withTimeoutOrNull(12_000L) {
+        traktEpisodeMappingService.prefetchEpisodeMapping(
+            contentId = resolvedContentId,
+            contentType = contentType,
+            videoId = currentVideoId,
+            season = season,
+            episode = episode
+        )
+    }
     currentTraktEpisodeMappingKey = currentEpisodeMappingCacheKey()
 }
 

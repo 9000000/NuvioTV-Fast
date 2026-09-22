@@ -41,7 +41,15 @@ class SearchHistoryDataStore @Inject constructor(
         val current = recentSearches.first()
         val updated = buildList {
             add(normalized)
-            addAll(current.filterNot { it.equals(normalized, ignoreCase = true) })
+            addAll(
+                current.filterNot { existing ->
+                    existing.equals(normalized, ignoreCase = true) ||
+                        // Live search saves each query the user pauses on, and on a remote every
+                        // prefix of a word is one of those. Collapse them into the query actually
+                        // landed on instead of listing "f", "fr", "fri" alongside "frieren".
+                        normalized.startsWith(existing, ignoreCase = true)
+                }
+            )
         }.take(maxItems.coerceAtLeast(1))
 
         store().edit { prefs ->
@@ -52,6 +60,22 @@ class SearchHistoryDataStore @Inject constructor(
     suspend fun clearRecentSearches() {
         store().edit { prefs ->
             prefs.remove(recentSearchesKey)
+        }
+    }
+
+    suspend fun removeRecentSearch(query: String) {
+        val normalized = query.trim()
+        if (normalized.isEmpty()) return
+
+        store().edit { prefs ->
+            val updated = parseRecentSearches(prefs[recentSearchesKey])
+                .filterNot { it.equals(normalized, ignoreCase = true) }
+
+            if (updated.isEmpty()) {
+                prefs.remove(recentSearchesKey)
+            } else {
+                prefs[recentSearchesKey] = gson.toJson(updated)
+            }
         }
     }
 

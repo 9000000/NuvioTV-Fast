@@ -1,6 +1,7 @@
 package com.nuvio.tv.domain.model
 
 import androidx.compose.runtime.Immutable
+import com.nuvio.tv.core.util.isEpisodeReleaseAired
 
 @Immutable
 data class Meta(
@@ -58,30 +59,20 @@ data class Meta(
      * (either via the `available` flag or because its release date is in the future).
      */
     fun watchableEpisodes(): List<Video> {
-        val today = java.time.LocalDate.now()
         val candidates = videos.filter {
             it.season != null && it.episode != null && (it.season ?: 0) > 0
         }
+        fun isFutureRelease(raw: String?): Boolean = isEpisodeReleaseAired(raw) == false
         val unavailableSeasons = candidates.groupBy { it.season }
             .filter { (_, eps) ->
                 val first = eps.minByOrNull { it.episode ?: Int.MAX_VALUE }
                     ?: return@filter false
-                // Exclude if explicitly marked unavailable
                 if (first.available == false) return@filter true
-                // Exclude if release date is in the future
-                val released = first.released?.substringBefore('T')?.trim()
-                if (!released.isNullOrBlank()) {
-                    try {
-                        return@filter java.time.LocalDate.parse(
-                            released,
-                            java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
-                        ).isAfter(today)
-                    } catch (_: java.time.format.DateTimeParseException) { }
-                }
-                false
+                isFutureRelease(first.released)
             }.keys
-        return if (unavailableSeasons.isEmpty()) candidates
-        else candidates.filter { it.season !in unavailableSeasons }
+        return candidates
+            .filter { it.season !in unavailableSeasons }
+            .filter { it.available != false && !isFutureRelease(it.released) }
     }
 }
 
@@ -105,7 +96,14 @@ internal fun normalizeLanguageCode(language: String?): String? {
 /** Best-effort mapping from country name/code to ISO 639-1 primary language. */
 internal fun countryToLanguageCode(country: String?): String? {
     val normalized = country?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
-    return COUNTRY_TO_LANGUAGE_MAP[normalized]
+    // Direct lookup first (single country)
+    COUNTRY_TO_LANGUAGE_MAP[normalized]?.let { return it }
+    // Multi-country: split on comma and try the first one
+    if (',' in normalized) {
+        val first = normalized.substringBefore(',').trim()
+        COUNTRY_TO_LANGUAGE_MAP[first]?.let { return it }
+    }
+    return null
 }
 
 private val LANGUAGE_NORMALIZATION_MAP = mapOf(
@@ -161,7 +159,13 @@ private val COUNTRY_TO_LANGUAGE_MAP = mapOf(
     "netherlands" to "nl", "sweden" to "sv", "norway" to "no",
     "denmark" to "da", "finland" to "fi", "thailand" to "th",
     "israel" to "he", "romania" to "ro", "hungary" to "hu",
-    "ukraine" to "uk", "greece" to "el"
+    "ukraine" to "uk", "greece" to "el",
+    "united kingdom" to "en", "united states" to "en",
+    "united states of america" to "en", "australia" to "en",
+    "canada" to "en", "new zealand" to "en", "ireland" to "en",
+    "us" to "en", "gb" to "en", "uk" to "en", "usa" to "en",
+    "gbr" to "en", "aus" to "en", "can" to "en", "nzl" to "en",
+    "irl" to "en"
 )
 
 @Immutable
@@ -190,6 +194,8 @@ data class Video(
     val episode: Int?,
     val overview: String?,
     val runtime: Int? = null, // episode runtime in minutes
+    /** Per-episode rating supplied by the addon, when it provides one. */
+    val rating: Double? = null,
     val available: Boolean? = null
 )
 

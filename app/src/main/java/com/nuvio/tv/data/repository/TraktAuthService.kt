@@ -121,7 +121,7 @@ class TraktAuthService @Inject constructor(
         return BuildConfig.TRAKT_CLIENT_ID.isNotBlank() && BuildConfig.TRAKT_CLIENT_SECRET.isNotBlank()
     }
 
-    suspend fun getCurrentAuthState(): TraktAuthState = traktAuthDataStore.state.first()
+    suspend fun getCurrentAuthState(): TraktAuthState = traktAuthDataStore.getCurrentState()
 
     suspend fun startDeviceAuth(): Result<TraktDeviceCodeResponseDto> {
         if (!hasRequiredCredentials()) {
@@ -224,6 +224,7 @@ class TraktAuthService @Inject constructor(
         if (response.isSuccessful && tokenBody != null) {
             traktAuthDataStore.saveToken(tokenBody)
             authSessionNoticeDataStore.markTraktAuthenticated()
+            resetCircuit()
             traktAuthDataStore.clearDeviceFlow()
             val user = fetchUserSettings()
             return TraktTokenPollResult.Approved(user)
@@ -287,16 +288,15 @@ class TraktAuthService @Inject constructor(
             val tokenBody = response.body()
             if (!response.isSuccessful || tokenBody == null) {
                 trace("refreshTokenIfNeeded: failed code=${response.code()}")
-                if (response.code() == 401 || response.code() == 403) {
-                    authSessionNoticeDataStore.markUnexpectedTraktLogoutIfNeeded()
-                    traktAuthDataStore.clearAuth()
-                    tripCircuit("Token refresh returned ${response.code()}")
+                if (response.code() == 400 || response.code() == 401 || response.code() == 403) {
+                    invalidateCredentials(response.code())
                 }
                 return@withLock false
             }
 
             traktAuthDataStore.saveToken(tokenBody)
             authSessionNoticeDataStore.markTraktAuthenticated()
+            resetCircuit()
             trace("refreshTokenIfNeeded: success")
             true
         }
@@ -530,5 +530,11 @@ class TraktAuthService @Inject constructor(
                 append(it)
             }
         }
+    }
+
+    private suspend fun invalidateCredentials(statusCode: Int) {
+        authSessionNoticeDataStore.markTraktReconnectRequired()
+        traktAuthDataStore.clearAuth()
+        tripCircuit("Token refresh returned $statusCode")
     }
 }

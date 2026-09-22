@@ -13,7 +13,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private val Context.authSessionNoticeDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "auth_session_notice_store"
+    name = "auth_session_notice_store",
+    corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() }
 )
 
 enum class StartupAuthNotice {
@@ -57,16 +58,19 @@ class AuthSessionNoticeDataStore @Inject constructor(
         }
     }
 
-    suspend fun markUnexpectedNuvioLogoutIfNeeded() {
+    suspend fun markUnexpectedNuvioLogoutIfNeeded(): Boolean {
+        var marked = false
         context.authSessionNoticeDataStore.edit { preferences ->
             val hadAuth = preferences[hadNuvioAuthKey] == true
             val explicitLogout = preferences[nuvioExplicitLogoutKey] == true
             if (hadAuth && !explicitLogout) {
                 preferences[pendingNuvioNoticeKey] = true
+                marked = true
             }
             preferences[hadNuvioAuthKey] = false
             preferences[nuvioExplicitLogoutKey] = false
         }
+        return marked
     }
 
     suspend fun markTraktAuthenticated() {
@@ -85,13 +89,24 @@ class AuthSessionNoticeDataStore @Inject constructor(
         }
     }
 
-    suspend fun markUnexpectedTraktLogoutIfNeeded() {
+    suspend fun markUnexpectedTraktLogoutIfNeeded(): Boolean {
+        var marked = false
         context.authSessionNoticeDataStore.edit { preferences ->
             val hadAuth = preferences[hadTraktAuthKey] == true
             val explicitLogout = preferences[traktExplicitLogoutKey] == true
             if (hadAuth && !explicitLogout) {
                 preferences[pendingTraktNoticeKey] = true
+                marked = true
             }
+            preferences[hadTraktAuthKey] = false
+            preferences[traktExplicitLogoutKey] = false
+        }
+        return marked
+    }
+
+    suspend fun markTraktReconnectRequired() {
+        context.authSessionNoticeDataStore.edit { preferences ->
+            preferences[pendingTraktNoticeKey] = true
             preferences[hadTraktAuthKey] = false
             preferences[traktExplicitLogoutKey] = false
         }

@@ -25,6 +25,11 @@ internal suspend fun PlayerRuntimeController.startTorrentStream(
     currentInfoHash = infoHash
     currentFileIdx = fileIdx
 
+    setLoadingStatus(
+        phase = "torrent_starting_engine",
+        message = context.getString(com.nuvio.tv.R.string.player_torrent_starting_engine),
+        showOverlay = true
+    )
     _uiState.update {
         it.copy(
             showLoadingOverlay = true,
@@ -68,6 +73,10 @@ internal fun PlayerRuntimeController.observeTorrentState() {
 
                 is TorrentState.Connecting -> {
                     if (!hasRenderedFirstFrame) {
+                        recordLoadingDiagnosticEvent(
+                            phase = "torrent_connecting_peers",
+                            message = context.getString(com.nuvio.tv.R.string.player_torrent_connecting_peers)
+                        )
                         _uiState.update {
                             it.copy(
                                 showLoadingOverlay = true,
@@ -80,9 +89,9 @@ internal fun PlayerRuntimeController.observeTorrentState() {
                 }
 
                 is TorrentState.Streaming -> {
-                    val speed = formatSpeed(torrentState.downloadSpeed)
+                    val speed = formatSpeed(context, torrentState.downloadSpeed)
                     val peerInfo = context.getString(com.nuvio.tv.R.string.player_torrent_peer_info, torrentState.seeds, torrentState.peers)
-                    val mbLoaded = formatMB(torrentState.preloadedBytes)
+                    val mbLoaded = formatMB(context, torrentState.preloadedBytes)
                     val statsHidden = _uiState.value.hideTorrentStats
 
                     if (!hasRenderedFirstFrame) {
@@ -91,6 +100,12 @@ internal fun PlayerRuntimeController.observeTorrentState() {
                         val preloadTarget = 5_242_880L // 5MB
                         val progress = (torrentState.preloadedBytes.toFloat() / preloadTarget).coerceIn(0f, 1f)
                         val message = if (statsHidden) null else context.getString(com.nuvio.tv.R.string.player_torrent_buffered_status, mbLoaded, peerInfo, speed)
+                        recordLoadingDiagnosticEvent(
+                            phase = "torrent_preloading",
+                            message = message,
+                            progress = progress,
+                            detail = "${torrentState.seeds}/${torrentState.peers}"
+                        )
                         _uiState.update {
                             it.copy(
                                 showLoadingOverlay = true,
@@ -159,7 +174,7 @@ internal fun PlayerRuntimeController.launchTorrentSourceStream(
                 ?: emptyList()
             val localUrl = startTorrentStream(
                 infoHash = infoHash,
-                fileIdx = stream.fileIdx,
+                fileIdx = stream.getEffectiveFileIdx(),
                 filename = stream.behaviorHints?.filename,
                 trackers = trackers
             )
@@ -191,12 +206,13 @@ internal fun PlayerRuntimeController.launchTorrentSourceStream(
     }
 }
 
-private fun formatSpeed(bytesPerSec: Long): String {
+private fun formatSpeed(context: android.content.Context, bytesPerSec: Long): String {
     return when {
-        bytesPerSec >= 1_048_576 -> String.format("%.1f MB/s", bytesPerSec / 1_048_576.0)
-        bytesPerSec >= 1_024 -> String.format("%.0f KB/s", bytesPerSec / 1_024.0)
-        else -> "$bytesPerSec B/s"
+        bytesPerSec >= 1_048_576 -> context.getString(com.nuvio.tv.R.string.unit_speed_mb_s, String.format("%.1f", bytesPerSec / 1_048_576.0))
+        bytesPerSec >= 1_024 -> context.getString(com.nuvio.tv.R.string.unit_speed_kb_s, String.format("%.0f", bytesPerSec / 1_024.0))
+        else -> context.getString(com.nuvio.tv.R.string.unit_speed_b_s, bytesPerSec)
     }
 }
 
-private fun formatMB(bytes: Long): String = String.format("%.1f MB", bytes / 1_048_576.0)
+private fun formatMB(context: android.content.Context, bytes: Long): String =
+    context.getString(com.nuvio.tv.R.string.unit_size_mb, String.format("%.1f", bytes / 1_048_576.0))

@@ -1,4 +1,7 @@
-@file:OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    androidx.tv.material3.ExperimentalTvMaterial3Api::class
+)
 
 package com.nuvio.tv.ui.screens.detail
 
@@ -11,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewResponder
+import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,12 +29,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import coil3.compose.AsyncImage
@@ -41,7 +52,6 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaCompany
-import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 @Composable
@@ -51,7 +61,8 @@ fun CompanyLogosSection(
     onCompanyClick: (MetaCompany) -> Unit = {},
     restoreCompanyId: Int? = null,
     restoreFocusToken: Int = 0,
-    onRestoreFocusHandled: () -> Unit = {}
+    onRestoreFocusHandled: () -> Unit = {},
+    onCompanyFocused: (revealOverflowPx: Float) -> Unit = {}
 ) {
     if (companies.isEmpty()) return
 
@@ -60,32 +71,60 @@ fun CompanyLogosSection(
             .mapNotNull { company -> company.tmdbId?.let { it to FocusRequester() } }
             .toMap()
     }
+    var holdRestoreScrollSuppress by remember { mutableStateOf(false) }
+    var revealOverflowPx by remember { mutableFloatStateOf(0f) }
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val revealPaddingPx = remember(density) { with(density) { NuvioTheme.spacing.md.toPx() } }
+    val suppressRestoreScroll = holdRestoreScrollSuppress ||
+        (restoreFocusToken > 0 && restoreCompanyId != null)
+    val restoreNoScrollResponder = remember {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) {}
+        }
+    }
+    val stayVerticalResponder = remember {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect {
+                return Rect(localRect.left, 0f, localRect.right, 0f)
+            }
+
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) {}
+        }
+    }
 
     LaunchedEffect(restoreCompanyId, restoreFocusToken) {
         if (restoreFocusToken <= 0 || restoreCompanyId == null) return@LaunchedEffect
-        val targetRequester = focusRequesters[restoreCompanyId]
-        if (targetRequester == null) return@LaunchedEffect
+        val targetRequester = focusRequesters[restoreCompanyId] ?: return@LaunchedEffect
+        holdRestoreScrollSuppress = true
         repeat(2) { withFrameNanos { } }
         runCatching { targetRequester.requestFocus() }
+        repeat(2) { withFrameNanos { } }
         onRestoreFocusHandled()
+        holdRestoreScrollSuppress = false
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, bottom = 8.dp)
+            .padding(top = 20.dp, bottom = NuvioTheme.spacing.sm)
+            .onGloballyPositioned { coords ->
+                val bounds = coords.boundsInWindow()
+                revealOverflowPx = (bounds.bottom - view.height + revealPaddingPx).coerceAtLeast(0f)
+            }
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
-            color = NuvioColors.TextPrimary,
-            modifier = Modifier.padding(horizontal = 48.dp)
+            color = NuvioTheme.colors.TextPrimary,
+            modifier = Modifier.padding(horizontal = NuvioTheme.spacing.xxxl)
         )
 
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.xxxl, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
             itemsIndexed(
                 items = companies,
@@ -93,11 +132,20 @@ fun CompanyLogosSection(
                     "$title-$index-${company.name}-${company.logo.orEmpty()}"
                 }
             ) { _, company ->
-                CompanyLogoCard(
-                    company = company,
-                    focusRequester = focusRequesters[company.tmdbId],
-                    onClick = { onCompanyClick(company) }
-                )
+                Box(
+                    modifier = Modifier.bringIntoViewResponder(
+                        if (suppressRestoreScroll) restoreNoScrollResponder else stayVerticalResponder
+                    )
+                ) {
+                    CompanyLogoCard(
+                        company = company,
+                        focusRequester = focusRequesters[company.tmdbId],
+                        onFocused = {
+                            onCompanyFocused(if (suppressRestoreScroll) 0f else revealOverflowPx)
+                        },
+                        onClick = { onCompanyClick(company) }
+                    )
+                }
             }
         }
     }
@@ -107,12 +155,13 @@ fun CompanyLogosSection(
 private fun CompanyLogoCard(
     company: MetaCompany,
     focusRequester: FocusRequester? = null,
+    onFocused: () -> Unit = {},
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val logoWidthPx = remember(density) { with(density) { 140.dp.roundToPx() } }
-    val logoHeightPx = remember(density) { with(density) { 56.dp.roundToPx() } }
+    val logoHeightPx = remember(density) { with(density) { NuvioTheme.spacing.huge.roundToPx() } }
     val logoModel = remember(context, company.logo, logoWidthPx, logoHeightPx) {
         company.logo?.let { logo ->
             ImageRequest.Builder(context)
@@ -132,19 +181,22 @@ private fun CompanyLogoCard(
         },
         modifier = Modifier
             .width(140.dp)
-            .height(56.dp)
+            .height(NuvioTheme.spacing.huge)
             .then(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
-            ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+            )
+            .onFocusChanged { state ->
+                if (state.isFocused) onFocused()
+            },
+        shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.sm)),
         colors = CardDefaults.colors(
             containerColor = Color.White,
             focusedContainerColor = Color.White
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(8.dp)
+                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                shape = RoundedCornerShape(NuvioTheme.radii.sm)
             )
         ),
         scale = CardDefaults.scale(focusedScale = 1.03f)
@@ -152,8 +204,8 @@ private fun CompanyLogoCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .height(NuvioTheme.spacing.huge)
+                .clip(RoundedCornerShape(NuvioTheme.radii.sm))
                 .background(Color.White),
         contentAlignment = Alignment.Center
         ) {
@@ -174,7 +226,7 @@ private fun CompanyLogoCard(
                     color = NuvioTheme.extendedColors.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = NuvioTheme.spacing.lg)
                 )
             }
         }

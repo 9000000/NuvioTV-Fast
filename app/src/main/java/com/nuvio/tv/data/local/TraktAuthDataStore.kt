@@ -9,16 +9,21 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val TRAKT_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 86_400
+private const val TRAKT_LEGACY_FORCED_TOKEN_LIFETIME_SECONDS = 86_400
+private const val TRAKT_DOCUMENTED_TOKEN_LIFETIME_SECONDS = 604_800
 
 internal fun normalizeTraktTokenLifetimeSeconds(expiresIn: Int): Int {
-    if (expiresIn <= 0) return TRAKT_ACCESS_TOKEN_MAX_LIFETIME_SECONDS
-    return expiresIn.coerceAtMost(TRAKT_ACCESS_TOKEN_MAX_LIFETIME_SECONDS)
+    return if (expiresIn == TRAKT_LEGACY_FORCED_TOKEN_LIFETIME_SECONDS) {
+        TRAKT_DOCUMENTED_TOKEN_LIFETIME_SECONDS
+    } else {
+        expiresIn
+    }
 }
 
 data class TraktAuthState(
@@ -89,6 +94,28 @@ class TraktAuthDataStore @Inject constructor(
     val isAuthenticated: Flow<Boolean> = state.map { it.isAuthenticated }
 
     val isEffectivelyAuthenticated: Flow<Boolean> = isAuthenticated
+
+    suspend fun getCurrentState(): TraktAuthState {
+        return getCurrentState(profileManager.activeProfileId.value)
+    }
+
+    suspend fun getCurrentState(profileId: Int): TraktAuthState {
+        val prefs = store(profileId).data.first()
+        return TraktAuthState(
+            accessToken = prefs[accessTokenKey],
+            refreshToken = prefs[refreshTokenKey],
+            tokenType = prefs[tokenTypeKey],
+            createdAt = prefs[createdAtKey],
+            expiresIn = prefs[expiresInKey]?.let(::normalizeTraktTokenLifetimeSeconds),
+            username = prefs[usernameKey],
+            userSlug = prefs[userSlugKey],
+            deviceCode = prefs[deviceCodeKey],
+            userCode = prefs[userCodeKey],
+            verificationUrl = prefs[verificationUrlKey],
+            expiresAt = prefs[expiresAtKey],
+            pollInterval = prefs[pollIntervalKey]
+        )
+    }
 
     suspend fun saveToken(token: TraktTokenResponseDto) {
         store().edit { preferences ->

@@ -1,15 +1,21 @@
 package com.nuvio.tv.ui.components.posteroptions
 
 import android.util.Log
+import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbService
+import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
+import com.nuvio.tv.core.tracking.mergeTrackingMembershipWithTabs
+import com.nuvio.tv.core.tracking.toggleTrackingMembershipSelection
+import com.nuvio.tv.data.local.WatchedSeriesStateHolder
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.LibraryEntryInput
-import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.LibraryRepository
+import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +44,8 @@ class PosterOptionsController @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val metaRepository: MetaRepository,
+    private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
     private val tmdbService: TmdbService
 ) {
     private val _state = MutableStateFlow(PosterOptionsState())
@@ -48,6 +56,7 @@ class PosterOptionsController @Inject constructor(
     private var scope: CoroutineScope? = null
     private var bound = false
     private var showJob: kotlinx.coroutines.Job? = null
+    private var pendingMembershipChanges: ListMembershipChanges? = null
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun bind(scope: CoroutineScope) {
@@ -59,7 +68,7 @@ class PosterOptionsController @Inject constructor(
             .distinctUntilChanged()
             .onEach { mode ->
                 _state.update { current ->
-                    val resetPicker = mode != LibrarySourceMode.TRAKT
+                    val resetPicker = mode == LibrarySourceMode.LOCAL
                     if (resetPicker) {
                         current.copy(
                             librarySourceMode = mode,
@@ -67,6 +76,7 @@ class PosterOptionsController @Inject constructor(
                             listPickerPending = false,
                             listPickerError = null,
                             listPickerTitle = null,
+                            listPickerContentType = null,
                             listPickerMembership = emptyMap()
                         )
                     } else {
@@ -76,13 +86,13 @@ class PosterOptionsController @Inject constructor(
             }
             .launchIn(scope)
 
-        libraryRepository.listTabs
+        libraryRepository.membershipListTabs
             .distinctUntilChanged()
             .onEach { tabs ->
                 _state.update { current ->
                     current.copy(
                         libraryListTabs = tabs,
-                        listPickerMembership = mergeMembershipWithTabs(
+                        listPickerMembership = mergeTrackingMembershipWithTabs(
                             tabs = tabs,
                             membership = current.listPickerMembership
                         )
@@ -96,10 +106,20 @@ class PosterOptionsController @Inject constructor(
                 if (item == null) {
                     flowOf(false to false)
                 } else {
-                    combine(
-                        libraryRepository.isInLibrary(item.id, item.apiType),
-                        watchProgressRepository.isWatched(item.id, videoId = item.imdbId)
-                    ) { lib, watched -> lib to watched }
+                    val isSeries = item.apiType.equals("series", ignoreCase = true) ||
+                        item.apiType.equals("tv", ignoreCase = true) ||
+                        item.apiType.equals("anime", ignoreCase = true)
+                    if (isSeries) {
+                        combine(
+                            libraryRepository.isInLibrary(item.id, item.apiType),
+                            watchedSeriesStateHolder.fullyWatchedSeriesIds
+                        ) { lib, watchedIds -> lib to (item.id in watchedIds) }
+                    } else {
+                        combine(
+                            libraryRepository.isInLibrary(item.id, item.apiType),
+                            watchProgressRepository.isWatched(item.id, videoId = item.imdbId)
+                        ) { lib, watched -> lib to watched }
+                    }
                 }
             }
             .onEach { (isInLibrary, isWatched) ->
@@ -118,16 +138,24 @@ class PosterOptionsController @Inject constructor(
         showJob?.cancel()
         showJob = launchScope.launch {
             val canonical = canonicalize(item)
+            val isSeries = canonical.apiType.equals("series", ignoreCase = true) ||
+                canonical.apiType.equals("tv", ignoreCase = true) ||
+                canonical.apiType.equals("anime", ignoreCase = true)
             val initialIsInLibrary = runCatching {
                 libraryRepository.isInLibrary(canonical.id, canonical.apiType).first()
             }.getOrDefault(false)
-            val initialIsWatched = runCatching {
-                watchProgressRepository.isWatched(canonical.id, videoId = canonical.imdbId).first()
-            }.getOrDefault(false)
+            val initialIsWatched = if (isSeries) {
+                canonical.id in watchedSeriesStateHolder.fullyWatchedSeriesIds.value
+            } else {
+                runCatching {
+                    watchProgressRepository.isWatched(canonical.id, videoId = canonical.imdbId).first()
+                }.getOrDefault(false)
+            }
 
             _state.update { current ->
                 current.copy(
                     target = canonical,
+                    originalItemId = item.id,
                     addonBaseUrl = addonBaseUrl.orEmpty(),
                     isInLibrary = initialIsInLibrary,
                     isWatched = initialIsWatched,
@@ -143,7 +171,8 @@ class PosterOptionsController @Inject constructor(
         if (item.id.startsWith("tt", ignoreCase = false)) return item
         val tmdbNumber = parseContentIds(item.id).tmdb ?: item.id.toIntOrNull() ?: return item
         val mediaType = if (item.apiType.equals("series", ignoreCase = true) ||
-            item.apiType.equals("tv", ignoreCase = true)
+            item.apiType.equals("tv", ignoreCase = true) ||
+            item.apiType.equals("anime", ignoreCase = true)
         ) "tv" else "movie"
         val imdb = runCatching { tmdbService.tmdbToImdb(tmdbNumber, mediaType) }.getOrNull()
         return if (!imdb.isNullOrBlank()) item.copy(id = imdb) else item
@@ -189,7 +218,7 @@ class PosterOptionsController @Inject constructor(
     fun openListPicker() {
         val state = _state.value
         val item = state.target ?: return
-        if (state.librarySourceMode != LibrarySourceMode.TRAKT) {
+        if (state.librarySourceMode == LibrarySourceMode.LOCAL) {
             toggleLibrary()
             dismiss()
             return
@@ -201,9 +230,10 @@ class PosterOptionsController @Inject constructor(
                 target = null,
                 listPickerActive = true,
                 listPickerTitle = item.name,
+                listPickerContentType = item.apiType,
                 listPickerPending = true,
                 listPickerError = null,
-                listPickerMembership = mergeMembershipWithTabs(
+                listPickerMembership = mergeTrackingMembershipWithTabs(
                     tabs = current.libraryListTabs,
                     membership = emptyMap()
                 )
@@ -222,7 +252,7 @@ class PosterOptionsController @Inject constructor(
                     current.copy(
                         listPickerPending = false,
                         listPickerError = null,
-                        listPickerMembership = mergeMembershipWithTabs(
+                        listPickerMembership = mergeTrackingMembershipWithTabs(
                             tabs = current.libraryListTabs,
                             membership = snapshot.listMembership
                         )
@@ -242,9 +272,12 @@ class PosterOptionsController @Inject constructor(
 
     fun toggleListMembership(listKey: String) {
         _state.update { current ->
-            val nextMembership = current.listPickerMembership.toMutableMap().apply {
-                this[listKey] = !(this[listKey] == true)
-            }
+            val nextMembership = toggleTrackingMembershipSelection(
+                tabs = current.libraryListTabs,
+                membership = current.listPickerMembership,
+                listKey = listKey,
+                contentType = current.listPickerContentType
+            ) ?: return@update current
             current.copy(
                 listPickerMembership = nextMembership,
                 listPickerError = null
@@ -255,7 +288,7 @@ class PosterOptionsController @Inject constructor(
     fun saveListPicker() {
         val state = _state.value
         if (state.listPickerPending) return
-        if (state.librarySourceMode != LibrarySourceMode.TRAKT) return
+        if (state.librarySourceMode == LibrarySourceMode.LOCAL) return
         val input = activeListPickerInput ?: return
         val scope = this.scope ?: return
 
@@ -268,15 +301,19 @@ class PosterOptionsController @Inject constructor(
                         desiredMembership = _state.value.listPickerMembership
                     )
                 )
-            }.onSuccess {
-                activeListPickerInput = null
-                _state.update {
-                    it.copy(
-                        listPickerActive = false,
-                        listPickerPending = false,
-                        listPickerError = null,
-                        listPickerTitle = null
+            }.onSuccess { result ->
+                if (result.requiresRemovalConfirmation) {
+                    pendingMembershipChanges = ListMembershipChanges(
+                        desiredMembership = _state.value.listPickerMembership
                     )
+                    _state.update {
+                        it.copy(
+                            listPickerPending = false,
+                            removalConfirmations = result.requiredRemovalConfirmations
+                        )
+                    }
+                } else {
+                    closeListPickerAfterSave()
                 }
             }.onFailure { error ->
                 Log.w(TAG, "Failed to save list picker: ${error.message}")
@@ -292,12 +329,72 @@ class PosterOptionsController @Inject constructor(
 
     fun dismissListPicker() {
         activeListPickerInput = null
+        pendingMembershipChanges = null
         _state.update {
             it.copy(
                 listPickerActive = false,
                 listPickerPending = false,
                 listPickerError = null,
-                listPickerTitle = null
+                listPickerTitle = null,
+                listPickerContentType = null,
+                removalConfirmations = emptyList()
+            )
+        }
+    }
+
+    fun confirmDestructiveRemoval() {
+        val input = activeListPickerInput ?: return
+        val changes = pendingMembershipChanges ?: return
+        val confirmations = _state.value.removalConfirmations
+        val scope = this.scope ?: return
+        _state.update { it.copy(listPickerPending = true) }
+        scope.launch {
+            runCatching {
+                libraryRepository.applyMembershipChanges(
+                    item = input,
+                    changes = changes,
+                    confirmedRemovalProviders = confirmations.mapTo(linkedSetOf(), TrackingMembershipRemovalConfirmation::providerId)
+                )
+            }.onSuccess { result ->
+                if (result.requiresRemovalConfirmation) {
+                    _state.update {
+                        it.copy(
+                            listPickerPending = false,
+                            removalConfirmations = result.requiredRemovalConfirmations
+                        )
+                    }
+                } else {
+                    closeListPickerAfterSave()
+                }
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        listPickerPending = false,
+                        removalConfirmations = emptyList(),
+                        listPickerError = error.message
+                            ?: appContext.getString(com.nuvio.tv.R.string.poster_options_error_update_lists_failed)
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelDestructiveRemoval() {
+        pendingMembershipChanges = null
+        _state.update { it.copy(removalConfirmations = emptyList()) }
+    }
+
+    private fun closeListPickerAfterSave() {
+        activeListPickerInput = null
+        pendingMembershipChanges = null
+        _state.update {
+            it.copy(
+                listPickerActive = false,
+                listPickerPending = false,
+                listPickerError = null,
+                listPickerTitle = null,
+                listPickerContentType = null,
+                removalConfirmations = emptyList()
             )
         }
     }
@@ -309,10 +406,20 @@ class PosterOptionsController @Inject constructor(
         if (state.isWatchedPending) return
         val scope = this.scope ?: return
 
+        val currentlyWatched = state.isWatched
+        // Collect all known ID variants: original UI id (e.g. "tmdb:123"),
+        // canonical id (e.g. "tt1979376"), and imdbId field if available.
+        val optimisticIds = buildSet {
+            add(item.id)
+            state.originalItemId?.takeIf { it != item.id }?.let(::add)
+            item.imdbId?.takeIf(String::isNotBlank)?.let(::add)
+        }
+
+        watchProgressRepository.applyOptimisticWatchedMovie(optimisticIds, add = !currentlyWatched)
+
         _state.update { it.copy(isWatchedPending = true) }
         scope.launch {
             val canonical = ensureCanonical() ?: return@launch
-            val currentlyWatched = _state.value.isWatched
             runCatching {
                 if (currentlyWatched) {
                     watchProgressRepository.removeFromHistory(canonical.id, videoId = canonical.imdbId)
@@ -321,26 +428,108 @@ class PosterOptionsController @Inject constructor(
                 }
             }.onFailure { error ->
                 Log.w(TAG, "Failed to toggle watched for ${canonical.id}: ${error.message}")
+                // Revert optimistic update on failure
+                watchProgressRepository.revertOptimisticWatchedMovie(optimisticIds, add = !currentlyWatched)
             }
             _state.update { it.copy(isWatchedPending = false) }
         }
+    }
+
+    fun toggleSeriesWatched() {
+        val state = _state.value
+        val item = state.target ?: return
+        val isSeries = item.apiType.equals("series", ignoreCase = true) ||
+            item.apiType.equals("tv", ignoreCase = true) ||
+            item.apiType.equals("anime", ignoreCase = true)
+        if (!isSeries) return
+        if (state.isWatchedPending) return
+        val scope = this.scope ?: return
+
+        val currentlyWatched = state.isWatched
+
+        // Optimistic UI update — badge changes immediately
+        val currentIds = watchedSeriesStateHolder.fullyWatchedSeriesIds.value
+        val optimisticIds = if (currentlyWatched) currentIds - item.id else currentIds + item.id
+        watchedSeriesStateHolder.update(optimisticIds)
+
+        _state.update { it.copy(isWatchedPending = true) }
+        scope.launch {
+            val canonical = ensureCanonical() ?: return@launch
+            runCatching {
+                if (currentlyWatched) {
+                    unmarkSeriesWatched(canonical)
+                } else {
+                    markSeriesWatched(canonical)
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to toggle series watched for ${canonical.id}: ${error.message}")
+                // Revert optimistic update on failure
+                watchedSeriesStateHolder.update(currentIds)
+            }
+            _state.update { it.copy(isWatchedPending = false) }
+        }
+    }
+
+    private suspend fun markSeriesWatched(item: MetaPreview) {
+        val episodes = fetchSeriesEpisodes(item).filter { it.season != null && it.episode != null && it.season != 0 }
+        if (episodes.isEmpty()) {
+            watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(item))
+            return
+        }
+
+        val progressList = episodes.map { video ->
+            WatchProgress(
+                contentId = item.id,
+                contentType = item.apiType,
+                name = item.name,
+                poster = item.poster,
+                backdrop = item.backdropUrl,
+                logo = item.logo,
+                videoId = video.id,
+                season = video.season,
+                episode = video.episode,
+                episodeTitle = video.title,
+                position = 1L,
+                duration = 1L,
+                lastWatched = System.currentTimeMillis(),
+                progressPercent = 100f
+            )
+        }
+        watchProgressRepository.markAsCompletedBatch(progressList)
+    }
+
+    private suspend fun unmarkSeriesWatched(item: MetaPreview) {
+        val episodes = fetchSeriesEpisodes(item).filter { it.season != null && it.episode != null && it.season != 0 }
+        if (episodes.isEmpty()) {
+            watchProgressRepository.removeFromHistory(item.id, videoId = item.imdbId)
+            return
+        }
+
+        watchProgressRepository.removeFromHistoryBatch(
+            contentId = item.id,
+            videoId = item.imdbId,
+            episodes = episodes.map { Triple(it.season!!, it.episode!!, it.id) }
+        )
+    }
+
+    private suspend fun fetchSeriesEpisodes(item: MetaPreview): List<Video> {
+        val type = if (item.apiType.equals("tv", ignoreCase = true) ||
+            item.apiType.equals("anime", ignoreCase = true)
+        ) "series" else item.apiType
+        var episodes: List<Video> = emptyList()
+        metaRepository.getMetaFromPrimaryAddon(type, item.id)
+            .collect { networkResult ->
+                if (networkResult is NetworkResult.Success) {
+                    episodes = networkResult.data.videos
+                }
+            }
+        return episodes
     }
 
     private var activeListPickerInput: LibraryEntryInput? = null
 
     companion object {
         private const val TAG = "PosterOptionsCtrl"
-    }
-}
-
-private fun mergeMembershipWithTabs(
-    tabs: List<LibraryListTab>,
-    membership: Map<String, Boolean>
-): Map<String, Boolean> {
-    return if (tabs.isEmpty()) {
-        membership
-    } else {
-        tabs.associate { tab -> tab.key to (membership[tab.key] == true) }
     }
 }
 
@@ -383,6 +572,7 @@ private fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?): LibraryEntry
         title = name,
         year = year,
         traktId = parsedIds.trakt,
+        simklId = parsedIds.simkl,
         imdbId = parsedIds.imdb,
         tmdbId = parsedIds.tmdb,
         poster = savedPoster,

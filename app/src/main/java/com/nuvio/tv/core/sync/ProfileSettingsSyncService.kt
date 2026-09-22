@@ -2,6 +2,7 @@ package com.nuvio.tv.core.sync
 
 import android.os.SystemClock
 import android.util.Log
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
@@ -13,11 +14,17 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.data.local.ContinueWatchingEnrichmentCache
 import com.nuvio.tv.data.local.ExperienceModeDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
+import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
+import com.nuvio.tv.data.local.TmdbSettingsDataStore
+import com.nuvio.tv.data.remote.supabase.SupabaseProfileSetupCopyResult
 import com.nuvio.tv.data.remote.supabase.SupabaseProfileSettingsBlob
 import com.nuvio.tv.domain.model.DiscoverLocation
+import com.nuvio.tv.domain.repository.MetaRepository
 import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,13 +64,117 @@ private const val SETTINGS_PUSH_DEBOUNCE_MS = 1500L
 private const val FOREGROUND_PULL_DELAY_MS = 2500L
 private const val FOREGROUND_PULL_MIN_INTERVAL_MS = 60_000L
 private const val SETTINGS_SYNC_PLATFORM = "tv"
+private const val PLAYER_SETTINGS_FEATURE = "player_settings"
+
+private val catalogKeysExcludedFromProfileSettingsBlob = setOf(
+    "home_catalog_order_keys",
+    "disabled_home_catalog_keys",
+    "custom_catalog_titles"
+)
+
+private val localOnlyLayoutProfileSettingsKeys = setOf(
+    "last_non_off_discover_location"
+)
+
+private val localOnlyPlayerProfileSettingsKeys = setOf(
+    "player_preference",
+    "internal_player_engine",
+    "auto_switch_internal_player_on_error",
+    "use_libass",
+    "libass_render_type",
+    "decoder_priority",
+    "downmix_enabled",
+    "audio_output_channels",
+    "maintain_original_audio_on_downmix",
+    "downmix_normalization_enabled",
+    "tunneling_enabled",
+    "force_optical_passthrough",
+    "audio_amplification_db",
+    "center_mix_level_db",
+    "persist_audio_amplification",
+    "remember_audio_delay_per_device",
+    "experimental_dv5_to_dv81_enabled",
+    "experimental_dv7_to_dv81_preserve_mapping_enabled",
+    "dv7_handling_mode",
+    "map_dv7_to_hevc",
+    "dv7_libdovi_mode_override",
+    "strip_hdr10plus_sei",
+    "mpv_hardware_decode_mode",
+    "frame_rate_matching",
+    "frame_rate_matching_mode",
+    "resolution_matching_enabled",
+    "external_player_forward_subtitles",
+    "external_player_send_skip_segments",
+    "vod_cache_enabled",
+    "vod_cache_size_mode",
+    "vod_cache_size_mb",
+    "use_parallel_connections",
+    "buffer_engine_enabled",
+    "parallel_network_enabled",
+    "allow_large_target_buffer",
+    "buffer_budget_managed",
+    "parallel_connection_count",
+    "parallel_chunk_size_mb",
+    "parallel_chunk_size_kb",
+    "enable_http2",
+    "last_playback_diagnostics_json",
+    "enable_buffer_logs",
+    "resize_mode",
+    "min_buffer_ms",
+    "max_buffer_ms",
+    "buffer_for_playback_ms",
+    "buffer_for_playback_after_rebuffer_ms",
+    "target_buffer_size_mb",
+    "back_buffer_duration_ms",
+    "retain_back_buffer_from_keyframe",
+    "migration_load_control_defaults_aligned_done",
+    "migration_load_control_defaults_retuned_done",
+    "migration_load_control_min_buffer_retuned_done",
+    "migration_vod_cache_split_done",
+    "migration_back_buffer_duration_bumped_done",
+    "migration_max_buffer_bumped_done",
+    "migration_target_buffer_size_bumped_done",
+    "migration_after_rebuffer_lowered_done",
+    "migration_back_buffer_duration_reduced_done",
+    "migration_target_buffer_size_reduced_done",
+    "migration_allow_large_target_buffer_off_done",
+    "migration_buffer_budget_managed_exo_done",
+    "migration_vod_cache_back_buffer_zeroed_done",
+    "nuvio_performance_mode_enabled"
+)
+
+private val credentialProfileSettingsKeys = mapOf(
+    "debrid_settings" to setOf(
+        "torbox_api_key",
+        "premiumize_api_key",
+        "real_debrid_api_key"
+    ),
+    "mdblist_settings" to setOf("mdblist_api_key"),
+    "animeskip_settings" to setOf("animeskip_client_id")
+)
+
+internal fun shouldExcludePreferenceFromProfileSettingsSync(feature: String, keyName: String): Boolean {
+    return when {
+        feature == "layout_settings" && keyName in catalogKeysExcludedFromProfileSettingsBlob -> true
+        feature == "layout_settings" && keyName in localOnlyLayoutProfileSettingsKeys -> true
+        feature == "layout_settings" && keyName == "search_discover_enabled" -> true
+        feature == PLAYER_SETTINGS_FEATURE && keyName in localOnlyPlayerProfileSettingsKeys -> true
+        keyName in credentialProfileSettingsKeys[feature].orEmpty() -> true
+        else -> false
+    }
+}
 
 @Singleton
 class ProfileSettingsSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val postgrest: Postgrest,
     private val profileManager: ProfileManager,
-    private val profileDataStoreFactory: ProfileDataStoreFactory
+    private val profileDataStoreFactory: ProfileDataStoreFactory,
+    private val syncClientIdentity: SyncClientIdentity,
+    private val providerCredentialSyncService: ProviderCredentialSyncService,
+    private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val metaRepository: MetaRepository,
+    private val cwEnrichmentCache: ContinueWatchingEnrichmentCache
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val syncMutex = Mutex()
@@ -80,23 +191,15 @@ class ProfileSettingsSyncService @Inject constructor(
         "theme_settings",
         "layout_settings",
         ExperienceModeDataStore.FEATURE,
-        "player_settings",
+        PLAYER_SETTINGS_FEATURE,
+        StreamBadgeSettingsDataStore.FEATURE,
         "trailer_settings",
         "tmdb_settings",
         "mdblist_settings",
         "trakt_settings",
+        "debrid_settings",
         "animeskip_settings",
         "track_preference"
-    )
-
-    private val catalogKeysExcludedFromBlob = setOf(
-        "home_catalog_order_keys",
-        "disabled_home_catalog_keys",
-        "custom_catalog_titles"
-    )
-
-    private val localOnlyLayoutKeys = setOf(
-        "last_non_off_discover_location"
     )
 
     init {
@@ -116,18 +219,7 @@ class ProfileSettingsSyncService @Inject constructor(
         syncMutex.withLock {
             try {
                 val profileId = profileManager.activeProfileId.value
-                val settingsJson = exportSettingsBlob(profileId)
-
-                val params = buildJsonObject {
-                    put("p_profile_id", profileId)
-                    put("p_settings_json", settingsJson)
-                    put("p_platform", SETTINGS_SYNC_PLATFORM)
-                }
-
-                withJwtRefreshRetry {
-                    postgrest.rpc("sync_push_profile_settings_blob", params)
-                }
-
+                pushProfileToRemote(profileId)
                 Log.d(TAG, "Pushed profile settings blob for profile $profileId")
                 Result.success(Unit)
             } catch (e: Exception) {
@@ -141,17 +233,8 @@ class ProfileSettingsSyncService @Inject constructor(
         syncMutex.withLock {
             try {
                 val profileId = profileManager.activeProfileId.value
-                val params = buildJsonObject {
-                    put("p_profile_id", profileId)
-                    put("p_platform", SETTINGS_SYNC_PLATFORM)
-                }
-
-                val response = withJwtRefreshRetry {
-                    postgrest.rpc("sync_pull_profile_settings_blob", params)
-                }
+                val blob = pullProfileFromRemote(profileId)
                 lastForegroundPullAtMs = SystemClock.elapsedRealtime()
-                val rows = response.decodeList<SupabaseProfileSettingsBlob>()
-                val blob = rows.firstOrNull()?.settingsJson
                 if (blob == null) {
                     Log.d(TAG, "No remote profile settings blob for profile $profileId; keeping local settings")
                     return@withLock Result.success(false)
@@ -165,8 +248,7 @@ class ProfileSettingsSyncService @Inject constructor(
                     return@withLock Result.success(false)
                 }
 
-                importSettingsBlob(profileId, featuresJson)
-                skipNextPushSignature = remoteSignature
+                applySettingsBlob(profileId, featuresJson, remoteSignature)
                 Log.d(TAG, "Applied remote profile settings blob for profile $profileId")
                 Result.success(true)
             } catch (e: Exception) {
@@ -176,7 +258,102 @@ class ProfileSettingsSyncService @Inject constructor(
         }
     }
 
+    suspend fun copyProfileSetup(
+        sourceProfileId: Int,
+        targetProfileId: Int,
+        copyProviderCredentials: Boolean = false
+    ): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            syncMutex.withLock {
+                try {
+                    require(sourceProfileId != targetProfileId)
+                    require(profileManager.profiles.value.any { it.id == sourceProfileId })
+                    require(profileManager.profiles.value.any { it.id == targetProfileId })
+
+                    val targetFeatures = if (authManager.isAuthenticated) {
+                        if (
+                            copyProviderCredentials &&
+                            profileManager.activeProfileId.value in setOf(sourceProfileId, targetProfileId)
+                        ) {
+                            providerCredentialSyncService.syncFromRemote().getOrThrow()
+                        }
+                        val sourceBlob = if (sourceProfileId == profileManager.activeProfileId.value) {
+                            exportSettingsBlob(sourceProfileId).also { blob ->
+                                pushProfileToRemote(sourceProfileId, blob)
+                            }
+                        } else {
+                            pullProfileFromRemote(sourceProfileId)
+                                ?: exportSettingsBlob(sourceProfileId).also { blob ->
+                                    pushProfileToRemote(sourceProfileId, blob)
+                                }
+                        }
+                        require(sourceBlob["features"] is JsonObject)
+
+                        val params = buildJsonObject {
+                            put("p_source_profile_id", sourceProfileId)
+                            put("p_target_profile_id", targetProfileId)
+                            put("p_copy_tv", true)
+                            put("p_copy_mobile", false)
+                            put("p_copy_desktop", false)
+                            put("p_copy_provider_credentials", copyProviderCredentials)
+                            put("p_replace_provider_credentials", false)
+                            putSyncOriginClientId(syncClientIdentity)
+                        }
+                        val response = withJwtRefreshRetry {
+                            postgrest.rpc("sync_copy_profile_setup", params)
+                        }
+                        val copyResult = response.decodeList<SupabaseProfileSetupCopyResult>().firstOrNull()
+                            ?: error("Profile settings copy returned no result")
+                        check(copyResult.sourceProfileId == sourceProfileId)
+                        check(copyResult.targetProfileId == targetProfileId)
+                        check(copyResult.tvStatus == "copied" || copyResult.tvStatus == "unchanged")
+                        if (copyProviderCredentials) {
+                            check(
+                                copyResult.providerCredentialsStatus in setOf(
+                                    "copied",
+                                    "copied_partial",
+                                    "kept_existing",
+                                    "unchanged",
+                                    "source_missing"
+                                )
+                            )
+                        }
+                        pullProfileFromRemote(targetProfileId)
+                            ?.get("features")
+                            ?.jsonObject
+                            ?: error("Copied TV settings are unavailable")
+                    } else {
+                        exportSettingsBlob(sourceProfileId)["features"]?.jsonObject
+                            ?: error("Source TV settings are unavailable")
+                    }
+
+                    applySettingsBlob(
+                        profileId = targetProfileId,
+                        featuresJson = targetFeatures,
+                        signature = buildSettingsSignature(targetFeatures)
+                    )
+                    if (copyProviderCredentials) {
+                        if (authManager.isAuthenticated) {
+                            if (profileManager.activeProfileId.value == targetProfileId) {
+                                providerCredentialSyncService.syncFromRemote(targetProfileId).getOrThrow()
+                            }
+                        } else {
+                            copyProviderCredentialsLocally(sourceProfileId, targetProfileId)
+                        }
+                    }
+                    Log.d(TAG, "Copied profile setup from $sourceProfileId to $targetProfileId")
+                    Result.success(Unit)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to copy profile setup from $sourceProfileId to $targetProfileId", e)
+                    Result.failure(e)
+                }
+            }
+        }
+
     fun requestForegroundPull(force: Boolean = false) {
+        providerCredentialSyncService.requestForegroundPull(force)
         if (!authManager.isAuthenticated) return
 
         val now = SystemClock.elapsedRealtime()
@@ -194,15 +371,78 @@ class ProfileSettingsSyncService @Inject constructor(
         }
     }
 
+    private suspend fun pushProfileToRemote(
+        profileId: Int,
+        settingsJson: JsonObject? = null
+    ) {
+        val resolvedSettingsJson = settingsJson ?: exportSettingsBlob(profileId)
+        val params = buildJsonObject {
+            put("p_profile_id", profileId)
+            put("p_settings_json", resolvedSettingsJson)
+            put("p_platform", SETTINGS_SYNC_PLATFORM)
+            putSyncOriginClientId(syncClientIdentity)
+        }
+        withJwtRefreshRetry {
+            postgrest.rpc("sync_push_profile_settings_blob", params)
+        }
+    }
+
+    private suspend fun pullProfileFromRemote(profileId: Int): JsonObject? {
+        val params = buildJsonObject {
+            put("p_profile_id", profileId)
+            put("p_platform", SETTINGS_SYNC_PLATFORM)
+        }
+        val response = withJwtRefreshRetry {
+            postgrest.rpc("sync_pull_profile_settings_blob", params)
+        }
+        return response.decodeList<SupabaseProfileSettingsBlob>().firstOrNull()?.settingsJson
+    }
+
+    private suspend fun applySettingsBlob(
+        profileId: Int,
+        featuresJson: JsonObject,
+        signature: String
+    ) {
+        val isActiveProfile = profileManager.activeProfileId.value == profileId
+        val previousUseReleaseDates = if (isActiveProfile) {
+            tmdbSettingsDataStore.settings.first().useReleaseDates
+        } else {
+            null
+        }
+        importSettingsBlob(profileId, featuresJson)
+        if (isActiveProfile) {
+            val currentUseReleaseDates = tmdbSettingsDataStore.settings.first().useReleaseDates
+            if (previousUseReleaseDates != currentUseReleaseDates) {
+                metaRepository.clearCache()
+                cwEnrichmentCache.clearAll()
+            }
+            skipNextPushSignature = signature
+        }
+    }
+
+    private suspend fun copyProviderCredentialsLocally(sourceProfileId: Int, targetProfileId: Int) {
+        credentialProfileSettingsKeys.forEach { (feature, keyNames) ->
+            val sourcePreferences = profileDataStoreFactory.get(sourceProfileId, feature).data.first()
+            profileDataStoreFactory.get(targetProfileId, feature).edit { targetPreferences ->
+                keyNames.forEach { keyName ->
+                    val key = stringPreferencesKey(keyName)
+                    val sourceValue = sourcePreferences[key]?.trim().orEmpty()
+                    val targetValue = targetPreferences[key]?.trim().orEmpty()
+                    if (sourceValue.isNotEmpty() && targetValue.isEmpty()) {
+                        targetPreferences[key] = sourceValue
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun exportSettingsBlob(profileId: Int): JsonObject {
         val features = buildJsonObject {
             syncedFeatures.forEach { feature ->
                 val prefs = profileDataStoreFactory.get(profileId, feature).data.first()
                 val serialized = buildJsonObject {
                     prefs.asMap().forEach { (key, rawValue) ->
-                        if (feature == "layout_settings" && key.name in catalogKeysExcludedFromBlob) return@forEach
-                        if (feature == "layout_settings" && key.name in localOnlyLayoutKeys) return@forEach
-                        if (feature == "layout_settings" && key.name == "search_discover_enabled") return@forEach
+                        if (shouldExcludePreferenceFromProfileSettingsSync(feature, key.name)) return@forEach
                         val encoded = encodePreferenceValue(rawValue) ?: return@forEach
                         put(key.name, encoded)
                     }
@@ -223,22 +463,7 @@ class ProfileSettingsSyncService @Inject constructor(
             syncedFeatures.forEach { feature ->
                 val featureJson = featuresJson[feature]?.jsonObject ?: return@forEach
                 profileDataStoreFactory.get(profileId, feature).edit { mutablePrefs ->
-                    val preservedEntries = if (feature == "layout_settings") {
-                        val entries = mutableMapOf<Preferences.Key<*>, Any>()
-                        catalogKeysExcludedFromBlob.forEach { keyName ->
-                            val strKey = stringPreferencesKey(keyName)
-                            runCatching { mutablePrefs[strKey] }.getOrNull()?.let { entries[strKey] = it }
-                            val boolKey = booleanPreferencesKey(keyName)
-                            runCatching { mutablePrefs[boolKey] }.getOrNull()?.let { entries[boolKey] = it }
-                        }
-                        localOnlyLayoutKeys.forEach { keyName ->
-                            val strKey = stringPreferencesKey(keyName)
-                            runCatching { mutablePrefs[strKey] }.getOrNull()?.let { entries[strKey] = it }
-                        }
-                        entries
-                    } else {
-                        emptyMap()
-                    }
+                    val preservedEntries = captureLocalOnlyPreferenceEntries(feature, mutablePrefs)
                     val priorDiscoverLocation = if (feature == "layout_settings") {
                         mutablePrefs[stringPreferencesKey("discover_location")]
                     } else null
@@ -252,9 +477,8 @@ class ProfileSettingsSyncService @Inject constructor(
                     val hasWellFormedNewDiscoverKey = feature == "layout_settings" &&
                         extractDiscoverLocationString(featureJson) != null
                     featureJson.forEach { (keyName, encodedValue) ->
-                        if (feature == "layout_settings" && keyName in catalogKeysExcludedFromBlob) return@forEach
-                        if (feature == "layout_settings" && keyName in localOnlyLayoutKeys) return@forEach
-                        if (feature == "layout_settings" && keyName == "search_discover_enabled") {
+                        if (shouldExcludePreferenceFromProfileSettingsSync(feature, keyName)) {
+                            if (feature != "layout_settings" || keyName != "search_discover_enabled") return@forEach
                             if (!hasWellFormedNewDiscoverKey) {
                                 val legacy = (encodedValue as? JsonObject)
                                     ?.get("value")?.jsonPrimitive?.contentOrNull
@@ -282,17 +506,7 @@ class ProfileSettingsSyncService @Inject constructor(
                         applyEncodedPreference(mutablePrefs, keyName, encodedValue)
                     }
 
-                    @Suppress("UNCHECKED_CAST")
-                    preservedEntries.forEach { (key, value) ->
-                        when (value) {
-                            is String -> mutablePrefs[key as Preferences.Key<String>] = value
-                            is Boolean -> mutablePrefs[key as Preferences.Key<Boolean>] = value
-                            is Int -> mutablePrefs[key as Preferences.Key<Int>] = value
-                            is Long -> mutablePrefs[key as Preferences.Key<Long>] = value
-                            is Float -> mutablePrefs[key as Preferences.Key<Float>] = value
-                            is Double -> mutablePrefs[key as Preferences.Key<Double>] = value
-                        }
-                    }
+                    restorePreferenceEntries(mutablePrefs, preservedEntries)
                     if (feature == "layout_settings" && priorDiscoverLocation != null) {
                         val discoverKey = stringPreferencesKey("discover_location")
                         if (mutablePrefs[discoverKey] == null) {
@@ -369,7 +583,7 @@ class ProfileSettingsSyncService @Inject constructor(
     private fun normalizeLayoutSettingsForSignature(featureJson: JsonObject): JsonObject {
         val hasLegacy = "search_discover_enabled" in featureJson
         val hasNewKey = "discover_location" in featureJson
-        val hasLocalOnly = featureJson.keys.any { it in localOnlyLayoutKeys }
+        val hasLocalOnly = featureJson.keys.any { it in localOnlyLayoutProfileSettingsKeys }
         if (!hasLegacy && !hasNewKey && !hasLocalOnly) return featureJson
         val newDiscoverString = extractDiscoverLocationString(featureJson)
         if (!hasLegacy && newDiscoverString != null && !hasLocalOnly) return featureJson
@@ -378,7 +592,7 @@ class ProfileSettingsSyncService @Inject constructor(
                 when {
                     keyName == "search_discover_enabled" -> return@forEach
                     keyName == "discover_location" && newDiscoverString == null -> return@forEach
-                    keyName in localOnlyLayoutKeys -> return@forEach
+                    keyName in localOnlyLayoutProfileSettingsKeys -> return@forEach
                     else -> put(keyName, encodedValue)
                 }
             }
@@ -410,7 +624,7 @@ class ProfileSettingsSyncService @Inject constructor(
             } else {
                 featureJson
             }
-            "$feature={${buildFeatureSignature(normalized)}}"
+            "$feature={${buildFeatureSignature(normalized, feature)}}"
         }
     }
 
@@ -418,8 +632,7 @@ class ProfileSettingsSyncService @Inject constructor(
         return prefs.asMap()
             .entries
             .mapNotNull { (key, rawValue) ->
-                if (feature == "layout_settings" && key.name in catalogKeysExcludedFromBlob) return@mapNotNull null
-                if (feature == "layout_settings" && key.name in localOnlyLayoutKeys) return@mapNotNull null
+                if (shouldExcludePreferenceFromProfileSettingsSync(feature, key.name)) return@mapNotNull null
                 encodePreferenceValue(rawValue)?.let { encoded ->
                     key.name to encoded.toString()
                 }
@@ -428,10 +641,71 @@ class ProfileSettingsSyncService @Inject constructor(
             .joinToString(separator = "|") { (key, value) -> "$key=$value" }
     }
 
-    private fun buildFeatureSignature(featureJson: JsonObject): String {
+    private fun buildFeatureSignature(featureJson: JsonObject, feature: String = ""): String {
         return featureJson.entries
+            .filterNot { (key, _) -> shouldExcludePreferenceFromProfileSettingsSync(feature, key) }
             .sortedBy { it.key }
             .joinToString(separator = "|") { (key, value) -> "$key=$value" }
+    }
+
+    private fun captureLocalOnlyPreferenceEntries(
+        feature: String,
+        mutablePrefs: MutablePreferences
+    ): Map<Preferences.Key<*>, Any> {
+        val keyNames = when (feature) {
+            "layout_settings" -> catalogKeysExcludedFromProfileSettingsBlob + localOnlyLayoutProfileSettingsKeys
+            PLAYER_SETTINGS_FEATURE -> localOnlyPlayerProfileSettingsKeys
+            else -> credentialProfileSettingsKeys[feature].orEmpty()
+        }
+        if (keyNames.isEmpty()) return emptyMap()
+        val entries = mutableMapOf<Preferences.Key<*>, Any>()
+        keyNames.forEach { keyName ->
+            val stringKey = stringPreferencesKey(keyName)
+            runCatching { mutablePrefs[stringKey] }.getOrNull()?.let { entries[stringKey] = it }
+            val booleanKey = booleanPreferencesKey(keyName)
+            runCatching { mutablePrefs[booleanKey] }.getOrNull()?.let { entries[booleanKey] = it }
+            val intKey = intPreferencesKey(keyName)
+            runCatching { mutablePrefs[intKey] }.getOrNull()?.let { entries[intKey] = it }
+            val longKey = longPreferencesKey(keyName)
+            runCatching { mutablePrefs[longKey] }.getOrNull()?.let { entries[longKey] = it }
+            val floatKey = floatPreferencesKey(keyName)
+            runCatching { mutablePrefs[floatKey] }.getOrNull()?.let { entries[floatKey] = it }
+            val doubleKey = doublePreferencesKey(keyName)
+            runCatching { mutablePrefs[doubleKey] }.getOrNull()?.let { entries[doubleKey] = it }
+            val stringSetKey = stringSetPreferencesKey(keyName)
+            runCatching { mutablePrefs[stringSetKey] }.getOrNull()?.let { entries[stringSetKey] = it }
+        }
+        return entries
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun restorePreferenceEntries(
+        mutablePrefs: MutablePreferences,
+        entries: Map<Preferences.Key<*>, Any>
+    ) {
+        val gson = com.google.gson.Gson()
+        entries.forEach { (key, value) ->
+            when (value) {
+                is String -> mutablePrefs[key as Preferences.Key<String>] = value
+                is Boolean -> mutablePrefs[key as Preferences.Key<Boolean>] = value
+                is Int -> mutablePrefs[key as Preferences.Key<Int>] = value
+                is Long -> mutablePrefs[key as Preferences.Key<Long>] = value
+                is Float -> mutablePrefs[key as Preferences.Key<Float>] = value
+                is Double -> mutablePrefs[key as Preferences.Key<Double>] = value
+                is Set<*> -> {
+                    if (value.all { it is String }) {
+                        // Catalog keys should be stored as JSON strings, not Sets.
+                        // Convert to prevent ClassCastException on read.
+                        if (key.name in catalogKeysExcludedFromProfileSettingsBlob) {
+                            val jsonValue = gson.toJson((value as Set<String>).toList())
+                            mutablePrefs[stringPreferencesKey(key.name)] = jsonValue
+                        } else {
+                            mutablePrefs[key as Preferences.Key<Set<String>>] = value as Set<String>
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun encodePreferenceValue(rawValue: Any?): JsonObject? {

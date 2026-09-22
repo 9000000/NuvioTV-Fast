@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.player
 import androidx.media3.common.C
 import androidx.media3.common.TrackGroup
 import androidx.media3.ui.AspectRatioFrameLayout
+import com.nuvio.tv.core.streams.StreamBadgePlacement
 import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.LibassRenderType
@@ -18,6 +19,13 @@ import com.nuvio.tv.ui.components.SourceChipItem
 
 enum class PlayerExitReason {
     StillWatchingPrompt
+}
+
+enum class PlaybackIssueReportStatus {
+    Idle,
+    Sending,
+    Sent,
+    Failed
 }
 
 sealed interface PostPlayMode {
@@ -60,6 +68,9 @@ data class PlayerUiState(
     val contentType: String? = null,
     val currentStreamName: String? = null, // Name of the current stream source
     val currentStreamUrl: String? = null,
+    val currentStreamInfoHash: String? = null, // InfoHash of the currently playing stream (for debrid matching)
+    val currentStreamFileIdx: Int? = null, // FileIdx of the currently playing stream (for debrid matching)
+    val currentStreamAddonName: String? = null, // Addon name of the currently playing stream
     val backdrop: String? = null,
     val logo: String? = null,
     val description: String? = null,
@@ -69,11 +80,17 @@ data class PlayerUiState(
     val pendingPreviewSeekPosition: Long? = null,
     val playbackSpeed: Float = 1f,
     val loadingOverlayEnabled: Boolean = true,
+    val showPlayerLoadingStatus: Boolean = false,
+    val playbackIssueReportsEnabled: Boolean = false,
     val showLoadingOverlay: Boolean = true,
     val loadingMessage: String? = null,
     val loadingProgress: Float? = null,
+    val loadingIssueReportVisible: Boolean = false,
+    val loadingIssueElapsedMs: Long = 0L,
     val pauseOverlayEnabled: Boolean = true,
     val osdClockEnabled: Boolean = true,
+    val playerStatsHudEnabled: Boolean = false,
+    val playerStatsHudButtonAvailable: Boolean = false,
     val showPauseOverlay: Boolean = false,
     val audioTracks: List<TrackInfo> = emptyList(),
     val subtitleTracks: List<TrackInfo> = emptyList(),
@@ -129,6 +146,7 @@ data class PlayerUiState(
     val episodeSelectedAddonFilter: String? = null, // null means "All"
     val episodeFilteredStreams: List<Stream> = emptyList(),
     val episodeAvailableAddons: List<String> = emptyList(),
+    val episodeSourceChips: List<SourceChipItem> = emptyList(),
     val episodeStreamsForVideoId: String? = null,
     val episodeStreamsSeason: Int? = null,
     val episodeStreamsEpisode: Int? = null,
@@ -142,7 +160,14 @@ data class PlayerUiState(
     val sourceFilteredStreams: List<Stream> = emptyList(),
     val sourceAvailableAddons: List<String> = emptyList(),
     val sourceChips: List<SourceChipItem> = emptyList(),
+    val showFileSizeBadges: Boolean = true,
+    val showAddonLogo: Boolean = true,
+    val streamBadgePlacement: StreamBadgePlacement = StreamBadgePlacement.BOTTOM,
     val error: String? = null,
+    val showSwitchToMpvErrorAction: Boolean = false,
+    val playbackIssueReportStatus: PlaybackIssueReportStatus = PlaybackIssueReportStatus.Idle,
+    val playbackIssueReportId: String? = null,
+    val playbackIssueReportError: String? = null,
     val pendingSeekPosition: Long? = null, // For resuming from saved progress
     // Parental guide overlay
     val parentalWarnings: List<ParentalWarning> = emptyList(),
@@ -150,13 +175,16 @@ data class PlayerUiState(
     val parentalGuideHasShown: Boolean = false,
     // Skip intro
     val activeSkipInterval: SkipInterval? = null,
+    val activeSkipTargetsPostCredits: Boolean = false,
     val skipIntervalDismissed: Boolean = false,
     // Next episode card
     val nextEpisode: NextEpisodeInfo? = null,
+    val isNextEpisodeMetadataResolved: Boolean = false,
     val postPlayMode: PostPlayMode? = null,
     val postPlayDismissedForCurrentEpisode: Boolean = false,
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
+    val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = false,
     // Stream source badge
     val showStreamSourceIndicator: Boolean = false,
     val streamSourceIndicatorText: String = "",
@@ -201,7 +229,13 @@ data class PlayerUiState(
 
 data class PlaybackTimelineState(
     val currentPosition: Long = 0L,
-    val duration: Long = 0L
+    val duration: Long = 0L,
+    /** Position (ms) up to which the player has buffered ahead of the playhead. */
+    val bufferedPosition: Long = 0L,
+    /** True for live windows (Live TV / live HLS), not VOD HLS. */
+    val isLive: Boolean = false,
+    /** Wall-clock time spent playing the current live stream. */
+    val watchedDurationMs: Long = 0L
 )
 
 data class TrackInfo(
@@ -231,6 +265,7 @@ data class NextEpisodeInfo(
 
 data class SubtitleSyncCue(
     val startTimeMs: Long,
+    val endTimeMs: Long,
     val text: String
 )
 
@@ -264,6 +299,7 @@ sealed class PlayerEvent {
     data object OnShowSubtitleDelayOverlay : PlayerEvent()
     data object OnHideSubtitleDelayOverlay : PlayerEvent()
     data class OnAdjustSubtitleDelay(val deltaMs: Int, val showOverlay: Boolean = true) : PlayerEvent()
+    data class OnResetSubtitleDelay(val showOverlay: Boolean = true) : PlayerEvent()
     data object OnShowSpeedDialog : PlayerEvent()
     data object OnShowMoreDialog : PlayerEvent()
     data object OnDismissMoreDialog : PlayerEvent()
@@ -282,6 +318,7 @@ sealed class PlayerEvent {
     data class OnSourceStreamSelected(val stream: Stream) : PlayerEvent()
     data object OnDismissTransientOverlay : PlayerEvent()
     data object OnRetry : PlayerEvent()
+    data object OnReportPlaybackIssue : PlayerEvent()
     data object OnParentalGuideHide : PlayerEvent()
     data class OnShowDisplayModeInfo(val info: DisplayModeInfo) : PlayerEvent()
     data object OnHideDisplayModeInfo : PlayerEvent()
@@ -303,8 +340,10 @@ sealed class PlayerEvent {
     data object OnResetSubtitleDefaults : PlayerEvent()
     data object OnToggleAspectRatio : PlayerEvent()
     data object OnSwitchInternalPlayerEngine : PlayerEvent()
+    data object OnSwitchToMpvPlayer : PlayerEvent()
     data object OnShowStreamInfo : PlayerEvent()
     data object OnDismissStreamInfo : PlayerEvent()
+    data object OnTogglePlayerStatsHud : PlayerEvent()
     data object OnToggleTorrentStats : PlayerEvent()
 }
 
@@ -342,6 +381,7 @@ data class StreamInfoData(
     val videoHeight: Int? = null,
     val videoFrameRate: Float? = null,
     val videoBitrate: Int? = null,
+    val fileBitrate: Int? = null,
     // Audio
     val audioCodec: String? = null,
     val audioChannels: String? = null,

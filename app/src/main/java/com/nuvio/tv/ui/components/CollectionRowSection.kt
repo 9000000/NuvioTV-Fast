@@ -6,6 +6,8 @@
 
 package com.nuvio.tv.ui.components
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +26,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +49,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -63,9 +68,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.nuvio.tv.domain.model.Collection
+import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.CollectionFolder
 import com.nuvio.tv.domain.model.PosterShape
-import com.nuvio.tv.ui.theme.NuvioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -78,12 +83,12 @@ fun CollectionRowSection(
     focusedItemIndex: Int = -1,
     onItemFocused: (itemIndex: Int) -> Unit = {},
     onFolderFocused: (collection: Collection, folder: CollectionFolder) -> Unit = { _, _ -> },
-    entryFocusRequester: FocusRequester? = null
+    entryFocusRequester: FocusRequester? = null,
+    rowFocusRequester: FocusRequester = remember { FocusRequester() }
 ) {
     val currentOnFolderClick by rememberUpdatedState(onFolderClick)
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
     val currentOnFolderFocused by rememberUpdatedState(onFolderFocused)
-    val rowFocusRequester = remember { FocusRequester() }
     val itemFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     var lastRequestedFocusKey by remember { mutableStateOf<String?>(null) }
     var lastFocusedItemIndex by remember { mutableIntStateOf(-1) }
@@ -124,14 +129,14 @@ fun CollectionRowSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 48.dp, end = 48.dp, bottom = 12.dp),
+                .padding(start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl, bottom = NuvioTheme.spacing.md),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = collection.title,
                 style = MaterialTheme.typography.headlineMedium,
-                color = NuvioColors.TextPrimary,
+                color = NuvioTheme.colors.TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -139,46 +144,72 @@ fun CollectionRowSection(
 
         val density = LocalDensity.current
         val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
-        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec) {
-            val startPx = with(density) { 48.dp.roundToPx() }
+        val layoutDirection = LocalLayoutDirection.current
+        val isRtl = layoutDirection == LayoutDirection.Rtl
+        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec, isRtl) {
+            val startPx = with(density) { NuvioTheme.spacing.xxxl.roundToPx() }
             @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {
                 override val scrollAnimationSpec: AnimationSpec<Float> =
                     defaultBringIntoViewSpec.scrollAnimationSpec
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
                     val childSize = kotlin.math.abs(size)
-                    val target = startPx.toFloat()
-                    val space = containerSize - target
-                    val leading = if (childSize <= containerSize && space < childSize) containerSize - childSize else target
-                    return offset - leading
+                    if (isRtl) {
+                        val childSmallerThanParent = childSize <= containerSize
+                        val initialTarget = containerSize - startPx.toFloat()
+                        val targetForTrailingEdge =
+                            if (childSmallerThanParent && initialTarget < childSize) {
+                                childSize
+                            } else {
+                                initialTarget
+                            }
+                        return (offset + size) - targetForTrailingEdge
+                    } else {
+                        val target = startPx.toFloat()
+                        val space = containerSize - target
+                        val leading = if (childSize <= containerSize && space < childSize) containerSize - childSize else target
+                        return offset - leading
+                    }
                 }
             }
         }
 
         CompositionLocalProvider(LocalBringIntoViewSpec provides horizontalBringIntoViewSpec) {
-            val restoreIdx = lastFocusedItemIndex.coerceIn(0, (collection.folders.size - 1).coerceAtLeast(0))
-            val restoreFolder = collection.folders.getOrNull(restoreIdx)
-            val restoreFocusRequester = if (restoreFolder != null) {
-                itemFocusRequesters.getOrPut(folderFocusKey(restoreIdx, restoreFolder)) { FocusRequester() }
-            } else FocusRequester.Default
-
             LazyRow(
                 state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(rowFocusRequester)
-                    .focusRestorer(restoreFocusRequester)
+                    .focusRestorer {
+                        val visibleIndices = listState.layoutInfo.visibleItemsInfo.map { it.index }
+                        val restoreIdx = lastFocusedItemIndex.takeIf { it in visibleIndices }
+                            ?: visibleIndices.firstOrNull()
+                        restoreIdx?.let { index ->
+                            collection.folders.getOrNull(index)?.let { folder ->
+                                itemFocusRequesters[folderFocusKey(index, folder)]
+                            }
+                        }
+                            ?: FocusRequester.Default
+                    }
                     .focusGroup(),
-                contentPadding = PaddingValues(start = 48.dp, end = 200.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(start = NuvioTheme.spacing.xxxl, end = 200.dp),
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
             ) {
                 itemsIndexed(
                     items = collection.folders,
                     key = { index, folder -> folderFocusKey(index, folder) },
                     contentType = { _, _ -> "collection_folder" }
                 ) { index, folder ->
-                    val targetIndex = if (lastFocusedItemIndex >= 0) lastFocusedItemIndex else 0
-                    val isEntryTarget = entryFocusRequester != null && index == targetIndex
+                    val isEntryTarget by remember(entryFocusRequester, index) {
+                        derivedStateOf {
+                            val targetIndex = if (lastFocusedItemIndex >= 0) {
+                                lastFocusedItemIndex
+                            } else {
+                                0
+                            }
+                            entryFocusRequester != null && index == targetIndex
+                        }
+                    }
 
                     FolderCard(
                         folder = folder,
@@ -226,6 +257,7 @@ private fun FolderCard(
     }
 
     val shape = RoundedCornerShape(posterCardStyle.cornerRadius)
+    val cardDepthStyle = LocalCardDepthStyle.current
     val cardGlow = rememberArtworkBackedCardGlow(
         imageUrl = folder.coverImageUrl,
         fallbackSeed = "${collection.title}:${folder.title}:${folder.coverEmoji.orEmpty()}",
@@ -244,19 +276,28 @@ private fun FolderCard(
             },
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = NuvioTheme.colors.BackgroundCard,
+            focusedContainerColor = NuvioTheme.colors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                border = NuvioTheme.focusRing.border(posterCardStyle.focusedBorderWidth),
                 shape = shape
             )
         ),
         scale = CardDefaults.scale(focusedScale = posterCardStyle.focusedScale),
         glow = cardGlow
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape)
+                .nuvioCardDepth(
+                    shape = shape,
+                    surface = CardDepthSurface.POSTERS,
+                    style = cardDepthStyle
+                )
+        ) {
             val activeImageUrl = collectionFolderCardImageUrl(folder, isFocused)
             if (!activeImageUrl.isNullOrBlank()) {
                 AsyncImage(
@@ -285,7 +326,7 @@ private fun FolderCard(
                     Text(
                         text = folder.title.take(2).uppercase(),
                         style = MaterialTheme.typography.headlineLarge,
-                        color = NuvioColors.TextSecondary
+                        color = NuvioTheme.colors.TextSecondary
                     )
                 }
             }
@@ -316,7 +357,7 @@ private fun FolderCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
-                        .padding(8.dp),
+                        .padding(NuvioTheme.spacing.sm),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

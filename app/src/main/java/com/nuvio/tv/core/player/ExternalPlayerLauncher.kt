@@ -8,19 +8,31 @@ import com.nuvio.tv.R
 
 object ExternalPlayerLauncher {
 
+    /**
+     * Fire-and-forget launch of an external player.
+     * Used as a fallback when ActivityResultLauncher is not available (e.g. non-Activity context).
+     */
     fun launch(
         context: Context,
         url: String,
         title: String? = null,
-        headers: Map<String, String>? = null
+        headers: Map<String, String>? = null,
+        resumePositionMs: Long = 0L,
+        startFromBeginning: Boolean = false,
+        subtitles: List<SubtitleInput>? = null,
+        skipSegmentsJson: String? = null
     ): Boolean {
         return try {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(Uri.parse(url), "video/*")
 
+                // Pre-resolved intro/outro skip segments (mpvNova reads this; others ignore it).
+                skipSegmentsJson?.let { putExtra("skip_segments", it) }
+
                 title?.let {
                     putExtra("title", it)
                     putExtra(Intent.EXTRA_TITLE, it)
+                    putExtra("forcename", it) // Vimu Player
                 }
 
                 headers?.let { hdrs ->
@@ -28,6 +40,54 @@ object ExternalPlayerLauncher {
                         val headerArray = hdrs.entries.map { "${it.key}: ${it.value}" }.toTypedArray()
                         putExtra("headers", headerArray)
                     }
+                }
+
+                if (startFromBeginning) {
+                    putExtra("position", 0)
+                    putExtra("extra_position", 0L)
+                    putExtra("startfrom", 0)
+                    putExtra("forceresume", false)
+                    putExtra("from_start", true)
+                } else if (resumePositionMs > 0L) {
+                    putExtra("position", resumePositionMs.toInt())
+                    putExtra("startfrom", resumePositionMs.toInt())
+                    putExtra("forceresume", true)  // Vimu: enable resume for network streams
+                    putExtra("from_start", false)
+                }
+
+                // Subtitle extras for external players
+                if (!subtitles.isNullOrEmpty()) {
+                    val subtitleUris = subtitles.map { Uri.parse(it.url) }.toTypedArray()
+                    val subtitleNames = subtitles.map { it.name }.toTypedArray()
+                    val subtitleFilenames = subtitles.map { "${it.lang}_${it.name}.srt" }.toTypedArray()
+
+                    // Grant read permission for content:// URIs via ClipData.
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    val clipData = android.content.ClipData(
+                        "subtitles",
+                        arrayOf("application/x-subrip", "text/vtt"),
+                        android.content.ClipData.Item(subtitleUris.first())
+                    )
+                    subtitleUris.drop(1).forEach { uri ->
+                        clipData.addItem(android.content.ClipData.Item(uri))
+                    }
+                    setClipData(clipData)
+
+                    // MX Player / mpv-android / Nova
+                    putExtra("subs", subtitleUris)
+                    putExtra("subs.name", subtitleNames)
+                    putExtra("subs.filename", subtitleFilenames)
+                    putExtra("subs.enable", arrayOf(subtitleUris.first()))
+
+                    // Just Player
+                    putExtra("subtitle_uri", subtitleUris)
+                    putExtra("subtitle_name", subtitleNames)
+
+                    // VLC (single subtitle — use first one)
+                    putExtra("subtitles_location", subtitleUris.first())
+
+                    // Vimu Player
+                    putExtra("forcedsrt", subtitles.first().url)
                 }
 
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -44,4 +104,27 @@ object ExternalPlayerLauncher {
             false
         }
     }
+
+    /**
+     * Create an [ExternalPlayerInput] for use with [ExternalPlayerResultContract].
+     * Prefer this over [launch] when you have an Activity context and want to receive
+     * playback progress back from the external player.
+     */
+    fun createInput(
+        url: String,
+        title: String? = null,
+        headers: Map<String, String>? = null,
+        resumePositionMs: Long = 0L,
+        startFromBeginning: Boolean = false,
+        subtitles: List<SubtitleInput>? = null,
+        skipSegmentsJson: String? = null
+    ): ExternalPlayerInput = ExternalPlayerInput(
+        url = url,
+        title = title,
+        headers = headers,
+        resumePositionMs = resumePositionMs,
+        startFromBeginning = startFromBeginning,
+        subtitles = subtitles,
+        skipSegmentsJson = skipSegmentsJson
+    )
 }

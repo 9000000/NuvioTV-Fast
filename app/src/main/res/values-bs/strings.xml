@@ -115,6 +115,13 @@
     <string name="cw_min_left">Preostalo %1$dm</string>
     <string name="cw_almost_done">Skoro gotovo</string>
     <string name="cw_airs_date">Prikazuje se %1$s</string>
+    <string name="cw_airs_today">Prikazuje se danas</string>
+    <string name="cw_airs_tomorrow">Prikazuje se sutra</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Prikazuje se za %d dan</item>
+        <item quantity="few">Prikazuje se za %d dana</item>
+        <item quantity="other">Prikazuje se za %d dana</item>
+    </plurals>
     <string name="cw_action_go_to_details">Idi na detalje</string>
     <string name="cw_action_start_from_beginning">Počni ispočetka</string>
     <string name="cw_action_remove">Ukloni</string>
@@ -320,7 +327,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio će ostati besplatan i open source. Ako želite podržati projekt, možete pomoći u pokrivanju vremena i infrastrukture koja stoji iza njega.</string>
     <string name="supporters_contributors_donate_button">Donirajte za Nuvio</string>
     <string name="supporters_contributors_qr_title">Skenirajte za donaciju</string>
-    <string name="supporters_contributors_qr_subtitle">Otvorite link na telefonu i podržite Nuvio putem Ko-fi.</string>
+    <string name="supporters_contributors_qr_subtitle">Otvorite link na telefonu kako biste podržali Nuvio.</string>
     <string name="supporters_contributors_qr_hint">Usmjerite kameru na QR kod ili koristite dugme ispod.</string>
     <string name="supporters_contributors_back_button">Nazad na detalje</string>
     <string name="supporters_tab">Podržavaoci</string>
@@ -362,8 +369,8 @@
     <string name="playback_engine_mvplayer">libmpv (Beta)</string>
     <string name="playback_auto_switch_internal_player_on_error">Automatski promijeni engine u slučaju greške</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Ako pokretanje streama ne uspije, automatski se prebaci između ExoPlayer i libmpv.</string>
-    <string name="playback_section_audio">Zvuk i Trailer</string>
-    <string name="playback_section_audio_desc">Ponašanje trailera i kontrole zvuka.</string>
+    <string name="playback_section_audio">Zvuk i video</string>
+    <string name="playback_section_audio_desc">Kontrole zvuka i kompatibilnost videa.</string>
     <string name="playback_section_subtitles">Titlovi</string>
     <string name="playback_section_subtitles_desc">Jezik, stil i način iscrtavanja.</string>
     <string name="playback_afr_open">Otvori</string>
@@ -402,7 +409,6 @@
     <string name="audio_decoder_priority">Prioritet Dekodera</string>
     <string name="audio_tunneled">Tunneled Playback</string>
     <string name="audio_tunneled_sub">Sinhronizacija zvuka/videa na hardverskom nivou. Može poboljšati reprodukciju na nekim Android TV uređajima.</string>
-    <string name="audio_dv_sub">Mapiraj Dolby Vision Profile 7 na standardni HEVC za uređaje bez hardverske Dolby Vision podrške.</string>
     <string name="audio_mpv_hwdec_title">Hardware Decoding (Samo MPV)</string>
     <string name="audio_mpv_hwdec_dialog_subtitle">Odaberite kako bi libmpv trebao koristiti hardware dekodere.</string>
     <string name="audio_mpv_hwdec_legacy_direct_copy">Legacy (direct -&gt; copy)</string>
@@ -459,13 +465,6 @@
     <string name="sub_org_none_desc">Prikaži titlove u zadanom redoslijedu rezultata addona.</string>
     <string name="sub_org_by_lang_desc">Grupiši titlove po jeziku.</string>
     <string name="sub_org_by_addon_desc">Grupiši titlove po izvoru addona.</string>
-    <string name="sub_startup_mode_title">Učitavanje Addon Titlova</string>
-    <string name="sub_startup_mode_fast">Brzo pokretanje</string>
-    <string name="sub_startup_mode_preferred">Preferirani jezici</string>
-    <string name="sub_startup_mode_all">Svi addon titlovi</string>
-    <string name="sub_startup_mode_fast_desc">Pokreni reprodukciju odmah. Odabir addon titlova može jednom ponovo učitati player.</string>
-    <string name="sub_startup_mode_preferred_desc">Unaprijed učitaj addon titlove prije reprodukcije i dodaj preferirane/sekundarne jezičke trackove.</string>
-    <string name="sub_startup_mode_all_desc">Unaprijed učitaj i dodaj sve addon titlove prije reprodukcije. Najsporije pokretanje.</string>
 
     <!-- PlaybackAutoPlaySettings -->
     <string name="autoplay_reuse_last_link">Ponovo Koristi Zadnji Link</string>
@@ -577,7 +576,7 @@
     <string name="layout_trailer_muted">Pusti Trailer Bez Zvuka</string>
     <string name="layout_trailer_muted_sub_preview">Utišaj zvuk trailera tokom autoplay previewa.</string>
     <string name="layout_trailer_muted_sub_expanded">Utišaj zvuk trailera u proširenim karticama.</string>
-    <string name="layout_section_card_style">Stil Poster Kartice</string>
+    <string name="layout_section_card_style">Poster Kartica</string>
     <string name="layout_section_card_style_desc">Podesi širinu kartice i radius uglova.</string>
     <string name="layout_open">Otvoreno</string>
     <string name="layout_closed">Zatvoreno</string>
@@ -1149,11 +1148,9 @@
 
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Prijava Sa QR Kodom</string>
-    <string name="auth_qr_account_login">Prijava na Račun</string>
     <string name="auth_qr_finishing">Završavanje prijave…</string>
     <string name="auth_qr_code_label">Kod: %1$s</string>
     <string name="auth_qr_expires">Ističe za %1$s</string>
-    <string name="auth_qr_phone_hint">Koristi telefon za prijavu sa emailom/lozinkom. TV ostaje samo za QR zbog brže prijave.</string>
     <string name="auth_qr_scan_instruction">Skeniraj QR, odobri u pretraživaču, pa se vrati ovdje.</string>
     <string name="auth_qr_code_display">Kod: %1$s</string>
     <string name="auth_qr_refresh">Osvježi QR</string>

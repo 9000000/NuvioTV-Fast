@@ -3,19 +3,22 @@ package com.nuvio.tv.ui.components.posteroptions
 import android.content.Context
 import android.util.Log
 import com.nuvio.tv.core.tmdb.TmdbService
+import com.nuvio.tv.data.local.WatchedSeriesStateHolder
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.domain.repository.LibraryRepository
+import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -44,10 +47,10 @@ class PosterOptionsControllerShowTest {
             isInLibrary = true,
             isWatched = false
         )
-        controller.bind(this)
+        controller.bind(backgroundScope)
 
         controller.show(samplePreview(), addonBaseUrl = null)
-        advanceUntilIdle()
+        runCurrent()
 
         val state = controller.state.value
         assertEquals(true, state.isInLibrary)
@@ -62,10 +65,10 @@ class PosterOptionsControllerShowTest {
             isInLibrary = false,
             isWatched = false
         )
-        controller.bind(this)
+        controller.bind(backgroundScope)
 
         controller.show(samplePreview(), addonBaseUrl = null)
-        advanceUntilIdle()
+        runCurrent()
 
         val state = controller.state.value
         assertEquals(false, state.isInLibrary)
@@ -79,10 +82,10 @@ class PosterOptionsControllerShowTest {
             isInLibrary = false,
             isWatched = true
         )
-        controller.bind(this)
+        controller.bind(backgroundScope)
 
         controller.show(samplePreview(), addonBaseUrl = null)
-        advanceUntilIdle()
+        runCurrent()
 
         val state = controller.state.value
         assertEquals(true, state.isWatched)
@@ -94,6 +97,7 @@ class PosterOptionsControllerShowTest {
         val libraryRepository = mockk<LibraryRepository>(relaxed = true) {
             every { sourceMode } returns flowOf(LibrarySourceMode.LOCAL)
             every { listTabs } returns flowOf(emptyList())
+            every { membershipListTabs } returns flowOf(emptyList())
             every { isInLibrary(any(), any()) } returns flowOf(false)
         }
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true) {
@@ -106,17 +110,23 @@ class PosterOptionsControllerShowTest {
             }
             coEvery { tmdbToImdb(222, "movie") } returns "tt0000002"
         }
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val watchedSeriesStateHolder = mockk<WatchedSeriesStateHolder>(relaxed = true) {
+            every { fullyWatchedSeriesIds } returns MutableStateFlow(emptySet())
+        }
         val controller = PosterOptionsController(
             appContext = context,
             libraryRepository = libraryRepository,
             watchProgressRepository = watchProgressRepository,
+            metaRepository = metaRepository,
+            watchedSeriesStateHolder = watchedSeriesStateHolder,
             tmdbService = tmdbService
         )
-        controller.bind(this)
+        controller.bind(backgroundScope)
 
         controller.show(samplePreview(id = "tmdb:111"), addonBaseUrl = null)
         controller.show(samplePreview(id = "tmdb:222"), addonBaseUrl = null)
-        advanceUntilIdle()
+        runCurrent()
 
         val state = controller.state.value
         assertEquals("tt0000002", state.target?.id)
@@ -130,6 +140,7 @@ class PosterOptionsControllerShowTest {
         val libraryRepository = mockk<LibraryRepository>(relaxed = true) {
             every { sourceMode } returns flowOf(LibrarySourceMode.LOCAL)
             every { listTabs } returns flowOf(emptyList())
+            every { membershipListTabs } returns flowOf(emptyList())
             // The item is stored under the canonical IMDB id; a query under the
             // raw TMDB id would miss.
             every { isInLibrary(tmdbId, any()) } returns flowOf(false)
@@ -141,16 +152,22 @@ class PosterOptionsControllerShowTest {
         val tmdbService = mockk<TmdbService>(relaxed = true) {
             coEvery { tmdbToImdb(12345, "movie") } returns imdbId
         }
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val watchedSeriesStateHolder = mockk<WatchedSeriesStateHolder>(relaxed = true) {
+            every { fullyWatchedSeriesIds } returns MutableStateFlow(emptySet())
+        }
         val controller = PosterOptionsController(
             appContext = context,
             libraryRepository = libraryRepository,
             watchProgressRepository = watchProgressRepository,
+            metaRepository = metaRepository,
+            watchedSeriesStateHolder = watchedSeriesStateHolder,
             tmdbService = tmdbService
         )
-        controller.bind(this)
+        controller.bind(backgroundScope)
 
         controller.show(samplePreview(id = tmdbId), addonBaseUrl = null)
-        advanceUntilIdle()
+        runCurrent()
 
         val state = controller.state.value
         assertEquals(true, state.isInLibrary)
@@ -162,16 +179,23 @@ class PosterOptionsControllerShowTest {
         val libraryRepository = mockk<LibraryRepository>(relaxed = true) {
             every { sourceMode } returns flowOf(LibrarySourceMode.LOCAL)
             every { listTabs } returns flowOf(emptyList())
+            every { membershipListTabs } returns flowOf(emptyList())
             every { isInLibrary(any(), any()) } returns flowOf(isInLibrary)
         }
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true) {
             every { isWatched(any(), any(), any(), any()) } returns flowOf(isWatched)
         }
         val tmdbService = mockk<TmdbService>(relaxed = true)
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val watchedSeriesStateHolder = mockk<WatchedSeriesStateHolder>(relaxed = true) {
+            every { fullyWatchedSeriesIds } returns MutableStateFlow(emptySet())
+        }
         return PosterOptionsController(
             appContext = context,
             libraryRepository = libraryRepository,
             watchProgressRepository = watchProgressRepository,
+            metaRepository = metaRepository,
+            watchedSeriesStateHolder = watchedSeriesStateHolder,
             tmdbService = tmdbService
         )
     }

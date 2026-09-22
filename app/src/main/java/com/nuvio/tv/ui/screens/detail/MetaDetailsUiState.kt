@@ -1,5 +1,8 @@
 package com.nuvio.tv.ui.screens.detail
 
+import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
+import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
+import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.MetaTrailer
@@ -10,6 +13,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.MDBListRatings
+import com.nuvio.tv.domain.model.HomeImdbRatingsVisibility
 
 enum class MoreLikeThisSource {
     TMDB,
@@ -51,21 +55,27 @@ data class MetaDetailsUiState(
     val pickerMembership: Map<String, Boolean> = emptyMap(),
     val pickerPending: Boolean = false,
     val pickerError: String? = null,
+    val defaultLibraryTogglePending: Boolean = false,
+    val removalConfirmations: List<TrackingMembershipRemovalConfirmation> = emptyList(),
     val isMovieWatched: Boolean = false,
     val isMovieWatchedPending: Boolean = false,
     val watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     val episodeWatchedPendingKeys: Set<String> = emptySet(),
     val blurUnwatchedEpisodes: Boolean = false,
+    val episodeOptionsOverlayStyle: EpisodeOptionsOverlayStyle = EpisodeOptionsOverlayStyle.BLUR,
+    val overallRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
+    val detailImdbRatingsVisibility: DetailImdbRatingsVisibility = DetailImdbRatingsVisibility.SHOW_ALL,
     val showFullReleaseDate: Boolean = true,
     val moreLikeThis: List<MetaPreview> = emptyList(),
     val moreLikeThisSource: MoreLikeThisSource? = null,
     val collection: List<MetaPreview> = emptyList(),
     val collectionName: String? = null,
+    val relatedWatchedStatus: Map<String, Boolean> = emptyMap(),
     val episodeImdbRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
     val isEpisodeRatingsLoading: Boolean = false,
     val episodeRatingsError: String? = null,
     val mdbListRatings: MDBListRatings? = null,
-    val showMdbListImdb: Boolean = false,
+    val isMdbListRatingsActive: Boolean = false,
     val tmdbRating: Float? = null,
     val comments: List<TraktCommentReview> = emptyList(),
     val commentsCurrentPage: Int = 0,
@@ -112,6 +122,8 @@ sealed class MetaDetailsEvent {
     data class OnPickerMembershipToggled(val listKey: String) : MetaDetailsEvent()
     data object OnPickerSave : MetaDetailsEvent()
     data object OnPickerDismiss : MetaDetailsEvent()
+    data object OnRemovalConfirmed : MetaDetailsEvent()
+    data object OnRemovalCancelled : MetaDetailsEvent()
     data object OnClearMessage : MetaDetailsEvent()
     data object OnLifecyclePause : MetaDetailsEvent()
 }

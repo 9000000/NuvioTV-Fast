@@ -1,15 +1,34 @@
 package com.nuvio.tv.ui.screens.settings
 
+import android.content.Context
+import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.R
+import com.nuvio.tv.core.qr.QrCodeGenerator
+import com.nuvio.tv.core.server.DeviceIpAddress
+import com.nuvio.tv.core.server.StreamBadgeConfigServer
+import com.nuvio.tv.core.streams.StreamBadgePlacement
+import com.nuvio.tv.core.streams.StreamBadgeRules
+import com.nuvio.tv.core.streams.StreamBadgeSettings
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
 import com.nuvio.tv.data.local.TraktSettingsDataStore
+import com.nuvio.tv.data.local.TrailerSettingsDataStore
+import com.nuvio.tv.domain.model.CardDepthStyle
+import com.nuvio.tv.domain.model.CardDepthSurface
+import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
 import com.nuvio.tv.domain.model.DiscoverLocation
+import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
+import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeLayout
+import com.nuvio.tv.domain.model.HomeImdbRatingsVisibility
+import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,16 +64,25 @@ data class LayoutSettingsUiState(
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
+    val cardDepthStyle: CardDepthStyle = CardDepthStyle(),
     val blurUnwatchedEpisodes: Boolean = false,
+    val episodeOptionsOverlayStyle: EpisodeOptionsOverlayStyle = EpisodeOptionsOverlayStyle.BLUR,
+    val homeImdbRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
+    val detailImdbRatingsVisibility: DetailImdbRatingsVisibility = DetailImdbRatingsVisibility.SHOW_ALL,
     val blurContinueWatchingNextUp: Boolean = false,
     val useEpisodeThumbnailsInCw: Boolean = true,
     val detailPageTrailerButtonEnabled: Boolean = true,
+    val detailPageTrailerAutoplayEnabled: Boolean = true,
+    val detailPageTrailerAutoplayDelaySeconds: Int = 7,
     val preferExternalMetaAddonDetail: Boolean = false,
     val hideUnreleasedContent: Boolean = false,
     val showFullReleaseDate: Boolean = true,
     val nextUpFromFurthestEpisode: Boolean = true,
     val showUnairedNextUp: Boolean = true,
-    val continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT
+    val continueWatchingEnabled: Boolean = true,
+    val continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
+    val continueWatchingCardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
+    val customPosterUrlPattern: String = "",
 )
 
 data class CatalogInfo(
@@ -86,29 +114,55 @@ sealed class LayoutSettingsEvent {
     ) : LayoutSettingsEvent()
     data class SetPosterCardWidth(val widthDp: Int) : LayoutSettingsEvent()
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
+    data class SetCardDepthEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetCardDepthEdgeStrength(val strength: Int) : LayoutSettingsEvent()
+    data class SetCardDepthSheenStrength(val strength: Int) : LayoutSettingsEvent()
+    data class SetCardDepthEdgeCoverage(val coverage: Int) : LayoutSettingsEvent()
+    data class SetCardDepthSurfaceEnabled(
+        val surface: CardDepthSurface,
+        val enabled: Boolean
+    ) : LayoutSettingsEvent()
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetEpisodeOptionsOverlayStyle(val style: EpisodeOptionsOverlayStyle) : LayoutSettingsEvent()
+    data class SetHomeImdbRatingsVisibility(val visibility: HomeImdbRatingsVisibility) : LayoutSettingsEvent()
+    data class SetDetailImdbRatingsVisibility(val visibility: DetailImdbRatingsVisibility) : LayoutSettingsEvent()
     data class SetBlurContinueWatchingNextUp(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetUseEpisodeThumbnailsInCw(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetDetailPageTrailerButtonEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetDetailPageTrailerAutoplayEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetDetailPageTrailerAutoplayDelaySeconds(val seconds: Int) : LayoutSettingsEvent()
     data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHideUnreleasedContent(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetShowFullReleaseDate(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetNextUpFromFurthestEpisode(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetShowUnairedNextUp(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetContinueWatchingEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetContinueWatchingSortMode(val mode: ContinueWatchingSortMode) : LayoutSettingsEvent()
+    data class SetContinueWatchingCardStyle(val style: ContinueWatchingCardStyle) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
+    data object ResetCardDepthStyle : LayoutSettingsEvent()
+    data class SetCustomPosterUrlPattern(val pattern: String) : LayoutSettingsEvent()
+    data object ClearCustomPosterSettings : LayoutSettingsEvent()
 }
 
 @HiltViewModel
 class LayoutSettingsViewModel @Inject constructor(
+    @param:ApplicationContext private val context: Context,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val streamBadgeSettingsDataStore: StreamBadgeSettingsDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val addonRepository: AddonRepository,
     private val metaRepository: com.nuvio.tv.domain.repository.MetaRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LayoutSettingsUiState())
     val uiState: StateFlow<LayoutSettingsUiState> = _uiState.asStateFlow()
+    private var streamBadgeServer: StreamBadgeConfigServer? = null
+    private var logoBytes: ByteArray? = null
+
+    private val _streamBadgeUiState = MutableStateFlow(StreamBadgeSettingsUiState())
+    val streamBadgeUiState: StateFlow<StreamBadgeSettingsUiState> = _streamBadgeUiState.asStateFlow()
 
     private inline fun updateUiStateIfChanged(
         update: (LayoutSettingsUiState) -> LayoutSettingsUiState
@@ -120,6 +174,12 @@ class LayoutSettingsViewModel @Inject constructor(
     }
 
     init {
+        loadLogoBytes()
+        viewModelScope.launch {
+            streamBadgeSettingsDataStore.settings.collectLatest { settings ->
+                _streamBadgeUiState.update { it.copy(settings = settings) }
+            }
+        }
         viewModelScope.launch {
             layoutPreferenceDataStore.selectedLayout.distinctUntilChanged().collectLatest { layout ->
                 updateUiStateIfChanged { it.copy(selectedLayout = layout) }
@@ -236,8 +296,28 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.cardDepthStyle.distinctUntilChanged().collectLatest { style ->
+                updateUiStateIfChanged { it.copy(cardDepthStyle = style) }
+            }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.blurUnwatchedEpisodes.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(blurUnwatchedEpisodes = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.episodeOptionsOverlayStyle.distinctUntilChanged().collectLatest { style ->
+                updateUiStateIfChanged { it.copy(episodeOptionsOverlayStyle = style) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.homeImdbRatingsVisibility.distinctUntilChanged().collectLatest { visibility ->
+                updateUiStateIfChanged { it.copy(homeImdbRatingsVisibility = visibility) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.detailImdbRatingsVisibility.distinctUntilChanged().collectLatest { visibility ->
+                updateUiStateIfChanged { it.copy(detailImdbRatingsVisibility = visibility) }
             }
         }
         viewModelScope.launch {
@@ -256,7 +336,17 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            layoutPreferenceDataStore.preferExternalMetaAddonDetail.distinctUntilChanged().collectLatest { enabled ->
+            trailerSettingsDataStore.settings.distinctUntilChanged().collectLatest { settings ->
+                updateUiStateIfChanged {
+                    it.copy(
+                        detailPageTrailerAutoplayEnabled = settings.enabled,
+                        detailPageTrailerAutoplayDelaySeconds = settings.delaySeconds
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.preferExternalMetaAddonDetail.collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(preferExternalMetaAddonDetail = enabled) }
             }
         }
@@ -271,7 +361,7 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            layoutPreferenceDataStore.nextUpFromFurthestEpisode.distinctUntilChanged().collectLatest { enabled ->
+            layoutPreferenceDataStore.nextUpFromFurthestEpisode.collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(nextUpFromFurthestEpisode = enabled) }
             }
         }
@@ -281,10 +371,31 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.continueWatchingEnabled
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    updateUiStateIfChanged { it.copy(continueWatchingEnabled = enabled) }
+                }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.continueWatchingSortMode
                 .distinctUntilChanged()
                 .collect { mode ->
                     updateUiStateIfChanged { it.copy(continueWatchingSortMode = mode) }
+                }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.continueWatchingCardStyle
+                .distinctUntilChanged()
+                .collect { style ->
+                    updateUiStateIfChanged { it.copy(continueWatchingCardStyle = style) }
+                }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.customPosterUrlPattern
+                .distinctUntilChanged()
+                .collect { pattern ->
+                    updateUiStateIfChanged { it.copy(customPosterUrlPattern = pattern) }
                 }
         }
         loadAvailableCatalogs()
@@ -313,18 +424,102 @@ class LayoutSettingsViewModel @Inject constructor(
                 setFocusedPosterBackdropTrailerPlaybackTarget(event.target)
             is LayoutSettingsEvent.SetPosterCardWidth -> setPosterCardWidth(event.widthDp)
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
+            is LayoutSettingsEvent.SetCardDepthEnabled -> setCardDepthEnabled(event.enabled)
+            is LayoutSettingsEvent.SetCardDepthEdgeStrength -> setCardDepthEdgeStrength(event.strength)
+            is LayoutSettingsEvent.SetCardDepthSheenStrength -> setCardDepthSheenStrength(event.strength)
+            is LayoutSettingsEvent.SetCardDepthEdgeCoverage -> setCardDepthEdgeCoverage(event.coverage)
+            is LayoutSettingsEvent.SetCardDepthSurfaceEnabled ->
+                setCardDepthSurfaceEnabled(event.surface, event.enabled)
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
+            is LayoutSettingsEvent.SetEpisodeOptionsOverlayStyle -> setEpisodeOptionsOverlayStyle(event.style)
+            is LayoutSettingsEvent.SetHomeImdbRatingsVisibility -> setHomeImdbRatingsVisibility(event.visibility)
+            is LayoutSettingsEvent.SetDetailImdbRatingsVisibility -> setDetailImdbRatingsVisibility(event.visibility)
             is LayoutSettingsEvent.SetBlurContinueWatchingNextUp -> setBlurContinueWatchingNextUp(event.enabled)
             is LayoutSettingsEvent.SetUseEpisodeThumbnailsInCw -> setUseEpisodeThumbnailsInCw(event.enabled)
             is LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled -> setDetailPageTrailerButtonEnabled(event.enabled)
+            is LayoutSettingsEvent.SetDetailPageTrailerAutoplayEnabled -> setDetailPageTrailerAutoplayEnabled(event.enabled)
+            is LayoutSettingsEvent.SetDetailPageTrailerAutoplayDelaySeconds -> setDetailPageTrailerAutoplayDelaySeconds(event.seconds)
             is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
             is LayoutSettingsEvent.SetHideUnreleasedContent -> setHideUnreleasedContent(event.enabled)
             is LayoutSettingsEvent.SetShowFullReleaseDate -> setShowFullReleaseDate(event.enabled)
             is LayoutSettingsEvent.SetNextUpFromFurthestEpisode -> setNextUpFromFurthestEpisode(event.enabled)
             is LayoutSettingsEvent.SetShowUnairedNextUp -> setShowUnairedNextUp(event.enabled)
+            is LayoutSettingsEvent.SetContinueWatchingEnabled -> setContinueWatchingEnabled(event.enabled)
             is LayoutSettingsEvent.SetContinueWatchingSortMode -> setContinueWatchingSortMode(event.mode)
+            is LayoutSettingsEvent.SetContinueWatchingCardStyle -> setContinueWatchingCardStyle(event.style)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
+            LayoutSettingsEvent.ResetCardDepthStyle -> resetCardDepthStyle()
+            is LayoutSettingsEvent.SetCustomPosterUrlPattern -> setCustomPosterUrlPattern(event.pattern)
+            LayoutSettingsEvent.ClearCustomPosterSettings -> clearCustomPosterSettings()
         }
+    }
+
+    fun startStreamBadgeQrMode() {
+        val ip = DeviceIpAddress.get(context)
+        if (ip == null) {
+            _streamBadgeUiState.update { it.copy(serverError = context.getString(R.string.error_network_required)) }
+            return
+        }
+        stopStreamBadgeServer()
+        streamBadgeServer = StreamBadgeConfigServer.startOnAvailablePort(
+            currentSettingsProvider = { _streamBadgeUiState.value.settings },
+            onSettingsChanged = { settings ->
+                _streamBadgeUiState.update { it.copy(settings = settings) }
+                viewModelScope.launch { streamBadgeSettingsDataStore.setSettings(settings) }
+            },
+            context = context,
+            logoProvider = { logoBytes }
+        )
+        val server = streamBadgeServer
+        if (server == null) {
+            _streamBadgeUiState.update { it.copy(serverError = context.getString(R.string.error_server_ports_unavailable)) }
+            return
+        }
+        val url = "http://$ip:${server.listeningPort}"
+        _streamBadgeUiState.update {
+            it.copy(
+                isQrModeActive = true,
+                qrCodeBitmap = QrCodeGenerator.generate(url, 512),
+                serverUrl = url,
+                serverError = null
+            )
+        }
+    }
+
+    fun stopStreamBadgeQrMode() {
+        stopStreamBadgeServer()
+        _streamBadgeUiState.update {
+            it.copy(
+                isQrModeActive = false,
+                qrCodeBitmap = null,
+                serverUrl = null
+            )
+        }
+    }
+
+    fun setShowFileSizeBadges(enabled: Boolean) {
+        viewModelScope.launch { streamBadgeSettingsDataStore.setShowFileSizeBadges(enabled) }
+    }
+
+    fun setShowAddonLogo(enabled: Boolean) {
+        viewModelScope.launch { streamBadgeSettingsDataStore.setShowAddonLogo(enabled) }
+    }
+
+    fun setStreamBadgePlacement(placement: StreamBadgePlacement) {
+        viewModelScope.launch { streamBadgeSettingsDataStore.setStreamBadgePlacement(placement) }
+    }
+
+    private fun loadLogoBytes() {
+        try {
+            val inputStream = context.resources.openRawResource(R.drawable.app_logo_wordmark)
+            logoBytes = inputStream.use { it.readBytes() }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun stopStreamBadgeServer() {
+        streamBadgeServer?.stop()
+        streamBadgeServer = null
     }
 
     private fun selectLayout(layout: HomeLayout) {
@@ -473,6 +668,41 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
+    private fun setCardDepthEnabled(enabled: Boolean) {
+        if (_uiState.value.cardDepthStyle.enabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCardDepthEnabled(enabled)
+        }
+    }
+
+    private fun setCardDepthEdgeStrength(strength: Int) {
+        if (_uiState.value.cardDepthStyle.edgeStrength == strength) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCardDepthEdgeStrength(strength)
+        }
+    }
+
+    private fun setCardDepthSheenStrength(strength: Int) {
+        if (_uiState.value.cardDepthStyle.sheenStrength == strength) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCardDepthSheenStrength(strength)
+        }
+    }
+
+    private fun setCardDepthEdgeCoverage(coverage: Int) {
+        if (_uiState.value.cardDepthStyle.edgeCoverage == coverage) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCardDepthEdgeCoverage(coverage)
+        }
+    }
+
+    private fun setCardDepthSurfaceEnabled(surface: CardDepthSurface, enabled: Boolean) {
+        if (_uiState.value.cardDepthStyle.isSurfaceEnabled(surface) == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCardDepthSurfaceEnabled(surface, enabled)
+        }
+    }
+
     private fun setDetailPageTrailerButtonEnabled(enabled: Boolean) {
         if (_uiState.value.detailPageTrailerButtonEnabled == enabled) return
         viewModelScope.launch {
@@ -480,10 +710,45 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
+    private fun setDetailPageTrailerAutoplayEnabled(enabled: Boolean) {
+        if (_uiState.value.detailPageTrailerAutoplayEnabled == enabled) return
+        viewModelScope.launch {
+            trailerSettingsDataStore.setEnabled(enabled)
+        }
+    }
+
+    private fun setDetailPageTrailerAutoplayDelaySeconds(seconds: Int) {
+        if (_uiState.value.detailPageTrailerAutoplayDelaySeconds == seconds) return
+        viewModelScope.launch {
+            trailerSettingsDataStore.setDelaySeconds(seconds)
+        }
+    }
+
     private fun setBlurUnwatchedEpisodes(enabled: Boolean) {
         if (_uiState.value.blurUnwatchedEpisodes == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setBlurUnwatchedEpisodes(enabled)
+        }
+    }
+
+    private fun setEpisodeOptionsOverlayStyle(style: EpisodeOptionsOverlayStyle) {
+        if (_uiState.value.episodeOptionsOverlayStyle == style) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setEpisodeOptionsOverlayStyle(style)
+        }
+    }
+
+    private fun setHomeImdbRatingsVisibility(visibility: HomeImdbRatingsVisibility) {
+        if (_uiState.value.homeImdbRatingsVisibility == visibility) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setHomeImdbRatingsVisibility(visibility)
+        }
+    }
+
+    private fun setDetailImdbRatingsVisibility(visibility: DetailImdbRatingsVisibility) {
+        if (_uiState.value.detailImdbRatingsVisibility == visibility) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setDetailImdbRatingsVisibility(visibility)
         }
     }
 
@@ -537,6 +802,20 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
+    private fun setContinueWatchingEnabled(enabled: Boolean) {
+        if (_uiState.value.continueWatchingEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setContinueWatchingEnabled(enabled)
+        }
+    }
+
+    private fun setContinueWatchingCardStyle(style: ContinueWatchingCardStyle) {
+        if (_uiState.value.continueWatchingCardStyle == style) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setContinueWatchingCardStyle(style)
+        }
+    }
+
     private fun setContinueWatchingSortMode(mode: ContinueWatchingSortMode) {
         if (_uiState.value.continueWatchingSortMode == mode) return
         viewModelScope.launch {
@@ -559,9 +838,79 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
+    private fun resetCardDepthStyle() {
+        if (_uiState.value.cardDepthStyle == CardDepthStyle()) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.resetCardDepthStyle()
+        }
+    }
+
+    private fun setCustomPosterUrlPattern(pattern: String) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCustomPosterUrlPattern(pattern)
+        }
+    }
+
+    private fun clearCustomPosterSettings() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.clearCustomPosterSettings()
+        }
+    }
+
+    // -- Custom poster QR mode --
+
+    private var customPosterServer: com.nuvio.tv.core.server.CustomPosterConfigServer? = null
+
+    private val _customPosterQrState = MutableStateFlow(CustomPosterQrState())
+    val customPosterQrState: StateFlow<CustomPosterQrState> = _customPosterQrState.asStateFlow()
+
+    fun startCustomPosterQrMode() {
+        val ip = DeviceIpAddress.get(context)
+        if (ip == null) {
+            _customPosterQrState.update { it.copy(serverError = context.getString(com.nuvio.tv.R.string.error_network_required)) }
+            return
+        }
+        stopCustomPosterServer()
+        customPosterServer = com.nuvio.tv.core.server.CustomPosterConfigServer.startOnAvailablePort(
+            currentPatternProvider = { _uiState.value.customPosterUrlPattern },
+            onPatternChanged = { pattern ->
+                _uiState.update { it.copy(customPosterUrlPattern = pattern) }
+                viewModelScope.launch { layoutPreferenceDataStore.setCustomPosterUrlPattern(pattern) }
+            },
+            context = context
+        )
+        val server = customPosterServer
+        if (server == null) {
+            _customPosterQrState.update { it.copy(serverError = context.getString(com.nuvio.tv.R.string.error_server_ports_unavailable)) }
+            return
+        }
+        val url = "http://$ip:${server.listeningPort}"
+        _customPosterQrState.update {
+            it.copy(
+                isActive = true,
+                qrCodeBitmap = com.nuvio.tv.core.qr.QrCodeGenerator.generate(url, 512),
+                serverUrl = url,
+                serverError = null
+            )
+        }
+    }
+
+    fun stopCustomPosterQrMode() {
+        stopCustomPosterServer()
+        _customPosterQrState.update {
+            it.copy(isActive = false, qrCodeBitmap = null, serverUrl = null)
+        }
+    }
+
+    private fun stopCustomPosterServer() {
+        customPosterServer?.stop()
+        customPosterServer = null
+    }
+
     private fun loadAvailableCatalogs() {
         viewModelScope.launch {
-            addonRepository.getInstalledAddons().collectLatest { addons ->
+            addonRepository.getInstalledAddons().collectLatest { installedAddons ->
+                val addons = installedAddons.enabledAddons()
                 val catalogs = addons.flatMap { addon ->
                     addon.catalogs
                         .filter { catalog ->
@@ -579,4 +928,37 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
     }
+
+    override fun onCleared() {
+        stopStreamBadgeServer()
+        stopCustomPosterServer()
+        super.onCleared()
+    }
 }
+
+data class StreamBadgeSettingsUiState(
+    val settings: StreamBadgeSettings = StreamBadgeSettings(),
+    val isQrModeActive: Boolean = false,
+    val qrCodeBitmap: Bitmap? = null,
+    val serverUrl: String? = null,
+    val serverError: String? = null
+) {
+    val rules: StreamBadgeRules
+        get() = settings.rules
+
+    val showFileSizeBadges: Boolean
+        get() = settings.showFileSizeBadges
+
+    val showAddonLogo: Boolean
+        get() = settings.showAddonLogo
+
+    val badgePlacement: StreamBadgePlacement
+        get() = settings.badgePlacement
+}
+
+data class CustomPosterQrState(
+    val isActive: Boolean = false,
+    val qrCodeBitmap: android.graphics.Bitmap? = null,
+    val serverUrl: String? = null,
+    val serverError: String? = null
+)

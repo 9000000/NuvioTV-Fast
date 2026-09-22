@@ -85,13 +85,16 @@ data class ScraperInfo(
     val type: RepositoryType = RepositoryType.NUVIO_JS
 ) {
     fun supportsType(type: String): Boolean {
-        val normalizedType = when (type.lowercase()) {
-            "series", "other" -> "tv"
-            else -> type.lowercase()
-        }
-        return supportedTypes.map { it.lowercase() }.contains(normalizedType)
+        val normalizedType = normalizePluginType(type)
+        return supportedTypes.any { normalizePluginType(it) == normalizedType }
     }
 }
+
+private fun normalizePluginType(value: String): String =
+    when (value.lowercase()) {
+        "series", "show", "other" -> "tv"
+        else -> value.lowercase()
+    }
 
 /**
  * Result from a local scraper execution
@@ -108,7 +111,8 @@ data class LocalScraperResult(
     val seeders: Int? = null,
     val peers: Int? = null,
     val infoHash: String? = null,
-    val headers: Map<String, String>? = null
+    val headers: Map<String, String>? = null,
+    val subtitles: List<Subtitle> = emptyList()
 )
 
 /**
@@ -175,6 +179,7 @@ fun LocalScraperResult.toStream(scraper: ScraperInfo): com.nuvio.tv.domain.model
             proxyHeaders = headers?.let { ProxyHeaders(request = it, response = null) }
         ),
         addonName = scraper.name,
-        addonLogo = scraper.logo
+        addonLogo = scraper.logo,
+        subtitles = subtitles
     )
 }

@@ -9,7 +9,9 @@ internal fun PlayerRuntimeController.releasePlayer() {
 }
 
 internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) {
+    logScrobbleDiagnostic("release_player", "flushPlaybackState=$flushPlaybackState")
     isReleasingPlayer = true
+    com.nuvio.tv.core.recommendations.TvRecommendationManager.isPlaybackActive.value = false
     if (flushPlaybackState) {
         stopTorrentStream()
         flushPlaybackSnapshotForSwitchOrExit()
@@ -17,6 +19,8 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
 
     notifyAudioSessionUpdate(false)
     unregisterAudioDelayRouteCallback()
+    audioRouteChangeJob?.cancel()
+    audioRouteChangeJob = null
 
     try {
         currentMediaSession?.release()
@@ -25,9 +29,14 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
         e.printStackTrace()
     }
     progressJob?.cancel()
+    mpvTrackRefreshJob?.cancel()
+    mpvTrackRefreshJob = null
+    mpvTrackRefreshInProgress = false
     hideControlsJob?.cancel()
     watchProgressSaveJob?.cancel()
     seekProgressSyncJob?.cancel()
+    seekSourceLogJob?.cancel()
+    seekSourceLogJob = null
     frameRateProbeJob?.cancel()
     hideStreamSourceIndicatorJob?.cancel()
     hideStreamSourceIndicatorJob = null
@@ -35,15 +44,25 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
     hidePlayerEngineSwitchInfoJob?.cancel()
     hideSubtitleDelayOverlayJob?.cancel()
     subtitleAutoSyncLoadJob?.cancel()
+    stopSidecarAddonSubtitle(clearView = true)
+    subtitleTimingRefreshJob?.cancel()
+    subtitleTimingRefreshJob = null
     playbackPreparationJob?.cancel()
     playbackPreparationJob = null
+    traktMappingJob?.cancel()
+    traktMappingJob = null
     delayMpvResumeSeekUntilVideoTrack = false
+    mpvMediaLoadPrepared = false
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
+    debridResolveJob?.cancel()
+    debridResolveJob = null
     stillWatchingPromptJob?.cancel()
     stillWatchingPromptJob = null
     errorRetryJob?.cancel()
     errorRetryJob = null
+    stableProgressResetJob?.cancel()
+    stableProgressResetJob = null
     releaseMpvPlayer()
     _exoPlayer?.let { player ->
         runCatching { player.playWhenReady = false }
@@ -54,6 +73,9 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
         runCatching { player.release() }
     }
     _exoPlayer = null
+    _loadControl = null
+    currentBitrateAwareLoadControl = null
+    currentParallelChunkOverheadMb = 0
     ffmpegAudioRenderer = null
     updateAudioControlAvailability()
     playbackSpeedAwareAudioSink = null

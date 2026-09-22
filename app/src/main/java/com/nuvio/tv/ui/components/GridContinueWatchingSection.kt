@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.components
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,9 +23,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
@@ -32,8 +34,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
-import com.nuvio.tv.ui.theme.NuvioColors
+import kotlin.math.abs
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -46,15 +49,24 @@ fun GridContinueWatchingSection(
     showManualPlayOption: Boolean = false,
     onPlayManually: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
+    title: String? = null,
     fullWidth: Dp = Dp.Unspecified,
     focusedItemIndex: Int = -1,
+    lastFocusedIndex: MutableIntState = remember { mutableIntStateOf(-1) },
+    focusRequesters: MutableMap<Int, FocusRequester> = remember { mutableMapOf() },
+    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(
+        initialFirstVisibleItemIndex = (lastFocusedIndex.intValue - 1).coerceAtLeast(0)
+    ),
+    onItemFocused: (Int) -> Unit = {},
+    rowFocusRequester: FocusRequester = remember { FocusRequester() },
     blurUnwatchedEpisodes: Boolean = false,
-    useEpisodeThumbnails: Boolean = true
+    useEpisodeThumbnails: Boolean = true,
+    cardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
+    cornerRadius: Dp = NuvioTheme.radii.md
 ) {
     if (items.isEmpty()) return
+
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
-    val focusRequesters = remember(items.size) { List(items.size) { FocusRequester() } }
-    val lastFocusedIndex = remember { mutableIntStateOf(-1) }
     var lastRequestedFocusIndex by remember { mutableIntStateOf(-1) }
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -64,7 +76,8 @@ fun GridContinueWatchingSection(
             var focused = false
             for (attempt in 0 until 3) {
                 withFrameNanos { }
-                focused = runCatching { focusRequesters[focusedItemIndex].requestFocus() }.isSuccess
+                val requester = focusRequesters[focusedItemIndex] ?: continue
+                focused = runCatching { requester.requestFocus() }.isSuccess
                 if (focused) break
             }
             if (focused) {
@@ -79,18 +92,19 @@ fun GridContinueWatchingSection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp, bottom = 12.dp)
+                .padding(top = NuvioTheme.spacing.xl, bottom = NuvioTheme.spacing.md)
         ) {
             Column {
                 Text(
-                    text = stringResource(R.string.continue_watching),
+                    text = title ?: stringResource(R.string.continue_watching),
                     style = MaterialTheme.typography.headlineMedium,
-                    color = NuvioColors.TextPrimary
+                    color = NuvioTheme.colors.TextPrimary
                 )
             }
         }
 
         LazyRow(
+            state = listState,
             modifier = Modifier
                 .then(
                     if (fullWidth != Dp.Unspecified)
@@ -98,13 +112,24 @@ fun GridContinueWatchingSection(
                     else
                         Modifier.fillMaxWidth()
                 )
+                .focusRequester(rowFocusRequester)
                 .focusRestorer {
-                    val idx = if (lastFocusedIndex.intValue >= 0 && lastFocusedIndex.intValue < focusRequesters.size)
-                        lastFocusedIndex.intValue else 0
-                    focusRequesters.getOrNull(idx) ?: FocusRequester.Default
-                },
-            contentPadding = PaddingValues(horizontal = 36.dp, vertical = 0.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    // Take the remembered card when it is on screen, otherwise the nearest one
+                    // that is, the way the classic row does it. Falling back to whichever
+                    // requester was registered first can hand focus to a card that is not
+                    // composed, and focus then lands wherever the directional search goes.
+                    val visible = listState.layoutInfo.visibleItemsInfo
+                        .map { it.index }
+                        .filter { it in items.indices }
+                    val remembered = lastFocusedIndex.intValue
+                    val idx = remembered.takeIf { it in visible }
+                        ?: visible.minByOrNull { abs(it - remembered) }
+                    idx?.let { focusRequesters[it] }
+                        ?: FocusRequester.Default
+                }
+                .focusGroup(),
+            contentPadding = PaddingValues(horizontal = 36.dp, vertical = NuvioTheme.spacing.none),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
             itemsIndexed(
                 items = items,
@@ -117,26 +142,41 @@ fun GridContinueWatchingSection(
                     }
                 }
             ) { index, progress ->
-                val focusModifier = if (index < focusRequesters.size) {
-                    Modifier.focusRequester(focusRequesters[index])
-                } else {
-                    Modifier
-                }
+                val requester = focusRequesters.getOrPut(index) { FocusRequester() }
+                val focusModifier = Modifier.focusRequester(requester)
+                val stableOnClick = remember(progress) { { onItemClick(progress) } }
+                val stableOnLongPress = remember(progress) { { optionsItem = progress } }
+                var isCardFocused by remember { mutableStateOf(false) }
 
                 ContinueWatchingCard(
                     item = progress,
-                    onClick = { onItemClick(progress) },
-                    onLongPress = { optionsItem = progress },
+                    onClick = stableOnClick,
+                    onLongPress = stableOnLongPress,
                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                     useEpisodeThumbnails = useEpisodeThumbnails,
+                    cardStyle = cardStyle,
+                    cornerRadius = cornerRadius,
+                    isFocused = isCardFocused,
                     modifier = focusModifier
                         .onFocusChanged { focusState ->
-                            if (focusState.isFocused && lastFocusedIndex.intValue != index) {
-                                lastFocusedIndex.intValue = index
+                            isCardFocused = focusState.isFocused
+                            if (focusState.isFocused) {
+                                if (lastFocusedIndex.intValue != index) {
+                                    lastFocusedIndex.intValue = index
+                                }
+                                onItemFocused(index)
                             }
                         },
-                    cardWidth = 220.dp,
-                    imageHeight = 124.dp
+                    cardWidth = when (cardStyle) {
+                        ContinueWatchingCardStyle.POSTER -> 120.dp
+                        ContinueWatchingCardStyle.WIDE -> 320.dp
+                        ContinueWatchingCardStyle.CARD -> 220.dp
+                    },
+                    imageHeight = when (cardStyle) {
+                        ContinueWatchingCardStyle.POSTER -> 180.dp
+                        ContinueWatchingCardStyle.WIDE -> 128.dp
+                        ContinueWatchingCardStyle.CARD -> 124.dp
+                    }
                 )
             }
         }
@@ -171,15 +211,18 @@ fun GridContinueWatchingSection(
 
     LaunchedEffect(items.size, pendingFocusIndex) {
         val target = pendingFocusIndex
-        if (target != null && target >= 0 && target < focusRequesters.size) {
-            var focused = false
-            for (attempt in 0 until 3) {
-                withFrameNanos { }
-                focused = runCatching { focusRequesters[target].requestFocus() }.isSuccess
-                if (focused) break
-            }
-            if (focused) {
-                lastRequestedFocusIndex = target
+        if (target != null && target >= 0) {
+            val requester = focusRequesters[target]
+            if (requester != null) {
+                var focused = false
+                for (attempt in 0 until 3) {
+                    withFrameNanos { }
+                    focused = runCatching { requester.requestFocus() }.isSuccess
+                    if (focused) break
+                }
+                if (focused) {
+                    lastRequestedFocusIndex = target
+                }
             }
             pendingFocusIndex = null
         }

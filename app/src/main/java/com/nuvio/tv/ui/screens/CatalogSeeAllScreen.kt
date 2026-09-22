@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -32,7 +35,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.nuvio.tv.ui.util.dpadRepeatThrottle
 import androidx.compose.ui.res.stringResource
@@ -47,15 +52,23 @@ import com.nuvio.tv.R
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.LocalCardDepthStyle
+import com.nuvio.tv.ui.components.nuvioCardDepth
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.screens.home.HomeEvent
 import com.nuvio.tv.ui.screens.home.HomeViewModel
 import com.nuvio.tv.ui.screens.search.SearchEvent
 import com.nuvio.tv.ui.screens.search.SearchViewModel
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.legacyKey
+import com.nuvio.tv.domain.model.stableItemKeys
+import com.nuvio.tv.domain.model.stableKey
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
+
+/** Stable focus key for a catalog poster (survives list reloads; not a grid index). */
+private fun catalogItemFocusKey(item: MetaPreview): String = "${item.apiType}:${item.id}"
 
 @Composable
 fun CatalogSeeAllScreen(
@@ -91,18 +104,34 @@ fun CatalogSeeAllScreen(
     val searchWatchedMovieIds = searchViewModel?.watchedMovieIds?.collectAsState()
     val searchWatchedSeriesIds = searchViewModel?.watchedSeriesIds?.collectAsState()
     val searchCatalogRow = searchUiState?.value?.catalogRows?.find {
-        "${it.addonId}_${it.apiType}_${it.catalogId}" == catalogKey
+        it.legacyKey() == catalogKey
     }
     val homeCatalogRow = fullCatalogRows.find {
-        "${it.addonId}_${it.apiType}_${it.catalogId}" == catalogKey
+        it.legacyKey() == catalogKey
     }
     val catalogRow = if (isSearchMode) searchCatalogRow else homeCatalogRow
 
+    LaunchedEffect(catalogKey, isSearchMode, catalogRow != null) {
+        if (!isSearchMode && catalogRow == null) {
+            viewModel.requestLazyCatalogLoad(catalogKey)
+        }
+    }
+
     val gridState = rememberLazyGridState()
     val restoreFocusRequester = remember { FocusRequester() }
-    var focusedItemIndex by rememberSaveable(catalogKey) { mutableStateOf(0) }
+    // Persist the focused catalog item by stable id (not grid index) so return-from-Details
+    // can re-focus the same poster even if the row reloads or the first cell steals focus.
+    var focusedItemKey by rememberSaveable(catalogKey) { mutableStateOf<String?>(null) }
     var shouldRestoreFocus by rememberSaveable(catalogKey) { mutableStateOf(true) }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val focusedItemIndex = remember(catalogRow?.items, focusedItemKey) {
+        val items = catalogRow?.items.orEmpty()
+        if (items.isEmpty()) return@remember 0
+        val key = focusedItemKey
+        if (key.isNullOrBlank()) return@remember 0
+        items.indexOfFirst { catalogItemFocusKey(it) == key }.takeIf { it >= 0 } ?: 0
+    }
 
     // Load more when scrolling near the bottom
     LaunchedEffect(gridState, catalogRow?.items?.size) {
@@ -117,7 +146,7 @@ fun CatalogSeeAllScreen(
                     val row = catalogRow
                     if (row != null && row.hasMore && !row.isLoading) {
                         if (isSearchMode) {
-                            searchViewModel?.onEvent(
+                            searchViewModel.onEvent(
                                 SearchEvent.LoadMoreCatalog(row.catalogId, row.addonId, row.apiType)
                             )
                         } else {
@@ -142,12 +171,12 @@ fun CatalogSeeAllScreen(
         }
     }
 
-    LaunchedEffect(shouldRestoreFocus, catalogRow?.items?.size, focusedItemIndex) {
+    LaunchedEffect(shouldRestoreFocus, catalogRow?.items?.size, focusedItemKey) {
         if (!shouldRestoreFocus) return@LaunchedEffect
-        val itemsCount = catalogRow?.items?.size ?: 0
-        if (itemsCount == 0) return@LaunchedEffect
+        val items = catalogRow?.items.orEmpty()
+        if (items.isEmpty()) return@LaunchedEffect
 
-        val targetIndex = focusedItemIndex.coerceIn(0, itemsCount - 1)
+        val targetIndex = focusedItemIndex.coerceIn(0, items.lastIndex)
         val isTargetVisible = gridState.layoutInfo.visibleItemsInfo.any { it.index == targetIndex }
         if (!isTargetVisible) {
             gridState.animateScrollToItem(targetIndex)
@@ -163,53 +192,56 @@ fun CatalogSeeAllScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(vertical = 24.dp)
+            .padding(vertical = NuvioTheme.spacing.xl)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 48.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = NuvioTheme.spacing.xxxl),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = catalogRow?.catalogName ?: stringResource(R.string.catalog_see_all_title_fallback),
                 style = MaterialTheme.typography.headlineLarge,
-                color = NuvioColors.TextPrimary
+                color = NuvioTheme.colors.TextPrimary
             )
         }
 
         if (uiState.catalogAddonNameEnabled) {
             catalogRow?.addonName?.let { addonName ->
                 Text(
-                    modifier = Modifier.padding(horizontal = 48.dp),
+                    modifier = Modifier.padding(horizontal = NuvioTheme.spacing.xxxl),
                     text = stringResource(R.string.catalog_see_all_from, addonName),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NuvioTheme.colors.TextSecondary
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(NuvioTheme.spacing.xl))
 
         val hasItems = catalogRow?.items?.isNotEmpty() == true
         val isCatalogLoading = catalogRow == null || catalogRow.isLoading
 
         if (hasItems) {
+            val seeAllItemKeys = remember(catalogRow?.items) {
+                catalogRow?.stableItemKeys().orEmpty()
+            }
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(minSize = posterCardStyle.width),
                     modifier = Modifier.dpadRepeatThrottle(),
                     contentPadding = PaddingValues(
-                        start = 48.dp,
-                        end = 24.dp,
-                        top = 12.dp,
-                        bottom = if (catalogRow.isLoading) 80.dp else 32.dp
+                        start = NuvioTheme.spacing.xxxl,
+                        end = NuvioTheme.spacing.xl,
+                        top = NuvioTheme.spacing.md,
+                        bottom = NuvioTheme.spacing.xxl
                     ),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
+                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
                 ) {
                     itemsIndexed(
                         items = catalogRow.items,
-                        key = { index, item -> "${catalogRow.catalogId}_${item.id}_$index" }
+                        key = { index, _ -> seeAllItemKeys.getOrElse(index) { "${catalogRow.stableKey()}_$index" } }
                     ) { index, item ->
                         val isWatched = if (isSearchMode) {
                             val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
@@ -220,14 +252,26 @@ fun CatalogSeeAllScreen(
                                 com.nuvio.tv.ui.screens.home.homeItemStatusKey(item.id, item.apiType)
                             ] == true
                         }
+                        val itemFocusKey = catalogItemFocusKey(item)
                         GridContentCard(
                             item = item,
                             posterCardStyle = posterCardStyle,
                             showLabel = uiState.posterLabelsEnabled,
                             isWatched = isWatched,
                             focusRequester = if (index == focusedItemIndex) restoreFocusRequester else null,
-                            onFocused = { focusedItemIndex = index },
+                            onFocused = {
+                                // While restoring after Details/resume, ignore transient focus on the
+                                // first/leftmost cell so it cannot overwrite the saved poster key.
+                                if (shouldRestoreFocus &&
+                                    focusedItemKey != null &&
+                                    itemFocusKey != focusedItemKey
+                                ) {
+                                    return@GridContentCard
+                                }
+                                focusedItemKey = itemFocusKey
+                            },
                             onClick = {
+                                focusedItemKey = itemFocusKey
                                 onNavigateToDetail(
                                     item.id,
                                     item.apiType,
@@ -235,22 +279,58 @@ fun CatalogSeeAllScreen(
                                 )
                             },
                             onLongPress = {
-                                focusedItemIndex = index
+                                focusedItemKey = itemFocusKey
                                 posterOptionsController.show(item, catalogRow.addonBaseUrl)
                             }
                         )
                     }
-                }
 
-                if (catalogRow.isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingIndicator()
+                    if (catalogRow.isLoading) {
+                        item(key = "loading_more") {
+                            val cardShape = remember(posterCardStyle.cornerRadius) {
+                                androidx.compose.foundation.shape.RoundedCornerShape(posterCardStyle.cornerRadius)
+                            }
+                            val cardDepthStyle = com.nuvio.tv.ui.components.LocalCardDepthStyle.current
+                            Column(
+                                modifier = Modifier
+                                    .width(posterCardStyle.width)
+                            ) {
+                                androidx.tv.material3.Card(
+                                    onClick = {},
+                                    modifier = Modifier
+                                        .width(posterCardStyle.width)
+                                        .height(posterCardStyle.height)
+                                        .then(Modifier.focusProperties { canFocus = false }),
+                                    shape = androidx.tv.material3.CardDefaults.shape(shape = cardShape),
+                                    colors = androidx.tv.material3.CardDefaults.colors(
+                                        containerColor = NuvioTheme.colors.BackgroundCard,
+                                        focusedContainerColor = NuvioTheme.colors.BackgroundCard
+                                    )
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(cardShape)
+                                            .then(
+                                                Modifier.nuvioCardDepth(
+                                                    shape = cardShape,
+                                                    surface = com.nuvio.tv.domain.model.CardDepthSurface.POSTERS,
+                                                    style = cardDepthStyle
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        LoadingIndicator()
+                                    }
+                                }
+                                Spacer(
+                                    modifier = Modifier
+                                        .width(posterCardStyle.width)
+                                        .padding(top = NuvioTheme.spacing.sm)
+                                        .height(MaterialTheme.typography.titleMedium.lineHeight.value.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

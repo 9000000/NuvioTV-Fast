@@ -214,11 +214,17 @@ class PluginManager @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     private val pluginDispatcher: CoroutineDispatcher =
         Executors.newFixedThreadPool(MAX_CONCURRENT_SCRAPERS) { runnable ->
-            Thread(runnable, "plugin-worker").apply {
-                priority = Thread.MIN_PRIORITY
+            Thread({
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                runnable.run()
+            }, "plugin-worker").apply {
                 isDaemon = true
             }
         }.asCoroutineDispatcher()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val scraperOrchestrationDispatcher: CoroutineDispatcher =
+        Dispatchers.IO.limitedParallelism(MAX_CONCURRENT_SCRAPERS)
     
     // Flow of all repositories
     val repositories: Flow<List<PluginRepository>> = dataStore.repositories
@@ -302,6 +308,11 @@ class PluginManager @Inject constructor(
             }
 
             val sanitizedUrl = resolvedUrl.trimEnd('/')
+            val existingRepository = dataStore.repositories.first()
+                .find { normalizeUrl(it.url) == normalizeUrl(sanitizedUrl) }
+            if (existingRepository != null) {
+                return@withContext Result.success(existingRepository)
+            }
             val filename = sanitizedUrl.substringAfterLast("/")
             val isExplicitJsonFile = filename.endsWith(".json", ignoreCase = true)
                     && !filename.equals("manifest.json", ignoreCase = true)
@@ -661,11 +672,16 @@ class PluginManager @Inject constructor(
             val allDexIds = dataStore.scrapers.first()
                 .filter { it.type == RepositoryType.EXTERNAL_DEX }
                 .map { it.id }
-            externalExtensionLoader.ensureExtractorsLoaded(allDexIds)
+            withContext(Dispatchers.IO) {
+                externalExtensionLoader.ensureExtractorsLoaded(allDexIds)
+            }
         }
 
-        val results = enabledScraperList.map { scraper ->
-            async {
+        val results = enabledScraperList.mapIndexed { index, scraper ->
+            async(scraperOrchestrationDispatcher) {
+                if (index > 0) {
+                    kotlinx.coroutines.delay(index * 60L)
+                }
                 executeScraperWithSingleFlight(scraper, tmdbId, mediaType, season, episode)
             }
         }.awaitAll()
@@ -693,19 +709,23 @@ class PluginManager @Inject constructor(
         }
         
         Log.d(TAG, "Streaming execution of ${enabledList.size} scrapers for $mediaType:$tmdbId")
-
+ 
         // Preload all extractors from EXTERNAL_DEX repos before any scraper runs
         val dexScraperIds = enabledList.filter { it.type == RepositoryType.EXTERNAL_DEX }.map { it.id }
         if (dexScraperIds.isNotEmpty()) {
             val allDexIds = dataStore.scrapers.first()
                 .filter { it.type == RepositoryType.EXTERNAL_DEX }
                 .map { it.id }
-            externalExtensionLoader.ensureExtractorsLoaded(allDexIds)
+            withContext(Dispatchers.IO) {
+                externalExtensionLoader.ensureExtractorsLoaded(allDexIds)
+            }
         }
-
-        // Launch all scrapers concurrently within the channelFlow scope
-        enabledList.forEach { scraper ->
-            launch {
+ 
+        enabledList.forEachIndexed { index, scraper ->
+            launch(scraperOrchestrationDispatcher) {
+                if (index > 0) {
+                    kotlinx.coroutines.delay(index * 60L)
+                }
                 try {
                     val results = executeScraperWithSingleFlight(scraper, tmdbId, mediaType, season, episode)
                     if (results.isNotEmpty()) {
@@ -890,7 +910,9 @@ class PluginManager @Inject constructor(
             val allDexIds = dataStore.scrapers.first()
                 .filter { it.type == RepositoryType.EXTERNAL_DEX }
                 .map { it.id }
-            externalExtensionLoader.ensureExtractorsLoaded(allDexIds, diagnostics)
+            withContext(Dispatchers.IO) {
+                externalExtensionLoader.ensureExtractorsLoaded(allDexIds, diagnostics)
+            }
         }
 
         val testSeason = if (testMediaType == "movie") null else 1

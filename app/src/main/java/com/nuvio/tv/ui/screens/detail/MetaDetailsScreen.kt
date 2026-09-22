@@ -1,5 +1,11 @@
 package com.nuvio.tv.ui.screens.detail
 
+import com.nuvio.tv.ui.components.LocalPlaybackAvailability
+import android.widget.Toast
+
+import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NuvioMotion
+
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
@@ -7,6 +13,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,13 +36,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.rememberUpdatedState
@@ -45,6 +54,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
@@ -52,6 +62,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
@@ -68,6 +79,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.nuvio.tv.ui.util.localizedGenreLabel
 import com.nuvio.tv.ui.util.recompositionHighlighter
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
@@ -93,7 +105,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import com.nuvio.tv.domain.model.ContentType
+import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
+import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
+import com.nuvio.tv.domain.model.HomeImdbRatingsVisibility
 import com.nuvio.tv.domain.model.LibraryListTab
+import com.nuvio.tv.domain.model.localizedTitle
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaCastMember
@@ -108,12 +124,14 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
 import com.nuvio.tv.ui.components.NuvioDialog
+import com.nuvio.tv.ui.components.PlayManualOverrideDialog
+import com.nuvio.tv.ui.components.SynopsisOverlay
 import com.nuvio.tv.ui.components.TrailerPlayer
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.components.posteroptions.TrackingRemovalConfirmationDialog
+import com.nuvio.tv.core.tracking.LOCAL_LIBRARY_LIST_KEY
+import com.nuvio.tv.core.tracking.supportsMembershipFor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.rememberCoroutineScope
 
 private enum class RestoreTarget {
@@ -147,9 +165,7 @@ private data class DetailReturnEpisodeFocusRequest(
 
 private fun resolveDetailReturnEpisodeFocusTarget(
     meta: Meta,
-    request: DetailReturnEpisodeFocusRequest?,
-    episodeProgressMap: Map<Pair<Int, Int>, WatchProgress>,
-    watchedEpisodes: Set<Pair<Int, Int>>
+    request: DetailReturnEpisodeFocusRequest?
 ): Video? {
     val requestedSeason = request?.season ?: return null
     val requestedEpisode = request.episode ?: return null
@@ -165,6 +181,155 @@ private fun resolveDetailReturnEpisodeFocusTarget(
     if (matchedIndex < 0) return null
 
     return orderedEpisodes[matchedIndex]
+}
+
+internal fun resolveVisibleEpisodeRestoreId(
+    requestedId: String?,
+    episodesForSeason: List<Video>,
+    nextVideoId: String?
+): String? {
+    requestedId?.let { id ->
+        if (episodesForSeason.any { it.id == id }) return id
+    }
+    nextVideoId?.let { id ->
+        if (episodesForSeason.any { it.id == id }) return id
+    }
+    return episodesForSeason.firstOrNull()?.id
+}
+
+internal fun resolveReturnFocusSeason(
+    playedSeason: Int?,
+    selectedSeason: Int,
+    nextSeason: Int?,
+    availableSeasons: Collection<Int>
+): Int? {
+    val next = nextSeason?.takeIf { it in availableSeasons }
+    val played = playedSeason?.takeIf { it in availableSeasons }
+    val selected = selectedSeason.takeIf { it in availableSeasons }
+    return when {
+        next != null && played != null && next > played -> next
+        selected != null && played != null && selected > played -> selected
+        next != null -> next
+        else -> played ?: selected
+    }
+}
+
+internal fun isLastEpisodeOfSeason(
+    allVideos: List<Video>,
+    season: Int?,
+    episode: Int?
+): Boolean {
+    if (season == null || episode == null) return false
+    val lastEpisode = allVideos
+        .filter { it.season == season }
+        .mapNotNull { it.episode }
+        .maxOrNull() ?: return false
+    return episode >= lastEpisode
+}
+
+internal fun hasLaterAvailableSeason(
+    playedSeason: Int?,
+    availableSeasons: Collection<Int>
+): Boolean = playedSeason != null && availableSeasons.any { it > playedSeason }
+
+internal fun shouldWaitForReturnFocusSeasonAdvance(
+    playedSeason: Int?,
+    playedEpisode: Int?,
+    nextSeason: Int?,
+    allVideos: List<Video>,
+    availableSeasons: Collection<Int>
+): Boolean {
+    if (!isLastEpisodeOfSeason(allVideos, playedSeason, playedEpisode)) return false
+    if (!hasLaterAvailableSeason(playedSeason, availableSeasons)) return false
+    return nextSeason == null || (playedSeason != null && nextSeason <= playedSeason)
+}
+
+internal sealed class ReturnFocusStep {
+    data object WaitForSeasonAdvance : ReturnFocusStep()
+    data class SelectSeason(val season: Int) : ReturnFocusStep()
+    data class RestoreEpisode(val episodeId: String, val consumeRequest: Boolean) : ReturnFocusStep()
+    data object Idle : ReturnFocusStep()
+}
+
+internal fun resolveReturnFocusStep(
+    playedSeason: Int?,
+    playedEpisode: Int?,
+    selectedSeason: Int,
+    nextSeason: Int?,
+    availableSeasons: Collection<Int>,
+    allVideos: List<Video>,
+    requestedEpisodeId: String?,
+    episodesForSeason: List<Video>,
+    nextVideoId: String?,
+    alreadyRestoredId: String?,
+    hasWaitedForSeasonAdvance: Boolean
+): ReturnFocusStep {
+    val waitingForAdvance = shouldWaitForReturnFocusSeasonAdvance(
+        playedSeason = playedSeason,
+        playedEpisode = playedEpisode,
+        nextSeason = nextSeason,
+        allVideos = allVideos,
+        availableSeasons = availableSeasons
+    )
+    if (waitingForAdvance && !hasWaitedForSeasonAdvance) {
+        return ReturnFocusStep.WaitForSeasonAdvance
+    }
+
+    val seasonToShow = resolveReturnFocusSeason(
+        playedSeason = playedSeason,
+        selectedSeason = selectedSeason,
+        nextSeason = nextSeason,
+        availableSeasons = availableSeasons
+    )
+    if (seasonToShow != null && seasonToShow != selectedSeason) {
+        return ReturnFocusStep.SelectSeason(seasonToShow)
+    }
+
+    val restoreEpisodeId = resolveVisibleEpisodeRestoreId(
+        requestedId = requestedEpisodeId,
+        episodesForSeason = episodesForSeason,
+        nextVideoId = nextVideoId
+    ) ?: return ReturnFocusStep.Idle
+
+    if (restoreEpisodeId == alreadyRestoredId) {
+        return ReturnFocusStep.Idle
+    }
+
+    return ReturnFocusStep.RestoreEpisode(
+        episodeId = restoreEpisodeId,
+        consumeRequest = !waitingForAdvance
+    )
+}
+
+private const val RETURN_FOCUS_SEASON_ADVANCE_WAIT_MS = 400L
+
+private fun resolveHeroPlaybackVideo(
+    meta: Meta,
+    nextToWatch: NextToWatch?,
+    episodesForSeason: List<Video>
+): Video? {
+    if (meta.type != ContentType.SERIES && meta.videos.isEmpty()) return null
+
+    val byId = nextToWatch?.nextVideoId?.let { id ->
+        meta.videos.firstOrNull { it.id == id }
+    }
+    val bySeasonEpisode = if (
+        byId == null &&
+        nextToWatch?.nextSeason != null &&
+        nextToWatch.nextEpisode != null
+    ) {
+        meta.videos.firstOrNull {
+            it.season == nextToWatch.nextSeason && it.episode == nextToWatch.nextEpisode
+        }
+    } else {
+        null
+    }
+    val defaultVideoId = meta.behaviorHints?.defaultVideoId
+    val defaultVideo = meta.videos.firstOrNull {
+        it.id == defaultVideoId && it.available != false
+    }
+
+    return byId ?: bySeasonEpisode ?: defaultVideo ?: episodesForSeason.firstOrNull()
 }
 
 private const val USER_INTERACTION_DISPATCH_DEBOUNCE_MS = 120L
@@ -202,7 +367,10 @@ fun MetaDetailsScreen(
     returnFocusEpisode: Int? = null,
     heroRestoreToken: Int = 0,
     heroBackdropUrl: String? = null,
+    playOnLoad: Boolean = false,
+    playOnLoadManually: Boolean = false,
     onBackPress: () -> Unit,
+    onReturnFocusConsumed: () -> Unit = {},
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToTmdbEntityBrowse: (entityKind: String, entityId: Int, entityName: String, sourceType: String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
@@ -237,9 +405,27 @@ fun MetaDetailsScreen(
         year: String?,
         runtime: Int?,
         contentLanguage: String?
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    onPlayStartFromBeginningClick: (
+        videoId: String,
+        contentType: String,
+        contentId: String,
+        title: String,
+        poster: String?,
+        backdrop: String?,
+        logo: String?,
+        season: Int?,
+        episode: Int?,
+        episodeName: String?,
+        genres: String?,
+        year: String?,
+        runtime: Int?,
+        contentLanguage: String?
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
+    val playbackAvailability = LocalPlaybackAvailability.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val posterCardCornerRadiusDp by viewModel.posterCardCornerRadiusDp.collectAsStateWithLifecycle()
     val effectiveAutoplayEnabled by viewModel.effectiveAutoplayEnabled.collectAsStateWithLifecycle(
         initialValue = false
     )
@@ -248,6 +434,25 @@ fun MetaDetailsScreen(
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
     var restoreSharedTrailerFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var isTrailerPaused by remember { mutableStateOf(false) }
+    val playOnLoadConsumed = rememberSaveable { mutableStateOf(false) }
+    val playOnLoadHandoffDispatched = rememberSaveable { mutableStateOf(false) }
+    val playOnLoadReturnObserved = rememberSaveable { mutableStateOf(false) }
+    val suppressInitialPlayOnLoadContent = playOnLoad && !playOnLoadReturnObserved.value
+    val playOnLoadReturnContentReady = !uiState.isLoading && uiState.meta != null
+    var playOnLoadReturnRevealRequested by remember(playOnLoad) { mutableStateOf(!playOnLoad) }
+    var playOnLoadReturnContentRevealed by remember(playOnLoad) { mutableStateOf(!playOnLoad) }
+
+    LaunchedEffect(playOnLoad, playOnLoadReturnObserved.value, playOnLoadReturnContentReady) {
+        if (!playOnLoad || (playOnLoadReturnObserved.value && playOnLoadReturnContentReady)) {
+            playOnLoadReturnRevealRequested = true
+        }
+    }
+    val playOnLoadReturnContentAlpha by animateFloatAsState(
+        targetValue = if (playOnLoadReturnRevealRequested) 1f else 0f,
+        animationSpec = NuvioMotion.mediumTween(),
+        label = "playOnLoadReturnContentAlpha",
+        finishedListener = { playOnLoadReturnContentRevealed = it == 1f }
+    )
 
     BackHandler {
         if (selectedComment != null) {
@@ -288,9 +493,24 @@ fun MetaDetailsScreen(
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
+        if (
+            playOnLoad &&
+            playOnLoadHandoffDispatched.value &&
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        ) {
+            playOnLoadReturnObserved.value = true
+        }
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE) {
-                viewModel.onEvent(MetaDetailsEvent.OnLifecyclePause)
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.onEvent(MetaDetailsEvent.OnLifecyclePause)
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    if (playOnLoad && playOnLoadHandoffDispatched.value) {
+                        playOnLoadReturnObserved.value = true
+                    }
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -384,33 +604,36 @@ fun MetaDetailsScreen(
     ) {
         when {
             uiState.isLoading -> {
-                // Show hero backdrop from ModernHome during loading to prevent visual gap
-                if (!heroBackdropUrl.isNullOrBlank()) {
-                    val localContext = LocalContext.current
-                    val localDensity = LocalDensity.current
-                    val configuration = LocalConfiguration.current
-                    val loadingBackdropWidthPx = remember(configuration, localDensity) {
-                        with(localDensity) { configuration.screenWidthDp.dp.roundToPx() }
+                if (playOnLoad && !playOnLoadReturnContentRevealed) {
+                    PlaybackHandoffBackdrop(backdropUrl = heroBackdropUrl)
+                } else {
+                    if (!heroBackdropUrl.isNullOrBlank()) {
+                        val localContext = LocalContext.current
+                        val localDensity = LocalDensity.current
+                        val configuration = LocalConfiguration.current
+                        val loadingBackdropWidthPx = remember(configuration, localDensity) {
+                            with(localDensity) { configuration.screenWidthDp.dp.roundToPx() }
+                        }
+                        val loadingBackdropHeightPx = remember(configuration, localDensity) {
+                            with(localDensity) { configuration.screenHeightDp.dp.roundToPx() }
+                        }
+                        val loadingBackdropRequest = remember(localContext, heroBackdropUrl, loadingBackdropWidthPx, loadingBackdropHeightPx) {
+                            ImageRequest.Builder(localContext)
+                                .data(heroBackdropUrl)
+                                .crossfade(false)
+                                .size(width = loadingBackdropWidthPx, height = loadingBackdropHeightPx)
+                                .build()
+                        }
+                        AsyncImage(
+                            model = loadingBackdropRequest,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                            alignment = Alignment.TopEnd
+                        )
                     }
-                    val loadingBackdropHeightPx = remember(configuration, localDensity) {
-                        with(localDensity) { configuration.screenHeightDp.dp.roundToPx() }
-                    }
-                    val loadingBackdropRequest = remember(localContext, heroBackdropUrl, loadingBackdropWidthPx, loadingBackdropHeightPx) {
-                        ImageRequest.Builder(localContext)
-                            .data(heroBackdropUrl)
-                            .crossfade(false)
-                            .size(width = loadingBackdropWidthPx, height = loadingBackdropHeightPx)
-                            .build()
-                    }
-                    AsyncImage(
-                        model = loadingBackdropRequest,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.TopEnd
-                    )
+                    MetaDetailsSkeleton(backdropAware = !heroBackdropUrl.isNullOrBlank())
                 }
-                MetaDetailsSkeleton(backdropAware = !heroBackdropUrl.isNullOrBlank())
             }
             uiState.error != null -> {
                 ErrorState(
@@ -420,20 +643,164 @@ fun MetaDetailsScreen(
             }
             uiState.meta != null -> {
                 val meta = uiState.meta!!
+                val context = LocalContext.current
                 val genresString = remember(meta.genres) {
-                    meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+                    meta.genres.takeIf { it.isNotEmpty() }
+                        ?.joinToString(" • ") { localizedGenreLabel(context, it) }
                 }
                 val yearString = remember(meta.releaseInfo) {
                     formatDetailYearRange(meta.releaseInfo)
                 }
+                val playEpisode: (Video) -> Unit = playEpisode@{ video ->
+                    if (!playbackAvailability.canStream(meta.apiType, video.id, meta.id, video)) {
+                        Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
+                        return@playEpisode
+                    }
+                    onPlayClick(
+                        video.id,
+                        meta.apiType,
+                        meta.id,
+                        meta.name,
+                        video.thumbnail ?: meta.poster,
+                        meta.backdropUrl,
+                        meta.logo,
+                        video.season,
+                        video.episode,
+                        video.title,
+                        null,
+                        null,
+                        video.runtime,
+                        meta.resolveContentLanguage()
+                    )
+                }
+                val playEpisodeManually: (Video) -> Unit = playEpisodeManually@{ video ->
+                    if (!playbackAvailability.canStream(meta.apiType, video.id, meta.id, video)) {
+                        Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
+                        return@playEpisodeManually
+                    }
+                    onPlayManuallyClick(
+                        video.id,
+                        meta.apiType,
+                        meta.id,
+                        meta.name,
+                        video.thumbnail ?: meta.poster,
+                        meta.backdropUrl,
+                        meta.logo,
+                        video.season,
+                        video.episode,
+                        video.title,
+                        null,
+                        null,
+                        video.runtime,
+                        meta.resolveContentLanguage()
+                    )
+                }
+                val playTitle: (String) -> Unit = playTitle@{ videoId ->
+                    if (!playbackAvailability.canStream(meta.apiType, videoId, meta.id)) {
+                        Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
+                        return@playTitle
+                    }
+                    onPlayClick(
+                        videoId,
+                        meta.apiType,
+                        meta.id,
+                        meta.name,
+                        meta.poster,
+                        meta.backdropUrl,
+                        meta.logo,
+                        null,
+                        null,
+                        null,
+                        genresString,
+                        yearString,
+                        null,
+                        meta.resolveContentLanguage()
+                    )
+                }
+                val playTitleManually: (String) -> Unit = playTitleManually@{ videoId ->
+                    if (!playbackAvailability.canStream(meta.apiType, videoId, meta.id)) {
+                        Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
+                        return@playTitleManually
+                    }
+                    onPlayManuallyClick(
+                        videoId,
+                        meta.apiType,
+                        meta.id,
+                        meta.name,
+                        meta.poster,
+                        meta.backdropUrl,
+                        meta.logo,
+                        null,
+                        null,
+                        null,
+                        genresString,
+                        yearString,
+                        null,
+                        meta.resolveContentLanguage()
+                    )
+                }
+                val isSeries = remember(meta.type, meta.videos) {
+                    meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
+                }
+                val playOnLoadVideo = remember(meta, uiState.nextToWatch, uiState.episodesForSeason) {
+                    resolveHeroPlaybackVideo(
+                        meta = meta,
+                        nextToWatch = uiState.nextToWatch,
+                        episodesForSeason = uiState.episodesForSeason
+                    )
+                }
 
+                LaunchedEffect(
+                    playOnLoad,
+                    playOnLoadManually,
+                    playOnLoadConsumed.value,
+                    isSeries,
+                    uiState.nextToWatch,
+                    playOnLoadVideo?.id,
+                    playbackAvailability
+                ) {
+                    if (!playOnLoad || playOnLoadConsumed.value || (isSeries && uiState.nextToWatch == null)) {
+                        return@LaunchedEffect
+                    }
+                    if (!playbackAvailability.isLoaded) return@LaunchedEffect
+                    playOnLoadConsumed.value = true
+                    if (!playbackAvailability.canStream(meta.apiType, playOnLoadVideo?.id ?: meta.id, meta.id, playOnLoadVideo)) {
+                        playOnLoadReturnObserved.value = true
+                        Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
+                        return@LaunchedEffect
+                    }
+                    playOnLoadHandoffDispatched.value = true
+                    if (playOnLoadVideo != null) {
+                        if (playOnLoadManually) {
+                            playEpisodeManually(playOnLoadVideo)
+                        } else {
+                            playEpisode(playOnLoadVideo)
+                        }
+                    } else if (playOnLoadManually) {
+                        playTitleManually(meta.id)
+                    } else {
+                        playTitle(meta.id)
+                    }
+                }
+
+                if (suppressInitialPlayOnLoadContent) {
+                    PlaybackHandoffBackdrop(backdropUrl = heroBackdropUrl ?: meta.backdropUrl)
+                    return@Box
+                }
+                if (playOnLoad && !playOnLoadReturnContentRevealed) {
+                    PlaybackHandoffBackdrop(backdropUrl = heroBackdropUrl ?: meta.backdropUrl)
+                }
                 MetaDetailsContent(
+                    modifier = Modifier.graphicsLayer {
+                        alpha = playOnLoadReturnContentAlpha
+                    },
                     heroBackdropUrl = heroBackdropUrl,
                     meta = meta,
                     detailReturnEpisodeFocusRequest = DetailReturnEpisodeFocusRequest(
                         season = returnFocusSeason,
                         episode = returnFocusEpisode
                     ),
+                    onDetailReturnEpisodeFocusConsumed = onReturnFocusConsumed,
                     lastFocusedEpisodeIdBySeason = viewModel.lastFocusedEpisodeIdBySeason,
                     heroRestoreToken = heroRestoreToken,
                     seasons = uiState.seasons,
@@ -446,18 +813,23 @@ fun MetaDetailsScreen(
                     watchedEpisodes = uiState.watchedEpisodes,
                     episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
                     blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
+                    episodeOptionsOverlayStyle = uiState.episodeOptionsOverlayStyle,
                     showFullReleaseDate = uiState.showFullReleaseDate,
+                    overallRatingsVisibility = uiState.overallRatingsVisibility,
+                    detailImdbRatingsVisibility = uiState.detailImdbRatingsVisibility,
                     isMovieWatched = uiState.isMovieWatched,
                     isMovieWatchedPending = uiState.isMovieWatchedPending,
                     moreLikeThis = uiState.moreLikeThis,
                     moreLikeThisSource = uiState.moreLikeThisSource,
+                    posterCardCornerRadiusDp = posterCardCornerRadiusDp,
                     collection = uiState.collection,
                     collectionName = uiState.collectionName,
+                    relatedWatchedStatus = uiState.relatedWatchedStatus,
                     episodeImdbRatings = uiState.episodeImdbRatings,
                     isEpisodeRatingsLoading = uiState.isEpisodeRatingsLoading,
                     episodeRatingsError = uiState.episodeRatingsError,
                     mdbListRatings = uiState.mdbListRatings,
-                    showMdbListImdb = uiState.showMdbListImdb,
+                    isMdbListRatingsActive = uiState.isMdbListRatingsActive,
                     tmdbRating = uiState.tmdbRating,
                     comments = uiState.comments,
                     commentsCurrentPage = uiState.commentsCurrentPage,
@@ -470,8 +842,16 @@ fun MetaDetailsScreen(
                     commentsEpisodeTarget = uiState.commentsEpisodeTarget,
                     selectedComment = uiState.selectedComment,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
-                    onEpisodeClick = { video ->
-                        onPlayClick(
+                    onEpisodeClick = playEpisode,
+                    onEpisodeManualPlayClick = playEpisodeManually,
+                    onPlayClick = playTitle,
+                    onPlayManuallyClick = playTitleManually,
+                    onEpisodeStartFromBeginningClick = onEpisodeStartFromBeginningClick@{ video ->
+                        if (!playbackAvailability.canStream(meta.apiType, video.id, meta.id, video)) {
+                            Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
+                            return@onEpisodeStartFromBeginningClick
+                        }
+                        onPlayStartFromBeginningClick(
                             video.id,
                             meta.apiType,
                             meta.id,
@@ -488,44 +868,12 @@ fun MetaDetailsScreen(
                             meta.resolveContentLanguage()
                         )
                     },
-                    onEpisodeManualPlayClick = { video ->
-                        onPlayManuallyClick(
-                            video.id,
-                            meta.apiType,
-                            meta.id,
-                            meta.name,
-                            video.thumbnail ?: meta.poster,
-                            meta.backdropUrl,
-                            meta.logo,
-                            video.season,
-                            video.episode,
-                            video.title,
-                            null,
-                            null,
-                            video.runtime,
-                            meta.resolveContentLanguage()
-                        )
-                    },
-                    onPlayClick = { videoId ->
-                        onPlayClick(
-                            videoId,
-                            meta.apiType,
-                            meta.id,
-                            meta.name,
-                            meta.poster,
-                            meta.backdropUrl,
-                            meta.logo,
-                            null,
-                            null,
-                            null,
-                            genresString,
-                            yearString,
-                            null,
-                            meta.resolveContentLanguage()
-                        )
-                    },
-                    onPlayManuallyClick = { videoId ->
-                        onPlayManuallyClick(
+                    onPlayStartFromBeginningClick = onPlayStartFromBeginningClick@{ videoId ->
+                        if (!playbackAvailability.canStream(meta.apiType, videoId, meta.id)) {
+                            Toast.makeText(context, R.string.playback_unavailable_message, Toast.LENGTH_SHORT).show()
+                            return@onPlayStartFromBeginningClick
+                        }
+                        onPlayStartFromBeginningClick(
                             videoId,
                             meta.apiType,
                             meta.id,
@@ -676,11 +1024,15 @@ fun MetaDetailsScreen(
 
         if (uiState.showListPicker) {
             val nuvioListTab = LibraryListTab(
-                key = "local",
+                key = LOCAL_LIBRARY_LIST_KEY,
                 title = stringResource(R.string.trakt_library_source_nuvio),
                 type = LibraryListTab.Type.WATCHLIST
             )
-            val combinedTabs = listOf(nuvioListTab) + uiState.libraryListTabs
+            val contentType = uiState.meta?.apiType?.lowercase().orEmpty()
+            val providerTabs = uiState.libraryListTabs.filter { tab ->
+                tab.supportsMembershipFor(contentType)
+            }
+            val combinedTabs = listOf(nuvioListTab) + providerTabs
             LibraryListPickerDialog(
                 title = uiState.meta?.name ?: stringResource(R.string.detail_lists_fallback),
                 tabs = combinedTabs,
@@ -695,17 +1047,27 @@ fun MetaDetailsScreen(
             )
         }
 
+        if (uiState.removalConfirmations.isNotEmpty()) {
+            TrackingRemovalConfirmationDialog(
+                itemTitle = uiState.meta?.name.orEmpty(),
+                confirmations = uiState.removalConfirmations,
+                isPending = uiState.pickerPending || uiState.defaultLibraryTogglePending,
+                onConfirm = { viewModel.onEvent(MetaDetailsEvent.OnRemovalConfirmed) },
+                onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnRemovalCancelled) }
+            )
+        }
+
         val message = uiState.userMessage
         if (!message.isNullOrBlank()) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 24.dp)
+                    .padding(top = NuvioTheme.spacing.xl)
                     .background(
                         color = if (uiState.userMessageIsError) {
                             Color(0xFF5A1C1C)
                         } else {
-                            NuvioColors.BackgroundElevated
+                            NuvioTheme.colors.BackgroundElevated
                         },
                         shape = RoundedCornerShape(10.dp)
                     )
@@ -714,7 +1076,7 @@ fun MetaDetailsScreen(
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextPrimary
+                    color = NuvioTheme.colors.TextPrimary
                 )
             }
         }
@@ -753,9 +1115,11 @@ fun MetaDetailsScreen(
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun MetaDetailsContent(
+    modifier: Modifier = Modifier,
     heroBackdropUrl: String? = null,
     meta: Meta,
     detailReturnEpisodeFocusRequest: DetailReturnEpisodeFocusRequest? = null,
+    onDetailReturnEpisodeFocusConsumed: () -> Unit,
     lastFocusedEpisodeIdBySeason: MutableMap<Int, String>,
     heroRestoreToken: Int = 0,
     seasons: List<Int>,
@@ -768,18 +1132,23 @@ private fun MetaDetailsContent(
     watchedEpisodes: Set<Pair<Int, Int>>,
     episodeWatchedPendingKeys: Set<String>,
     blurUnwatchedEpisodes: Boolean,
+    episodeOptionsOverlayStyle: EpisodeOptionsOverlayStyle,
     showFullReleaseDate: Boolean,
+    overallRatingsVisibility: HomeImdbRatingsVisibility,
+    detailImdbRatingsVisibility: DetailImdbRatingsVisibility,
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     moreLikeThis: List<MetaPreview>,
     moreLikeThisSource: MoreLikeThisSource?,
+    posterCardCornerRadiusDp: Int = 12,
     collection: List<MetaPreview>,
     collectionName: String?,
+    relatedWatchedStatus: Map<String, Boolean> = emptyMap(),
     episodeImdbRatings: Map<Pair<Int, Int>, Double>,
     isEpisodeRatingsLoading: Boolean,
     episodeRatingsError: String?,
     mdbListRatings: MDBListRatings?,
-    showMdbListImdb: Boolean,
+    isMdbListRatingsActive: Boolean,
     tmdbRating: Float?,
     comments: List<TraktCommentReview>,
     commentsCurrentPage: Int,
@@ -794,8 +1163,10 @@ private fun MetaDetailsContent(
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onEpisodeManualPlayClick: (Video) -> Unit,
+    onEpisodeStartFromBeginningClick: (Video) -> Unit = {},
     onPlayClick: (String) -> Unit,
     onPlayManuallyClick: (String) -> Unit,
+    onPlayStartFromBeginningClick: (String) -> Unit = {},
     showManualPlayOption: Boolean,
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
@@ -846,6 +1217,7 @@ private fun MetaDetailsContent(
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onPosterLongPress: (MetaPreview) -> Unit = {}
 ) {
+    val playbackAvailability = LocalPlaybackAvailability.current
     val canLoadMoreComments = commentsCurrentPage in 1 until commentsPageCount
     val selectedCommentIndex = remember(comments, selectedComment?.id) {
         selectedComment?.let { review -> comments.indexOfFirst { it.id == review.id } } ?: -1
@@ -858,32 +1230,33 @@ private fun MetaDetailsContent(
         meta.videos.firstOrNull { it.id == defaultVideoId && it.available != false }
     }
     val nextEpisode = remember(episodesForSeason) { episodesForSeason.firstOrNull() }
-    val heroVideo = remember(meta.videos, nextToWatch, nextEpisode, defaultSeriesVideo, isSeries) {
-        if (!isSeries) return@remember null
-        val byId = nextToWatch?.nextVideoId?.let { id ->
-            meta.videos.firstOrNull { it.id == id }
-        }
-        val bySeasonEpisode = if (byId == null && nextToWatch?.nextSeason != null && nextToWatch.nextEpisode != null) {
-            meta.videos.firstOrNull { it.season == nextToWatch.nextSeason && it.episode == nextToWatch.nextEpisode }
-        } else {
-            null
-        }
-        byId ?: bySeasonEpisode ?: defaultSeriesVideo ?: nextEpisode
+    val heroVideo = remember(meta, nextToWatch, episodesForSeason) {
+        resolveHeroPlaybackVideo(
+            meta = meta,
+            nextToWatch = nextToWatch,
+            episodesForSeason = episodesForSeason
+        )
+    }
+    val isPlayEnabled = playbackAvailability.canStream(meta.apiType, heroVideo?.id ?: meta.id, meta.id, heroVideo)
+    val canPlayEpisode = remember(playbackAvailability, meta.apiType, meta.id) {
+        { video: Video -> playbackAvailability.canStream(meta.apiType, video.id, meta.id, video) }
     }
     val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
     val listState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    val castRowListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    val moreLikeThisListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    val collectionListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    var lastFocusedCastKey by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
+    var lastFocusedMoreLikeItemId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
+    var lastFocusedCollectionItemId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
+    var savedRestoreScrollIndex by rememberSaveable(meta.id) { mutableIntStateOf(-1) }
+    var savedRestoreScrollOffset by rememberSaveable(meta.id) { mutableIntStateOf(0) }
+    var pinnedPageIndex by remember { mutableIntStateOf(-1) }
+    var pinnedPageOffset by remember { mutableIntStateOf(0) }
     // Suppress auto-scroll when hero buttons get focus
     val heroNoScrollResponder = remember {
         object : BringIntoViewResponder {
             override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
-            override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
-        }
-    }
-    // Suppress vertical scroll from LazyColumn when focus moves horizontally inside nested LazyRows,
-    // but still pass the rect upward so focus traversal works correctly.
-    val noVerticalScrollResponder = remember {
-        object : BringIntoViewResponder {
-            override fun calculateRectForParent(localRect: Rect): Rect = localRect
             override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
         }
     }
@@ -911,29 +1284,147 @@ private fun MetaDetailsContent(
     var restoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var commentsEntryFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var companyRestoreToken by rememberSaveable { mutableIntStateOf(0) }
+    var restoreOnNextResume by rememberSaveable { mutableStateOf(false) }
+    var consumeReturnEpisodeFocusOnClear by rememberSaveable(meta.id) { mutableStateOf(false) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
     var showHeroPlayOptionsDialog by rememberSaveable(meta.id) { mutableStateOf(false) }
-    var initialDetailReturnFocusHandled by rememberSaveable(
+    var showSynopsisOverlay by rememberSaveable(meta.id) { mutableStateOf(false) }
+    var lastReturnFocusRestoreId by rememberSaveable(
         meta.id,
         detailReturnEpisodeFocusRequest?.season,
         detailReturnEpisodeFocusRequest?.episode
     ) {
-        mutableStateOf(false)
+        mutableStateOf<String?>(null)
     }
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
+    val suppressDetailRowRelocation = pendingRestoreType == RestoreTarget.EPISODE
+    val suppressRestoreBringIntoView =
+        pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK ||
+            pendingRestoreType == RestoreTarget.CAST_MEMBER ||
+            pendingRestoreType == RestoreTarget.MORE_LIKE_THIS ||
+            pendingRestoreType == RestoreTarget.COLLECTION
+    val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
+    val restoreNoScrollBringIntoViewSpec = remember {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(
+                offset: Float,
+                size: Float,
+                containerSize: Float
+            ): Float = 0f
+        }
+    }
+    val detailRowBringIntoViewResponder = remember(suppressDetailRowRelocation) {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect {
+                return if (suppressDetailRowRelocation) Rect.Zero else localRect
+            }
+
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
+        }
+    }
+    var lastDetailDpadKey by rememberSaveable(meta.id) { mutableIntStateOf(0) }
+    val episodeRowStayVerticalResponder = remember(lastDetailDpadKey, pendingRestoreType) {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect {
+                val stayVertical = pendingRestoreType == RestoreTarget.EPISODE ||
+                    lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_RIGHT
+                return if (stayVertical) {
+                    Rect(localRect.left, 0f, localRect.right, 0f)
+                } else {
+                    localRect
+                }
+            }
+
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
+        }
+    }
+
+    fun capturePageScroll() {
+        savedRestoreScrollIndex = listState.firstVisibleItemIndex
+        savedRestoreScrollOffset = listState.firstVisibleItemScrollOffset
+    }
+
+    fun pinDetailPageScroll() {
+        if (pinnedPageIndex >= 0) return
+        pinnedPageIndex = listState.firstVisibleItemIndex
+        pinnedPageOffset = listState.firstVisibleItemScrollOffset
+    }
+
+    suspend fun animateDetailScrollTo(index: Int, offset: Int) {
+        if (index < 0) return
+        val currentIndex = listState.firstVisibleItemIndex
+        val currentOffset = listState.firstVisibleItemScrollOffset
+        if (currentIndex == index) {
+            val delta = (offset - currentOffset).toFloat()
+            if (kotlin.math.abs(delta) > 1f) {
+                listState.animateScrollBy(delta, NuvioMotion.slowTween())
+            }
+            return
+        }
+        listState.animateScrollToItem(index, offset)
+    }
+
+    fun remainingDetailScrollPx(): Int {
+        val info = listState.layoutInfo
+        val lastVisible = info.visibleItemsInfo.lastOrNull() ?: return 0
+        val tail = (lastVisible.offset + lastVisible.size - info.viewportEndOffset).coerceAtLeast(0)
+        return if (lastVisible.index < info.totalItemsCount - 1) Int.MAX_VALUE else tail
+    }
+
+    fun onCompanyRowFocused(revealOverflowPx: Float) {
+        pinDetailPageScroll()
+        if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) return
+        val remaining = remainingDetailScrollPx()
+        val distance = when {
+            revealOverflowPx > 1f -> {
+                if (remaining == Int.MAX_VALUE) revealOverflowPx else minOf(revealOverflowPx, remaining.toFloat())
+            }
+            remaining in 1..200 -> remaining.toFloat()
+            else -> 0f
+        }
+        if (distance <= 1f) return
+        coroutineScope.launch {
+            listState.animateScrollBy(distance, NuvioMotion.slowTween())
+        }
+    }
+
+    fun restorePinnedDetailPageIfNudge() {
+        val index = pinnedPageIndex
+        val offset = pinnedPageOffset
+        if (index < 0) return
+        pinnedPageIndex = -1
+        val currentIndex = listState.firstVisibleItemIndex
+        val currentOffset = listState.firstVisibleItemScrollOffset
+        val offsetDelta = kotlin.math.abs(currentOffset - offset)
+        if (currentIndex != index || offsetDelta !in 1..200) return
+        coroutineScope.launch {
+            animateDetailScrollTo(index, offset)
+        }
+    }
 
     fun clearPendingRestore() {
+        savedRestoreScrollIndex = -1
+        savedRestoreScrollOffset = 0
+        val shouldConsumeReturnFocus = consumeReturnEpisodeFocusOnClear
         pendingRestoreType = null
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
         pendingRestoreMoreLikeItemId = null
         pendingRestoreCollectionItemId = null
         pendingRestoreCompanyId = null
+        restoreFocusToken = 0
         companyRestoreToken = 0
+        restoreOnNextResume = false
+        consumeReturnEpisodeFocusOnClear = false
+        if (shouldConsumeReturnFocus) {
+            onDetailReturnEpisodeFocusConsumed()
+        }
     }
 
     fun markHeroRestore() {
+        restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         pendingRestoreType = RestoreTarget.HERO
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
@@ -942,7 +1433,10 @@ private fun MetaDetailsContent(
         pendingRestoreCompanyId = null
     }
 
-    fun markEpisodeRestore(episodeId: String) {
+    fun markEpisodeRestore(episodeId: String, restoreOnResume: Boolean = true) {
+        restoreOnNextResume = restoreOnResume &&
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        restoreFocusToken = 0
         pendingRestoreType = RestoreTarget.EPISODE
         pendingRestoreEpisodeId = episodeId
         pendingRestoreCastPersonId = null
@@ -952,6 +1446,9 @@ private fun MetaDetailsContent(
     }
 
     fun markCastMemberRestore(personId: Int) {
+        capturePageScroll()
+        restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        restoreFocusToken = 0
         pendingRestoreType = RestoreTarget.CAST_MEMBER
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = personId
@@ -961,6 +1458,9 @@ private fun MetaDetailsContent(
     }
 
     fun markMoreLikeThisRestore(itemId: String) {
+        capturePageScroll()
+        restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        restoreFocusToken = 0
         pendingRestoreType = RestoreTarget.MORE_LIKE_THIS
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
@@ -970,6 +1470,9 @@ private fun MetaDetailsContent(
     }
 
     fun markCollectionRestore(itemId: String) {
+        capturePageScroll()
+        restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        restoreFocusToken = 0
         pendingRestoreType = RestoreTarget.COLLECTION
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
@@ -979,6 +1482,8 @@ private fun MetaDetailsContent(
     }
 
     fun markCompanyRestore(companyId: Int) {
+        capturePageScroll()
+        restoreOnNextResume = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         pendingRestoreType = RestoreTarget.COMPANY_OR_NETWORK
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
@@ -994,21 +1499,25 @@ private fun MetaDetailsContent(
         }
     }
 
-    DisposableEffect(
-        lifecycleOwner,
-        pendingRestoreType,
-        pendingRestoreEpisodeId,
-        pendingRestoreCastPersonId,
-        pendingRestoreMoreLikeItemId,
-        pendingRestoreCollectionItemId,
-        pendingRestoreCompanyId
-    ) {
+    DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && pendingRestoreType != null) {
-                android.util.Log.d("DetailFocus", "ON_RESUME: restoreFocusToken++ pendingRestoreType=$pendingRestoreType")
-                restoreFocusToken += 1
-                if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) {
-                    companyRestoreToken += 1
+            if (
+                event == Lifecycle.Event.ON_RESUME &&
+                restoreOnNextResume &&
+                pendingRestoreType != null
+            ) {
+                restoreOnNextResume = false
+                val index = savedRestoreScrollIndex
+                val offset = savedRestoreScrollOffset
+                val bumpCompany = pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK
+                coroutineScope.launch {
+                    if (index >= 0) {
+                        animateDetailScrollTo(index, offset)
+                    }
+                    if (bumpCompany) {
+                        companyRestoreToken += 1
+                    }
+                    restoreFocusToken += 1
                 }
             }
         }
@@ -1018,50 +1527,109 @@ private fun MetaDetailsContent(
         }
     }
 
+    var lastCastRowMetaId by remember { mutableStateOf(meta.id) }
+    LaunchedEffect(meta.id) {
+        if (lastCastRowMetaId == meta.id) return@LaunchedEffect
+        lastCastRowMetaId = meta.id
+        if (castRowListState.firstVisibleItemIndex != 0 ||
+            castRowListState.firstVisibleItemScrollOffset != 0
+        ) {
+            castRowListState.scrollToItem(0)
+        }
+        if (moreLikeThisListState.firstVisibleItemIndex != 0 ||
+            moreLikeThisListState.firstVisibleItemScrollOffset != 0
+        ) {
+            moreLikeThisListState.scrollToItem(0)
+        }
+        if (collectionListState.firstVisibleItemIndex != 0 ||
+            collectionListState.firstVisibleItemScrollOffset != 0
+        ) {
+            collectionListState.scrollToItem(0)
+        }
+    }
+
     LaunchedEffect(
         meta.id,
         detailReturnEpisodeFocusRequest?.season,
         detailReturnEpisodeFocusRequest?.episode,
-        nextToWatch,
-        episodeProgressMap,
-        watchedEpisodes
+        selectedSeason,
+        nextToWatch?.nextSeason,
+        nextToWatch?.nextVideoId,
+        episodesForSeason.size,
+        episodesForSeason.firstOrNull()?.id
     ) {
-        android.util.Log.d("DetailFocus", "ReturnEpisodeFocus LE fired: handled=$initialDetailReturnFocusHandled request=${detailReturnEpisodeFocusRequest?.season}/${detailReturnEpisodeFocusRequest?.episode} pendingRestore=$pendingRestoreType")
-        if (initialDetailReturnFocusHandled) return@LaunchedEffect
         if (!isSeries) {
-            initialDetailReturnFocusHandled = true
             return@LaunchedEffect
         }
         val request = detailReturnEpisodeFocusRequest
         if (request?.season == null || request.episode == null) {
-            initialDetailReturnFocusHandled = true
             return@LaunchedEffect
         }
-        if (nextToWatch == null) return@LaunchedEffect
-
         val targetEpisode = resolveDetailReturnEpisodeFocusTarget(
             meta = meta,
-            request = request,
-            episodeProgressMap = episodeProgressMap,
-            watchedEpisodes = watchedEpisodes
+            request = request
         )
-        initialDetailReturnFocusHandled = true
-        targetEpisode ?: return@LaunchedEffect
+        if (targetEpisode == null) {
+            onDetailReturnEpisodeFocusConsumed()
+            return@LaunchedEffect
+        }
 
-        val targetSeason = targetEpisode.season
-        if (targetSeason != null && selectedSeason != targetSeason) {
-            onSeasonSelected(targetSeason)
+        suspend fun applyReturnFocusStep(step: ReturnFocusStep) {
+            when (step) {
+                ReturnFocusStep.WaitForSeasonAdvance -> {
+                    delay(RETURN_FOCUS_SEASON_ADVANCE_WAIT_MS)
+                    // If nextToWatch advanced, this effect is cancelled and restarted.
+                    // Otherwise fall through with the same snapshot as a fallback restore.
+                    applyReturnFocusStep(
+                        resolveReturnFocusStep(
+                            playedSeason = targetEpisode.season,
+                            playedEpisode = targetEpisode.episode,
+                            selectedSeason = selectedSeason,
+                            nextSeason = nextToWatch?.nextSeason,
+                            availableSeasons = seasons,
+                            allVideos = meta.videos,
+                            requestedEpisodeId = targetEpisode.id,
+                            episodesForSeason = episodesForSeason,
+                            nextVideoId = nextToWatch?.nextVideoId,
+                            alreadyRestoredId = lastReturnFocusRestoreId,
+                            hasWaitedForSeasonAdvance = true
+                        )
+                    )
+                }
+                is ReturnFocusStep.SelectSeason -> {
+                    onSeasonSelected(step.season)
+                }
+                is ReturnFocusStep.RestoreEpisode -> {
+                    lastReturnFocusRestoreId = step.episodeId
+                    // Prevent the default hero autofocus from stealing focus after the episode restore completes.
+                    initialHeroFocusRequested = true
+                    consumeReturnEpisodeFocusOnClear = step.consumeRequest
+                    markEpisodeRestore(step.episodeId, restoreOnResume = false)
+                    restoreFocusToken += 1
+                    if (seasons.isNotEmpty()) {
+                        // Ensure the episodes row is composed before requesting focus on a card.
+                        listState.scrollToItem(1)
+                    }
+                }
+                ReturnFocusStep.Idle -> Unit
+            }
         }
-        // Prevent the default hero autofocus from stealing focus after the episode restore completes.
-        initialHeroFocusRequested = true
-        markEpisodeRestore(targetEpisode.id)
-        if (seasons.isNotEmpty()) {
-            android.util.Log.d("DetailFocus", "ReturnEpisodeFocus: scrollToItem(2)")
-            // Ensure the episodes row is composed before requesting focus on a card.
-            listState.scrollToItem(2)
-            delay(32)
-        }
-        restoreFocusToken += 1
+
+        applyReturnFocusStep(
+            resolveReturnFocusStep(
+                playedSeason = targetEpisode.season,
+                playedEpisode = targetEpisode.episode,
+                selectedSeason = selectedSeason,
+                nextSeason = nextToWatch?.nextSeason,
+                availableSeasons = seasons,
+                allVideos = meta.videos,
+                requestedEpisodeId = targetEpisode.id,
+                episodesForSeason = episodesForSeason,
+                nextVideoId = nextToWatch?.nextVideoId,
+                alreadyRestoredId = lastReturnFocusRestoreId,
+                hasWaitedForSeasonAdvance = false
+            )
+        )
     }
 
     // Track if scrolled past hero (first item)
@@ -1123,7 +1691,23 @@ private fun MetaDetailsContent(
     val hasCastSection = directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()
     val hasMoreLikeThisSection = moreLikeThis.isNotEmpty()
     val hasTrailerSection = remember(meta.trailers) { meta.trailers.any { !it.ytId.isNullOrBlank() } }
-    val hasRatingsSection = isTvShow
+    val showEpisodeImdbRatings = detailImdbRatingsVisibility.showEpisodeRatings
+    val visibleEpisodeImdbRatings = remember(
+        episodeImdbRatings,
+        detailImdbRatingsVisibility,
+        episodeProgressMap,
+        watchedEpisodes
+    ) {
+        episodeImdbRatings.filterKeys { episodeKey ->
+            val isWatched = episodeProgressMap[episodeKey]?.isCompleted() == true ||
+                watchedEpisodes.contains(episodeKey)
+            detailImdbRatingsVisibility.showEpisodeRating(isWatched)
+        }
+    }
+    val showStandardOverallRatings = overallRatingsVisibility
+        .showStandardDetailRatings(isMdbListRatingsActive)
+    val visibleMdbListRatings = mdbListRatings.takeIf { isMdbListRatingsActive }
+    val hasRatingsSection = isTvShow && showEpisodeImdbRatings
     val strTabCast = stringResource(R.string.detail_tab_cast)
     val strTabRatings = stringResource(R.string.detail_tab_ratings)
     val strTabMoreLikeThis = stringResource(R.string.detail_tab_more_like_this)
@@ -1223,10 +1807,9 @@ private fun MetaDetailsContent(
     }
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
-    // Tracks whether the initial auto-scroll to the "next to play" episode has fired
-    // for each season.  Until it fires we must keep passing scrollToEpisodeId even if
-    // the user already focused an episode (which sets lastFocusedEpisodeIdBySeason).
-    val nextToWatchScrolledSeasons = remember(meta.id) { mutableStateMapOf<Int, Boolean>() }
+    // Tracks whether the initial auto-scroll to the "next to play" episode has fired.
+    // Once it fires, no more auto-scrolls happen for the lifetime of this detail screen.
+    var initialEpisodeScrollDone by remember(meta.id) { mutableStateOf(false) }
     val episodeFocusRequestersBySeason = remember(meta.id) { mutableMapOf<Int, MutableMap<String, FocusRequester>>() }
     val seasonEpisodeFocusRequesters = remember(selectedSeason, episodesForSeason) {
         val byEpisodeId = episodeFocusRequestersBySeason.getOrPut(selectedSeason) { mutableMapOf() }
@@ -1282,34 +1865,38 @@ private fun MetaDetailsContent(
         if (commentsMode == CommentsMode.EPISODE) commentsEpisodeModeFocusRequester else commentsTitleModeFocusRequester
 
     val visiblePeopleTabsList = visiblePeopleTabItems.map { it.tab }
-    LaunchedEffect(visiblePeopleTabsList) {
-        if (visiblePeopleTabsList.isNotEmpty() && activePeopleTab !in visiblePeopleTabsList) {
-            activePeopleTab = visiblePeopleTabsList.first()
+    LaunchedEffect(visiblePeopleTabsList, pendingRestoreType) {
+        if (visiblePeopleTabsList.isEmpty() || activePeopleTab in visiblePeopleTabsList) return@LaunchedEffect
+        if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS ||
+            pendingRestoreType == RestoreTarget.COLLECTION
+        ) {
+            return@LaunchedEffect
         }
+        activePeopleTab = visiblePeopleTabsList.first()
     }
 
     // Switch to the correct people tab when restoring focus after navigation
     LaunchedEffect(restoreFocusToken, pendingRestoreType) {
         if (restoreFocusToken <= 0 || pendingRestoreType == null) return@LaunchedEffect
-        val targetTab = when (pendingRestoreType) {
-            RestoreTarget.MORE_LIKE_THIS -> PeopleSectionTab.MORE_LIKE_THIS
-            RestoreTarget.CAST_MEMBER -> PeopleSectionTab.CAST
-            else -> null
-        }
-        if (targetTab != null && targetTab in visiblePeopleTabsList && activePeopleTab != targetTab) {
-            activePeopleTab = targetTab
+        when (pendingRestoreType) {
+            RestoreTarget.MORE_LIKE_THIS -> activePeopleTab = PeopleSectionTab.MORE_LIKE_THIS
+            RestoreTarget.COLLECTION -> activePeopleTab = PeopleSectionTab.COLLECTION
+            RestoreTarget.CAST_MEMBER -> if (PeopleSectionTab.CAST in visiblePeopleTabsList) {
+                activePeopleTab = PeopleSectionTab.CAST
+            }
+            else -> Unit
         }
     }
 
     // Backdrop alpha for crossfade
-    val backgroundColor = NuvioColors.Background
+    val backgroundColor = NuvioTheme.colors.Background
 
     // Pre-compute gradient brushes once
 
     // Stable hero play callback
-    val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick) {
+    val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick, isPlayEnabled) {
         {
-            markHeroRestore()
+            if (isPlayEnabled) markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeClick(heroVideo)
             } else {
@@ -1317,9 +1904,9 @@ private fun MetaDetailsContent(
             }
         }
     }
-    val heroPlayManualClick = remember(heroVideo, meta.id, onEpisodeManualPlayClick, onPlayManuallyClick) {
+    val heroPlayManualClick = remember(heroVideo, meta.id, onEpisodeManualPlayClick, onPlayManuallyClick, isPlayEnabled) {
         {
-            markHeroRestore()
+            if (isPlayEnabled) markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeManualPlayClick(heroVideo)
             } else {
@@ -1327,16 +1914,25 @@ private fun MetaDetailsContent(
             }
         }
     }
-
-    val episodeClick = remember(onEpisodeClick) {
+    val heroPlayStartFromBeginningClick = remember(heroVideo, meta.id, onEpisodeStartFromBeginningClick, onPlayStartFromBeginningClick, isPlayEnabled) {
+        {
+            if (isPlayEnabled) markHeroRestore()
+            if (heroVideo != null) {
+                onEpisodeStartFromBeginningClick(heroVideo)
+            } else {
+                onPlayStartFromBeginningClick(meta.id)
+            }
+        }
+    }
+    val episodeClick = remember(onEpisodeClick, canPlayEpisode) {
         { video: Video ->
-            markEpisodeRestore(video.id)
+            if (canPlayEpisode(video)) markEpisodeRestore(video.id)
             onEpisodeClick(video)
         }
     }
-    val episodeManualClick = remember(onEpisodeManualPlayClick) {
+    val episodeManualClick = remember(onEpisodeManualPlayClick, canPlayEpisode) {
         { video: Video ->
-            markEpisodeRestore(video.id)
+            if (canPlayEpisode(video)) markEpisodeRestore(video.id)
             onEpisodeManualPlayClick(video)
         }
     }
@@ -1370,7 +1966,6 @@ private fun MetaDetailsContent(
             pendingRestoreEpisodeId == null &&
             !isTrailerPlaying
         ) {
-            android.util.Log.d("DetailFocus", "Hero auto-focus LE: requesting hero focus")
             repeat(3) {
                 if (initialHeroFocusRequested) return@repeat
                 heroPlayFocusRequester.requestFocusAfterFrames()
@@ -1511,7 +2106,7 @@ private fun MetaDetailsContent(
 
     // Always-composed bottom gradient alpha (avoids add/remove during scroll)
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         // Sticky background — backdrop or trailer
         BackdropLayer(
             backdropRequest = backdropRequest,
@@ -1532,10 +2127,29 @@ private fun MetaDetailsContent(
         )
 
         // Single scrollable column with hero + content
+        CompositionLocalProvider(
+            LocalBringIntoViewSpec provides if (suppressRestoreBringIntoView) {
+                restoreNoScrollBringIntoViewSpec
+            } else {
+                defaultBringIntoViewSpec
+            }
+        ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .recompositionHighlighter(),
+                .recompositionHighlighter()
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (native.action == KeyEvent.ACTION_DOWN) {
+                        when (native.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_UP,
+                            KeyEvent.KEYCODE_DPAD_DOWN,
+                            KeyEvent.KEYCODE_DPAD_LEFT,
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> lastDetailDpadKey = native.keyCode
+                        }
+                    }
+                    false
+                },
             state = listState
         ) {
             // Hero as first item in the lazy column
@@ -1546,7 +2160,8 @@ private fun MetaDetailsContent(
                         nextEpisode = nextEpisode,
                         nextToWatch = nextToWatch,
                         onPlayClick = heroPlayClick,
-                        onPlayLongPress = if (showManualPlayOption) {
+                        isPlayEnabled = isPlayEnabled,
+                        onPlayLongPress = if (isPlayEnabled && (showManualPlayOption || nextToWatch?.isResume == true)) {
                             { showHeroPlayOptionsDialog = true }
                         } else {
                             null
@@ -1557,9 +2172,9 @@ private fun MetaDetailsContent(
                         isMovieWatched = isMovieWatched,
                         isMovieWatchedPending = isMovieWatchedPending,
                         onToggleMovieWatched = onToggleMovieWatched,
-                        mdbListRatings = mdbListRatings,
-                        hideMetaInfoImdb = showMdbListImdb,
-                        tmdbRating = if (mdbListRatings?.isEmpty() != false) tmdbRating else null,
+                        mdbListRatings = visibleMdbListRatings,
+                        hideMetaInfoImdb = !showStandardOverallRatings,
+                        tmdbRating = tmdbRating.takeIf { showStandardOverallRatings },
                         showFullReleaseDate = showFullReleaseDate,
                         trailerAvailable = trailerButtonEnabled && !trailerUrl.isNullOrBlank(),
                         onTrailerClick = onTrailerButtonClick,
@@ -1567,14 +2182,15 @@ private fun MetaDetailsContent(
                         isTrailerPlaying = isTrailerPlaying,
                         playButtonFocusRequester = heroPlayFocusRequester,
                         onHeroActionFocused = {
-                            android.util.Log.d("DetailFocus", "onHeroActionFocused: scrolling to top, listState.firstVisible=${listState.firstVisibleItemIndex}")
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
                                 coroutineScope.launch {
                                     listState.animateScrollToItem(0)
                                 }
                             }
                             initialHeroFocusRequested = true
-                            clearPendingRestore()
+                            if (pendingRestoreType != RestoreTarget.HERO) {
+                                clearPendingRestore()
+                            }
                         },
                         restorePlayFocusToken = (if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0) +
                                 restorePlayFocusAfterTrailerBackToken,
@@ -1582,7 +2198,8 @@ private fun MetaDetailsContent(
                             onPlayButtonFocused()
                             initialHeroFocusRequested = true
                             clearPendingRestore()
-                        }
+                        },
+                        onShowFullDescription = { showSynopsisOverlay = true }
                     )
                 }
             }
@@ -1592,7 +2209,7 @@ private fun MetaDetailsContent(
             val showEpisodesRow = isSeries && seasons.isNotEmpty()
             if (showSeasonTabs) {
                 item(key = "season_tabs", contentType = "season_tabs") {
-                    Box(modifier = Modifier.bringIntoViewResponder(noVerticalScrollResponder)) {
+                    Box(modifier = Modifier.bringIntoViewResponder(detailRowBringIntoViewResponder)) {
                         SeasonTabs(
                             seasons = seasons,
                             selectedSeason = selectedSeason,
@@ -1600,23 +2217,40 @@ private fun MetaDetailsContent(
                             onSeasonLongPress = { seasonOptionsDialogSeason = it },
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
                             upFocusRequester = heroPlayFocusRequester,
-                            downFocusRequester = seasonDownFocusRequester
+                            downFocusRequester = seasonDownFocusRequester,
+                            isFocusEnabled = pendingRestoreType != RestoreTarget.EPISODE
                         )
                     }
                 }
             }
             if (showEpisodesRow) {
                 item(key = "episodes_$selectedSeason", contentType = "episodes") {
-                    Box(modifier = Modifier.bringIntoViewResponder(noVerticalScrollResponder)) {
+                    val visibleEpisodeRestoreId = if (pendingRestoreType == RestoreTarget.EPISODE) {
+                        resolveVisibleEpisodeRestoreId(
+                            requestedId = pendingRestoreEpisodeId,
+                            episodesForSeason = episodesForSeason,
+                            nextVideoId = nextToWatch?.nextVideoId
+                        )
+                    } else {
+                        null
+                    }
+                    Box(modifier = Modifier.bringIntoViewResponder(episodeRowStayVerticalResponder)) {
                         EpisodesRow(
                             episodes = episodesForSeason,
                             episodeProgressMap = episodeProgressMap,
-                            episodeRatings = episodeImdbRatings,
+                            episodeRatings = visibleEpisodeImdbRatings,
                             watchedEpisodes = watchedEpisodes,
                             episodeWatchedPendingKeys = episodeWatchedPendingKeys,
                             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                            episodeOptionsOverlayStyle = episodeOptionsOverlayStyle,
+                            posterCardCornerRadiusDp = posterCardCornerRadiusDp,
                             onEpisodeClick = episodeClick,
+                            canPlayEpisode = canPlayEpisode,
                             onEpisodeManualPlayClick = episodeManualClick,
+                            onEpisodeStartFromBeginningClick = { video ->
+                                if (canPlayEpisode(video)) markEpisodeRestore(video.id)
+                                onEpisodeStartFromBeginningClick(video)
+                            },
                             showManualPlayOption = showManualPlayOption,
                             onToggleEpisodeWatched = onToggleEpisodeWatched,
                             onMarkSeasonWatched = onMarkSeasonWatched,
@@ -1629,35 +2263,52 @@ private fun MetaDetailsContent(
                             upFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else heroPlayFocusRequester,
                             downFocusRequester = episodesDownFocusRequester,
                             episodeFocusRequesters = seasonEpisodeFocusRequesters,
-                            restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
+                            restoreEpisodeId = visibleEpisodeRestoreId,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
                             onRestoreFocusHandled = {
-                                clearPendingRestore()
+                                val isStaleEpisodeRestore =
+                                    pendingRestoreType == RestoreTarget.EPISODE &&
+                                        pendingRestoreEpisodeId != null &&
+                                        visibleEpisodeRestoreId != null &&
+                                        pendingRestoreEpisodeId != visibleEpisodeRestoreId
+                                if (!isStaleEpisodeRestore) {
+                                    clearPendingRestore()
+                                }
                             },
                             onEpisodeFocused = { episodeId ->
                                 lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
+                                if (lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_UP) {
+                                    val episodeListItemIndex = 1 + if (showSeasonTabs) 1 else 0
+                                    val episodeItem = listState.layoutInfo.visibleItemsInfo
+                                        .firstOrNull { it.index == episodeListItemIndex }
+                                    if (episodeItem == null || episodeItem.offset < 0) {
+                                        coroutineScope.launch {
+                                            listState.animateScrollToItem(episodeListItemIndex)
+                                        }
+                                    }
+                                }
                             },
                             scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] != null) {
                                 null
-                            } else if (nextToWatchScrolledSeasons[selectedSeason] != true && pendingRestoreType != RestoreTarget.EPISODE) {
+                            } else if (!initialEpisodeScrollDone && pendingRestoreType != RestoreTarget.EPISODE) {
                                 val ntwId = nextToWatch?.nextVideoId
                                     ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
                                 if (ntwId != null) {
                                     ntwId
                                 } else if (nextToWatch != null) {
                                     // nextToWatch resolved but target is in a different season — mark done and fall through.
-                                    nextToWatchScrolledSeasons[selectedSeason] = true
+                                    initialEpisodeScrollDone = true
                                     defaultSeriesVideo?.id?.takeIf { defaultId -> episodesForSeason.any { it.id == defaultId } }
                                 } else {
                                     // nextToWatch not yet calculated — emit null so LaunchedEffect waits.
                                     null
                                 }
-                            } else if (lastFocusedEpisodeIdBySeason[selectedSeason] == null && pendingRestoreType != RestoreTarget.EPISODE) {
-                                // nextToWatch scroll already done; fall back to default only if user hasn't focused anything yet.
+                            } else if (lastFocusedEpisodeIdBySeason[selectedSeason] == null && !initialEpisodeScrollDone && pendingRestoreType != RestoreTarget.EPISODE) {
+                                // Initial scroll not yet done; fall back to default only if user hasn't focused anything yet.
                                 defaultSeriesVideo?.id?.takeIf { defaultId -> episodesForSeason.any { it.id == defaultId } }
                             } else null,
                             onScrollToEpisodeHandled = {
-                                nextToWatchScrolledSeasons[selectedSeason] = true
+                                initialEpisodeScrollDone = true
                             }
                         )
                     }
@@ -1674,7 +2325,15 @@ private fun MetaDetailsContent(
                             upFocusRequester = seasonDownFocusRequester ?: heroPlayFocusRequester,
                             ratingsDownFocusRequester = ratingsContentFocusRequester,
                             onTabFocused = { tab ->
-                                activePeopleTab = tab
+                                val lockedTab = when (pendingRestoreType) {
+                                    RestoreTarget.MORE_LIKE_THIS -> PeopleSectionTab.MORE_LIKE_THIS
+                                    RestoreTarget.COLLECTION -> PeopleSectionTab.COLLECTION
+                                    RestoreTarget.CAST_MEMBER -> PeopleSectionTab.CAST
+                                    else -> null
+                                }
+                                if (lockedTab == null || tab == lockedTab) {
+                                    activePeopleTab = tab
+                                }
                             }
                         )
                     }
@@ -1700,6 +2359,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.CAST -> {
                                 CastSection(
                                     cast = normalCastMembers,
+                                    listState = castRowListState,
                                     title = if (hasVisiblePeopleTabs) "" else strTabCast,
                                     leadingCast = directorWriterMembers,
                                     upFocusRequester = if (hasVisiblePeopleTabs) castTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
@@ -1707,8 +2367,13 @@ private fun MetaDetailsContent(
                                     sectionFocusRequester = castSectionFocusRequester,
                                     restorePersonId = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
+                                    lastFocusedPersonKey = lastFocusedCastKey,
+                                    onLastFocusedPersonKeyChange = { lastFocusedCastKey = it },
                                     onRestoreFocusHandled = {
                                         clearPendingRestore()
+                                    },
+                                    onCastMemberFocused = {
+                                        restorePinnedDetailPageIfNudge()
                                     },
                                     onCastMemberClick = { member ->
                                         member.tmdbId?.let { id ->
@@ -1726,14 +2391,22 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.MORE_LIKE_THIS -> {
                                 MoreLikeThisSection(
                                     items = moreLikeThis,
+                                    listState = moreLikeThisListState,
                                     sourceLabel = moreLikeThisSourceLabel,
+                                    posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                                     upFocusRequester = if (hasVisiblePeopleTabs) moreLikeTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
                                     downFocusRequester = if (shouldShowCommentsSection && canToggleEpisodeComments) commentsSelectedModeFocusRequester else null,
                                     sectionFocusRequester = moreLikeSectionFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
+                                    lastFocusedItemId = lastFocusedMoreLikeItemId,
+                                    onLastFocusedItemIdChange = { lastFocusedMoreLikeItemId = it },
                                     onRestoreFocusHandled = {
                                         clearPendingRestore()
+                                    },
+                                    isItemWatched = { item -> relatedWatchedStatus["${item.id}|${item.apiType}"] == true },
+                                    onItemFocused = {
+                                        restorePinnedDetailPageIfNudge()
                                     },
                                     onItemClick = { item ->
                                         markMoreLikeThisRestore(item.id)
@@ -1748,6 +2421,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.TRAILER -> {
                                 TrailerSection(
                                     trailers = meta.trailers,
+                                    posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                                     upFocusRequester = if (hasVisiblePeopleTabs) trailerTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
                                     sectionFocusRequester = trailerSectionFocusRequester,
                                     restoreTrailerId = if (restoreSharedTrailerFocusToken > 0) selectedSharedTrailer?.ytId else null,
@@ -1762,13 +2436,21 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.COLLECTION -> {
                                 CollectionSection(
                                     items = collection,
+                                    listState = collectionListState,
+                                    posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                                     upFocusRequester = if (hasVisiblePeopleTabs) collectionTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
                                     downFocusRequester = if (shouldShowCommentsSection && canToggleEpisodeComments) commentsSelectedModeFocusRequester else null,
                                     sectionFocusRequester = collectionSectionFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
+                                    lastFocusedItemId = lastFocusedCollectionItemId,
+                                    onLastFocusedItemIdChange = { lastFocusedCollectionItemId = it },
                                     onRestoreFocusHandled = {
                                         clearPendingRestore()
+                                    },
+                                    isItemWatched = { item -> relatedWatchedStatus["${item.id}|${item.apiType}"] == true },
+                                    onItemFocused = {
+                                        restorePinnedDetailPageIfNudge()
                                     },
                                     onItemClick = { item ->
                                         markCollectionRestore(item.id)
@@ -1783,7 +2465,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.RATINGS -> {
                                 EpisodeRatingsSection(
                                     episodes = meta.videos,
-                                    ratings = episodeImdbRatings,
+                                    ratings = visibleEpisodeImdbRatings,
                                     isLoading = isEpisodeRatingsLoading,
                                     error = episodeRatingsError,
                                     title = if (hasVisiblePeopleTabs) "" else strTabRatings,
@@ -1795,7 +2477,7 @@ private fun MetaDetailsContent(
                                     downFocusRequester = if (shouldShowCommentsSection && canToggleEpisodeComments) commentsSelectedModeFocusRequester else null,
                                     firstItemFocusRequester = ratingsContentFocusRequester,
                                     ratingsGridFocusRequester = ratingsGridFocusRequester,
-                                    modifier = Modifier.heightIn(min = if (!hasItemsBelow) castSectionHeight else 0.dp)
+                                    modifier = Modifier.heightIn(min = if (!hasItemsBelow) castSectionHeight else NuvioTheme.spacing.none)
                                 )
                             }
                         }
@@ -1808,7 +2490,9 @@ private fun MetaDetailsContent(
                 item(key = "collection_section", contentType = "horizontal_row") {
                     CollectionSection(
                         items = collection,
+                        listState = collectionListState,
                         title = collectionName ?: strTabCollection,
+                        posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                         upFocusRequester = if (hasVisiblePeopleSection) {
                             when (activePeopleTab) {
                                 PeopleSectionTab.CAST -> castSectionFocusRequester
@@ -1823,13 +2507,19 @@ private fun MetaDetailsContent(
                         sectionFocusRequester = collectionSectionFocusRequester,
                         restoreItemId = if (pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
+                        lastFocusedItemId = lastFocusedCollectionItemId,
+                        onLastFocusedItemIdChange = { lastFocusedCollectionItemId = it },
                         onRestoreFocusHandled = {
                             clearPendingRestore()
+                        },
+                        onItemFocused = {
+                            restorePinnedDetailPageIfNudge()
                         },
                         onItemClick = { item ->
                             markCollectionRestore(item.id)
                             onNavigateToDetail(item.id, item.apiType, null)
                         },
+                        isItemWatched = { item -> relatedWatchedStatus["${item.id}|${item.apiType}"] == true },
                         onItemLongPress = { item ->
                             onPosterLongPress(item)
                         }
@@ -1877,6 +2567,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
+                            onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -1895,6 +2586,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
+                            onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -1913,6 +2605,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
+                            onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -1931,6 +2624,7 @@ private fun MetaDetailsContent(
                             restoreCompanyId = if (companyRestoreToken > 0 && pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) pendingRestoreCompanyId else null,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.COMPANY_OR_NETWORK) restoreFocusToken else 0,
                             onRestoreFocusHandled = { clearPendingRestore() },
+                            onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             onCompanyClick = { company ->
                                 company.tmdbId?.let { entityId ->
                                     markCompanyRestore(entityId)
@@ -1941,6 +2635,7 @@ private fun MetaDetailsContent(
                     }
                 }
             }
+        }
         }
 
         seasonOptionsDialogSeason?.let { season ->
@@ -1967,14 +2662,20 @@ private fun MetaDetailsContent(
             )
         }
 
-        if (showHeroPlayOptionsDialog) {
+        if (showHeroPlayOptionsDialog && isPlayEnabled) {
             PlayManualOverrideDialog(
                 title = meta.name,
                 subtitle = nextToWatch?.displayText ?: stringResource(R.string.hero_play),
                 onDismiss = { showHeroPlayOptionsDialog = false },
+                showPlayManually = showManualPlayOption,
                 onPlayManually = {
                     showHeroPlayOptionsDialog = false
                     heroPlayManualClick()
+                },
+                showStartFromBeginning = nextToWatch?.isResume == true,
+                onStartFromBeginning = {
+                    showHeroPlayOptionsDialog = false
+                    heroPlayStartFromBeginningClick()
                 }
             )
         }
@@ -2008,39 +2709,48 @@ private fun MetaDetailsContent(
                 onRetry = onRetrySharedTrailer
             )
         }
+
+        meta.description?.takeIf { showSynopsisOverlay && it.isNotBlank() }?.let { synopsis ->
+            SynopsisOverlay(
+                title = meta.name,
+                description = synopsis,
+                onDismiss = { showSynopsisOverlay = false }
+            )
+        }
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PlayManualOverrideDialog(
-    title: String,
-    subtitle: String?,
-    onDismiss: () -> Unit,
-    onPlayManually: () -> Unit
-) {
-    val primaryFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        primaryFocusRequester.requestFocus()
-    }
-
-    NuvioDialog(
-        onDismiss = onDismiss,
-        title = title,
-        subtitle = subtitle
+private fun PlaybackHandoffBackdrop(backdropUrl: String?) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
     ) {
-        Button(
-            onClick = onPlayManually,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(primaryFocusRequester),
-            colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+        if (!backdropUrl.isNullOrBlank()) {
+            val context = LocalContext.current
+            val density = LocalDensity.current
+            val configuration = LocalConfiguration.current
+            val widthPx = remember(configuration, density) {
+                with(density) { configuration.screenWidthDp.dp.roundToPx() }
+            }
+            val heightPx = remember(configuration, density) {
+                with(density) { configuration.screenHeightDp.dp.roundToPx() }
+            }
+            val request = remember(context, backdropUrl, widthPx, heightPx) {
+                ImageRequest.Builder(context)
+                    .data(backdropUrl)
+                    .crossfade(false)
+                    .size(width = widthPx, height = heightPx)
+                    .build()
+            }
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopEnd
             )
-        ) {
-            Text(stringResource(R.string.play_manually))
         }
     }
 }
@@ -2144,9 +2854,8 @@ private fun PeopleSectionTabs(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, start = 48.dp, end = 48.dp)
-            .focusRestorer(restorerRequester),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(top = 20.dp, start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl),
+        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
     ) {
         @Composable
         fun androidx.compose.foundation.layout.RowScope.renderTabs(items: List<PeopleTabItem>) {
@@ -2155,7 +2864,7 @@ private fun PeopleSectionTabs(
                     Text(
                         text = "|",
                         style = MaterialTheme.typography.titleLarge,
-                        color = NuvioColors.TextPrimary.copy(alpha = 0.45f),
+                        color = NuvioTheme.colors.TextPrimary.copy(alpha = 0.45f),
                         modifier = Modifier.padding(horizontal = 10.dp)
                     )
                 }
@@ -2164,6 +2873,7 @@ private fun PeopleSectionTabs(
                     label = item.label,
                     selected = activeTab == item.tab,
                     focusRequester = item.focusRequester,
+                    activeFocusRequester = if (activeTab != item.tab) restorerRequester else null,
                     upFocusRequester = upFocusRequester,
                     downFocusRequester = if (item.tab == PeopleSectionTab.RATINGS) ratingsDownFocusRequester else null,
                     onFocused = { onTabFocused(item.tab) }
@@ -2171,7 +2881,9 @@ private fun PeopleSectionTabs(
             }
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             renderTabs(tabs)
         }
     }
@@ -2183,11 +2895,18 @@ private fun PeopleSectionTabButton(
     label: String,
     selected: Boolean,
     focusRequester: FocusRequester,
+    activeFocusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isFocused, selected) {
+        if (isFocused && !selected && activeFocusRequester != null) {
+            runCatching { activeFocusRequester.requestFocus() }
+        }
+    }
 
     Card(
         onClick = onFocused,
@@ -2204,7 +2923,9 @@ private fun PeopleSectionTabButton(
             .onFocusChanged { state ->
                 val focusedNow = state.isFocused
                 isFocused = focusedNow
-                if (focusedNow) onFocused()
+                if (focusedNow) {
+                    onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = Color.Transparent,
@@ -2212,8 +2933,8 @@ private fun PeopleSectionTabButton(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(0.dp, Color.Transparent),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(NuvioTheme.spacing.none, Color.Transparent),
+                shape = RoundedCornerShape(NuvioTheme.radii.xl)
             )
         ),
         scale = CardDefaults.scale(focusedScale = 1.03f)
@@ -2222,11 +2943,11 @@ private fun PeopleSectionTabButton(
             text = label,
             style = MaterialTheme.typography.titleLarge,
             color = when {
-                isFocused -> NuvioColors.TextPrimary
-                selected -> NuvioColors.TextPrimary.copy(alpha = 0.92f)
-                else -> NuvioColors.TextPrimary.copy(alpha = 0.55f)
+                isFocused -> NuvioTheme.colors.TextPrimary
+                selected -> NuvioTheme.colors.TextPrimary.copy(alpha = 0.92f)
+                else -> NuvioTheme.colors.TextPrimary.copy(alpha = 0.55f)
             },
-            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
+            modifier = Modifier.padding(horizontal = NuvioTheme.spacing.xxs, vertical = NuvioTheme.spacing.xxs)
         )
     }
 }
@@ -2271,7 +2992,7 @@ private fun LibraryListPickerDialog(
         ) {
             items(tabs, key = { it.key }) { tab ->
                 val selected = membership[tab.key] == true
-                val titleText = if (selected) "\u2713 ${tab.title}" else tab.title
+                val titleText = if (selected) "\u2713 ${tab.localizedTitle()}" else tab.localizedTitle()
                 Button(
                     onClick = { onToggle(tab.key) },
                     enabled = !isPending,
@@ -2283,8 +3004,8 @@ private fun LibraryListPickerDialog(
                         Modifier.fillMaxWidth()
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = if (selected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
                     )
                 ) {
                     Text(
@@ -2296,15 +3017,15 @@ private fun LibraryListPickerDialog(
             }
         }
 
-        HorizontalDivider(color = NuvioColors.Border, thickness = 1.dp)
+        HorizontalDivider(color = NuvioTheme.colors.Border, thickness = NuvioTheme.spacing.hairline)
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Button(
                 onClick = onSave,
                 enabled = !isPending,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
                 )
             ) {
                 Text(if (isPending) stringResource(R.string.action_saving) else stringResource(R.string.action_save))

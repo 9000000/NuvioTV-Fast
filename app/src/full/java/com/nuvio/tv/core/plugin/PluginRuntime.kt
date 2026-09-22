@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.domain.model.LocalScraperResult
+import com.nuvio.tv.domain.model.Subtitle
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeout
@@ -38,11 +39,8 @@ import javax.inject.Singleton
 
 private const val TAG = "PluginRuntime"
 private const val PLUGIN_TIMEOUT_MS = 60_000L
-private const val MAX_FETCH_RESPONSE_BYTES = 256 * 1024
-private const val MAX_FETCH_BODY_CHARS = 256 * 1024
-private const val MAX_FETCH_HEADER_VALUE_CHARS = 8 * 1024
-private const val FETCH_TRUNCATION_SUFFIX = "\n...[truncated]"
-
+private const val MAX_FETCH_RESPONSE_BYTES = 1024 * 1024
+private const val MAX_FETCH_BODY_CHARS = 1024 * 1024
 @Singleton
 class PluginRuntime @Inject constructor() {
 
@@ -56,6 +54,16 @@ class PluginRuntime @Inject constructor() {
         .followRedirects(true)
         .followSslRedirects(true)
         .proxy(java.net.Proxy.NO_PROXY)
+        .dispatcher(okhttp3.Dispatcher(
+            java.util.concurrent.Executors.newCachedThreadPool { runnable ->
+                Thread({
+                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                    runnable.run()
+                }, "okhttp-plugin-worker").apply {
+                    isDaemon = true
+                }
+            }
+        ))
         .build()
 
     // Pre-compiled regex for :contains() selector conversion
@@ -63,6 +71,84 @@ class PluginRuntime @Inject constructor() {
 
     @Volatile
     private var cachedCryptoJsSource: String? = null
+
+    @Volatile
+    private var compiledCryptoJsBytecode: ByteArray? = null
+
+    @Volatile
+    private var compiledPolyfillBytecode: ByteArray? = null
+
+    @Volatile
+    private var compiledCallBytecode: ByteArray? = null
+
+    private fun getCompiledCryptoJsBytecode(qjs: com.dokar.quickjs.QuickJs): ByteArray? {
+        compiledCryptoJsBytecode?.let { return it }
+        synchronized(this) {
+            compiledCryptoJsBytecode?.let { return it }
+            val source = loadCryptoJsSourceOrNull() ?: return null
+            try {
+                val bytecode = qjs.compile(source, "crypto-js.js", false)
+                compiledCryptoJsBytecode = bytecode
+                return bytecode
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to compile crypto-js to bytecode: ${e.message}", e)
+                return null
+            }
+        }
+    }
+
+    private fun getCompiledPolyfillBytecode(qjs: com.dokar.quickjs.QuickJs): ByteArray {
+        compiledPolyfillBytecode?.let { return it }
+        synchronized(this) {
+            compiledPolyfillBytecode?.let { return it }
+            try {
+                val bytecode = qjs.compile(getStaticPolyfillCode(), "polyfill.js", false)
+                compiledPolyfillBytecode = bytecode
+                return bytecode
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to compile polyfill to bytecode: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
+    private fun getCompiledCallBytecode(qjs: com.dokar.quickjs.QuickJs): ByteArray {
+        compiledCallBytecode?.let { return it }
+        synchronized(this) {
+            compiledCallBytecode?.let { return it }
+            try {
+                val bytecode = qjs.compile(getStaticCallCode(), "call.js", false)
+                compiledCallBytecode = bytecode
+                return bytecode
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to compile call code to bytecode: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
+    private fun getStaticCallCode(): String {
+        return """
+            (async function() {
+                try {
+                    var getStreams = module.exports.getStreams || globalThis.getStreams;
+                    if (!getStreams) {
+                        console.error("getStreams function not found on module.exports or globalThis");
+                        __capture_result(JSON.stringify([]));
+                        return;
+                    }
+                    var args = JSON.parse(__get_call_args());
+                    console.log("Calling getStreams with tmdbId=" + args.tmdbId + " type=" + args.mediaType + " s=" + args.season + " e=" + args.episode);
+                    var result = await getStreams(args.tmdbId, args.mediaType, args.season, args.episode);
+                    console.log("getStreams returned: " + (result ? result.length : 0) + " streams");
+                    __capture_result(JSON.stringify(result || []));
+                } catch (e) {
+                    console.error("getStreams error:", e.message || e, e.stack || "");
+                    __capture_result(JSON.stringify([]));
+                }
+            })();
+        """.trimIndent()
+    }
 
     private fun loadCryptoJsSourceOrNull(): String? {
         cachedCryptoJsSource?.let { return it }
@@ -148,10 +234,20 @@ class PluginRuntime @Inject constructor() {
         scraperSettings: Map<String, Any>
     ): List<LocalScraperResult> {
         val documentCache = ConcurrentHashMap<String, Document>()
+        val loadedDocIds = java.util.Collections.synchronizedList(mutableListOf<String>())
         val elementCache = ConcurrentHashMap<String, Element>()
         val inFlightCalls = ConcurrentHashMap.newKeySet<Call>()
 
+        val job = coroutineContext[kotlinx.coroutines.Job]
+        val cancellationRegistration = job?.invokeOnCompletion { cause ->
+            if (cause is kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "Scraper $scraperId coroutine cancelled! Cancelling ${inFlightCalls.size} in-flight HTTP calls.")
+                inFlightCalls.forEach { call -> call.cancel() }
+            }
+        }
+
         var resultJson = "[]"
+        var qjsInstance: Any? = null
 
         // Inherit the caller's dispatcher (the low-priority
         // pluginDispatcher set up by PluginManager) instead of hard-coding
@@ -163,8 +259,9 @@ class PluginRuntime @Inject constructor() {
 
         try {
             quickJs(parentDispatcher) {
-                    // Define console object - must return null to avoid quickjs conversion issues
-                    define("console") {
+                qjsInstance = this
+                // Define console object - must return null to avoid quickjs conversion issues
+                define("console") {
                         function("log") { args ->
                             Log.d("Plugin:$scraperId", args.joinToString(" ") { it?.toString() ?: "null" })
                             null
@@ -221,6 +318,19 @@ class PluginRuntime @Inject constructor() {
                         val docId = UUID.randomUUID().toString()
                         val doc = Jsoup.parse(html)
                         documentCache[docId] = doc
+                        loadedDocIds.add(docId)
+                        
+                        // Limit size to 8 active documents to reduce memory footprint while safely supporting parallel scraper requests
+                        if (loadedDocIds.size > 8) {
+                            val evictedId = try { loadedDocIds.removeAt(0) } catch (_: Exception) { null }
+                            if (evictedId != null) {
+                                documentCache.remove(evictedId)
+                                // Evict associated elements
+                                elementCache.keys.filter { it.startsWith("$evictedId:") }.forEach { key ->
+                                    elementCache.remove(key)
+                                }
+                            }
+                        }
                         docId
                     }
 
@@ -338,18 +448,20 @@ class PluginRuntime @Inject constructor() {
 
                 // Inject JavaScript polyfills
                 val settingsJson = gson.toJson(scraperSettings)
-                val polyfillCode = buildPolyfillCode(scraperId, settingsJson)
-                evaluate<Any?>(polyfillCode)
+                function("__get_scraper_id") { scraperId }
+                function("__get_scraper_settings") { settingsJson }
+                function("__get_tmdb_api_key") { BuildConfig.TMDB_API_KEY }
 
-                // Load real crypto-js into the JS runtime before plugin code runs.
-                loadCryptoJsSourceOrNull()?.let { cryptoJsSource ->
-                    evaluate<Any?>(cryptoJsSource)
+                val polyfillBytecode = getCompiledPolyfillBytecode(this)
+                evaluate<Any?>(polyfillBytecode)
+
+                // Eagerly load crypto-js bytecode into this instance
+                getCompiledCryptoJsBytecode(this)?.let { cryptoJsBytecode ->
+                    evaluate<Any?>(cryptoJsBytecode)
                 }
 
                 // Execute plugin code with module wrapper - wrapped in IIFE to avoid
                 // redeclaration conflicts with polyfill vars (e.g. cheerio, URL, fetch).
-                // Must NOT pass polyfill names as parameters, because plugins use
-                // 'const cheerio = require(...)' which would conflict with a parameter named 'cheerio'.
                 val wrappedCode = """
                     var module = { exports: {} };
                     var exports = module.exports;
@@ -360,30 +472,19 @@ class PluginRuntime @Inject constructor() {
                 evaluate<Any?>(wrappedCode)
 
                 // Call getStreams and capture result
-                val seasonArg = season?.toString() ?: "undefined"
-                val episodeArg = episode?.toString() ?: "undefined"
+                function("__get_call_args") {
+                    gson.toJson(
+                        mapOf(
+                            "tmdbId" to tmdbId,
+                            "mediaType" to mediaType,
+                            "season" to season,
+                            "episode" to episode
+                        )
+                    )
+                }
 
-                val callCode = """
-                    (async function() {
-                        try {
-                            var getStreams = module.exports.getStreams || globalThis.getStreams;
-                            if (!getStreams) {
-                                console.error("getStreams function not found on module.exports or globalThis");
-                                __capture_result(JSON.stringify([]));
-                                return;
-                            }
-                            console.log("Calling getStreams with tmdbId=$tmdbId type=$mediaType s=$seasonArg e=$episodeArg");
-                            var result = await getStreams("$tmdbId", "$mediaType", $seasonArg, $episodeArg);
-                            console.log("getStreams returned: " + (result ? result.length : 0) + " streams");
-                            __capture_result(JSON.stringify(result || []));
-                        } catch (e) {
-                            console.error("getStreams error:", e.message || e, e.stack || "");
-                            __capture_result(JSON.stringify([]));
-                        }
-                    })();
-                """.trimIndent()
-
-                    evaluate<Any?>(callCode)
+                val callBytecode = getCompiledCallBytecode(this)
+                evaluate<Any?>(callBytecode)
             }
 
             return parseJsonResults(resultJson)
@@ -392,12 +493,14 @@ class PluginRuntime @Inject constructor() {
             Log.e(TAG, "Plugin execution failed: ${e.message}", e)
             throw e
         } finally {
+            cancellationRegistration?.dispose()
             // Clean up caches
             documentCache.clear()
             elementCache.clear()
             // Cancel any network calls still in progress when plugin execution exits.
             inFlightCalls.forEach { call -> call.cancel() }
             inFlightCalls.clear()
+            // qjsInstance is cleared automatically when block finishes
         }
     }
 
@@ -483,10 +586,7 @@ class PluginRuntime @Inject constructor() {
 
                     val charset = bodyContentType?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
                     val responseBody = decodeBodyToSafeString(decodedRead.bytes, charset)
-                    val responseHeaders = mutableMapOf<String, String>()
-                    httpResponse.headers.forEach { (name, value) ->
-                        responseHeaders[name.lowercase()] = truncateString(value, MAX_FETCH_HEADER_VALUE_CHARS)
-                    }
+                    val responseHeaders = httpResponse.headers.toPluginResponseHeaders()
 
                     val result = mapOf(
                         "ok" to httpResponse.isSuccessful,
@@ -521,13 +621,6 @@ class PluginRuntime @Inject constructor() {
         val bytes: ByteArray,
         val truncated: Boolean
     )
-
-    private fun truncateString(value: String, maxChars: Int): String {
-        if (value.length <= maxChars) return value
-        val end = maxChars - FETCH_TRUNCATION_SUFFIX.length
-        if (end <= 0) return FETCH_TRUNCATION_SUFFIX.take(maxChars)
-        return value.substring(0, end) + FETCH_TRUNCATION_SUFFIX
-    }
 
     private fun decodeBodyToSafeString(bytes: ByteArray, charset: java.nio.charset.Charset): String {
         val decoded = try {
@@ -581,13 +674,13 @@ class PluginRuntime @Inject constructor() {
         }
     }
 
-    private fun buildPolyfillCode(scraperId: String, settingsJson: String): String {
+    private fun getStaticPolyfillCode(): String {
         return """
             // Global constants (using globalThis to avoid redeclaration errors)
-            globalThis.SCRAPER_ID = "$scraperId";
-            globalThis.SCRAPER_SETTINGS = $settingsJson;
+            globalThis.SCRAPER_ID = __get_scraper_id();
+            globalThis.SCRAPER_SETTINGS = JSON.parse(__get_scraper_settings());
             if (typeof TMDB_API_KEY === 'undefined') {
-                globalThis.TMDB_API_KEY = "${BuildConfig.TMDB_API_KEY}";
+                globalThis.TMDB_API_KEY = __get_tmdb_api_key();
             }
             if (typeof globalThis.global === 'undefined') {
                 globalThis.global = globalThis;
@@ -1170,7 +1263,7 @@ class PluginRuntime @Inject constructor() {
                 }
                 if (moduleName === 'crypto-js') {
                     if (globalThis.CryptoJS) return globalThis.CryptoJS;
-                    throw new Error("Module 'crypto-js' is not loaded");
+                    throw new Error("Module 'crypto-js' failed to load");
                 }
                 throw new Error("Module '" + moduleName + "' is not available");
             };
@@ -1273,12 +1366,39 @@ class PluginRuntime @Inject constructor() {
                     seeders = (item["seeders"] as? Number)?.toInt(),
                     peers = (item["peers"] as? Number)?.toInt(),
                     infoHash = item["infoHash"]?.toString()?.takeIf { !it.contains("[object") },
-                    headers = headers
+                    headers = headers,
+                    subtitles = parseSubtitles(item["subtitles"])
                 )
             }?.filter { it.url.isNotBlank() } ?: emptyList()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse results: ${e.message}")
             emptyList()
+        }
+    }
+
+    private fun parseSubtitles(raw: Any?): List<Subtitle> {
+        val list = raw as? List<*> ?: return emptyList()
+        return list.mapNotNull { entry ->
+            val obj = entry as? Map<*, *> ?: return@mapNotNull null
+            fun clean(value: Any?): String? =
+                value?.toString()?.takeIf { it.isNotBlank() && !it.contains("[object") }
+            val url = clean(obj["url"]) ?: return@mapNotNull null
+            val rawHeaders = obj["headers"] as? Map<*, *>
+            val headers = rawHeaders?.mapNotNull { (k, v) ->
+                val kStr = clean(k) ?: return@mapNotNull null
+                val vStr = clean(v) ?: return@mapNotNull null
+                kStr to vStr
+            }?.toMap()?.ifEmpty { null }
+
+            Subtitle(
+                id = clean(obj["id"]) ?: url,
+                url = url,
+                lang = clean(obj["language"]) ?: clean(obj["lang"]) ?: "Unknown",
+                addonName = clean(obj["name"]) ?: "Plugin",
+                addonLogo = null,
+                isStreamProvided = true,
+                headers = headers
+            )
         }
     }
 }

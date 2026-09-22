@@ -12,6 +12,7 @@ import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -21,23 +22,60 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.sync.AddonSyncService
 import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 
-class AddonRepositoryImpl @Inject constructor(
+/**
+ * Scoped @Singleton on the class, not only on the @Binds in RepositoryModule. The binding scopes
+ * the AddonRepository *interface*; anything injecting AddonRepositoryImpl directly would otherwise
+ * get its own instance, with its own manifest cache, refresh clock and stateIn collector.
+ */
+@Singleton
+class AddonRepositoryImpl(
     private val api: AddonApi,
     private val preferences: AddonPreferences,
     private val addonSyncService: AddonSyncService,
     private val authManager: AuthManager,
-    @ApplicationContext private val context: Context
+    private val context: Context,
+    /**
+     * The dispatcher backing syncScope, the manifest cache disk IO and installedAddonsFlow.
+     * Injectable so tests can drive the flow and the background sweep on a test dispatcher
+     * instead of racing real IO threads; production always gets Dispatchers.IO.
+     */
+    private val dispatcher: CoroutineDispatcher,
+    /** Source of the refresh clock, injectable so the TTL policy can be tested without waiting. */
+    private val clock: () -> Long
 ) : AddonRepository {
+
+    @Inject
+    constructor(
+        api: AddonApi,
+        preferences: AddonPreferences,
+        addonSyncService: AddonSyncService,
+        authManager: AuthManager,
+        @ApplicationContext context: Context
+    ) : this(
+        api = api,
+        preferences = preferences,
+        addonSyncService = addonSyncService,
+        authManager = authManager,
+        context = context,
+        dispatcher = Dispatchers.IO,
+        clock = System::currentTimeMillis
+    )
 
     companion object {
         private const val TAG = "AddonRepository"
@@ -48,7 +86,7 @@ class AddonRepositoryImpl @Inject constructor(
         private const val MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L 
     }
 
-    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val syncScope = CoroutineScope(SupervisorJob() + dispatcher)
     private var syncJob: Job? = null
     var isSyncingFromRemote = false
 
@@ -89,34 +127,72 @@ class AddonRepositoryImpl @Inject constructor(
 
     private val gson = Gson()
     private val manifestCache = mutableMapOf<String, Addon>()
+    private val manifestCacheLock = Any()
+    private val manifestCacheRevision = MutableStateFlow(0L)
     @Volatile
-    private var lastManifestRefreshTime = 0L
+    private var lastManifestRefreshAttemptTime = 0L
     private var manifestRefreshJob: Job? = null
+    private val manifestRefreshLock = Any()
 
     init {
         syncScope.launch { loadManifestCacheFromDisk() }
     }
 
     private fun isCacheStale(): Boolean =
-        System.currentTimeMillis() - lastManifestRefreshTime > MANIFEST_CACHE_TTL_MS
+        clock() - lastManifestRefreshAttemptTime > MANIFEST_CACHE_TTL_MS
 
+    /**
+     * Scheduling is serialised so that the staleness check, the timestamp and the job assignment
+     * happen as one step. Without the lock two recomputations can each observe a stale clock and
+     * an inactive job before either launched coroutine runs, and both sweep - the timestamp alone
+     * cannot prevent that, because it is written on the dispatcher rather than at the call site.
+     *
+     * The attempt is recorded here rather than after the fetches complete, so the record does not
+     * depend on the sweep finishing or on fetchAddon staying exception-free. The cost is that a
+     * cancelled sweep still counts as an attempt; nothing cancels this job or syncScope today, so
+     * that only arises at process death, where the field dies with the process anyway.
+     *
+     * The policy this encodes is a minimum interval between refresh *starts*, not a guarantee of
+     * freshness for a period after one completes. A sweep that outlived the TTL would therefore be
+     * eligible to run again as soon as it finished. Do not "fix" that by moving the assignment to
+     * completion: on an all-failed sweep that reinstates the bug this exists to prevent.
+     */
     private fun scheduleManifestRefresh(urls: List<String>) {
-        if (manifestRefreshJob?.isActive == true) return
-        manifestRefreshJob = syncScope.launch {
-            val refreshed = urls.map { url ->
-                async {
-                    fetchAddon(url)
+        if (urls.isEmpty()) {
+            // Nothing to attempt, so nothing is recorded - otherwise enabling an addon straight
+            // afterwards inherits a full TTL window it never had.
+            Log.d(TAG, "Background manifest refresh skipped: no enabled addons")
+            return
+        }
+        synchronized(manifestRefreshLock) {
+            if (manifestRefreshJob?.isActive == true) return
+            // Re-checked under the lock: the caller tested this before we got here.
+            if (!isCacheStale()) return
+            lastManifestRefreshAttemptTime = clock()
+            manifestRefreshJob = syncScope.launch {
+                val refreshed = urls.map { url ->
+                    async {
+                        fetchAddon(url)
+                    }
+                }.awaitAll()
+                // isCacheStale() is re-evaluated every time installedAddonsFlow's combine emits -
+                // on any addon add, remove, rename, enable or disable, and on any manifest cache
+                // mutation - so leaving the clock unset after a failed sweep makes each of those
+                // schedule another full fetch of every addon, indefinitely, while offline or
+                // while an addon is down. Manifests that are missing entirely are recovered by
+                // the cache-miss path above, which does not consult this clock, so waiting out
+                // the TTL here only delays refreshing manifests that are already cached and
+                // usable.
+                if (refreshed.any { it is NetworkResult.Success }) {
+                    Log.d(TAG, "Background manifest refresh completed")
+                } else {
+                    Log.w(TAG, "Background manifest refresh failed for all ${urls.size} addon(s)")
                 }
-            }.awaitAll()
-            val anyUpdated = refreshed.any { it is NetworkResult.Success }
-            if (anyUpdated) {
-                lastManifestRefreshTime = System.currentTimeMillis()
-                Log.d(TAG, "Background manifest refresh completed")
             }
         }
     }
 
-    private suspend fun loadManifestCacheFromDisk() = kotlinx.coroutines.withContext(Dispatchers.IO) {
+    private suspend fun loadManifestCacheFromDisk() = kotlinx.coroutines.withContext(dispatcher) {
         try {
             val prefs = context.getSharedPreferences(MANIFEST_CACHE_PREFS, Context.MODE_PRIVATE)
             if (prefs.contains(LEGACY_MANIFEST_CACHE_KEY)) {
@@ -125,7 +201,10 @@ class AddonRepositoryImpl @Inject constructor(
             val json = prefs.getString(MANIFEST_CACHE_KEY, null) ?: return@withContext
             val type = object : TypeToken<Map<String, Addon>>() {}.type
             val cached: Map<String, Addon> = gson.fromJson(json, type) ?: return@withContext
-            manifestCache.putAll(cached)
+            synchronized(manifestCacheLock) {
+                manifestCache.putAll(cached)
+            }
+            bumpManifestCacheRevision()
             Log.d(TAG, "Loaded ${cached.size} cached manifests from disk")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to load manifest cache from disk", e)
@@ -135,7 +214,7 @@ class AddonRepositoryImpl @Inject constructor(
     private fun persistManifestCacheToDisk() {
         syncScope.launch {
             try {
-                val snapshot = manifestCache.toMap()
+                val snapshot = synchronized(manifestCacheLock) { manifestCache.toMap() }
                 val prefs = context.getSharedPreferences(MANIFEST_CACHE_PREFS, Context.MODE_PRIVATE)
                 prefs.edit().putString(MANIFEST_CACHE_KEY, gson.toJson(snapshot)).apply()
             } catch (e: Exception) {
@@ -144,45 +223,77 @@ class AddonRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getInstalledAddons(): Flow<List<Addon>> =
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val installedAddonsFlow: kotlinx.coroutines.flow.StateFlow<List<Addon>> =
         combine(
             preferences.installedAddonUrls,
-            preferences.userSetNames
-        ) { urls, names -> urls to names }
-        .flatMapLatest { (urls, userNames) ->
+            preferences.userSetNames,
+            preferences.addonEnabledStates,
+            manifestCacheRevision
+        ) { urls, names, enabledStates, _ -> Triple(urls, names, enabledStates) }
+        .flatMapLatest { (urls, userNames, enabledStates) ->
             flow {
                 if (urls.isEmpty()) {
                     emit(emptyList())
                     return@flow
                 }
 
-                val cached = urls.mapNotNull { manifestCache[canonicalizeUrl(it)] }
+                val enabledByUrl = enabledStates.mapKeys { (url, _) -> canonicalizeUrl(url) }
+                val cached = urls.mapNotNull { url ->
+                    val canonical = canonicalizeUrl(url)
+                    val enabled = enabledByUrl[canonical] ?: true
+                    getCachedManifest(canonical)
+                        ?.copy(enabled = enabled)
+                        ?: if (!enabled) placeholderAddon(canonical, userNames, enabled) else null
+                }
                 if (cached.isNotEmpty()) {
-                    emit(applyDisplayNames(cached, userNames))
+                    emit(applyDisplayNames(cached, userNames, enabledByUrl))
                 }
 
-                val hasCacheMiss = cached.size < urls.size
+                val hasCacheMiss = urls.any { url ->
+                    val canonical = canonicalizeUrl(url)
+                    (enabledByUrl[canonical] ?: true) && getCachedManifest(canonical) == null
+                }
                 if (hasCacheMiss) {
                     val fresh = coroutineScope {
                         urls.map { url ->
                             async {
                                 val canonical = canonicalizeUrl(url)
-                                manifestCache[canonical] ?: when (val result = fetchAddon(url)) {
-                                    is NetworkResult.Success -> result.data
-                                    else -> null
+                                val enabled = enabledByUrl[canonical] ?: true
+                                if (!enabled) {
+                                    return@async getCachedManifest(canonical)
+                                        ?.copy(enabled = false)
+                                        ?: placeholderAddon(canonical, userNames, enabled = false)
                                 }
+                                // On failure fall back to a placeholder rather than null. Returning
+                                // null drops the addon from the emitted list entirely, so an installed
+                                // URL whose manifest has never been fetched successfully becomes
+                                // invisible in the addon manager - and unremovable, because removal is
+                                // driven by the listed row. The disabled branch above already does this.
+                                // A placeholder carries no resources or catalogs, so it is not queried
+                                // for streams and contributes no catalog rows until a real manifest
+                                // arrives.
+                                (getCachedManifest(canonical) ?: when (val result = fetchAddon(url)) {
+                                    is NetworkResult.Success -> result.data
+                                    else -> placeholderAddon(canonical, userNames, enabled)
+                                }).copy(enabled = enabled)
                             }
-                        }.awaitAll().filterNotNull()
+                        }.awaitAll()
                     }
 
                     if (fresh != cached) {
-                        emit(applyDisplayNames(fresh, userNames))
+                        emit(applyDisplayNames(fresh, userNames, enabledByUrl))
                     }
                 } else if (isCacheStale() && urls.isNotEmpty()) {
-                    scheduleManifestRefresh(urls)
+                    scheduleManifestRefresh(
+                        urls.filter { url -> enabledByUrl[canonicalizeUrl(url)] ?: true }
+                    )
                 }
-            }.flowOn(Dispatchers.IO)
+            }.flowOn(dispatcher)
         }
+        .stateIn(syncScope, SharingStarted.Eagerly, emptyList<Addon>())
+
+    override fun getInstalledAddons(): Flow<List<Addon>> = installedAddonsFlow
 
     override suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon> {
         val cleanBaseUrl = canonicalizeUrl(baseUrl)
@@ -191,11 +302,12 @@ class AddonRepositoryImpl @Inject constructor(
         val baseQuery = if (queryStart >= 0) cleanBaseUrl.substring(queryStart) else ""
         val manifestUrl = "$basePath/manifest.json$baseQuery"
 
-        return when (val result = safeApiCall { api.getManifest(manifestUrl) }) {
+        return when (val result = safeApiCall(context) { api.getManifest(manifestUrl) }) {
             is NetworkResult.Success -> {
                 val addon = result.data.toDomain(cleanBaseUrl)
-                manifestCache[cleanBaseUrl] = addon
-                persistManifestCacheToDisk()
+                if (putCachedManifestIfChanged(cleanBaseUrl, addon)) {
+                    Log.d(TAG, "Updated addon manifest cache url=$cleanBaseUrl version=${addon.version} configVersion=${addon.configVersion}")
+                }
                 NetworkResult.Success(addon)
             }
             is NetworkResult.Error -> {
@@ -208,19 +320,31 @@ class AddonRepositoryImpl @Inject constructor(
 
     override suspend fun addAddon(url: String) {
         val cleanUrl = canonicalizeUrl(url)
-        preferences.addAddon(cleanUrl)
+        if (!preferences.addAddon(cleanUrl)) return
         triggerRemoteSync()
     }
 
     override suspend fun removeAddon(url: String) {
         val cleanUrl = canonicalizeUrl(url)
-        manifestCache.remove(cleanUrl)
-        preferences.removeAddon(cleanUrl)
+        if (!preferences.removeAddon(cleanUrl)) return
+        if (removeCachedManifest(cleanUrl)) {
+            persistManifestCacheToDisk()
+            bumpManifestCacheRevision()
+        }
         triggerRemoteSync()
     }
 
     override suspend fun setAddonOrder(urls: List<String>) {
-        preferences.setAddonOrder(urls)
+        if (!preferences.setAddonOrder(urls)) return
+        triggerRemoteSync()
+    }
+
+    override suspend fun setAddonEnabled(url: String, enabled: Boolean) {
+        val cleanUrl = canonicalizeUrl(url)
+        if (!preferences.setAddonEnabled(cleanUrl, enabled)) return
+        if (enabled && getCachedManifest(cleanUrl) == null) {
+            fetchAddon(cleanUrl)
+        }
         triggerRemoteSync()
     }
 
@@ -266,9 +390,14 @@ class AddonRepositoryImpl @Inject constructor(
         }
 
         if (shouldRemoveMissingLocal) {
-            initialLocalUrls
+            val removedAny = initialLocalUrls
                 .filter { normalizeUrl(it) !in remoteSet }
-                .forEach { manifestCache.remove(canonicalizeUrl(it)) }
+                .map { canonicalizeUrl(it) }
+                .fold(false) { removed, url -> removeCachedManifest(url) || removed }
+            if (removedAny) {
+                persistManifestCacheToDisk()
+                bumpManifestCacheRevision()
+            }
         }
 
 
@@ -278,13 +407,43 @@ class AddonRepositoryImpl @Inject constructor(
         }
     }
 
-    private fun applyDisplayNames(addons: List<Addon>, userSetNames: Map<String, String>): List<Addon> {
+    private fun placeholderAddon(
+        url: String,
+        userSetNames: Map<String, String>,
+        enabled: Boolean
+    ): Addon {
+        val canonical = canonicalizeUrl(url)
+        val displayName = (userSetNames[canonical] ?: userSetNames[url])?.takeIf { it.isNotBlank() }
+            ?: canonical.substringBefore("?").substringAfterLast("/").ifBlank { canonical }
+        return Addon(
+            id = canonical,
+            name = displayName,
+            displayName = displayName,
+            version = "",
+            description = null,
+            logo = null,
+            baseUrl = canonical,
+            catalogs = emptyList(),
+            types = emptyList(),
+            rawTypes = emptyList(),
+            resources = emptyList(),
+            enabled = enabled
+        )
+    }
+
+    private fun applyDisplayNames(
+        addons: List<Addon>,
+        userSetNames: Map<String, String>,
+        enabledStates: Map<String, Boolean>
+    ): List<Addon> {
         val withUserNames = addons.map { addon ->
-            val userSetName = userSetNames[canonicalizeUrl(addon.baseUrl)]
+            val canonical = canonicalizeUrl(addon.baseUrl)
+            val userSetName = userSetNames[canonical] ?: userSetNames[addon.baseUrl]
+            val enabled = enabledStates[canonical] ?: addon.enabled
             if (!userSetName.isNullOrBlank() && userSetName != addon.name) {
-                addon.copy(displayName = userSetName)
+                addon.copy(displayName = userSetName, enabled = enabled)
             } else {
-                addon
+                addon.copy(enabled = enabled)
             }
         }
 
@@ -311,4 +470,54 @@ class AddonRepositoryImpl @Inject constructor(
             }
         }
     }
+
+    private fun getCachedManifest(url: String): Addon? =
+        synchronized(manifestCacheLock) { manifestCache[url] }
+
+    private fun putCachedManifestIfChanged(url: String, addon: Addon): Boolean {
+        val changed = synchronized(manifestCacheLock) {
+            val existing = manifestCache[url]
+            if (existing == null || hasManifestChanged(existing, addon)) {
+                manifestCache[url] = addon
+                true
+            } else {
+                false
+            }
+        }
+        if (changed) {
+            persistManifestCacheToDisk()
+            bumpManifestCacheRevision()
+        }
+        return changed
+    }
+
+    private fun removeCachedManifest(url: String): Boolean =
+        synchronized(manifestCacheLock) {
+            manifestCache.remove(url) != null
+        }
+
+    private fun bumpManifestCacheRevision() {
+        // scheduleManifestRefresh fetches every addon in parallel and each success can call
+        // this through putCachedManifestIfChanged, so a plain read-modify-write can lose an
+        // increment and with it one re-emission of installedAddonsFlow.
+        manifestCacheRevision.update { it + 1 }
+    }
+
+    private fun hasManifestChanged(existing: Addon, incoming: Addon): Boolean =
+        existing.id != incoming.id ||
+            existing.name != incoming.name ||
+            existing.version != incoming.version ||
+            existing.description != incoming.description ||
+            existing.logo != incoming.logo ||
+            existing.background != incoming.background ||
+            existing.baseUrl != incoming.baseUrl ||
+            existing.catalogs != incoming.catalogs ||
+            existing.types != incoming.types ||
+            existing.rawTypes != incoming.rawTypes ||
+            existing.resources != incoming.resources ||
+            existing.idPrefixes != incoming.idPrefixes ||
+            existing.behaviorHints != incoming.behaviorHints ||
+            existing.stremioAddonsConfig != incoming.stremioAddonsConfig ||
+            existing.manifestLanguage != incoming.manifestLanguage ||
+            existing.configVersion != incoming.configVersion
 }
