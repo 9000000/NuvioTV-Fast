@@ -951,7 +951,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
 ): List<MetaPreview> {
     if (items.isEmpty()) return items
     val mdbSettings = currentMdbListSettings
-    val mdbEnabled = mdbSettings.enabled && mdbSettings.apiKey.isNotBlank()
+    val mdbEnabled = mdbListRepository.isAvailable(mdbSettings)
 
     return coroutineScope {
         val semaphore = Semaphore(TMDB_HERO_ENRICHMENT_CONCURRENCY)

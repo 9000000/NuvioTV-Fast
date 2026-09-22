@@ -2910,7 +2910,7 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
 
     if (!isSeriesTypeCW(progress.contentType)) {
         val startedAtMs = SystemClock.elapsedRealtime()
-        val mdbEnabled = currentMdbListSettings.enabled && currentMdbListSettings.apiKey.isNotBlank()
+        val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings)
         val (movieMeta, mdbImdbRating) = coroutineScope {
             val movieDeferred = async {
                 runCatching {
@@ -2949,7 +2949,7 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
     }
 
     val episodeStartedAtMs = SystemClock.elapsedRealtime()
-    val mdbEnabled = currentMdbListSettings.enabled && currentMdbListSettings.apiKey.isNotBlank()
+    val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings)
 
     val (episodeMeta, showMeta, mdbImdbRating) = coroutineScope {
         val episodeDeferred = async {

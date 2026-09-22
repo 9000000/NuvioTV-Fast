@@ -1153,6 +1153,9 @@
     <string name="mdblist_enable_subtitle">Fetch ratings from external providers in metadata detail screen</string>
     <string name="mdblist_api_key_title">API Key</string>
     <string name="mdblist_api_key_subtitle">Required to fetch ratings from MDBList</string>
+    <string name="mdblist_ratings_credentials_subtitle">Use your MDBList account connected in Tracking, or enter a separate API key for ratings.</string>
+    <string name="mdblist_ratings_connected_account">Using connected account</string>
+    <string name="mdblist_ratings_key_override_subtitle">An API key overrides your connected account for ratings. Clear it to use the connected account again.</string>
     <string name="mdblist_trakt_title">Trakt</string>
     <string name="mdblist_trakt_subtitle">Show Trakt score</string>
     <string name="mdblist_imdb_title">IMDb</string>
