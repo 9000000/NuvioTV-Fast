@@ -681,7 +681,7 @@ class MetaDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             cancelCommentsRequests()
             val mdbListSettings = mdbListSettingsDataStore.settings.first()
-            val isMdbListActive = mdbListSettings.enabled && mdbListSettings.apiKey.isNotBlank()
+            val isMdbListActive = mdbListRepository.isAvailable(mdbListSettings)
             _uiState.update {
                 it.copy(
                     isLoading = true,
@@ -1328,7 +1328,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private suspend fun loadMDBListRatings(meta: Meta) {
         val settings = mdbListSettingsDataStore.settings.first()
-        val isMdbListActive = settings.enabled && settings.apiKey.isNotBlank()
+        val isMdbListActive = mdbListRepository.isAvailable(settings)
         val ratingsResult = runCatching {
             mdbListRepository.getRatingsForMeta(
                 meta = meta,
