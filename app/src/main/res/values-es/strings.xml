@@ -1746,8 +1746,8 @@
     <string name="parental_nudity">Desnudez</string>
     <string name="parental_violence">Violencia</string>
     <string name="parental_profanity">Lenguaje soez</string>
-    <string name="parental_alcohol">Alcohol/Drogas</string>
-    <string name="parental_frightening">Aterrador</string>
+    <string name="parental_alcohol">Alcohol/drogas</string>
+    <string name="parental_frightening">Terror</string>
     <string name="parental_severity_severe">Severo</string>
     <string name="parental_severity_moderate">Moderado</string>
     <string name="parental_severity_mild">Leve</string>
