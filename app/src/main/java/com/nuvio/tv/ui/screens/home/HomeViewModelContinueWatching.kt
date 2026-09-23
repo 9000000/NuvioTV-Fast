@@ -1559,8 +1559,36 @@ private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
                                 overlay.progress.season == item.progress.season &&
                                 overlay.progress.episode == item.progress.episode
                             ) {
-                                overlay.copy(
-                                    progress = overlay.progress.copy(
+                                // Fetch MDBList ratings if overlay doesn't have them yet.
+                                val mdbRatingsForOverlay = if (overlay.mdbListRatings == null &&
+                                    mdbListRepository.isAvailable(currentMdbListSettings) && currentMdbListSettings.showOnHero
+                                ) {
+                                    runCatching {
+                                        mdbListRepository.getRatingsForMeta(
+                                            meta = com.nuvio.tv.domain.model.Meta(
+                                                id = item.progress.contentId, type = when (item.progress.contentType.lowercase()) {
+                                                    "series", "tv", "show", "tvshow" -> com.nuvio.tv.domain.model.ContentType.SERIES
+                                                    else -> com.nuvio.tv.domain.model.ContentType.MOVIE
+                                                }, name = item.progress.name, poster = item.progress.poster,
+                                                posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
+                                                background = item.progress.backdrop, logo = item.progress.logo,
+                                                description = null, releaseInfo = null, imdbRating = null,
+                                                genres = emptyList(), runtime = null, director = emptyList(),
+                                                cast = emptyList(), videos = emptyList(), country = null,
+                                                awards = null, language = null, links = emptyList()
+                                            ),
+                                            fallbackItemId = item.progress.contentId,
+                                            fallbackItemType = item.progress.contentType
+                                        )?.ratings
+                                    }.getOrNull()
+                                } else null
+                                val enrichedOverlay = if (mdbRatingsForOverlay != null) {
+                                    overlay.copy(mdbListRatings = mdbRatingsForOverlay).also {
+                                        cwEnrichedInProgressOverlay[item.progress.contentId] = it
+                                    }
+                                } else overlay
+                                enrichedOverlay.copy(
+                                    progress = enrichedOverlay.progress.copy(
                                         position = item.progress.position,
                                         duration = item.progress.duration,
                                         lastWatched = item.progress.lastWatched,
@@ -1577,25 +1605,49 @@ private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
                                 overlay.season == item.info.season &&
                                 overlay.episode == item.info.episode
                             ) {
+                                // Fetch MDBList ratings if overlay doesn't have them yet.
+                                val mdbRatingsForOverlay = if (overlay.mdbListRatings == null &&
+                                    mdbListRepository.isAvailable(currentMdbListSettings) && currentMdbListSettings.showOnHero
+                                ) {
+                                    runCatching {
+                                        mdbListRepository.getRatingsForMeta(
+                                            meta = com.nuvio.tv.domain.model.Meta(
+                                                id = item.info.contentId, type = com.nuvio.tv.domain.model.ContentType.SERIES,
+                                                name = item.info.name, poster = item.info.poster,
+                                                posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
+                                                background = item.info.backdrop, logo = item.info.logo,
+                                                description = null, releaseInfo = null, imdbRating = null,
+                                                genres = emptyList(), runtime = null, director = emptyList(),
+                                                cast = emptyList(), videos = emptyList(), country = null,
+                                                awards = null, language = null, links = emptyList()
+                                            ),
+                                            fallbackItemId = item.info.contentId,
+                                            fallbackItemType = item.info.contentType
+                                        )?.ratings
+                                    }.getOrNull()
+                                } else null
+                                val effectiveOverlay = if (mdbRatingsForOverlay != null) {
+                                    overlay.copy(mdbListRatings = mdbRatingsForOverlay).also {
+                                        cwEnrichedNextUpOverlay[item.info.contentId] = it
+                                    }
+                                } else overlay
                                 // Recalculate hasAired/isReleaseAlert from current time
-                                // so overlays cached while an episode was unaired don't
-                                // keep it stuck in "upcoming" after the air date passes.
-                                val freshHasAired = hasEpisodeAired(overlay.released, fallback = overlay.hasAired)
-                                if (freshHasAired != overlay.hasAired) {
-                                    val releaseTimestamp = parseEpisodeReleaseInstant(overlay.released)?.toEpochMilli()
+                                val freshHasAired = hasEpisodeAired(effectiveOverlay.released, fallback = effectiveOverlay.hasAired)
+                                if (freshHasAired != effectiveOverlay.hasAired) {
+                                    val releaseTimestamp = parseEpisodeReleaseInstant(effectiveOverlay.released)?.toEpochMilli()
                                     val nowMs = System.currentTimeMillis()
                                     val sixtyDaysMs = 60L * 24 * 60 * 60 * 1000
                                     val isReleaseAlert = freshHasAired &&
                                         releaseTimestamp != null &&
-                                        releaseTimestamp > overlay.lastWatched &&
+                                        releaseTimestamp > effectiveOverlay.lastWatched &&
                                         (nowMs - releaseTimestamp) < sixtyDaysMs
                                     val isNewSeasonRelease = isReleaseAlert &&
-                                        overlay.seedSeason != null &&
-                                        overlay.season != overlay.seedSeason
-                                    val updatedOverlay = overlay.copy(
+                                        effectiveOverlay.seedSeason != null &&
+                                        effectiveOverlay.season != effectiveOverlay.seedSeason
+                                    val updatedOverlay = effectiveOverlay.copy(
                                         hasAired = freshHasAired,
-                                        airDateLabel = if (freshHasAired) null else overlay.airDateLabel,
-                                        sortTimestamp = if (isReleaseAlert && releaseTimestamp != null) releaseTimestamp else overlay.lastWatched,
+                                        airDateLabel = if (freshHasAired) null else effectiveOverlay.airDateLabel,
+                                        sortTimestamp = if (isReleaseAlert && releaseTimestamp != null) releaseTimestamp else effectiveOverlay.lastWatched,
                                         releaseTimestamp = releaseTimestamp,
                                         isReleaseAlert = isReleaseAlert,
                                         isNewSeasonRelease = isNewSeasonRelease
@@ -1603,7 +1655,7 @@ private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
                                     cwEnrichedNextUpOverlay[item.info.contentId] = updatedOverlay
                                     item.copy(info = updatedOverlay)
                                 } else {
-                                    item.copy(info = overlay)
+                                    item.copy(info = effectiveOverlay)
                                 }
                             } else {
                                 enrichNextUpItem(item, metaCache, debug)
@@ -1941,6 +1993,30 @@ private suspend fun HomeViewModel.enrichInProgressItem(
         )
     } else null
     val imdbRating = tmdbData?.rating?.toFloat() ?: meta.imdbRating
+
+    // Fetch full MDBList ratings for this CW item (auto-batched by MdbListRatingsLoader).
+    val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings) && currentMdbListSettings.showOnHero
+    val cwMdbRatings = if (mdbEnabled) {
+        runCatching {
+            mdbListRepository.getRatingsForMeta(
+                meta = com.nuvio.tv.domain.model.Meta(
+                    id = item.progress.contentId, type = when (item.progress.contentType.lowercase()) {
+                        "series", "tv", "show", "tvshow" -> com.nuvio.tv.domain.model.ContentType.SERIES
+                        else -> com.nuvio.tv.domain.model.ContentType.MOVIE
+                    }, name = item.progress.name, poster = item.progress.poster,
+                    posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
+                    background = item.progress.backdrop, logo = item.progress.logo,
+                    description = null, releaseInfo = null, imdbRating = null,
+                    genres = emptyList(), runtime = null, director = emptyList(),
+                    cast = emptyList(), videos = emptyList(), country = null,
+                    awards = null, language = null, links = emptyList()
+                ),
+                fallbackItemId = item.progress.contentId,
+                fallbackItemType = item.progress.contentType
+            )?.ratings
+        }.getOrNull()
+    } else null
+
     val settings = currentTmdbSettings
     item.copy(
         progress = item.progress.copy(
@@ -1972,7 +2048,8 @@ private suspend fun HomeViewModel.enrichInProgressItem(
         contentLanguage = tmdbData?.contentLanguage
             ?: normalizeLanguageCode(meta.language)
             ?: countryToLanguageCode(meta.country)
-            ?: item.contentLanguage
+            ?: item.contentLanguage,
+        mdbListRatings = cwMdbRatings
     )
 }
 
@@ -2027,6 +2104,27 @@ private suspend fun HomeViewModel.enrichNextUpItem(
         hasAired = hasAired
     )
 
+    // Fetch full MDBList ratings (auto-batched by MdbListRatingsLoader).
+    val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings) && currentMdbListSettings.showOnHero
+    val cwMdbRatings = if (mdbEnabled) {
+        runCatching {
+            mdbListRepository.getRatingsForMeta(
+                meta = com.nuvio.tv.domain.model.Meta(
+                    id = item.info.contentId, type = com.nuvio.tv.domain.model.ContentType.SERIES,
+                    name = item.info.name, poster = item.info.poster,
+                    posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
+                    background = item.info.backdrop, logo = item.info.logo,
+                    description = null, releaseInfo = null, imdbRating = null,
+                    genres = emptyList(), runtime = null, director = emptyList(),
+                    cast = emptyList(), videos = emptyList(), country = null,
+                    awards = null, language = null, links = emptyList()
+                ),
+                fallbackItemId = item.info.contentId,
+                fallbackItemType = item.info.contentType
+            )?.ratings
+        }.getOrNull()
+    } else null
+
     val settings = currentTmdbSettings
     val enrichedInfo = item.info.copy(
         name = if (settings.useBasicInfo) tmdbData?.name ?: meta.name else meta.name,
@@ -2058,7 +2156,8 @@ private suspend fun HomeViewModel.enrichNextUpItem(
         contentLanguage = tmdbData?.contentLanguage
             ?: normalizeLanguageCode(meta.language)
             ?: countryToLanguageCode(meta.country)
-            ?: item.info.contentLanguage
+            ?: item.info.contentLanguage,
+        mdbListRatings = cwMdbRatings
     )
     if (shouldTraceNextUpSeries(progressSeed)) {
         logNextUpDecision(
@@ -2744,7 +2843,8 @@ private suspend fun HomeViewModel.applyContinueWatchingEnrichmentOverlay(
                         hasAired = effectiveOverlay.hasAired,
                         airDateLabel = effectiveOverlay.airDateLabel ?: item.info.airDateLabel,
                         releaseTimestamp = effectiveOverlay.releaseTimestamp ?: item.info.releaseTimestamp,
-                        contentLanguage = effectiveOverlay.contentLanguage ?: item.info.contentLanguage
+                        contentLanguage = effectiveOverlay.contentLanguage ?: item.info.contentLanguage,
+                        mdbListRatings = effectiveOverlay.mdbListRatings ?: item.info.mdbListRatings
                     ))
                 }
                 is ContinueWatchingItem.InProgress -> {
@@ -2763,7 +2863,8 @@ private suspend fun HomeViewModel.applyContinueWatchingEnrichmentOverlay(
                         episodeImdbRating = overlay.episodeImdbRating ?: item.episodeImdbRating,
                         genres = overlay.genres.ifEmpty { item.genres },
                         releaseInfo = overlay.releaseInfo ?: item.releaseInfo,
-                        contentLanguage = overlay.contentLanguage ?: item.contentLanguage
+                        contentLanguage = overlay.contentLanguage ?: item.contentLanguage,
+                        mdbListRatings = overlay.mdbListRatings ?: item.mdbListRatings
                     )
                 }
             }
@@ -2910,7 +3011,7 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
 
     if (!isSeriesTypeCW(progress.contentType)) {
         val startedAtMs = SystemClock.elapsedRealtime()
-        val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings)
+        val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings) && currentMdbListSettings.showOnHero
         val (movieMeta, mdbImdbRating) = coroutineScope {
             val movieDeferred = async {
                 runCatching {
@@ -2949,7 +3050,7 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
     }
 
     val episodeStartedAtMs = SystemClock.elapsedRealtime()
-    val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings)
+    val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings) && currentMdbListSettings.showOnHero
 
     val (episodeMeta, showMeta, mdbImdbRating) = coroutineScope {
         val episodeDeferred = async {

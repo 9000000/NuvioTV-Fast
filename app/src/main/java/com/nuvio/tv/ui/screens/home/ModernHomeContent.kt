@@ -732,6 +732,8 @@ fun ModernHomeContent(
                             poster = enrichedItem.poster,
                             backdrop = enrichedItem.backdropUrl,
                             imageUrl = activeCarouselItem?.heroPreview?.imageUrl,
+                            mdbListRatings = enrichedItem.mdbListRatings,
+                            mdbListRatingOrder = enrichedItem.mdbListRatingOrder,
                             frozenBackdropUrl = activeCarouselItem?.heroPreview?.frozenBackdropUrl,
                             frozenLogoUrl = activeCarouselItem?.heroPreview?.frozenLogoUrl
                         )
@@ -1100,6 +1102,8 @@ fun ModernHomeContent(
                 },
                 portraitMode = !useLandscapePosters,
                 showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
+                mdbListShowOnHero = uiState.mdbListShowOnHero,
+                mdbListRatingOrder = uiState.mdbListRatingOrder,
                 trailerPlaying = {
                     if (isRapidHorizontalNav.value) false
                     else {

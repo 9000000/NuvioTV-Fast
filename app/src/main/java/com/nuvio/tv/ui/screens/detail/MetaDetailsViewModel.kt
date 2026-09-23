@@ -1376,6 +1376,7 @@ class MetaDetailsViewModel @Inject constructor(
         _uiState.update { state ->
             state.copy(
                 mdbListRatings = ratingsResult?.ratings,
+                mdbListRatingOrder = settings.enabledRatingOrder(),
                 isMdbListRatingsActive = isMdbListActive
             )
         }

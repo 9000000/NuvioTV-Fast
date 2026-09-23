@@ -595,6 +595,41 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 } else null
             } else null
 
+            // Fetch MDBList ratings for the focused item (single GET, uses cache).
+            val mdbSettings = currentMdbListSettings
+            val mdbEnabled = mdbListRepository.isAvailable(mdbSettings) && mdbSettings.showOnHero
+            val mdbDeferred = if (mdbEnabled && item.mdbListRatings == null) {
+                async {
+                    runCatching {
+                        mdbListRepository.getRatingsForMeta(
+                            meta = com.nuvio.tv.domain.model.Meta(
+                                id = item.id,
+                                type = item.type,
+                                name = item.name,
+                                poster = item.poster,
+                                posterShape = item.posterShape,
+                                background = item.background,
+                                logo = item.logo,
+                                description = item.description,
+                                releaseInfo = item.releaseInfo,
+                                imdbRating = item.imdbRating,
+                                genres = item.genres,
+                                runtime = item.runtime,
+                                director = item.director,
+                                cast = emptyList(),
+                                videos = emptyList(),
+                                country = item.country,
+                                awards = null,
+                                language = item.language,
+                                links = item.links
+                            ),
+                            fallbackItemId = item.id,
+                            fallbackItemType = item.apiType
+                        )
+                    }.getOrNull()
+                }
+            } else null
+
             val externalMetaDeferred = if (externalMetaPrefetchEnabled &&
                 item.id !in prefetchedExternalMetaIds &&
                 externalMetaPrefetchInFlightIds.add(item.id)
@@ -626,6 +661,12 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             }
             if (tmdbEnrichment != null) {
                 updateCatalogItemWithTmdb(item.id, tmdbEnrichment)
+            }
+
+            // Apply MDBList ratings to the catalog item.
+            val mdbResult = mdbDeferred?.await()
+            if (mdbResult != null) {
+                updateCatalogItemMdbListRatings(item.id, mdbResult.ratings)
             }
 
             // If neither source produced anything, mark enrichment in previews
@@ -731,6 +772,42 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
             }
             if (tmdbEnrichment != null) {
                 updateCatalogItemWithTmdb(item.id, tmdbEnrichment)
+            }
+
+            // Prefetch MDBList ratings for the adjacent item.
+            val mdbSettings = currentMdbListSettings
+            val mdbEnabled = mdbListRepository.isAvailable(mdbSettings) && mdbSettings.showOnHero
+            if (mdbEnabled && item.mdbListRatings == null) {
+                val mdbResult = runCatching {
+                    mdbListRepository.getRatingsForMeta(
+                        meta = com.nuvio.tv.domain.model.Meta(
+                            id = item.id,
+                            type = item.type,
+                            name = item.name,
+                            poster = item.poster,
+                            posterShape = item.posterShape,
+                            background = item.background,
+                            logo = item.logo,
+                            description = item.description,
+                            releaseInfo = item.releaseInfo,
+                            imdbRating = item.imdbRating,
+                            genres = item.genres,
+                            runtime = item.runtime,
+                            director = item.director,
+                            cast = emptyList(),
+                            videos = emptyList(),
+                            country = item.country,
+                            awards = null,
+                            language = item.language,
+                            links = item.links
+                        ),
+                        fallbackItemId = item.id,
+                        fallbackItemType = item.apiType
+                    )
+                }.getOrNull()
+                if (mdbResult != null) {
+                    updateCatalogItemMdbListRatings(item.id, mdbResult.ratings)
+                }
             }
 
             if (tmdbEnrichment == null && externalMeta == null) {
@@ -853,6 +930,26 @@ private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: 
     }
 }
 
+private fun HomeViewModel.updateCatalogItemMdbListRatings(
+    itemId: String,
+    ratings: com.nuvio.tv.domain.model.MDBListRatings
+) {
+    val order = currentMdbListSettings.ratingOrder
+    fun mergeItem(currentItem: MetaPreview): MetaPreview =
+        currentItem.copy(
+            mdbListRatings = ratings,
+            mdbListRatingOrder = order,
+            imdbRating = ratings.imdb?.toFloat() ?: currentItem.imdbRating
+        )
+
+    updateIndexedCatalogItem(itemId, ::mergeItem)
+    applyEnrichmentToDisplayedRows(itemId, ::mergeItem)
+    findCatalogItemById(itemId)?.let { enriched ->
+        _lastEnrichedPreview.value = enriched
+        addEnrichedPreview(itemId, enriched)
+    }
+}
+
 internal fun HomeViewModel.updateCatalogItemImdbRating(itemId: String, rating: Float) {
     updateIndexedCatalogItem(itemId) { currentItem ->
         currentItem.copy(imdbRating = rating)
@@ -965,10 +1062,11 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
 ): List<MetaPreview> {
     if (items.isEmpty()) return items
     val mdbSettings = currentMdbListSettings
-    val mdbEnabled = mdbListRepository.isAvailable(mdbSettings)
+    val mdbEnabled = mdbListRepository.isAvailable(mdbSettings) && mdbSettings.showOnHero
 
     return coroutineScope {
         val semaphore = Semaphore(TMDB_HERO_ENRICHMENT_CONCURRENCY)
+
         items.map { item ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
@@ -984,14 +1082,41 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                                 language = settings.language
                             )
                         }
+                        // MdbListRatingsLoader auto-batches concurrent calls within a 50ms window,
+                        // so per-item getRatingsForMeta calls are efficiently grouped.
                         val mdbDeferred = if (mdbEnabled) async {
-                            runCatching { mdbListRepository.getImdbRatingForItem(item.id, item.apiType) }.getOrNull()
+                            runCatching {
+                                mdbListRepository.getRatingsForMeta(
+                                    meta = com.nuvio.tv.domain.model.Meta(
+                                        id = item.id, type = item.type, name = item.name,
+                                        poster = item.poster, posterShape = item.posterShape,
+                                        background = item.background, logo = item.logo,
+                                        description = item.description, releaseInfo = item.releaseInfo,
+                                        imdbRating = item.imdbRating, genres = item.genres,
+                                        runtime = item.runtime, director = item.director,
+                                        cast = emptyList(), videos = emptyList(),
+                                        country = item.country, awards = null,
+                                        language = item.language, links = item.links
+                                    ),
+                                    fallbackItemId = item.id,
+                                    fallbackItemType = item.apiType
+                                )
+                            }.getOrNull()
                         } else null
 
                         val enrichment = tmdbDeferred.await() ?: return@withPermit item
-                        val mdbImdbRating = mdbDeferred?.await()
+                        val mdbResult = mdbDeferred?.await()
 
                         var enriched = item
+
+                        // Attach full MDBList ratings (already filtered by user settings in repository).
+                        if (mdbResult != null) {
+                            enriched = enriched.copy(
+                                mdbListRatings = mdbResult.ratings,
+                                mdbListRatingOrder = mdbSettings.ratingOrder,
+                                imdbRating = mdbResult.ratings.imdb?.toFloat() ?: enriched.imdbRating
+                            )
+                        }
 
                         if (settings.useArtwork) {
                             enriched = enriched.copy(
@@ -1006,7 +1131,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                                 name = enrichment.localizedTitle ?: enriched.name,
                                 description = enrichment.description ?: enriched.description,
                                 genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else enriched.genres,
-                                imdbRating = mdbImdbRating?.toFloat() ?: enriched.imdbRating
+                                imdbRating = enriched.imdbRating
                             )
                         }
 

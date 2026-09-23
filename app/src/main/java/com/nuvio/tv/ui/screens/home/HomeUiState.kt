@@ -71,7 +71,9 @@ data class HomeUiState(
     val homeRows: List<HomeRow> = emptyList(),
     val customPosterUrlPattern: String = "",
     val customPosterEnabledScreens: Set<com.nuvio.tv.core.poster.CustomPosterScreen> =
-        com.nuvio.tv.core.poster.CustomPosterScreen.ALL
+        com.nuvio.tv.core.poster.CustomPosterScreen.ALL,
+    val mdbListShowOnHero: Boolean = false,
+    val mdbListRatingOrder: List<String> = com.nuvio.tv.domain.model.MDBListSettings.DEFAULT_RATING_ORDER
 )
 
 @Immutable
@@ -86,7 +88,8 @@ sealed class ContinueWatchingItem {
         val releaseInfo: String? = null,
         val contentLanguage: String? = null,
         val originalPoster: String? = null,
-        val customLandscapePoster: String? = null
+        val customLandscapePoster: String? = null,
+        val mdbListRatings: com.nuvio.tv.domain.model.MDBListRatings? = null
     ) : ContinueWatchingItem()
 
     @Immutable
@@ -124,7 +127,8 @@ data class NextUpInfo(
     val isNewSeasonRelease: Boolean = false,
     val seedSeason: Int? = null,
     val seedEpisode: Int? = null,
-    val contentLanguage: String? = null
+    val contentLanguage: String? = null,
+    val mdbListRatings: com.nuvio.tv.domain.model.MDBListRatings? = null
 )
 
 @Immutable
