@@ -77,6 +77,7 @@ class HomeViewModel @Inject constructor(
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
     internal val mdbListRepository: MDBListRepository,
+    internal val imdbEpisodeRatingsRepository: com.nuvio.tv.data.repository.ImdbEpisodeRatingsRepository,
     internal val trailerService: TrailerService,
     internal val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     internal val cwEnrichmentCache: ContinueWatchingEnrichmentCache,
