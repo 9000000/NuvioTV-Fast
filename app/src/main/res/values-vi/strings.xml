@@ -538,8 +538,7 @@
     <string name="essential_autoplay_next_episode">Tự động phát tập tiếp theo</string>
     <string name="essential_autoplay_next_episode_subtitle">Tiếp tục phát tập tiếp theo sau khi luồng kết thúc.</string>
     <string name="external_auto_next_loading">Đang tải tập tiếp theo…</string>
-    <string name="essential_p2p_streams">Luồng P2P</string>
-    <string name="essential_p2p_streams_subtitle">Cho phép các nguồn luồng ngang hàng.</string>
+
     <string name="essential_subtitle_language_subtitle">Ngôn ngữ phụ đề ưu tiên.</string>
     <string name="essential_audio_language_subtitle">Ngôn ngữ âm thanh ưu tiên.</string>
     <!-- Account / sign-in error messages -->
@@ -1694,16 +1693,10 @@
     <string name="debrid_resolution_failed">Không thể phân giải luồng Debrid này.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">Phát luồng P2P</string>
-    <string name="p2p_consent_body">Luồng phát này sử dụng công nghệ ngang hàng (P2P)\n\nKhi bật P2P, bạn xác nhận và đồng ý rằng:\n\n• Địa chỉ IP của bạn sẽ hiển thị với các người dùng ngang hàng khác trong mạng.\n• Bạn tự chịu trách nhiệm về nội dung mình truy cập.\n• Bạn xác nhận mình có quyền hợp pháp để phát nội dung này tại khu vực của mình.\n• Nuvio không lưu trữ, phân phối hoặc kiểm soát bất kỳ nội dung P2P nào.\n• Nuvio không chịu trách nhiệm cho bất kỳ hậu quả pháp lý nào phát sinh từ việc sử dụng P2P.\n\nBạn tự chịu mọi rủi ro khi sử dụng tính năng này. Có thể tắt P2P bất cứ lúc nào trong phần Cài đặt</string>
-    <string name="p2p_consent_enable">Bật P2P</string>
-    <string name="p2p_consent_cancel">Hủy</string>
-    <string name="settings_p2p_title">Phát luồng P2P</string>
-    <string name="settings_p2p_subtitle">Cho phép phát trực tuyến ngang hàng (torrent)</string>
+
     <string name="settings_p2p_hide_stats_title">Ẩn thống kê torrent</string>
     <string name="settings_p2p_hide_stats_subtitle">Ẩn bộ đệm, số lượng seed, peer và tốc độ tải xuống trong khi tải và phát lại</string>
-    <string name="p2p_download_title">Đang tải xuống lõi P2P</string>
-    <string name="p2p_download_subtitle">Đây là tải xuống một lần, cần thiết để phát luồng P2P.</string>
+
     <string name="stream_type_external">Bên ngoài</string>
     <string name="stream_player_picker_title">Dùng trình phát nào?</string>
     <string name="stream_player_internal">Bên trong</string>
@@ -3312,24 +3305,18 @@
     <string name="settings_torrserver_title">TorrServer</string>
     <string name="settings_torrserver_subtitle">Cấu hình máy chủ TorrServer và tùy chọn phát luồng</string>
     <string name="torrserver_enable_title">Bật TorrServer</string>
-    <string name="torrserver_enable_subtitle">Phát torrent qua máy chủ TorrServer (tự động tắt P2P gốc để giải phóng CPU/RAM TV)</string>
+    <string name="torrserver_enable_subtitle">Phát trực tuyến torrent qua máy chủ TorrServer</string>
+    <string name="torrserver_embedded_server_title">Máy chủ tích hợp (Local)</string>
+    <string name="torrserver_embedded_server_subtitle">Chạy TorrServer trực tiếp trên TV. Tắt mục này để dừng hoàn toàn tiến trình ngầm và dùng máy chủ ngoài (PC, NAS, Docker)</string>
+    <string name="torrserver_local_server_url_desc">http://127.0.0.1:8091 (Máy chủ tích hợp nội bộ)</string>
     <string name="torrserver_server_url_title">Địa chỉ máy chủ TorrServer</string>
     <string name="torrserver_server_url_hint">http://192.168.1.100:8090</string>
     <string name="torrserver_test_connection">Kiểm tra kết nối</string>
-    <string name="torrserver_addon_url_title">URL Addon tìm kiếm Torrent (Tùy chọn)</string>
-    <string name="torrserver_addon_url_hint">Tự động nhận diện từ Addon đã cài</string>
-    <string name="torrserver_select_installed_addon">Chọn từ Addon đã cài</string>
-    <string name="torrserver_select_installed_addon_subtitle">Chọn nhanh URL manifest từ các Addon đã cài đặt</string>
-    <string name="torrserver_auto_detect_addons_desc">Tự động nhận diện nguồn Torrent từ tất cả Addon đã cài đặt (khuyến nghị)</string>
-    <string name="torrserver_test_addon">Kiểm tra Addon</string>
+
     <string name="torrserver_auth_title">Xác thực HTTP Basic (Tùy chọn)</string>
     <string name="torrserver_username_hint">Tên đăng nhập</string>
     <string name="torrserver_password_hint">Mật khẩu</string>
-    <string name="torrserver_btn_save">Lưu thay đổi</string>
-    <string name="torrserver_connected">Đã kết nối: %1$s</string>
-    <string name="torrserver_addon_valid">Hợp lệ: %1$s</string>
-    <string name="torrserver_error_connect">Kết nối thất bại: %1$s</string>
-    <string name="torrserver_error_addon">Kiểm tra addon thất bại: %1$s</string>
+
     <string name="torrserver_error_not_configured">TorrServer chưa được cấu hình. Vui lòng bật và cài đặt URL máy chủ trong Cài đặt > TorrServer.</string>
     <string name="torrserver_preload_title">Tải trước bộ đệm (Preload)</string>
     <string name="torrserver_preload_subtitle">Tải trước đệm dữ liệu torrent trước khi bắt đầu phát video</string>
@@ -3344,5 +3331,10 @@
     <string name="torrent_file_picker_empty">Không tìm thấy tệp video có thể phát</string>
     <string name="torrent_file_picker_hint">Tìm thấy %1$d tệp. Chọn một tệp để phát:</string>
     <string name="torrent_file_matched_badge">Khớp</string>
+    <!-- TorrServer Enable Prompt Dialog -->
+    <string name="torrserver_prompt_title">Bật TorrServer để phát Torrent</string>
+    <string name="torrserver_prompt_message">Luồng phát này là Torrent và cần TorrServer để phát trực tuyến. Bạn có muốn bật TorrServer ngay bây giờ không?</string>
+    <string name="torrserver_prompt_enable">Bật TorrServer</string>
+    <string name="torrserver_prompt_cancel">Hủy</string>
 
 </resources>

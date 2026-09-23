@@ -55,9 +55,6 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     fun setP2pEnabled(enabled: Boolean) {
         torrentSettings.setP2pEnabled(enabled)
-        if (enabled) {
-            torrServerAddonConfig.setEnabled(false)
-        }
     }
     fun setHideTorrentStats(enabled: Boolean) = torrentSettings.setHideTorrentStats(enabled)
 

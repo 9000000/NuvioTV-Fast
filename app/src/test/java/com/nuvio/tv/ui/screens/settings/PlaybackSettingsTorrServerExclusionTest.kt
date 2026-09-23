@@ -44,7 +44,7 @@ class PlaybackSettingsTorrServerExclusionTest {
     }
 
     @Test
-    fun enablesP2pAndAutomaticallyDisablesTorrServer() = runTest {
+    fun enablesP2pWithoutTouchingTorrServer() = runTest {
         val viewModel = createViewModel()
         runCurrent()
 
@@ -52,7 +52,7 @@ class PlaybackSettingsTorrServerExclusionTest {
         runCurrent()
 
         verify { torrentSettings.setP2pEnabled(true) }
-        verify { torrServerAddonConfig.setEnabled(false) }
+        verify(exactly = 0) { torrServerAddonConfig.setEnabled(any()) }
     }
 
     @Test

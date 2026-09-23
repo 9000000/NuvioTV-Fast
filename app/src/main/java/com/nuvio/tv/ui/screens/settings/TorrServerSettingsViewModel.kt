@@ -17,13 +17,15 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class TorrServerSettingsUiState(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
+    val useEmbeddedServer: Boolean = true,
     val serverUrl: String = "http://127.0.0.1:8090",
     val authUsername: String = "",
     val authPassword: String = "",
     val preload: Boolean = true,
     val saveToDb: Boolean = false,
     val gst: Boolean = false,
+    val hideTorrentStats: Boolean = false,
     val isTestingServer: Boolean = false,
     val serverStatusMessage: String? = null,
     val serverStatusSuccess: Boolean? = null,
@@ -34,6 +36,8 @@ data class TorrServerSettingsUiState(
 
 sealed class TorrServerSettingsEvent {
     data class ToggleEnabled(val enabled: Boolean) : TorrServerSettingsEvent()
+    data class ToggleUseEmbeddedServer(val enabled: Boolean) : TorrServerSettingsEvent()
+    data class ToggleHideTorrentStats(val enabled: Boolean) : TorrServerSettingsEvent()
     data class UpdateServerUrl(val url: String) : TorrServerSettingsEvent()
     data class UpdateCredentials(val user: String, val pass: String) : TorrServerSettingsEvent()
     data class TogglePreload(val enabled: Boolean) : TorrServerSettingsEvent()
@@ -60,6 +64,7 @@ class TorrServerSettingsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         enabled = config.enabled,
+                        useEmbeddedServer = config.useEmbeddedServer,
                         serverUrl = config.serverUrl,
                         authUsername = config.authUsername,
                         authPassword = config.authPassword,
@@ -70,16 +75,33 @@ class TorrServerSettingsViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            torrentSettings.settings.collectLatest { settings ->
+                _uiState.update {
+                    it.copy(hideTorrentStats = settings.hideTorrentStats)
+                }
+            }
+        }
     }
 
     fun onEvent(event: TorrServerSettingsEvent) {
         when (event) {
             is TorrServerSettingsEvent.ToggleEnabled -> {
                 addonConfig.setEnabled(event.enabled)
-                if (event.enabled) {
-                    torrentSettings.setP2pEnabled(false)
+                if (!event.enabled) {
                     torrentService.shutdown()
                 }
+            }
+            is TorrServerSettingsEvent.ToggleUseEmbeddedServer -> {
+                addonConfig.setUseEmbeddedServer(event.enabled)
+                if (!event.enabled) {
+                    // Turn off local background process to prevent CPU/RAM overhead
+                    torrentService.shutdown()
+                }
+                _uiState.update { it.copy(serverStatusMessage = null, serverStatusSuccess = null) }
+            }
+            is TorrServerSettingsEvent.ToggleHideTorrentStats -> {
+                torrentSettings.setHideTorrentStats(event.enabled)
             }
             is TorrServerSettingsEvent.UpdateServerUrl -> {
                 addonConfig.setServerUrl(event.url)
@@ -144,6 +166,35 @@ class TorrServerSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isTestingServer = true, serverStatusMessage = null, serverStatusSuccess = null) }
             val current = _uiState.value
+            if (current.useEmbeddedServer) {
+                val result = remoteApi.healthCheck(
+                    serverUrl = "http://127.0.0.1:8091",
+                    username = null,
+                    password = null
+                )
+                result.fold(
+                    onSuccess = { version ->
+                        _uiState.update {
+                            it.copy(
+                                isTestingServer = false,
+                                serverStatusMessage = "Local: $version (Đang chạy)",
+                                serverStatusSuccess = true
+                            )
+                        }
+                    },
+                    onFailure = {
+                        _uiState.update {
+                            it.copy(
+                                isTestingServer = false,
+                                serverStatusMessage = "Máy chủ tích hợp sẵn sàng (Tự khởi chạy khi phát)",
+                                serverStatusSuccess = true
+                            )
+                        }
+                    }
+                )
+                return@launch
+            }
+
             val result = remoteApi.healthCheck(
                 serverUrl = current.serverUrl,
                 username = current.authUsername,

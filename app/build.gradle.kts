@@ -115,8 +115,8 @@ android {
         applicationId = "com.nuvio.tv.fast"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1084
-        versionName = "1.0.7"
+        versionCode = 1087
+        versionName = "1.1.0"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -369,7 +369,7 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
         val isPlaystore = variant.productFlavors.any { it.second == "playstore" }
-        variant.applicationId.set(if (isPlaystore) "com.nuvio.appdebug" else "com.nuviodebug.com")
+        variant.applicationId.set(if (isPlaystore) "com.nuvio.app.debug" else "com.nuvio.tv.debug")
     }
 }
 

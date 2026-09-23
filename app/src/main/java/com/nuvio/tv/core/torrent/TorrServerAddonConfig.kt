@@ -25,6 +25,7 @@ private val Context.torrServerAddonDataStore by preferencesDataStore(
 
 data class TorrServerAddonConfigData(
     val enabled: Boolean = false,
+    val useEmbeddedServer: Boolean = true,
     val serverUrl: String = "http://127.0.0.1:8090",
     val addonUrl: String = "",
     val authUsername: String = "",
@@ -42,6 +43,7 @@ class TorrServerAddonConfig @Inject constructor(
 
     private object Keys {
         val ENABLED = booleanPreferencesKey("enabled")
+        val USE_EMBEDDED_SERVER = booleanPreferencesKey("use_embedded_server")
         val SERVER_URL = stringPreferencesKey("server_url")
         val ADDON_URL = stringPreferencesKey("addon_url")
         val AUTH_USERNAME = stringPreferencesKey("auth_username")
@@ -55,6 +57,7 @@ class TorrServerAddonConfig @Inject constructor(
         .map { prefs ->
             TorrServerAddonConfigData(
                 enabled = prefs[Keys.ENABLED] ?: false,
+                useEmbeddedServer = prefs[Keys.USE_EMBEDDED_SERVER] ?: true,
                 serverUrl = prefs[Keys.SERVER_URL] ?: "http://127.0.0.1:8090",
                 addonUrl = prefs[Keys.ADDON_URL] ?: "",
                 authUsername = prefs[Keys.AUTH_USERNAME] ?: "",
@@ -69,6 +72,12 @@ class TorrServerAddonConfig @Inject constructor(
     fun setEnabled(enabled: Boolean) {
         scope.launch {
             context.torrServerAddonDataStore.edit { it[Keys.ENABLED] = enabled }
+        }
+    }
+
+    fun setUseEmbeddedServer(useEmbedded: Boolean) {
+        scope.launch {
+            context.torrServerAddonDataStore.edit { it[Keys.USE_EMBEDDED_SERVER] = useEmbedded }
         }
     }
 
@@ -116,6 +125,7 @@ class TorrServerAddonConfig @Inject constructor(
     suspend fun updateConfig(config: TorrServerAddonConfigData) {
         context.torrServerAddonDataStore.edit {
             it[Keys.ENABLED] = config.enabled
+            it[Keys.USE_EMBEDDED_SERVER] = config.useEmbeddedServer
             it[Keys.SERVER_URL] = config.serverUrl.trim().trimEnd('/')
             it[Keys.ADDON_URL] = config.addonUrl.trim()
             it[Keys.AUTH_USERNAME] = config.authUsername.trim()

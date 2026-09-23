@@ -165,12 +165,6 @@ class StreamScreenViewModel @Inject constructor(
         .map { it.playerPreference }
         .distinctUntilChanged()
 
-    val p2pEnabled = torrentSettings.settings
-        .map { it.p2pEnabled }
-        .distinctUntilChanged()
-
-    fun enableP2p() = torrentSettings.setP2pEnabled(true)
-
     private inline fun updateUiStateIfChanged(
         transform: (StreamScreenUiState) -> StreamScreenUiState
     ) {
@@ -282,6 +276,35 @@ class StreamScreenViewModel @Inject constructor(
             }
             StreamScreenEvent.OnDismissTorrentFilePicker -> {
                 dismissTorrentFilePicker()
+            }
+            is StreamScreenEvent.OnPromptEnableTorrServer -> {
+                _uiState.update {
+                    it.copy(
+                        showTorrServerPrompt = true,
+                        pendingTorrentStream = event.stream
+                    )
+                }
+            }
+            StreamScreenEvent.OnConfirmEnableTorrServer -> {
+                val stream = _uiState.value.pendingTorrentStream
+                torrServerAddonConfig.setEnabled(true)
+                _uiState.update {
+                    it.copy(
+                        showTorrServerPrompt = false,
+                        pendingTorrentStream = null
+                    )
+                }
+                if (stream != null) {
+                    prepareTorrServerFilePicker(stream)
+                }
+            }
+            StreamScreenEvent.OnDismissTorrServerPrompt -> {
+                _uiState.update {
+                    it.copy(
+                        showTorrServerPrompt = false,
+                        pendingTorrentStream = null
+                    )
+                }
             }
             StreamScreenEvent.OnAutoPlayConsumed -> {
                 if (autoPlayHandledForSession &&
@@ -1429,6 +1452,10 @@ class StreamScreenViewModel @Inject constructor(
     fun isTorrServerStream(stream: Stream): Boolean {
         val isExplicitTorrServer = stream.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
         return isExplicitTorrServer || (torrServerConfigData.enabled && stream.isTorrent())
+    }
+
+    suspend fun isRawTorrentStream(stream: Stream): Boolean {
+        return stream.isTorrent() && !directDebridResolver.shouldResolveToPlayableStream(stream)
     }
 
     suspend fun resolveTorrServerPlaybackDirect(stream: Stream): StreamPlaybackInfo? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

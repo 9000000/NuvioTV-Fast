@@ -49,11 +49,15 @@ class TorrServerApi @Inject constructor(
 
     private val baseUrl: String get() = binary.baseUrl
 
-    suspend fun addTorrent(magnetLink: String, title: String? = null): String? = withContext(Dispatchers.IO) {
+    suspend fun addTorrent(
+        magnetLink: String,
+        title: String? = null,
+        saveToDb: Boolean = false
+    ): String? = withContext(Dispatchers.IO) {
         val body = JSONObject().apply {
             put("action", "add")
             put("link", magnetLink)
-            put("save_to_db", false)
+            put("save_to_db", saveToDb)
             if (title != null) put("title", title)
         }
 
@@ -142,8 +146,15 @@ class TorrServerApi @Inject constructor(
         }
     }
 
-    fun getStreamUrl(magnetLink: String, fileIdx: Int): String {
+    fun getStreamUrl(
+        magnetLink: String,
+        fileIdx: Int,
+        preload: Boolean = false,
+        save: Boolean = false
+    ): String {
         val encodedLink = URLEncoder.encode(magnetLink, "UTF-8")
-        return "$baseUrl/stream?link=$encodedLink&index=$fileIdx&play"
+        val preloadParam = if (preload) "&preload" else ""
+        val saveParam = if (save) "&save" else ""
+        return "$baseUrl/stream?link=$encodedLink&index=$fileIdx&play$preloadParam$saveParam"
     }
 }

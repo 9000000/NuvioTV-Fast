@@ -42,7 +42,7 @@ class TorrServerSettingsViewModelTest {
     }
 
     @Test
-    fun enablesTorrServerAndAutomaticallyDisablesNativeP2P() = runTest {
+    fun togglesTorrServerEnabled() = runTest {
         val viewModel = createViewModel()
         runCurrent()
 
@@ -50,8 +50,40 @@ class TorrServerSettingsViewModelTest {
         runCurrent()
 
         verify { addonConfig.setEnabled(true) }
-        verify { torrentSettings.setP2pEnabled(false) }
+
+        viewModel.onEvent(TorrServerSettingsEvent.ToggleEnabled(false))
+        runCurrent()
+
+        verify { addonConfig.setEnabled(false) }
         verify { torrentService.shutdown() }
+    }
+
+    @Test
+    fun togglesUseEmbeddedServerAndShutsDownWhenDisabled() = runTest {
+        val viewModel = createViewModel()
+        runCurrent()
+
+        viewModel.onEvent(TorrServerSettingsEvent.ToggleUseEmbeddedServer(false))
+        runCurrent()
+
+        verify { addonConfig.setUseEmbeddedServer(false) }
+        verify { torrentService.shutdown() }
+
+        viewModel.onEvent(TorrServerSettingsEvent.ToggleUseEmbeddedServer(true))
+        runCurrent()
+
+        verify { addonConfig.setUseEmbeddedServer(true) }
+    }
+
+    @Test
+    fun togglesHideTorrentStats() = runTest {
+        val viewModel = createViewModel()
+        runCurrent()
+
+        viewModel.onEvent(TorrServerSettingsEvent.ToggleHideTorrentStats(true))
+        runCurrent()
+
+        verify { torrentSettings.setHideTorrentStats(true) }
     }
 
     @Test

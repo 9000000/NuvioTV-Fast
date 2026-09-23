@@ -126,45 +126,71 @@ fun TorrServerSettingsContent(
                         )
                     }
 
+                    // Embedded / Local Server Toggle
+                    item(key = "torrserver_embedded") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.torrserver_embedded_server_title),
+                            subtitle = stringResource(R.string.torrserver_embedded_server_subtitle),
+                            checked = uiState.useEmbeddedServer,
+                            onToggle = { viewModel.onEvent(TorrServerSettingsEvent.ToggleUseEmbeddedServer(!uiState.useEmbeddedServer)) }
+                        )
+                    }
+
                     // Server URL
                     item(key = "torrserver_server_url") {
+                        val subtitle = if (uiState.useEmbeddedServer) {
+                            stringResource(R.string.torrserver_local_server_url_desc)
+                        } else {
+                            uiState.serverUrl.ifBlank { stringResource(R.string.torrserver_server_url_hint) }
+                        }
                         SettingsActionRow(
                             title = stringResource(R.string.torrserver_server_url_title),
-                            subtitle = uiState.serverUrl.ifBlank { stringResource(R.string.torrserver_server_url_hint) },
+                            subtitle = subtitle,
                             value = uiState.serverStatusMessage?.let { msg ->
                                 if (uiState.serverStatusSuccess == true) "✅ $msg" else "❌ $msg"
                             },
                             valueColor = if (uiState.serverStatusSuccess == true) NuvioTheme.colors.Success else NuvioTheme.colors.Error,
-                            onClick = { showServerUrlDialog = true }
+                            onClick = {
+                                if (!uiState.useEmbeddedServer) {
+                                    showServerUrlDialog = true
+                                }
+                            }
                         )
                     }
 
                     // Test Server Connection Button
                     item(key = "torrserver_test_server_btn") {
+                        val testDesc = when {
+                            uiState.isTestingServer -> "Đang kiểm tra..."
+                            uiState.useEmbeddedServer -> "Kiểm tra kết nối máy chủ tích hợp (127.0.0.1:8091)"
+                            else -> "Kiểm tra kết nối GET /echo tới máy chủ ngoài"
+                        }
                         SettingsActionRow(
                             title = stringResource(R.string.torrserver_test_connection),
-                            subtitle = if (uiState.isTestingServer) "Đang kiểm tra..." else "Kiểm tra kết nối GET /echo tới máy chủ",
+                            subtitle = testDesc,
                             value = if (uiState.isTestingServer) "..." else null,
                             leadingIcon = Icons.Default.Refresh,
                             onClick = { viewModel.onEvent(TorrServerSettingsEvent.TestServerConnection) }
                         )
                     }
 
-                    // Basic Auth
-                    item(key = "torrserver_auth") {
-                        val authSubtitle = if (uiState.authUsername.isNotBlank()) {
-                            "Người dùng: ${uiState.authUsername}"
-                        } else {
-                            "Không sử dụng mật khẩu"
+                    // Basic Auth (Only needed for external server)
+                    if (!uiState.useEmbeddedServer) {
+                        item(key = "torrserver_auth") {
+                            val authSubtitle = if (uiState.authUsername.isNotBlank()) {
+                                "Người dùng: ${uiState.authUsername}"
+                            } else {
+                                "Không sử dụng mật khẩu"
+                            }
+                            SettingsActionRow(
+                                title = stringResource(R.string.torrserver_auth_title),
+                                subtitle = authSubtitle,
+                                onClick = { showAuthDialog = true }
+                            )
                         }
-                        SettingsActionRow(
-                            title = stringResource(R.string.torrserver_auth_title),
-                            subtitle = authSubtitle,
-                            onClick = { showAuthDialog = true }
-                        )
                     }
 
-                    // Preload Toggle
+                    // Preload Toggle (Available for both local and external)
                     item(key = "torrserver_preload") {
                         SettingsToggleRow(
                             title = stringResource(R.string.torrserver_preload_title),
@@ -174,7 +200,7 @@ fun TorrServerSettingsContent(
                         )
                     }
 
-                    // Save to DB Toggle
+                    // Save to DB Toggle (Available for both local and external)
                     item(key = "torrserver_save") {
                         SettingsToggleRow(
                             title = stringResource(R.string.torrserver_save_title),
@@ -184,21 +210,33 @@ fun TorrServerSettingsContent(
                         )
                     }
 
-                    // GStreamer (GST) Toggle
-                    item(key = "torrserver_gst") {
-                        val gstSubtitle = when {
-                            uiState.isCheckingGst -> "Đang kiểm tra hỗ trợ GStreamer trên máy chủ..."
-                            uiState.gstStatusMessage != null -> {
-                                val prefix = if (uiState.gstStatusSuccess == true) "✅ " else "⚠️ "
-                                prefix + uiState.gstStatusMessage
+                    // GStreamer (GST) Toggle (Only for external server with -gst build)
+                    if (!uiState.useEmbeddedServer) {
+                        item(key = "torrserver_gst") {
+                            val gstSubtitle = when {
+                                uiState.isCheckingGst -> "Đang kiểm tra hỗ trợ GStreamer trên máy chủ..."
+                                uiState.gstStatusMessage != null -> {
+                                    val prefix = if (uiState.gstStatusSuccess == true) "✅ " else "⚠️ "
+                                    prefix + uiState.gstStatusMessage
+                                }
+                                else -> stringResource(R.string.torrserver_gst_subtitle)
                             }
-                            else -> stringResource(R.string.torrserver_gst_subtitle)
+                            SettingsToggleRow(
+                                title = stringResource(R.string.torrserver_gst_title),
+                                subtitle = gstSubtitle,
+                                checked = uiState.gst,
+                                onToggle = { viewModel.onEvent(TorrServerSettingsEvent.ToggleGst(!uiState.gst)) }
+                            )
                         }
+                    }
+
+                    // Hide Torrent Stats (UI Overlay)
+                    item(key = "torrserver_hide_stats") {
                         SettingsToggleRow(
-                            title = stringResource(R.string.torrserver_gst_title),
-                            subtitle = gstSubtitle,
-                            checked = uiState.gst,
-                            onToggle = { viewModel.onEvent(TorrServerSettingsEvent.ToggleGst(!uiState.gst)) }
+                            title = stringResource(R.string.settings_p2p_hide_stats_title),
+                            subtitle = stringResource(R.string.settings_p2p_hide_stats_subtitle),
+                            checked = uiState.hideTorrentStats,
+                            onToggle = { viewModel.onEvent(TorrServerSettingsEvent.ToggleHideTorrentStats(!uiState.hideTorrentStats)) }
                         )
                     }
                 }

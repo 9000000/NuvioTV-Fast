@@ -27,6 +27,8 @@ internal fun torrServerDisplayTitle(title: String?): String? =
 @Singleton
 class TorrentService @Inject constructor(
     @ApplicationContext private val appContext: Context,
+    private val binary: TorrServerBinary,
+    private val api: TorrServerApi,
     private val remoteApi: TorrServerRemoteApi,
     private val addonConfig: TorrServerAddonConfig
 ) {
@@ -50,7 +52,7 @@ class TorrentService @Inject constructor(
     private var currentHash: String? = null
 
     /**
-     * Starts streaming a torrent via the remote TorrServer instance. Returns the HTTP URL for ExoPlayer.
+     * Starts streaming a torrent. Uses TorrServer Remote if enabled, otherwise falls back to P2P native.
      */
     suspend fun startStream(
         infoHash: String,
@@ -59,11 +61,33 @@ class TorrentService @Inject constructor(
         title: String? = null,
         poster: String? = null,
         trackers: List<String> = emptyList()
-    ): String = withContext(Dispatchers.IO) {
+    ): String {
         stopStream()
         _state.value = TorrentState.Connecting
 
         val config = addonConfig.config.first()
+        
+        return if (!config.useEmbeddedServer) {
+            // Use TorrServer Remote (External instance)
+            startRemoteStream(infoHash, fileIdx, filename, title, poster, trackers, config)
+        } else {
+            // Use Embedded TorrServer (local libtorrserver.so)
+            startNativeStream(infoHash, fileIdx, filename, title, trackers, config)
+        }
+    }
+
+    /**
+     * Starts streaming via remote TorrServer instance
+     */
+    private suspend fun startRemoteStream(
+        infoHash: String,
+        fileIdx: Int?,
+        filename: String?,
+        title: String?,
+        poster: String?,
+        trackers: List<String>,
+        config: TorrServerAddonConfigData
+    ): String = withContext(Dispatchers.IO) {
         val serverUrl = config.serverUrl.trim().trimEnd('/')
         if (serverUrl.isBlank()) {
             val errorMsg = appContext.getString(com.nuvio.tv.R.string.torrserver_error_not_configured)
@@ -154,6 +178,74 @@ class TorrentService @Inject constructor(
         streamUrl
     }
 
+    /**
+     * Starts streaming via embedded TorrServer (local libtorrserver.so)
+     */
+    private suspend fun startNativeStream(
+        infoHash: String,
+        fileIdx: Int?,
+        filename: String?,
+        title: String?,
+        trackers: List<String>,
+        config: TorrServerAddonConfigData
+    ): String = withContext(Dispatchers.IO) {
+        try {
+            // Ensure binary is running
+            binary.start()
+
+            val magnetLink = buildMagnetUri(infoHash, trackers)
+            Log.d(TAG, "Starting embedded TorrServer stream: $magnetLink")
+
+            // Add torrent
+            val hash = api.addTorrent(
+                magnetLink = magnetLink,
+                title = torrServerDisplayTitle(title),
+                saveToDb = config.saveToDb
+            ) ?: throw TorrentException(appContext.getString(com.nuvio.tv.R.string.torrent_error_add_failed))
+            currentHash = hash
+
+            // Resolve file index for native
+            val resolvedIdx = resolveFileIndexNative(hash, fileIdx, filename)
+
+            // Get stream URL — TorrServer handles all buffering/piece management
+            val streamUrl = api.getStreamUrl(
+                magnetLink = magnetLink,
+                fileIdx = resolvedIdx,
+                preload = config.preload,
+                save = config.saveToDb
+            )
+            Log.d(TAG, "Embedded TorrServer stream URL: $streamUrl")
+
+            // Start stats polling for native
+            startStatsPollingNative(hash)
+
+            _state.value = TorrentState.Streaming(
+                localUrl = streamUrl,
+                downloadSpeed = 0,
+                uploadSpeed = 0,
+                peers = 0,
+                seeds = 0,
+                bufferProgress = 0f,
+                totalProgress = 0f
+            )
+
+            streamUrl
+        } catch (e: TorrentException) {
+            // If embedded binary fails, provide helpful error message
+            Log.e(TAG, "Embedded TorrServer failed: ${e.message}")
+            val errorMsg = buildString {
+                append(e.message)
+                append("\n\n")
+                append("Gợi ý: ")
+                append("Máy chủ TorrServer tích hợp không khả dụng. ")
+                append("Bạn có thể tắt 'Máy chủ tích hợp' trong Cài đặt > TorrServer ")
+                append("và cấu hình kết nối đến máy chủ bên ngoài (PC/NAS).")
+            }
+            _state.value = TorrentState.Error(errorMsg)
+            throw TorrentException(errorMsg)
+        }
+    }
+
     fun stopStream() {
         statsJob?.cancel()
         statsJob = null
@@ -163,7 +255,17 @@ class TorrentService @Inject constructor(
         currentHash?.let { hash ->
             scope.launch(Dispatchers.IO) {
                 try {
-                    remoteApi.dropTorrent(hash)
+                    // Try both APIs (one will fail silently)
+                    try {
+                        remoteApi.dropTorrent(hash)
+                    } catch (e: Exception) {
+                        // Ignore remote API errors
+                    }
+                    try {
+                        api.dropTorrent(hash)
+                    } catch (e: Exception) {
+                        // Ignore native API errors
+                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "Error dropping torrent: $hash", e)
                 }
@@ -206,6 +308,7 @@ class TorrentService @Inject constructor(
 
     fun shutdown() {
         stopStream()
+        binary.stop()
     }
 
     private fun buildMagnetUri(infoHash: String, extraTrackers: List<String>): String {
@@ -305,6 +408,105 @@ class TorrentService @Inject constructor(
                             statString = stats.statString,
                             bufferProgress = stats.preloadProgress,
                             totalProgress = stats.preloadProgress
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Stats polling error", e)
+                }
+                delay(1000)
+            }
+        }
+    }
+
+    /**
+     * Resolve file index for P2P native (uses TorrServerFile from native API)
+     */
+    private suspend fun resolveFileIndexNative(hash: String, requestedIdx: Int?, filename: String?): Int {
+        // Poll for metadata — magnet links may not have it immediately
+        val deadline = System.currentTimeMillis() + 15_000L
+        var files: List<TorrServerFile> = emptyList()
+
+        while (System.currentTimeMillis() < deadline) {
+            files = api.getTorrentStats(hash)?.files ?: emptyList()
+            if (files.isNotEmpty()) break
+            Log.d(TAG, "Waiting for torrent metadata...")
+            delay(1_000L)
+        }
+
+        if (files.isEmpty()) {
+            Log.w(TAG, "No files after metadata timeout, defaulting to index ${requestedIdx ?: 0}")
+            return requestedIdx ?: 0
+        }
+
+        Log.d(TAG, "Torrent has ${files.size} files")
+
+        // Strategy 1: Match by filename
+        if (!filename.isNullOrBlank()) {
+            val name = filename.trim()
+            val exact = files.indexOfFirst { f ->
+                f.path.substringAfterLast('/').equals(name, ignoreCase = true)
+            }
+            if (exact >= 0) {
+                Log.d(TAG, "File resolved by exact filename match: ${files[exact].path} -> index=$exact")
+                return exact
+            }
+            val contains = files.indexOfFirst { f ->
+                f.path.contains(name, ignoreCase = true)
+            }
+            if (contains >= 0) {
+                Log.d(TAG, "File resolved by filename contains match: ${files[contains].path} -> index=$contains")
+                return contains
+            }
+        }
+
+        // Strategy 2: Use requested index if valid
+        if (requestedIdx != null && requestedIdx in files.indices) {
+            Log.d(TAG, "File resolved by requested index: [$requestedIdx] -> ${files[requestedIdx].path}")
+            return requestedIdx
+        }
+
+        // Strategy 3: Fallback to largest video file
+        val videoIdx = files
+            .mapIndexed { idx, file -> idx to file }
+            .filter { (_, f) ->
+                val ext = f.path.substringAfterLast('.', "").lowercase()
+                ext in VIDEO_EXTENSIONS
+            }
+            .maxByOrNull { (_, f) -> f.length }
+            ?.first
+
+        val result = videoIdx ?: files.indices.maxByOrNull { files[it].length } ?: 0
+        Log.d(TAG, "File resolved by largest video fallback: index=$result")
+        return result
+    }
+
+    /**
+     * Start stats polling for P2P native
+     */
+    private fun startStatsPollingNative(hash: String) {
+        statsJob?.cancel()
+        statsJob = scope.launch {
+            while (isActive) {
+                try {
+                    val stats = api.getTorrentStats(hash)
+                    val currentState = _state.value
+                    if (stats != null && currentState is TorrentState.Streaming) {
+                        val bufferProgress = if (stats.torrentSize > 0) {
+                            (stats.preloadedBytes.toFloat() / stats.torrentSize.toFloat()).coerceIn(0f, 1f)
+                        } else 0f
+                        val totalProgress = if (stats.torrentSize > 0) {
+                            (stats.loadedSize.toFloat() / stats.torrentSize.toFloat()).coerceIn(0f, 1f)
+                        } else 0f
+                        
+                        _state.value = currentState.copy(
+                            downloadSpeed = stats.downloadSpeed,
+                            uploadSpeed = stats.uploadSpeed,
+                            peers = stats.peers,
+                            seeds = stats.seeds,
+                            bufferProgress = bufferProgress,
+                            totalProgress = totalProgress
                         )
                     }
                 } catch (e: CancellationException) {

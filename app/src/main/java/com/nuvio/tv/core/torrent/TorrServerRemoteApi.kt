@@ -119,42 +119,6 @@ class TorrServerRemoteApi @Inject constructor(
         }
     }
 
-    suspend fun testAddonUrl(addonUrl: String): Result<String> = withContext(Dispatchers.IO) {
-        val trimmed = addonUrl.trim()
-        if (trimmed.isBlank()) {
-            return@withContext Result.failure(IllegalArgumentException("Addon URL is empty"))
-        }
-
-        val manifestUrl = if (trimmed.endsWith("/manifest.json", ignoreCase = true)) {
-            trimmed
-        } else {
-            "${trimmed.trimEnd('/')}/manifest.json"
-        }
-
-        val request = Request.Builder()
-            .url(manifestUrl)
-            .get()
-            .build()
-
-        try {
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: ""
-                    val json = JSONObject(body)
-                    val name = json.optString("name", "Unknown Addon")
-                    val version = json.optString("version", "")
-                    val info = if (version.isNotBlank()) "$name (v$version)" else name
-                    Result.success(info)
-                } else {
-                    Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "testAddonUrl failed: ${e.message}")
-            Result.failure(e)
-        }
-    }
-
     suspend fun addTorrent(
         magnetLink: String,
         title: String? = null,
