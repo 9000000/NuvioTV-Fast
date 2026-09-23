@@ -642,7 +642,8 @@ private fun HeroTitleContent(
                     com.nuvio.tv.ui.components.MDBListRatingsRow(
                         ratings = preview.mdbListRatings!!,
                         maxItems = 3,
-                        order = mdbListRatingOrder
+                        order = mdbListRatingOrder,
+                        iconSize = 30.dp * metaScale
                     )
                 }
             }

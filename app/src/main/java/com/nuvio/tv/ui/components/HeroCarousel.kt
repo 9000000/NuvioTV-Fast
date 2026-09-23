@@ -355,7 +355,7 @@ private fun HeroCarouselSlide(
                                 val mdbRatings = item.mdbListRatings
                                 if (mdbListShowOnHero && mdbRatings != null && !mdbRatings.isEmpty()) {
                                     if (trailingMetadata.isNotEmpty()) HeroCarouselMetaDivider()
-                                    MDBListRatingsRow(ratings = mdbRatings, maxItems = 3, order = mdbListRatingOrder)
+                                    MDBListRatingsRow(ratings = mdbRatings, maxItems = 3, order = mdbListRatingOrder, iconSize = 30.dp)
                                 } else {
                                     if (trailingMetadata.isNotEmpty()) HeroCarouselMetaDivider()
                                     Row(
@@ -377,7 +377,7 @@ private fun HeroCarouselSlide(
                                 }
                             } else if (mdbListShowOnHero && item.mdbListRatings != null && !item.mdbListRatings.isEmpty()) {
                                 if (trailingMetadata.isNotEmpty()) HeroCarouselMetaDivider()
-                                MDBListRatingsRow(ratings = item.mdbListRatings, maxItems = 3, order = mdbListRatingOrder)
+                                MDBListRatingsRow(ratings = item.mdbListRatings, maxItems = 3, order = mdbListRatingOrder, iconSize = 30.dp)
                             }
                         }
                     }

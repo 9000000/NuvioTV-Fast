@@ -21,13 +21,15 @@ import com.nuvio.tv.domain.model.MDBListSettings
 import com.nuvio.tv.domain.model.RottenTomatoesStatus
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 
 @Composable
 fun MDBListRatingsRow(
     ratings: MDBListRatings,
     modifier: Modifier = Modifier,
     maxItems: Int = Int.MAX_VALUE,
-    order: List<String> = MDBListSettings.DEFAULT_RATING_ORDER
+    order: List<String> = MDBListSettings.DEFAULT_RATING_ORDER,
+    iconSize: Dp = NuvioTheme.spacing.xl
 ) {
     val orderedProviders = remember(ratings, maxItems, order) {
         order.filter { provider -> getRatingValue(ratings, provider) != null }
@@ -41,7 +43,7 @@ fun MDBListRatingsRow(
     ) {
         orderedProviders.forEach { provider ->
             val rating = getRatingValue(ratings, provider) ?: return@forEach
-            RatingBadge(provider = provider, rating = rating, ratings = ratings)
+            RatingBadge(provider = provider, rating = rating, ratings = ratings, iconSize = iconSize)
         }
     }
 }
@@ -50,7 +52,8 @@ fun MDBListRatingsRow(
 private fun RatingBadge(
     provider: String,
     rating: Double,
-    ratings: MDBListRatings
+    ratings: MDBListRatings,
+    iconSize: Dp = NuvioTheme.spacing.xl
 ) {
     val context = LocalContext.current
     Row(
@@ -68,14 +71,14 @@ private fun RatingBadge(
                         }
                     ),
                     contentDescription = null,
-                    modifier = Modifier.size(NuvioTheme.spacing.xl)
+                    modifier = Modifier.size(iconSize)
                 )
             }
             "metacritic" -> {
                 Image(
                     painter = painterResource(id = R.drawable.mdblist_metacritic),
                     contentDescription = null,
-                    modifier = Modifier.size(NuvioTheme.spacing.xl)
+                    modifier = Modifier.size(iconSize)
                 )
             }
             else -> {
@@ -100,7 +103,7 @@ private fun RatingBadge(
                 AsyncImage(
                     model = model,
                     contentDescription = null,
-                    modifier = Modifier.size(NuvioTheme.spacing.xl),
+                    modifier = Modifier.size(iconSize),
                     contentScale = ContentScale.Fit
                 )
             }
