@@ -2993,9 +2993,8 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
     }
 
     val episodeStartedAtMs = SystemClock.elapsedRealtime()
-    val mdbEnabled = mdbListRepository.isAvailable(currentMdbListSettings)
 
-    val (episodeMeta, showMeta, mdbImdbRating) = coroutineScope {
+    val (episodeMeta, showMeta) = coroutineScope {
         val episodeDeferred = async {
             runCatching {
                 tmdbMetadataService.fetchEpisodeEnrichment(
@@ -3014,10 +3013,7 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
                 )
             }.getOrNull()
         }
-        val mdbDeferred = if (mdbEnabled) async {
-            runCatching { mdbListRepository.getImdbRatingForItem(progress.contentId, progress.contentType) }.getOrNull()
-        } else null
-        Triple(episodeDeferred.await(), showDeferred.await(), mdbDeferred?.await())
+        episodeDeferred.await() to showDeferred.await()
     }
 
     debug?.recordTmdbCall(
@@ -3040,7 +3036,7 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
         airDate = episodeMeta?.airDate?.trim()?.takeIf { it.isNotEmpty() },
         overview = episodeMeta?.overview?.trim()?.takeIf { it.isNotEmpty() },
         showDescription = showMeta?.description?.trim()?.takeIf { it.isNotEmpty() },
-        rating = mdbImdbRating ?: showMeta?.rating,
+        rating = showMeta?.rating,
         contentLanguage = showMeta?.language
     )
 
