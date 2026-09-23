@@ -269,10 +269,14 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     homeRows = state.homeRows,
                     catalogRows = state.catalogRows,
                     continueWatchingItems = if (state.continueWatchingEnabled)
-                        state.continueWatchingItems.withCustomPosterUrls(state.customPosterUrlPattern)
+                        state.continueWatchingItems.withCustomPosterUrls(
+                            com.nuvio.tv.core.poster.patternForScreen(state.customPosterUrlPattern, com.nuvio.tv.core.poster.CustomPosterScreen.CONTINUE_WATCHING, state.customPosterEnabledScreens)
+                        )
                     else emptyList(),
                     upcomingItems = if (state.continueWatchingEnabled)
-                        state.upcomingItems.withCustomPosterUrls(state.customPosterUrlPattern)
+                        state.upcomingItems.withCustomPosterUrls(
+                            com.nuvio.tv.core.poster.patternForScreen(state.customPosterUrlPattern, com.nuvio.tv.core.poster.CustomPosterScreen.CONTINUE_WATCHING, state.customPosterEnabledScreens)
+                        )
                     else emptyList(),
                     useLandscapePosters = state.modernLandscapePostersEnabled,
                     showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,

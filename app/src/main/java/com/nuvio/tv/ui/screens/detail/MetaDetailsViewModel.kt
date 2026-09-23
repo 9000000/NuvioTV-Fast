@@ -1257,12 +1257,15 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val pattern = layoutPreferenceDataStore.customPosterUrlPattern.first()
+            val enabledScreens = layoutPreferenceDataStore.customPosterEnabledScreens.first()
             val recommendations = if (hideUnreleasedContent) {
                 val today = LocalDate.now()
                 rawRecommendations.filterNot { it.isUnreleased(today) }
             } else {
                 rawRecommendations
-            }.withCustomPosterUrls(pattern)
+            }.withCustomPosterUrls(
+                com.nuvio.tv.core.poster.patternForScreen(pattern, com.nuvio.tv.core.poster.CustomPosterScreen.DETAILS, enabledScreens)
+            )
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
@@ -1310,12 +1313,15 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val collectionPattern = layoutPreferenceDataStore.customPosterUrlPattern.first()
+            val collectionEnabledScreens = layoutPreferenceDataStore.customPosterEnabledScreens.first()
             val filteredItems = if (hideUnreleasedContent) {
                 val today = LocalDate.now()
                 collection.items.filterNot { it.isUnreleased(today) }
             } else {
                 collection.items
-            }.withCustomPosterUrls(collectionPattern)
+            }.withCustomPosterUrls(
+                com.nuvio.tv.core.poster.patternForScreen(collectionPattern, com.nuvio.tv.core.poster.CustomPosterScreen.DETAILS, collectionEnabledScreens)
+            )
 
             _uiState.update { state ->
                 state.copy(

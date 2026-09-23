@@ -371,7 +371,8 @@ class SearchViewModel @Inject constructor(
                             skip = 0,
                             skipStep = 100,
                             extraArgs = mapOf("search" to query),
-                            supportsSkip = false
+                            supportsSkip = false,
+                            posterScreen = com.nuvio.tv.core.poster.CustomPosterScreen.SEARCH
                         ).collect { result ->
                             if (result is NetworkResult.Success && _uiState.value.query.trim() == query) {
                                 var added = false
@@ -712,7 +713,8 @@ class SearchViewModel @Inject constructor(
             skip = 0,
             skipStep = skipStep,
             extraArgs = mapOf("search" to query),
-            supportsSkip = supportsSkip
+            supportsSkip = supportsSkip,
+            posterScreen = com.nuvio.tv.core.poster.CustomPosterScreen.SEARCH
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
@@ -788,7 +790,8 @@ class SearchViewModel @Inject constructor(
                 skip = nextSkip,
                 skipStep = currentRow.skipStep,
                 extraArgs = mapOf("search" to query),
-                supportsSkip = currentRow.supportsSkip
+                supportsSkip = currentRow.supportsSkip,
+                posterScreen = com.nuvio.tv.core.poster.CustomPosterScreen.SEARCH
             ).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
@@ -1062,7 +1065,8 @@ class SearchViewModel @Inject constructor(
                 skip = skip,
                 skipStep = selectedCatalog.skipStep,
                 extraArgs = extraArgs,
-                supportsSkip = selectedCatalog.supportsSkip
+                supportsSkip = selectedCatalog.supportsSkip,
+                posterScreen = com.nuvio.tv.core.poster.CustomPosterScreen.SEARCH
             ).collect { result ->
                 if (_uiState.value.discoverLocation == DiscoverLocation.OFF) return@collect
                 when (result) {

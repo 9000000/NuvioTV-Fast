@@ -189,7 +189,9 @@ fun GridHomeContent(
     // Offset for section indices: pre-items + continue watching item (if present)
     val gridItems = uiState.gridItems
     val continueWatchingItems = if (uiState.continueWatchingEnabled)
-        uiState.continueWatchingItems.withCustomPosterUrls(uiState.customPosterUrlPattern)
+        uiState.continueWatchingItems.withCustomPosterUrls(
+            com.nuvio.tv.core.poster.patternForScreen(uiState.customPosterUrlPattern, com.nuvio.tv.core.poster.CustomPosterScreen.CONTINUE_WATCHING, uiState.customPosterEnabledScreens)
+        )
     else emptyList()
     val continueWatchingOffset = if (continueWatchingItems.isNotEmpty()) 1 else 0
 
@@ -587,7 +589,9 @@ fun GridHomeContent(
                     GridContinueWatchingSection(
                         modifier = Modifier.fillMaxWidth(),
                         fullWidth = gridWidth,
-                        items = uiState.upcomingItems.withCustomPosterUrls(uiState.customPosterUrlPattern),
+                        items = uiState.upcomingItems.withCustomPosterUrls(
+                            com.nuvio.tv.core.poster.patternForScreen(uiState.customPosterUrlPattern, com.nuvio.tv.core.poster.CustomPosterScreen.CONTINUE_WATCHING, uiState.customPosterEnabledScreens)
+                        ),
                         title = stringResource(R.string.upcoming_section_title),
                         lastFocusedIndex = lastFocusedUpcomingIndex,
                         focusRequesters = upcomingFocusRequesters,
