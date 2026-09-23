@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -1626,9 +1627,8 @@ private fun MetaDetailsContent(
     }
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
-    // Tracks whether the initial auto-scroll to the "next to play" episode has fired.
-    // Once it fires, no more auto-scrolls happen for the lifetime of this detail screen.
-    var initialEpisodeScrollDone by remember(meta.id) { mutableStateOf(false) }
+    // Tracks whether the initial auto-scroll to the "next to play" episode has fired per season.
+    val initialEpisodeScrollDoneBySeason = remember(meta.id) { mutableStateMapOf<Int, Boolean>() }
     val episodeFocusRequestersBySeason = remember(meta.id) { mutableMapOf<Int, MutableMap<String, FocusRequester>>() }
     val seasonEpisodeFocusRequesters = remember(selectedSeason, episodesForSeason) {
         val byEpisodeId = episodeFocusRequestersBySeason.getOrPut(selectedSeason) { mutableMapOf() }
@@ -1640,18 +1640,42 @@ private fun MetaDetailsContent(
         byEpisodeId.keys.retainAll(episodesForSeason.map { it.id }.toSet())
         byEpisodeId
     }
-    val seasonDownFocusRequester = remember(selectedSeason, episodesForSeason, seasonEpisodeFocusRequesters, lastFocusedEpisodeIdBySeason[selectedSeason], nextToWatch, defaultSeriesVideo, pendingRestoreType, pendingRestoreEpisodeId) {
-        val nextEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) {
-            null
+
+    val targetEpisodeForCurrentSeason = remember(
+        selectedSeason,
+        episodesForSeason,
+        nextToWatch,
+        episodeProgressMap,
+        watchedEpisodes,
+        defaultSeriesVideo
+    ) {
+        resolveTargetEpisodeForSeason(
+            episodes = episodesForSeason,
+            season = selectedSeason,
+            nextToWatch = nextToWatch,
+            episodeProgressMap = episodeProgressMap,
+            watchedEpisodes = watchedEpisodes,
+            defaultSeriesVideo = defaultSeriesVideo
+        )
+    }
+
+    val seasonDownFocusRequester = remember(
+        selectedSeason,
+        episodesForSeason,
+        seasonEpisodeFocusRequesters,
+        lastFocusedEpisodeIdBySeason[selectedSeason],
+        targetEpisodeForCurrentSeason,
+        pendingRestoreType,
+        pendingRestoreEpisodeId
+    ) {
+        if (pendingRestoreType == RestoreTarget.EPISODE) {
+            pendingRestoreEpisodeId?.let { seasonEpisodeFocusRequesters[it] }
         } else {
-            nextToWatch?.nextVideoId
-                ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
-                ?: defaultSeriesVideo?.id?.takeIf { defaultId -> episodesForSeason.any { it.id == defaultId } }
+            val preferredEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason]
+                ?: targetEpisodeForCurrentSeason?.id
+            (preferredEpisodeId?.let { seasonEpisodeFocusRequesters[it] })
+                ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
         }
-        val preferredEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason]
-            ?: nextEpisodeId?.takeIf { episodesForSeason.any { ep -> ep.id == it } }
-        (preferredEpisodeId?.let { seasonEpisodeFocusRequesters[it] })
-            ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
     }
 
     val activePeopleTabFocusRequester = visiblePeopleTabItems
@@ -1953,6 +1977,10 @@ private fun MetaDetailsContent(
                 defaultBringIntoViewSpec
             }
         ) {
+        // Season tabs and episodes for series
+        val showSeasonTabs = isSeries && seasons.isNotEmpty() && !(seasons.size == 1 && meta.apiType.equals("other", ignoreCase = true))
+        val showEpisodesRow = isSeries && seasons.isNotEmpty()
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -1988,6 +2016,7 @@ private fun MetaDetailsContent(
                         hideLogoDuringTrailer = hideLogoDuringTrailer,
                         isTrailerPlaying = isTrailerPlaying,
                         playButtonFocusRequester = heroPlayFocusRequester,
+                        playButtonDownFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (seasonDownFocusRequester ?: episodesDownFocusRequester),
                         onHeroActionFocused = {
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
                                 coroutineScope.launch {
@@ -2011,9 +2040,6 @@ private fun MetaDetailsContent(
                 }
             }
 
-            // Season tabs and episodes for series
-            val showSeasonTabs = isSeries && seasons.isNotEmpty() && !(seasons.size == 1 && meta.apiType.equals("other", ignoreCase = true))
-            val showEpisodesRow = isSeries && seasons.isNotEmpty()
             if (showSeasonTabs) {
                 item(key = "season_tabs", contentType = "season_tabs") {
                     Box(modifier = Modifier.bringIntoViewResponder(detailRowBringIntoViewResponder)) {
@@ -2071,25 +2097,11 @@ private fun MetaDetailsContent(
                             },
                             scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] != null) {
                                 null
-                            } else if (!initialEpisodeScrollDone && pendingRestoreType != RestoreTarget.EPISODE) {
-                                val ntwId = nextToWatch?.nextVideoId
-                                    ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
-                                if (ntwId != null) {
-                                    ntwId
-                                } else if (nextToWatch != null) {
-                                    // nextToWatch resolved but target is in a different season — mark done and fall through.
-                                    initialEpisodeScrollDone = true
-                                    defaultSeriesVideo?.id?.takeIf { defaultId -> episodesForSeason.any { it.id == defaultId } }
-                                } else {
-                                    // nextToWatch not yet calculated — emit null so LaunchedEffect waits.
-                                    null
-                                }
-                            } else if (lastFocusedEpisodeIdBySeason[selectedSeason] == null && !initialEpisodeScrollDone && pendingRestoreType != RestoreTarget.EPISODE) {
-                                // Initial scroll not yet done; fall back to default only if user hasn't focused anything yet.
-                                defaultSeriesVideo?.id?.takeIf { defaultId -> episodesForSeason.any { it.id == defaultId } }
+                            } else if (initialEpisodeScrollDoneBySeason[selectedSeason] != true && pendingRestoreType != RestoreTarget.EPISODE) {
+                                targetEpisodeForCurrentSeason?.id
                             } else null,
                             onScrollToEpisodeHandled = {
-                                initialEpisodeScrollDone = true
+                                initialEpisodeScrollDoneBySeason[selectedSeason] = true
                             }
                         )
                     }
@@ -2814,3 +2826,53 @@ private fun LibraryListPickerDialog(
         }
     }
 }
+
+private fun resolveTargetEpisodeForSeason(
+    episodes: List<Video>,
+    season: Int,
+    nextToWatch: NextToWatch?,
+    episodeProgressMap: Map<Pair<Int, Int>, WatchProgress>,
+    watchedEpisodes: Set<Pair<Int, Int>>,
+    defaultSeriesVideo: Video?
+): Video? {
+    if (episodes.isEmpty()) return null
+
+    // 1. Next to watch if it matches this season
+    if (nextToWatch != null) {
+        val ntwById = episodes.firstOrNull { it.id == nextToWatch.nextVideoId }
+        if (ntwById != null) return ntwById
+
+        if (nextToWatch.nextSeason == null || nextToWatch.nextSeason == season) {
+            val ntwBySeasonEp = episodes.firstOrNull { it.episode == nextToWatch.nextEpisode }
+            if (ntwBySeasonEp != null) return ntwBySeasonEp
+        }
+    }
+
+    // 2. In-progress episode in this season
+    val inProgress = episodes.firstOrNull { ep ->
+        val s = ep.season ?: season
+        val e = ep.episode ?: return@firstOrNull false
+        episodeProgressMap[s to e]?.isInProgress() == true
+    }
+    if (inProgress != null) return inProgress
+
+    // 3. Next unwatched episode in this season
+    val watchedIndices = episodes.mapIndexedNotNull { index, ep ->
+        val s = ep.season ?: season
+        val e = ep.episode ?: return@mapIndexedNotNull null
+        val isWatched = episodeProgressMap[s to e]?.isCompleted() == true || (s to e) in watchedEpisodes
+        if (isWatched) index else null
+    }
+    if (watchedIndices.isNotEmpty()) {
+        val lastWatchedIndex = watchedIndices.maxOrNull() ?: -1
+        val nextUnwatched = episodes.getOrNull(lastWatchedIndex + 1)
+        if (nextUnwatched != null) return nextUnwatched
+        val lastWatched = episodes.getOrNull(lastWatchedIndex)
+        if (lastWatched != null) return lastWatched
+    }
+
+    // 4. Default episode or first episode in season
+    val defaultEp = defaultSeriesVideo?.takeIf { defaultVid -> episodes.any { it.id == defaultVid.id } }
+    return defaultEp ?: episodes.firstOrNull()
+}
+

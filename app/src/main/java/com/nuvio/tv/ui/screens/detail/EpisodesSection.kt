@@ -330,8 +330,11 @@ fun EpisodesRow(
         }
         val index = dedupedEpisodes.indexOfFirst { it.id == restoreEpisodeId }
         if (index >= 0) {
-            val offsetPx = with(density) { (cardMetrics.cardWidth * 2f / 3f - cardMetrics.itemSpacing).roundToPx() }
-            lazyListState.scrollToItem(index, scrollOffset = -offsetPx)
+            val scrollIndex = (index - 1).coerceAtLeast(0)
+            val peekOffsetPx = if (index > 0) {
+                with(density) { (cardMetrics.cardWidth / 3f).roundToPx().coerceAtLeast(0) }
+            } else 0
+            lazyListState.scrollToItem(scrollIndex, scrollOffset = peekOffsetPx)
         }
         val focusRequested = restoreTargetRequester?.requestFocusAfterFrames(frames = 1) == true
         if (!focusRequested) {
@@ -346,8 +349,11 @@ fun EpisodesRow(
         if (scrollToEpisodeId.isNullOrBlank()) return@LaunchedEffect
         val index = dedupedEpisodes.indexOfFirst { it.id == scrollToEpisodeId }
         if (index < 0) return@LaunchedEffect
-        val offsetPx = with(density) { (cardMetrics.cardWidth * 2f / 3f - cardMetrics.itemSpacing).roundToPx() }
-        lazyListState.scrollToItem(index, scrollOffset = -offsetPx)
+        val scrollIndex = (index - 1).coerceAtLeast(0)
+        val peekOffsetPx = if (index > 0) {
+            with(density) { (cardMetrics.cardWidth / 3f).roundToPx().coerceAtLeast(0) }
+        } else 0
+        lazyListState.scrollToItem(scrollIndex, scrollOffset = peekOffsetPx)
         onScrollToEpisodeHandled()
     }
 

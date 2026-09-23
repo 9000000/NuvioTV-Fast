@@ -107,6 +107,7 @@ fun HeroContentSection(
     showFullReleaseDate: Boolean = true,
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
+    playButtonDownFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
     onHeroActionFocused: () -> Unit = {},
     onPlayFocusRestored: () -> Unit = {},
@@ -244,6 +245,7 @@ fun HeroContentSection(
                             onClick = onPlayClick,
                             onLongPress = onPlayLongPress,
                             focusRequester = playButtonFocusRequester,
+                            downFocusRequester = playButtonDownFocusRequester,
                             restoreFocusToken = restorePlayFocusToken,
                             onFocusRestored = {
                                 onHeroActionFocused()
@@ -347,6 +349,7 @@ private fun PlayButton(
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     restoreFocusToken: Int = 0,
     onFocusRestored: () -> Unit = {}
 ) {
@@ -409,7 +412,12 @@ private fun PlayButton(
                 }
                 false
             }
-            .focusProperties { up = FocusRequester.Cancel },
+            .focusProperties {
+                up = FocusRequester.Cancel
+                if (downFocusRequester != null) {
+                    down = downFocusRequester
+                }
+            },
         colors = ButtonDefaults.colors(
             containerColor = androidx.compose.ui.graphics.Color.White,
             focusedContainerColor = androidx.compose.ui.graphics.Color.White,

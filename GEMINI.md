@@ -94,9 +94,31 @@ Sử dụng các lệnh sau để kích hoạt quy trình tác chiến chuyên s
 - **/update-docs**: Đồng bộ tài liệu với mã nguồn.
 - **/visually**: Trực quan hóa logic & kiến trúc.
 
+## ⚡ Tích hợp Superpowers (obra/superpowers)
+Hệ thống kỹ năng phương pháp luận phát triển phần mềm chuẩn Superpowers đã được tích hợp vào `.agent/skills/`:
+- **using-superpowers**: Tự động nhận diện và kích hoạt kỹ năng phù hợp trước khi hành động.
+- **brainstorming**: Khám phá ý định người dùng, làm rõ yêu cầu và thống nhất thiết kế trước khi bắt tay vào triển khai.
+- **writing-plans** & **executing-plans**: Lập kế hoạch theo từng task nhỏ, độc lập, bám sát TDD, DRY, YAGNI và thực thi tuần tự.
+- **subagent-driven-development** & **dispatching-parallel-agents**: Điều phối các subagent độc lập xử lý task song song hoặc chuyên sâu.
+- **systematic-debugging**: Quy trình 4 pha gỡ lỗi triệt để (Reproduce -> Isolate -> Understand -> Fix & Verify), cấm đoán mò mẫm hay sửa triệu chứng.
+- **test-driven-development**: Chu kỳ Red -> Green -> Refactor nghiêm ngặt.
+- **verification-before-completion**: Kiểm chứng kết quả bằng test và chạy thực tế trước khi xác nhận hoàn tất.
+- **requesting-code-review** & **receiving-code-review**: Đánh giá và tiếp thu phản hồi chất lượng mã nguồn.
+- **finishing-a-development-branch**: Dọn dẹp, tổng kết và đóng gói nhánh phát triển an toàn.
+
+## 🦹 Tích hợp Ponytail (DietrichGebert/ponytail)
+Bộ kỹ năng "Lazy Senior Developer Mode" tối giản mã nguồn, loại bỏ over-engineering đã được tích hợp vào `.agent/skills/` và `.agent/rules/ponytail.md`:
+- **ponytail**: Chế độ tối giản cốt lõi - leo thang tối giản: YAGNI -> Tận dụng code cũ -> Stdlib -> Native feature -> Dependency có sẵn -> 1 dòng -> Code tối thiểu.
+- **ponytail-review**: Rà soát code chỉ để săn tìm sự phức tạp thừa thãi (chỉ ra dòng nào cần xóa, đơn giản hóa, dùng stdlib).
+- **ponytail-audit**: Quét toàn bộ repository để tìm code thừa, abstraction vô nghĩa hoặc thư viện không cần thiết.
+- **ponytail-debt**: Thu thập các comment `ponytail:` để theo dõi các điểm đánh đổi/đơn giản hóa có chủ đích.
+- **ponytail-gain**: Bảng điểm thống kê hiệu quả giảm thiểu dòng code và chi phí.
+- **ponytail-help**: Bảng hướng dẫn tra cứu nhanh các lệnh của Ponytail.
+
 ## Hướng dẫn tùy chỉnh
 
 Thêm các hướng dẫn cụ thể cho dự án của bạn tại đây.
 
 ---
 *Được tạo bởi Antigravity IDE*
+

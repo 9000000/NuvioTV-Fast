@@ -75,7 +75,6 @@ fun TorrentFilePickerDialog(
     onFileSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val listState = rememberLazyListState()
     val closeFocusRequester = remember { FocusRequester() }
 
     // Pre-calculate sorted list and UI models once per input change
@@ -119,6 +118,11 @@ fun TorrentFilePickerDialog(
     val matchedIndex = remember(uiFiles) {
         uiFiles.indexOfFirst { it.isMatched }
     }
+
+    val initialIndex = remember(matchedIndex) {
+        if (matchedIndex >= 0) matchedIndex else 0
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
 
     val fileFocusRequesters = remember(uiFiles.size) {
         List(uiFiles.size) { FocusRequester() }
@@ -357,31 +361,57 @@ private fun formatFileSize(bytes: Long): String {
     }
 }
 
-private fun buildEpisodeMatcher(season: Int?, episode: Int?): (String) -> Boolean {
+internal fun buildEpisodeMatcher(season: Int?, episode: Int?): (String) -> Boolean {
     if (episode == null) return { false }
     val epPattern = String.format(Locale.US, "%02d", episode)
     val epSingle = episode.toString()
 
-    val patterns = mutableListOf<String>()
-    if (season != null) {
+    val explicitSeasonEpPatterns = if (season != null) {
         val sPattern = String.format(Locale.US, "%02d", season)
         val sSingle = season.toString()
-        patterns.add("s${sPattern}e${epPattern}")
-        patterns.add("s${sSingle}e${epPattern}")
-        patterns.add("s${sPattern}e${epSingle}")
-        patterns.add("s${sSingle}e${epSingle}")
-        patterns.add("${sSingle}x${epPattern}")
-        patterns.add("${sSingle}x${epSingle}")
-    }
+        listOf(
+            "s${sPattern}e${epPattern}",
+            "s${sSingle}e${epPattern}",
+            "s${sPattern}e${epSingle}",
+            "s${sSingle}e${epSingle}",
+            "${sSingle}x${epPattern}",
+            "${sSingle}x${epSingle}"
+        )
+    } else emptyList()
 
-    patterns.add("e${epPattern}")
-    patterns.add("ep${epPattern}")
-    patterns.add("ep.${epPattern}")
-    patterns.add("episode ${epSingle}")
-    patterns.add("episode ${epPattern}")
+    val epPrefixedPatterns = listOf(
+        "e${epPattern}",
+        "ep${epPattern}",
+        "ep.${epPattern}",
+        "episode ${epSingle}",
+        "episode ${epPattern}"
+    )
+
+    // Regex for anime filenames (e.g. "One Piece - 1050", "[SubsPlease] One Piece - 1050 (1080p)", "One Piece 0500")
+    val animeEpRegex = Regex("""(?i)(?<!\d)(?:e|ep|ep\.|episode[\s._-]*)?0*${episode}(?:v\d+)?(?![pPkK\d])(?=[\s._\-\])]|$)""")
+    val otherSeasonRegex = if (season != null) {
+        Regex("""(?i)\b[sS]0*(\d+)[eE]""")
+    } else null
 
     return { path ->
-        val clean = path.substringAfterLast('/')
-        patterns.any { clean.contains(it, ignoreCase = true) }
+        val clean = path.substringAfterLast('/').substringBeforeLast('.')
+        // 1. Explicit SxxExx match takes highest priority
+        if (explicitSeasonEpPatterns.any { clean.contains(it, ignoreCase = true) }) {
+            true
+        } else {
+            // Check if file specifies a different season (e.g. S02E... when targeting season 1)
+            val hasDifferentSeason = otherSeasonRegex?.find(clean)?.let { matchResult ->
+                val fileSeason = matchResult.groupValues[1].toIntOrNull()
+                fileSeason != null && fileSeason != season
+            } ?: false
+
+            if (hasDifferentSeason) {
+                false
+            } else if (epPrefixedPatterns.any { clean.contains(it, ignoreCase = true) }) {
+                true
+            } else {
+                animeEpRegex.containsMatchIn(clean)
+            }
+        }
     }
 }

@@ -503,7 +503,6 @@ private fun EpisodesListView(
     onEpisodeSelected: (Video) -> Unit
 ) {
     val seasonTabFocusRequester = remember { FocusRequester() }
-    val episodesListState = rememberLazyListState()
     val lastOpenedEpisodeIndex = remember(
         uiState.episodes,
         uiState.episodeStreamsForVideoId
@@ -513,10 +512,28 @@ private fun EpisodesListView(
         else uiState.episodes.indexOfFirst { it.id == targetId }
     }
     val currentEpisodeIndex = remember(uiState.episodes, uiState.currentSeason, uiState.currentEpisode) {
-        uiState.episodes.indexOfFirst { episode ->
-            episode.season == uiState.currentSeason && episode.episode == uiState.currentEpisode
+        val targetEpisode = uiState.currentEpisode
+        if (targetEpisode == null) -1
+        else {
+            val targetSeason = uiState.currentSeason
+            val exact = uiState.episodes.indexOfFirst { episode ->
+                episode.episode == targetEpisode &&
+                    (targetSeason == null || episode.season == targetSeason)
+            }
+            if (exact >= 0) exact
+            else {
+                uiState.episodes.indexOfFirst { it.episode == targetEpisode }
+            }
         }
     }
+    val initialTargetIndex = remember(lastOpenedEpisodeIndex, currentEpisodeIndex) {
+        when {
+            lastOpenedEpisodeIndex >= 0 -> lastOpenedEpisodeIndex
+            currentEpisodeIndex >= 0 -> currentEpisodeIndex
+            else -> 0
+        }
+    }
+    val episodesListState = rememberLazyListState(initialFirstVisibleItemIndex = initialTargetIndex)
 
     LaunchedEffect(uiState.showEpisodeStreams, uiState.episodes, currentEpisodeIndex) {
         if (uiState.showEpisodeStreams || uiState.episodes.isEmpty()) return@LaunchedEffect
