@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.poster.withCustomPosterUrls
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbMovieCollection
 import com.nuvio.tv.core.tmdb.TmdbService
@@ -680,7 +681,7 @@ class MetaDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             cancelCommentsRequests()
             val mdbListSettings = mdbListSettingsDataStore.settings.first()
-            val isMdbListActive = mdbListSettings.enabled && mdbListSettings.apiKey.isNotBlank()
+            val isMdbListActive = mdbListRepository.isAvailable(mdbListSettings)
             _uiState.update {
                 it.copy(
                     isLoading = true,
@@ -1255,12 +1256,13 @@ class MetaDetailsViewModel @Inject constructor(
                 }
             }
 
+            val pattern = layoutPreferenceDataStore.customPosterUrlPattern.first()
             val recommendations = if (hideUnreleasedContent) {
                 val today = LocalDate.now()
                 rawRecommendations.filterNot { it.isUnreleased(today) }
             } else {
                 rawRecommendations
-            }
+            }.withCustomPosterUrls(pattern)
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
@@ -1307,12 +1309,13 @@ class MetaDetailsViewModel @Inject constructor(
                 TmdbMovieCollection(name = null, items = emptyList())
             }
 
+            val collectionPattern = layoutPreferenceDataStore.customPosterUrlPattern.first()
             val filteredItems = if (hideUnreleasedContent) {
                 val today = LocalDate.now()
                 collection.items.filterNot { it.isUnreleased(today) }
             } else {
                 collection.items
-            }
+            }.withCustomPosterUrls(collectionPattern)
 
             _uiState.update { state ->
                 state.copy(
@@ -1325,7 +1328,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private suspend fun loadMDBListRatings(meta: Meta) {
         val settings = mdbListSettingsDataStore.settings.first()
-        val isMdbListActive = settings.enabled && settings.apiKey.isNotBlank()
+        val isMdbListActive = mdbListRepository.isAvailable(settings)
         val ratingsResult = runCatching {
             mdbListRepository.getRatingsForMeta(
                 meta = meta,
@@ -1463,7 +1466,7 @@ class MetaDetailsViewModel @Inject constructor(
             ?: return meta
 
         val isSeries = meta.apiType in listOf("series", "tv")
-        val needsEpisodes = (settings.useEpisodes || settings.useReleaseDates) && isSeries
+        val needsEpisodes = settings.useEpisodes && isSeries
 
         // Fetch main enrichment and episode enrichment in parallel.
         val (enrichment, episodeMap) = coroutineScope {
@@ -1521,12 +1524,6 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        if (enrichment != null && settings.useReleaseDates) {
-            updated = updated.copy(
-                releaseInfo = enrichment.releaseInfo ?: updated.releaseInfo
-            )
-        }
-
         if (enrichment != null && settings.useCredits) {
             val peopleCredits = buildList {
                 addAll(enrichment.directorMembers)
@@ -1580,7 +1577,7 @@ class MetaDetailsViewModel @Inject constructor(
                         released = selectEpisodeReleaseValue(
                             addonReleased = video.released,
                             tmdbAirDate = ep?.airDate,
-                            useTmdbReleaseDates = settings.useReleaseDates
+                            useTmdbReleaseDates = false
                         ),
                         thumbnail = if (settings.useEpisodes) ep?.thumbnail ?: video.thumbnail else video.thumbnail,
                         runtime = if (settings.useEpisodes) ep?.runtimeMinutes ?: video.runtime else video.runtime
