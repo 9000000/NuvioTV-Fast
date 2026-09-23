@@ -1243,6 +1243,7 @@
     <string name="trakt_more_like_this_source_dialog_subtitle">Wybierz źródło rekomendacji wyświetlanych na stronach szczegółów.</string>
     <string name="trakt_more_like_this_source_trakt">Trakt</string>
     <string name="trakt_more_like_this_source_tmdb">TMDB</string>
+    <string name="trakt_more_like_this_source_simkl">Simkl</string>
 
     <string name="network_speed_test_run">Uruchom test prędkości</string>
     <string name="network_speed_test_running">Trwa test prędkości</string>
@@ -1317,6 +1318,7 @@
 
     <string name="detail_more_like_this_powered_by_tmdb">Na podstawie danych TMDB</string>
     <string name="detail_more_like_this_powered_by_trakt">Na podstawie danych Trakt</string>
+    <string name="detail_more_like_this_powered_by_simkl">Na podstawie danych Simkl</string>
     <string name="library_filter_genre">Gatunek</string>
     <string name="library_filter_year">Rok</string>
     <string name="library_filter_watched">Obejrzane</string>
