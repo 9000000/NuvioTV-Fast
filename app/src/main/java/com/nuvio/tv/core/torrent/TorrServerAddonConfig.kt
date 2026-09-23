@@ -33,7 +33,10 @@ data class TorrServerAddonConfigData(
     val preload: Boolean = true,
     val saveToDb: Boolean = false,
     val gst: Boolean = false
-)
+) {
+    val effectiveServerUrl: String
+        get() = if (useEmbeddedServer) "http://127.0.0.1:${TorrServerBinary.PORT}" else serverUrl.trim().trimEnd('/')
+}
 
 @Singleton
 class TorrServerAddonConfig @Inject constructor(

@@ -161,14 +161,30 @@ fun TorrServerSettingsContent(
                     // Test Server Connection Button
                     item(key = "torrserver_test_server_btn") {
                         val testDesc = when {
-                            uiState.isTestingServer -> "Đang kiểm tra..."
-                            uiState.useEmbeddedServer -> "Kiểm tra kết nối máy chủ tích hợp (127.0.0.1:8091)"
+                            uiState.isTestingServer -> "Đang kiểm tra kết nối..."
+                            uiState.serverStatusSuccess == true && uiState.serverStatusMessage != null -> {
+                                if (uiState.useEmbeddedServer) {
+                                    "Phiên bản: ${uiState.serverStatusMessage} (Hoạt động tốt)"
+                                } else {
+                                    "Kết nối thành công: ${uiState.serverStatusMessage}"
+                                }
+                            }
+                            uiState.serverStatusSuccess == false && uiState.serverStatusMessage != null -> {
+                                "Lỗi: ${uiState.serverStatusMessage}"
+                            }
+                            uiState.useEmbeddedServer -> "Kiểm tra kết nối và lấy phiên bản máy chủ tích hợp (127.0.0.1:8091)"
                             else -> "Kiểm tra kết nối GET /echo tới máy chủ ngoài"
                         }
                         SettingsActionRow(
                             title = stringResource(R.string.torrserver_test_connection),
                             subtitle = testDesc,
-                            value = if (uiState.isTestingServer) "..." else null,
+                            value = when {
+                                uiState.isTestingServer -> "..."
+                                uiState.serverStatusSuccess == true -> "✅ ${uiState.serverStatusMessage}"
+                                uiState.serverStatusSuccess == false -> "❌ Lỗi"
+                                else -> null
+                            },
+                            valueColor = if (uiState.serverStatusSuccess == true) NuvioTheme.colors.Success else NuvioTheme.colors.Error,
                             leadingIcon = Icons.Default.Refresh,
                             onClick = { viewModel.onEvent(TorrServerSettingsEvent.TestServerConnection) }
                         )

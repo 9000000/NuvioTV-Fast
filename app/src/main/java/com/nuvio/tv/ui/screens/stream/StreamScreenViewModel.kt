@@ -1471,7 +1471,7 @@ class StreamScreenViewModel @Inject constructor(
             } ?: return@withContext null
 
         val config = torrServerAddonConfig.config.first()
-        val serverUrl = config.serverUrl.trim().trimEnd('/')
+        val serverUrl = torrentService.getActiveServerUrl()
 
         val hash = torrServerRemoteApi.addTorrent(
             magnetLink = magnet,
@@ -1589,7 +1589,7 @@ class StreamScreenViewModel @Inject constructor(
                 }
 
                 val config = torrServerAddonConfig.config.first()
-                val serverUrl = config.serverUrl.trim().trimEnd('/')
+                val serverUrl = torrentService.getActiveServerUrl()
 
                 // Add torrent to remote TorrServer
                 val hash = torrServerRemoteApi.addTorrent(
@@ -1661,7 +1661,7 @@ class StreamScreenViewModel @Inject constructor(
         val pendingStream = _uiState.value.torrentFilePickerPendingStream ?: return null
         val hash = _uiState.value.torrentFilePickerPendingHash ?: pendingStream.getEffectiveInfoHash() ?: return null
         val config = torrServerAddonConfig.config.first()
-        val serverUrl = config.serverUrl.trim().trimEnd('/')
+        val serverUrl = torrentService.getActiveServerUrl()
 
         val magnet = pendingStream.torrentMagnetUri()
             ?: pendingStream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }

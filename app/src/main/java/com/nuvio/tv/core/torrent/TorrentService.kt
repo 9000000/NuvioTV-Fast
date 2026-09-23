@@ -52,6 +52,21 @@ class TorrentService @Inject constructor(
     private var currentHash: String? = null
 
     /**
+     * Resolves the active TorrServer URL.
+     * If embedded server is enabled, ensures the local binary process is running and returns its base URL (http://127.0.0.1:8091).
+     * Otherwise returns the configured remote server URL.
+     */
+    suspend fun getActiveServerUrl(): String = withContext(Dispatchers.IO) {
+        val config = addonConfig.config.first()
+        if (config.useEmbeddedServer) {
+            binary.start()
+            binary.baseUrl
+        } else {
+            config.serverUrl.trim().trimEnd('/')
+        }
+    }
+
+    /**
      * Starts streaming a torrent. Uses TorrServer Remote if enabled, otherwise falls back to P2P native.
      */
     suspend fun startStream(

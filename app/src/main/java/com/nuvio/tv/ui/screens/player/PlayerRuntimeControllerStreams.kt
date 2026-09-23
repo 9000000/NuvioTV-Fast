@@ -2043,7 +2043,7 @@ internal fun PlayerRuntimeController.prepareTorrServerFilePicker(stream: Stream)
             }
 
             val config = torrServerAddonConfig.config.first()
-            val serverUrl = config.serverUrl.trim().trimEnd('/')
+            val serverUrl = torrentService.getActiveServerUrl()
 
             val hash = torrServerRemoteApi.addTorrent(
                 magnetLink = magnet,
@@ -2133,7 +2133,7 @@ internal fun PlayerRuntimeController.resolveTorrServerPlaybackAndSwitch(fileId: 
 
     scope.launch(Dispatchers.IO) {
         val config = torrServerAddonConfig.config.first()
-        val serverUrl = config.serverUrl.trim().trimEnd('/')
+        val serverUrl = torrentService.getActiveServerUrl()
         val magnet = pendingStream.torrentMagnetUri()
             ?: pendingStream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
             ?: "magnet:?xt=urn:btih:$hash"

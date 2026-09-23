@@ -134,10 +134,15 @@ class TorrServerSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isCheckingGst = true, gstStatusMessage = null, gstStatusSuccess = null) }
             val current = _uiState.value
+            val targetUrl = if (current.useEmbeddedServer) {
+                runCatching { torrentService.getActiveServerUrl() }.getOrDefault("http://127.0.0.1:8091")
+            } else {
+                current.serverUrl
+            }
             val result = remoteApi.checkGStreamerSupport(
-                serverUrl = current.serverUrl,
-                username = current.authUsername,
-                password = current.authPassword
+                serverUrl = targetUrl,
+                username = if (current.useEmbeddedServer) null else current.authUsername,
+                password = if (current.useEmbeddedServer) null else current.authPassword
             )
             result.fold(
                 onSuccess = { supported ->
@@ -167,8 +172,9 @@ class TorrServerSettingsViewModel @Inject constructor(
             _uiState.update { it.copy(isTestingServer = true, serverStatusMessage = null, serverStatusSuccess = null) }
             val current = _uiState.value
             if (current.useEmbeddedServer) {
+                val serverUrl = runCatching { torrentService.getActiveServerUrl() }.getOrDefault("http://127.0.0.1:8091")
                 val result = remoteApi.healthCheck(
-                    serverUrl = "http://127.0.0.1:8091",
+                    serverUrl = serverUrl,
                     username = null,
                     password = null
                 )
@@ -177,17 +183,17 @@ class TorrServerSettingsViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isTestingServer = false,
-                                serverStatusMessage = "Local: $version (Đang chạy)",
+                                serverStatusMessage = version,
                                 serverStatusSuccess = true
                             )
                         }
                     },
-                    onFailure = {
+                    onFailure = { error ->
                         _uiState.update {
                             it.copy(
                                 isTestingServer = false,
-                                serverStatusMessage = "Máy chủ tích hợp sẵn sàng (Tự khởi chạy khi phát)",
-                                serverStatusSuccess = true
+                                serverStatusMessage = "Lỗi khởi chạy máy chủ tích hợp: ${error.message}",
+                                serverStatusSuccess = false
                             )
                         }
                     }
