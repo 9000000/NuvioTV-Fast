@@ -1153,8 +1153,6 @@
     <string name="tmdb_basic_info_subtitle">來自 TMDB 的描述、類型和評分</string>
     <string name="tmdb_details_title">詳細資訊</string>
     <string name="tmdb_details_subtitle">來自 TMDB 的片長、狀態、國家和語言</string>
-    <string name="tmdb_release_dates_title">上映日期</string>
-    <string name="tmdb_release_dates_subtitle">來自 TMDB 的上映和播出日期</string>
     <string name="tmdb_credits_title">演職人員</string>
     <string name="tmdb_credits_subtitle">來自 TMDB 的演員 (含照片)、導演和編劇</string>
     <string name="tmdb_productions_title">製作公司</string>
