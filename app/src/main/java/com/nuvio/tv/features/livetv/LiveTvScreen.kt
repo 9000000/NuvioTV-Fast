@@ -213,24 +213,44 @@ private fun LiveTvContent(
     onNavigateToSettings: () -> Unit
 ) {
     // Dùng rememberSaveable để nhớ filter đã chọn giữa các lần navigation
-    var activeFilter by rememberSaveable { mutableStateOf(FilterType.ALL) }
+    var activeFilter by rememberSaveable { mutableStateOf(FilterType.RECENT) }
     var selectedGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
     var isInitialEntry by rememberSaveable { mutableStateOf(true) }
     var showPlaylistDropdown by remember { mutableStateOf(false) }
+    var launchingChannelId by remember { mutableStateOf<String?>(null) }
 
-    // Kênh thuộc phạm vi playlist đã chọn (hoặc tất cả kênh nếu chưa chọn playlist)
+    // Lắng nghe tín hiệu điều hướng từ Sidebar để luôn trở về giao diện mặc định
+    val resetTrigger by LiveTvRepository.navigationResetEvent.collectAsState()
+    var lastHandledResetTrigger by rememberSaveable { mutableStateOf(0L) }
+
+    LaunchedEffect(resetTrigger) {
+        if (resetTrigger != 0L && resetTrigger != lastHandledResetTrigger) {
+            lastHandledResetTrigger = resetTrigger
+            selectedPlaylistId = null
+            selectedGroup = null
+            showPlaylistDropdown = false
+            activeFilter = if (state.recentChannelIds.isNotEmpty()) FilterType.RECENT else FilterType.FAVORITES
+            isInitialEntry = true
+        }
+    }
+
+    // Kênh thuộc phạm vi playlist đã chọn (rỗng nếu chưa chọn playlist cụ thể)
     val playlistScopedChannels = remember(state.channels, selectedPlaylistId) {
         if (selectedPlaylistId == null) {
-            state.channels
+            emptyList()
         } else {
             state.channels.filter { it.playlistId == selectedPlaylistId }
         }
     }
 
     // Các mục (nhóm) CHỈ thuộc về danh sách đang chọn
-    val allGroups = remember(playlistScopedChannels) {
-        playlistScopedChannels.mapNotNull { it.group?.trim() }.filter { it.isNotBlank() }.distinct().sorted()
+    val allGroups = remember(playlistScopedChannels, selectedPlaylistId) {
+        if (selectedPlaylistId == null) {
+            emptyList()
+        } else {
+            playlistScopedChannels.mapNotNull { it.group?.trim() }.filter { it.isNotBlank() }.distinct().sorted()
+        }
     }
 
     // Tất cả playlist có kênh (bao gồm M3U, Xtream và Stalker Portal)
@@ -274,19 +294,29 @@ private fun LiveTvContent(
         state.channels, activeFilter, selectedGroup, selectedPlaylistId,
         state.favoriteChannelIds, state.recentChannelIds, playlistScopedChannels
     ) {
-        when (activeFilter) {
-            FilterType.ALL -> {
-                if (selectedPlaylistId != null) playlistScopedChannels else state.channels
+        val channelMap = state.channels.associateBy { it.id }
+        if (selectedPlaylistId == null) {
+            // Khi chưa chọn danh sách phát: CHỈ hiển thị Gần đây hoặc Yêu thích
+            when (activeFilter) {
+                FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
+                FilterType.RECENT -> state.recentChannelIds.mapNotNull { channelMap[it] }
+                else -> {
+                    if (state.recentChannelIds.isNotEmpty()) {
+                        state.recentChannelIds.mapNotNull { channelMap[it] }
+                    } else {
+                        state.channels.filter { it.id in state.favoriteChannelIds }
+                    }
+                }
             }
-            FilterType.PLAYLIST -> playlistScopedChannels
-            FilterType.GROUP -> {
-                playlistScopedChannels.filter { it.group?.trim() == selectedGroup }
-            }
-            FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
-            // Các kênh trong mục xem gần đây GIỮ NGUYÊN (không bị lọc theo playlist đang chọn)
-            FilterType.RECENT -> {
-                val channelMap = state.channels.associateBy { it.id }
-                state.recentChannelIds.mapNotNull { channelMap[it] }
+        } else {
+            // Khi đã chọn danh sách phát cụ thể
+            when (activeFilter) {
+                FilterType.ALL, FilterType.PLAYLIST -> playlistScopedChannels
+                FilterType.GROUP -> {
+                    playlistScopedChannels.filter { it.group?.trim() == selectedGroup }
+                }
+                FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
+                FilterType.RECENT -> state.recentChannelIds.mapNotNull { channelMap[it] }
             }
         }
     }
@@ -312,9 +342,6 @@ private fun LiveTvContent(
     val groupChipFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val playlistDropdownButtonFocusRequester = remember { FocusRequester() }
 
-    // Tính số chip tĩnh trước GROUP chips: Playlist (luôn có), Tất cả kênh, Favorites, Recent (nếu có)
-    val staticChipCount = 1 + 1 + 1 + (if (state.recentChannelIds.isNotEmpty()) 1 else 0)
-
     LaunchedEffect(filteredChannels.map { it.id }) {
         channelFocusRequesters.keys.retainAll(filteredChannels.map { it.id }.toSet())
     }
@@ -333,17 +360,23 @@ private fun LiveTvContent(
         }
     }
 
-    // Focus ban đầu - ưu tiên Recent nếu có, không thì All Channels
-    LaunchedEffect(isInitialEntry, state.recentChannelIds) {
+    // Focus ban đầu khi vào màn hình: nếu chưa chọn danh sách phát thì ưu tiên Recent -> Favorites -> nút chọn Playlist
+    LaunchedEffect(isInitialEntry, state.recentChannelIds, state.favoriteChannelIds, selectedPlaylistId) {
         if (isInitialEntry) {
             delay(150)
-            if (state.recentChannelIds.isNotEmpty()) {
-                // Có lịch sử xem → hiển thị Recent
-                activeFilter = FilterType.RECENT
-                runCatching { recentChipFocusRequester.requestFocus() }
+            if (selectedPlaylistId == null) {
+                if (state.recentChannelIds.isNotEmpty()) {
+                    activeFilter = FilterType.RECENT
+                    runCatching { recentChipFocusRequester.requestFocus() }
+                } else if (state.favoriteChannelIds.isNotEmpty()) {
+                    activeFilter = FilterType.FAVORITES
+                    runCatching { favoritesChipFocusRequester.requestFocus() }
+                } else {
+                    activeFilter = FilterType.RECENT
+                    runCatching { playlistDropdownButtonFocusRequester.requestFocus() }
+                }
             } else {
-                // Chưa có lịch sử → hiển thị All Channels
-                activeFilter = FilterType.ALL
+                activeFilter = FilterType.PLAYLIST
                 runCatching { allChipFocusRequester.requestFocus() }
             }
             isInitialEntry = false
@@ -353,36 +386,29 @@ private fun LiveTvContent(
     // Helper navigate về chip hiện tại với scroll an toàn, retry và fallback
     suspend fun navigateToActiveChip() {
         showPlaylistDropdown = false
-        val hasRecent = state.recentChannelIds.isNotEmpty()
+        val hasRecent = state.recentChannelIds.isNotEmpty() || selectedPlaylistId == null
 
-        val isAllSelected = (activeFilter == FilterType.ALL && selectedPlaylistId == null) ||
-                (activeFilter == FilterType.PLAYLIST && selectedGroup == null)
-
-        val targetIndex = when {
-            isAllSelected -> 1
-            activeFilter == FilterType.FAVORITES -> 2
-            activeFilter == FilterType.RECENT -> if (hasRecent) 3 else 2
-            activeFilter == FilterType.GROUP -> {
-                val groupIdx = selectedGroup?.let { allGroups.indexOf(it) } ?: -1
-                if (groupIdx >= 0) {
-                    (if (hasRecent) 4 else 3) + groupIdx
-                } else {
-                    1
-                }
+        val (targetIndex, getTargetRequester) = if (selectedPlaylistId == null) {
+            // Khi chưa chọn danh sách: 0 = Nút chọn playlist, 1 = Recent (nếu có), 2 = Favorites
+            when (activeFilter) {
+                FilterType.RECENT -> (if (hasRecent) 1 else 0) to { recentChipFocusRequester }
+                FilterType.FAVORITES -> (if (hasRecent) 2 else 1) to { favoritesChipFocusRequester }
+                else -> 0 to { playlistDropdownButtonFocusRequester }
             }
-            else -> 0
-        }
-
-        val getTargetRequester: () -> FocusRequester = {
+        } else {
+            val isAllSelected = (activeFilter == FilterType.ALL || activeFilter == FilterType.PLAYLIST) && selectedGroup == null
             when {
-                isAllSelected -> allChipFocusRequester
-                activeFilter == FilterType.FAVORITES -> favoritesChipFocusRequester
-                activeFilter == FilterType.RECENT -> if (hasRecent) recentChipFocusRequester else favoritesChipFocusRequester
+                isAllSelected -> 1 to { allChipFocusRequester }
+                activeFilter == FilterType.RECENT && hasRecent -> 2 to { recentChipFocusRequester }
+                activeFilter == FilterType.FAVORITES -> (if (hasRecent) 3 else 2) to { favoritesChipFocusRequester }
                 activeFilter == FilterType.GROUP -> {
-                    selectedGroup?.let { groupChipFocusRequesters.getOrPut(it) { FocusRequester() } }
-                        ?: allChipFocusRequester
+                    val groupIdx = selectedGroup?.let { allGroups.indexOf(it) } ?: -1
+                    val baseIndex = 1 + (if (hasRecent) 1 else 0) + 1
+                    val idx = if (groupIdx >= 0) baseIndex + groupIdx else 1
+                    val req = { selectedGroup?.let { groupChipFocusRequesters.getOrPut(it) { FocusRequester() } } ?: allChipFocusRequester }
+                    idx to req
                 }
-                else -> playlistDropdownButtonFocusRequester
+                else -> 0 to { playlistDropdownButtonFocusRequester }
             }
         }
 
@@ -496,10 +522,10 @@ private fun LiveTvContent(
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                 userScrollEnabled = true
             ) {
-                // Playlist Dropdown Button — nút chọn danh sách
+                // 1. Playlist Dropdown Button — nút chọn danh sách
                 item(key = "playlist_dropdown") {
                     PlaylistDropdownButton(
-                        selectedName = selectedPlaylistName ?: stringResource(R.string.livetv_group_all),
+                        selectedName = selectedPlaylistName,
                         isActive = showPlaylistDropdown,
                         isOpen = showPlaylistDropdown,
                         focusRequester = playlistDropdownButtonFocusRequester,
@@ -510,40 +536,26 @@ private fun LiveTvContent(
                     )
                 }
 
-                // Chip Tất cả kênh trong phạm vi danh sách hiện tại
-                item(key = "all_channels_chip") {
-                    val isAllSelected = (activeFilter == FilterType.ALL && selectedPlaylistId == null) ||
-                            (activeFilter == FilterType.PLAYLIST && selectedGroup == null)
-                    FilterChipItem(
-                        label = stringResource(R.string.livetv_group_all),
-                        isSelected = isAllSelected,
-                        onClick = {
-                            activeFilter = if (selectedPlaylistId != null) FilterType.PLAYLIST else FilterType.ALL
-                            selectedGroup = null
-                            showPlaylistDropdown = false
-                            isInitialEntry = false
-                        },
-                        focusRequester = allChipFocusRequester
-                    )
+                // 2. Chip Tất cả kênh — CHỈ HIỆN KHI ĐÃ CHỌN PLAYLIST
+                if (selectedPlaylistId != null) {
+                    item(key = "all_channels_chip") {
+                        val isAllSelected = (activeFilter == FilterType.ALL || activeFilter == FilterType.PLAYLIST) && selectedGroup == null
+                        FilterChipItem(
+                            label = stringResource(R.string.livetv_group_all),
+                            isSelected = isAllSelected,
+                            onClick = {
+                                activeFilter = FilterType.PLAYLIST
+                                selectedGroup = null
+                                showPlaylistDropdown = false
+                                isInitialEntry = false
+                            },
+                            focusRequester = allChipFocusRequester
+                        )
+                    }
                 }
 
-                // FAVORITES
-                item(key = "favorites") {
-                    FilterChipItem(
-                        label = stringResource(R.string.livetv_group_favorites),
-                        isSelected = activeFilter == FilterType.FAVORITES,
-                        onClick = {
-                            activeFilter = FilterType.FAVORITES
-                            selectedGroup = null
-                            showPlaylistDropdown = false
-                            isInitialEntry = false
-                        },
-                        focusRequester = favoritesChipFocusRequester
-                    )
-                }
-
-                // RECENT - Các kênh xem gần đây giữ nguyên
-                if (state.recentChannelIds.isNotEmpty()) {
+                // 3. RECENT - Xem gần đây
+                if (state.recentChannelIds.isNotEmpty() || selectedPlaylistId == null) {
                     item(key = "recent") {
                         FilterChipItem(
                             label = stringResource(R.string.livetv_group_recent),
@@ -559,28 +571,90 @@ private fun LiveTvContent(
                     }
                 }
 
-                // GROUP chips - CHỈ CÁC NHÓM CỦA DANH SÁCH ĐANG CHỌN
-                items(allGroups, key = { "group_$it" }) { group ->
-                    val req = remember(group) { groupChipFocusRequesters.getOrPut(group) { FocusRequester() } }
+                // 4. FAVORITES - Kênh yêu thích
+                item(key = "favorites") {
                     FilterChipItem(
-                        label = group,
-                        isSelected = activeFilter == FilterType.GROUP && selectedGroup == group,
+                        label = stringResource(R.string.livetv_group_favorites),
+                        isSelected = activeFilter == FilterType.FAVORITES,
                         onClick = {
-                            activeFilter = FilterType.GROUP
-                            selectedGroup = group
+                            activeFilter = FilterType.FAVORITES
+                            selectedGroup = null
                             showPlaylistDropdown = false
                             isInitialEntry = false
                         },
-                        focusRequester = req
+                        focusRequester = favoritesChipFocusRequester
                     )
+                }
+
+                // 5. GROUP chips - CHỈ CÁC NHÓM CỦA DANH SÁCH ĐANG CHỌN (selectedPlaylistId != null)
+                if (selectedPlaylistId != null) {
+                    items(allGroups, key = { "group_$it" }) { group ->
+                        val req = remember(group) { groupChipFocusRequesters.getOrPut(group) { FocusRequester() } }
+                        FilterChipItem(
+                            label = group,
+                            isSelected = activeFilter == FilterType.GROUP && selectedGroup == group,
+                            onClick = {
+                                activeFilter = FilterType.GROUP
+                                selectedGroup = group
+                                showPlaylistDropdown = false
+                                isInitialEntry = false
+                            },
+                            focusRequester = req
+                        )
+                    }
                 }
             }
 
             // ── Channels Grid ──
             if (filteredChannels.isEmpty()) {
                 Box(Modifier.fillMaxWidth().weight(1f), Alignment.Center) {
-                    Text("Không có kênh nào trong mục này",
-                        color = NuvioTheme.colors.TextSecondary, fontSize = 15.sp)
+                    if (selectedPlaylistId == null) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            val emptyIcon = if (activeFilter == FilterType.FAVORITES) Icons.Default.Star else Icons.Default.LiveTv
+                            val emptyTitle = if (activeFilter == FilterType.FAVORITES) {
+                                stringResource(R.string.livetv_empty_favorites_title)
+                            } else {
+                                stringResource(R.string.livetv_empty_recent_title)
+                            }
+                            val emptyDesc = if (activeFilter == FilterType.FAVORITES) {
+                                stringResource(R.string.livetv_empty_favorites_desc)
+                            } else {
+                                stringResource(R.string.livetv_empty_recent_desc)
+                            }
+
+                            Icon(emptyIcon, null, Modifier.size(52.dp), tint = NuvioTheme.colors.Primary.copy(alpha = 0.8f))
+                            Text(emptyTitle, style = MaterialTheme.typography.titleMedium, color = NuvioTheme.colors.TextPrimary, fontWeight = FontWeight.Bold)
+                            Text(emptyDesc, style = MaterialTheme.typography.bodyMedium, color = NuvioTheme.colors.TextSecondary, textAlign = TextAlign.Center)
+                            Spacer(Modifier.height(4.dp))
+                            Card(
+                                onClick = {
+                                    showPlaylistDropdown = true
+                                },
+                                colors = CardDefaults.colors(
+                                    containerColor = NuvioTheme.colors.Primary,
+                                    focusedContainerColor = NuvioTheme.colors.FocusBackground
+                                ),
+                                shape = CardDefaults.shape(RoundedCornerShape(8.dp)),
+                                scale = CardDefaults.scale(focusedScale = 1.05f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(Icons.Default.PlaylistPlay, null, Modifier.size(20.dp), tint = NuvioTheme.colors.OnPrimary)
+                                    Text(stringResource(R.string.livetv_select_playlist), color = NuvioTheme.colors.OnPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        Text("Không có kênh nào trong mục này",
+                            color = NuvioTheme.colors.TextSecondary, fontSize = 15.sp)
+                    }
                 }
             } else {
                 LazyVerticalGrid(
@@ -599,12 +673,14 @@ private fun LiveTvContent(
                         TvChannelCard(
                             channel = channel,
                             isFavorite = isFav,
+                            isLaunching = (launchingChannelId == channel.id),
                             focusRequester = requester,
                             isFirstRow = itemIndex < GRID_COLUMNS,
                             isLastRow = itemIndex >= lastRowStartIndex,
                             onClick = {
                                 showPlaylistDropdown = false
                                 restoredChannelId = null
+                                launchingChannelId = channel.id
                                 onChannelSelected(channel)
                             },
                             onToggleFavorite = { onToggleFavorite(channel.id) },
@@ -633,16 +709,15 @@ private fun LiveTvContent(
             PlaylistDropdownPanel(
                 playlists = allPlaylists,
                 selectedPlaylistId = selectedPlaylistId,
-                isAllChannelsSelected = selectedPlaylistId == null,
-                onAllChannelsSelected = {
-                    activeFilter = FilterType.ALL
+                onDefaultViewSelected = {
                     selectedPlaylistId = null
                     selectedGroup = null
+                    activeFilter = if (state.recentChannelIds.isNotEmpty()) FilterType.RECENT else FilterType.FAVORITES
                     showPlaylistDropdown = false
                     isInitialEntry = false
                     coroutineScope.launch {
                         delay(60)
-                        allChipFocusRequester.requestFocus()
+                        playlistDropdownButtonFocusRequester.requestFocus()
                     }
                 },
                 onPlaylistSelected = { playlist ->
@@ -678,8 +753,7 @@ private fun PlaylistDropdownButton(
     focusRequester: FocusRequester,
     onClick: () -> Unit
 ) {
-    // Mặc định hiển thị "All Channels" nếu chưa chọn gì
-    val displayName = selectedName ?: stringResource(R.string.livetv_group_all)
+    val displayName = selectedName ?: stringResource(R.string.livetv_select_playlist)
     
     Card(
         onClick = onClick,
@@ -709,7 +783,7 @@ private fun PlaylistDropdownButton(
                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 140.dp)
+                modifier = Modifier.widthIn(max = 160.dp)
             )
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
@@ -727,8 +801,7 @@ private fun PlaylistDropdownButton(
 private fun PlaylistDropdownPanel(
     playlists: List<LiveTvPlaylist>,
     selectedPlaylistId: String?,
-    isAllChannelsSelected: Boolean,
-    onAllChannelsSelected: () -> Unit,
+    onDefaultViewSelected: () -> Unit,
     onPlaylistSelected: (LiveTvPlaylist) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -745,7 +818,7 @@ private fun PlaylistDropdownPanel(
             .shadow(elevation = 16.dp, shape = RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .background(NuvioTheme.colors.BackgroundElevated)
-            .widthIn(min = 220.dp, max = 320.dp)
+            .widthIn(min = 230.dp, max = 340.dp)
     ) {
         Column {
             // Header
@@ -759,7 +832,7 @@ private fun PlaylistDropdownPanel(
             ) {
                 Icon(Icons.Default.PlaylistPlay, null, Modifier.size(16.dp),
                     tint = NuvioTheme.colors.Primary)
-                Text("Chọn danh sách phát",
+                Text(stringResource(R.string.livetv_select_playlist),
                     style = MaterialTheme.typography.labelMedium,
                     color = NuvioTheme.colors.TextSecondary,
                     fontWeight = FontWeight.Medium)
@@ -770,26 +843,28 @@ private fun PlaylistDropdownPanel(
 
             // Playlist list
             LazyColumn(
-                modifier = Modifier.widthIn(min = 220.dp, max = 320.dp),
+                modifier = Modifier.widthIn(min = 230.dp, max = 340.dp),
                 contentPadding = PaddingValues(vertical = 6.dp)
             ) {
-                // ALL CHANNELS item - luôn ở đầu
-                item(key = "all_channels") {
-                    PlaylistDropdownAllChannelsItem(
-                        isSelected = isAllChannelsSelected,
-                        focusRequester = firstItemFocusRequester,
-                        onClick = onAllChannelsSelected,
-                        onKeyUp = onDismiss,
-                        isFirstItem = true,
-                        isLastItem = playlists.isEmpty()
-                    )
+                // DEFAULT VIEW item (chỉ hiện khi đang chọn 1 playlist cụ thể để có thể quay về mặc định)
+                if (selectedPlaylistId != null) {
+                    item(key = "default_view") {
+                        PlaylistDropdownDefaultViewItem(
+                            focusRequester = firstItemFocusRequester,
+                            onClick = onDefaultViewSelected,
+                            onKeyUp = onDismiss,
+                            isFirstItem = true,
+                            isLastItem = playlists.isEmpty()
+                        )
+                    }
                 }
                 
                 // Playlist items
                 itemsIndexed(playlists, key = { _, playlist -> playlist.id }) { index, playlist ->
                     val isSelected = playlist.id == selectedPlaylistId
+                    val isFirst = selectedPlaylistId == null && index == 0
                     val itemFocusRequester = remember(playlist.id) { 
-                        playlistFocusRequesters.getOrPut(playlist.id) { FocusRequester() }
+                        if (isFirst) firstItemFocusRequester else playlistFocusRequesters.getOrPut(playlist.id) { FocusRequester() }
                     }
                     val isLastItem = index == playlists.lastIndex
 
@@ -799,7 +874,7 @@ private fun PlaylistDropdownPanel(
                         focusRequester = itemFocusRequester,
                         onClick = { onPlaylistSelected(playlist) },
                         onKeyUp = onDismiss,
-                        isFirstItem = false,
+                        isFirstItem = isFirst,
                         isLastItem = isLastItem
                     )
                 }
@@ -808,11 +883,10 @@ private fun PlaylistDropdownPanel(
     }
 }
 
-// ─── Playlist Dropdown All Channels Item ───────────────────────────────────────
+// ─── Playlist Dropdown Default View Item ────────────────────────────────────────
 
 @Composable
-private fun PlaylistDropdownAllChannelsItem(
-    isSelected: Boolean,
+private fun PlaylistDropdownDefaultViewItem(
     focusRequester: FocusRequester,
     onClick: () -> Unit,
     onKeyUp: () -> Unit,
@@ -822,7 +896,6 @@ private fun PlaylistDropdownAllChannelsItem(
     var isFocused by remember { mutableStateOf(false) }
 
     val bgColor = when {
-        isSelected -> NuvioTheme.colors.Primary.copy(alpha = 0.18f)
         isFocused -> NuvioTheme.colors.FocusBackground
         else -> Color.Transparent
     }
@@ -835,25 +908,20 @@ private fun PlaylistDropdownAllChannelsItem(
             .onFocusChanged { isFocused = it.isFocused }
             .onKeyEvent { keyEvent ->
                 when {
-                    // UP từ item đầu → đóng dropdown
                     isFirstItem &&
                     keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
                     keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP -> {
                         onKeyUp(); true
                     }
-                    // DOWN từ item cuối → không làm gì (hoặc loop, tùy design)
                     isLastItem &&
                     keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
                     keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                        // Không làm gì, giữ focus tại chỗ
                         true
                     }
-                    // BACK → đóng dropdown
                     keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
                     keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_BACK -> {
                         onKeyUp(); true
                     }
-                    // OK / CENTER → chọn
                     keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
                     keyEvent.nativeKeyEvent.keyCode in listOf(
                         AndroidKeyEvent.KEYCODE_DPAD_CENTER,
@@ -886,25 +954,17 @@ private fun PlaylistDropdownAllChannelsItem(
                     imageVector = Icons.Default.LiveTv,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = if (isSelected) NuvioTheme.colors.Primary
-                           else if (isFocused) NuvioTheme.colors.TextPrimary
-                           else NuvioTheme.colors.TextSecondary
+                    tint = if (isFocused) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextSecondary
                 )
                 Text(
-                    text = "All Channels",
-                    color = if (isSelected) NuvioTheme.colors.Primary
-                            else if (isFocused) NuvioTheme.colors.TextPrimary
-                            else NuvioTheme.colors.TextSecondary,
+                    text = stringResource(R.string.livetv_default_view),
+                    color = if (isFocused) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextSecondary,
                     fontSize = 14.sp,
-                    fontWeight = if (isSelected || isFocused) FontWeight.SemiBold else FontWeight.Normal,
+                    fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                if (isSelected) {
-                    Icon(Icons.Default.Check, null, Modifier.size(16.dp),
-                        tint = NuvioTheme.colors.Primary)
-                }
             }
         }
     }
@@ -1044,6 +1104,7 @@ private fun FilterChipItem(
 private fun TvChannelCard(
     channel: LiveTvChannel,
     isFavorite: Boolean,
+    isLaunching: Boolean = false,
     focusRequester: FocusRequester? = null,
     isFirstRow: Boolean = false,
     isLastRow: Boolean = false,
@@ -1136,6 +1197,22 @@ private fun TvChannelCard(
                 Text(channel.name, color = Color.White, fontSize = 12.sp,
                     fontWeight = FontWeight.Medium, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+            }
+
+            // Launching loading overlay for instant feedback
+            if (isLaunching) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        color = NuvioTheme.colors.Primary,
+                        strokeWidth = 3.dp
+                    )
+                }
             }
         }
     }

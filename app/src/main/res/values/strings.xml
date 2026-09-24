@@ -2414,6 +2414,12 @@
     <string name="livetv_group_favorites">Favorites ⭐</string>
     <string name="livetv_group_recent">Recently Watched</string>
     <string name="livetv_channels_count">%1$d channels</string>
+    <string name="livetv_select_playlist">Select Playlist</string>
+    <string name="livetv_default_view">Default (Recent &amp; Favorites)</string>
+    <string name="livetv_empty_recent_title">No recently watched channels</string>
+    <string name="livetv_empty_recent_desc">Channels you watch will appear here for quick access.</string>
+    <string name="livetv_empty_favorites_title">No favorite channels</string>
+    <string name="livetv_empty_favorites_desc">Hold [OK] or [Menu] on any channel to add it to favorites.</string>
     <string name="action_select">Select</string>
     <string name="settings_rounded_ui">Rounded UI</string>
     <string name="cd_expand_sidebar">Expand sidebar</string>

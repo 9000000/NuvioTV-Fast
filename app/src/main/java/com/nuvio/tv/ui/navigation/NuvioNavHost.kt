@@ -171,9 +171,9 @@ private fun PlaybackNavHost(
                                 playableChannel.streamUrl.contains(".mkv", ignoreCase = true) -> "mkv"
                                 playableChannel.streamUrl.contains(".mpd", ignoreCase = true) -> "mpd"
                                 playableChannel.streamUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
-                                else -> null
+                                else -> "m3u8"
                             }
-                        val filename = effectiveType?.let { "live.$it" }
+                        val filename = effectiveType.let { "live.$it" }
                         val route = Screen.Player.createRoute(
                             streamUrl = playableChannel.streamUrl,
                             title = playableChannel.name,

@@ -2412,6 +2412,12 @@
     <string name="livetv_group_favorites">Yêu thích ⭐</string>
     <string name="livetv_group_recent">Xem gần đây 🕒</string>
     <string name="livetv_channels_count">%1$d kênh</string>
+    <string name="livetv_select_playlist">Chọn danh sách phát</string>
+    <string name="livetv_default_view">Mặc định (Gần đây &amp; Yêu thích)</string>
+    <string name="livetv_empty_recent_title">Chưa có kênh xem gần đây</string>
+    <string name="livetv_empty_recent_desc">Các kênh bạn xem sẽ xuất hiện ở đây để truy cập nhanh.</string>
+    <string name="livetv_empty_favorites_title">Chưa có kênh yêu thích</string>
+    <string name="livetv_empty_favorites_desc">Giữ phím [OK] hoặc [Menu] trên kênh bất kỳ để thêm vào yêu thích.</string>
     <string name="nav_settings">Cài đặt</string>
     <string name="action_select">Chọn</string>
     <string name="settings_rounded_ui">Giao diện bo góc</string>

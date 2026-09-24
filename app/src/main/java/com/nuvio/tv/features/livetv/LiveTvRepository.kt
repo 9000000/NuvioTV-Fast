@@ -60,6 +60,13 @@ object LiveTvRepository {
     private val _uiState = MutableStateFlow(LiveTvUiState())
     val uiState: StateFlow<LiveTvUiState> = _uiState.asStateFlow()
 
+    private val _navigationResetEvent = MutableStateFlow(0L)
+    val navigationResetEvent: StateFlow<Long> = _navigationResetEvent.asStateFlow()
+
+    fun requestResetToNavigationDefault() {
+        _navigationResetEvent.value = System.currentTimeMillis()
+    }
+
     private var hasLoaded = false
     private var liveTvConfigServer: LiveTvConfigServer? = null
 
@@ -415,30 +422,22 @@ object LiveTvRepository {
         var prepared = channel
 
         val isStalker = prepared.playlistId == STALKER_PLAYLIST_ID || !prepared.stalkerCommand.isNullOrBlank()
-        prepared = if (isStalker) {
-            preparePortalChannelForPlayback(prepared, _uiState.value.stalkerSettings)
-        } else {
-            val playlistSource = _uiState.value.playlists.firstOrNull { it.id == prepared.playlistId }?.source
-                ?: _uiState.value.playlistUrl
-            val resolution = resolveStreamMetadata(prepared.streamUrl, prepared.headers, playlistSource)
-            if (resolution.finalUrl != prepared.streamUrl || resolution.detectedType != null) {
-                prepared.copy(
-                    streamUrl = resolution.finalUrl,
-                    streamType = resolution.detectedType ?: prepared.streamType
-                )
-            } else {
-                prepared
-            }
+        if (isStalker) {
+            prepared = preparePortalChannelForPlayback(prepared, _uiState.value.stalkerSettings)
         }
 
-        // Resolve ClearKey HTTP URL to JWK JSON if needed
+        // Resolve ClearKey HTTP URL to JWK JSON if needed (with short timeout to avoid blocking)
         val drmKey = prepared.drmKey
         val isClearKey = prepared.drmType?.contains("clearkey", ignoreCase = true) == true ||
             (prepared.drmType.isNullOrBlank() && drmKey != null && !drmKey.startsWith("http", ignoreCase = true))
 
         if (isClearKey && drmKey != null && (drmKey.startsWith("http://", ignoreCase = true) || drmKey.startsWith("https://", ignoreCase = true))) {
             val resolvedJwk = withContext(Dispatchers.IO) {
-                ClearKeyUtil.fetchClearKeyJson(drmKey, prepared.headers)
+                runCatching {
+                    kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                        ClearKeyUtil.fetchClearKeyJson(drmKey, prepared.headers)
+                    }
+                }.getOrNull()
             }
             if (!resolvedJwk.isNullOrBlank()) {
                 prepared = prepared.copy(drmKey = resolvedJwk)

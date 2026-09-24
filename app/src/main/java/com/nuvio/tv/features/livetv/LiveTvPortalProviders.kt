@@ -314,6 +314,9 @@ private fun parseChannelsFromStalkerData(
     return result
 }
 
+private val stalkerLinkCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String>>()
+private const val STALKER_LINK_CACHE_TTL_MS = 10 * 60 * 1000L // 10 minutes
+
 internal suspend fun preparePortalChannelForPlayback(channel: LiveTvChannel, settings: LiveTvStalkerSettings): LiveTvChannel {
     val normalized = settings.normalized()
     val serverBaseUrl = normalized.portalServerBaseUrl()
@@ -327,9 +330,17 @@ internal suspend fun preparePortalChannelForPlayback(channel: LiveTvChannel, set
         ?: channel.id.removePrefix("stalker:").takeIf(String::isNotBlank)
         ?: channel.streamUrl.takeIf(String::isNotBlank)
 
-    val resolvedUrl = if (!rawCommand.isNullOrBlank()) {
-        requestCreateLink(normalized, rawCommand, serverBaseUrl, forceRefreshSession = false)
+    val now = System.currentTimeMillis()
+    val cached = stalkerLinkCache[channel.id]
+    val resolvedUrl = if (cached != null && (now - cached.first) < STALKER_LINK_CACHE_TTL_MS) {
+        cached.second
+    } else if (!rawCommand.isNullOrBlank()) {
+        val link = requestCreateLink(normalized, rawCommand, serverBaseUrl, forceRefreshSession = false)
             ?: requestCreateLink(normalized, rawCommand, serverBaseUrl, forceRefreshSession = true)
+        if (!link.isNullOrBlank()) {
+            stalkerLinkCache[channel.id] = Pair(now, link)
+        }
+        link
     } else null
 
     val channelIdOnly = channel.id.removePrefix("stalker:")
