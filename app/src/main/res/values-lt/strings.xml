@@ -844,8 +844,8 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="library_source_local">VIETINĖ</string>
     <string name="library_type_all">Visi</string>
     <string name="library_type_items">elementai</string>
-    <string name="library_empty_local_title">Kol kas čia nieko nėra</string>
-    <string name="library_empty_trakt_title">Šiame sąraše nieko nėra</string>
+    <string name="library_empty_local_title">Dar nėra %1$s</string>
+    <string name="library_empty_trakt_title">Šiame sąraše nėra %1$s</string>
     <string name="library_empty_local_subtitle">Išsaugokite mėgstamiausius, kad pamatytumėte juos čia</string>
     <string name="library_empty_trakt_subtitle">Naudokite „+“ informacijos lange turiniui pridėti į žiūrėjimo ar kitus sąrašus</string>
 
@@ -868,10 +868,10 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Prisijungti per telefoną</string>
     <string name="auth_qr_finishing">Užbaigiama…</string>
-    <string name="auth_qr_code_label">Skenuokite QR kodą</string>
-    <string name="auth_qr_expires">Kodas baigsis po %1$d s</string>
+    <string name="auth_qr_code_label">Kodas: %1$s</string>
+    <string name="auth_qr_expires">Galioja iki %1$s</string>
     <string name="auth_qr_scan_instruction">Nukreipkite kamerą į kodą</string>
-    <string name="auth_qr_code_display">QR kodo rodymas</string>
+    <string name="auth_qr_code_display">Kodas: %1$s</string>
     <string name="auth_qr_refresh">Atnaujinti kodą</string>
     <string name="auth_qr_continue_without_account">Tęsti be paskyros</string>
     <string name="auth_qr_connected">Prijungta</string>
@@ -903,8 +903,8 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
 
     <!-- PluginScreen -->
     <string name="plugin_readonly_notice">Naudojami pagrindinio profilio įskiepiai</string>
-    <string name="plugin_repositories_section">Repozitorijos</string>
-    <string name="plugin_providers_section">Teikėjai</string>
+    <string name="plugin_repositories_section">Repozitorijos (%1$d)</string>
+    <string name="plugin_providers_section">Teikėjai (%1$d)</string>
     <string name="plugin_title">Įskiepiai</string>
     <string name="plugin_subtitle">Tvarkyti projekto įskiepius ir šaltinius</string>
     <string name="plugin_add_repository">Pridėti repozitoriją</string>
@@ -918,12 +918,12 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="plugin_confirm_added">Pridėta:</string>
     <string name="plugin_confirm_removed">Pašalinta:</string>
     <string name="plugin_confirm_no_changes">Pakeitimų neaptikta</string>
-    <string name="plugin_confirm_total">Iš viso įskiepių</string>
+    <string name="plugin_confirm_total">Iš viso repozitorijų: %1$d</string>
     <string name="plugin_confirm_reject">Atmesti</string>
     <string name="plugin_confirm_confirm">Patvirtinti</string>
     <string name="plugin_updated_format">Atnaujinta: %1$s</string>
     <string name="plugin_test_btn">Testuoti</string>
-    <string name="plugin_test_results">Testo rezultatai</string>
+    <string name="plugin_test_results">Testo rezultatai (%1$d srautai)</string>
 
     <!-- ProfileSelectionScreen -->
     <string name="profile_selection_title">Kas žiūri?</string>
@@ -963,7 +963,7 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="account_sign_in_description">Prisijunkite, kad sinchronizuotumėte biblioteką, pažangą ir priedus tarp įrenginių. Biblioteka sinchronizuojama per „Nuvio Sync“, kai „Trakt“ neprijungta.</string>
     <string name="account_sync_code_title">Sinchronizavimo kodas</string>
     <string name="account_sync_code_description">Susiekite savo įrenginius naudodami kodą</string>
-    <string name="account_linked_devices">Susieti įrenginiai</string>
+    <string name="account_linked_devices">Susieti įrenginiai (%1$d)</string>
     <string name="account_no_linked_devices">Susietų įrenginių nėra</string>
     <string name="account_unlink">Atsieti</string>
 
@@ -971,7 +971,7 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="ratings_loading">Įkeliami įvertinimai…</string>
     <string name="ratings_unavailable">Įvertinimai neprieinami</string>
     <string name="ratings_load_error">Nepavyko įkelti įvertinimų</string>
-    <string name="ratings_season_summary">Sezono apžvalga</string>
+    <string name="ratings_season_summary">Sezonas %1$d – %2$d epizodai</string>
 
     <!-- SearchDiscoverSection -->
     <string name="discover_title">Atrasti</string>
@@ -988,9 +988,9 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="discover_empty_no_content_subtitle">Šioje kategorijoje elementų nėra</string>
 
     <!-- AddonManagerScreen -->
-    <string name="addon_confirm_total_addons">Iš viso priedų</string>
-    <string name="addon_confirm_total_catalogs">Iš viso katalogų</string>
-    <string name="addon_catalogs_types">Katalogų tipai</string>
+    <string name="addon_confirm_total_addons">Iš viso priedų: %1$d</string>
+    <string name="addon_confirm_total_catalogs">Iš viso katalogų: %1$d</string>
+    <string name="addon_catalogs_types">Katalogai: %1$d – Tipai: %2$s</string>
 
     <!-- PluginScreen -->
     <string name="plugin_and_more">ir dar %1$d</string>

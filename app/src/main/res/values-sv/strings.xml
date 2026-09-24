@@ -1370,16 +1370,8 @@
     <string name="addon_qr_collections_scan_instruction">Skanna med din telefon för att hantera samlingar</string>
 
     <!-- StreamScreen / P2P -->
-    <string name="p2p_consent_title">P2P-streaming</string>
-    <string name="p2p_consent_body">Denna ström använder peer-to-peer (P2P)-teknik. Genom att aktivera P2P bekräftar och godkänner du att:\n\n• Din IP-adress kommer att vara synlig för andra peers i nätverket\n• Du är ensam ansvarig för det innehåll du ser\n• Du bekräftar att du har laglig rätt att se detta innehåll i din jurisdiktion\n• Nuvio är inte värd för, distribuerar eller kontrollerar något P2P-innehåll\n• Nuvio bär inget ansvar för rättsliga konsekvenser som uppstår vid din användning av P2P-streaming\n\nDu använder denna funktion helt på egen risk. P2P kan inaktiveras när som helst i Inställningar.</string>
-    <string name="p2p_consent_enable">Aktivera P2P</string>
-    <string name="p2p_consent_cancel">Avbryt</string>
-    <string name="settings_p2p_title">P2P-streaming</string>
-    <string name="settings_p2p_subtitle">Tillåt peer-to-peer (torrent)-strömmar</string>
     <string name="settings_p2p_hide_stats_title">Dölj torrent-statistik</string>
     <string name="settings_p2p_hide_stats_subtitle">Dölj buffer, seeds, peers och nedladdningshastighet under laddning och uppspelning</string>
-    <string name="p2p_download_title">Laddar ner P2P-motor</string>
-    <string name="p2p_download_subtitle">Detta är en engångsnedladdning som krävs för P2P-streaming.</string>
 
     <!-- PlayerScreen -->
     <string name="player_loading_preparing">Förbereder ström…</string>

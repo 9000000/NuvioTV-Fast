@@ -110,14 +110,14 @@
     <string name="error_state_possible_fix">Možná oprava: %1$s</string>
     <string name="error_state_fix_retry_soon">skúste to znova o chvíľu.</string>
     <string name="error_state_issue_no_metadata_any_addon">Toto ID nemohlo načítať detaily, pretože žiadny z nainštalovaných doplnkov nevrátil metadáta.</string>
-    <string name="error_state_fix_no_metadata_any_addon">skúste iný doplnok, zakážte „Preferovať externý meta doplnok" v nastaveniach rozloženia, alebo potvrďte, že nainštalovaný doplnok podporuje toto ID.</string>
+    <string name="error_state_fix_no_metadata_any_addon">skúste iný doplnok, zakážte „Preferovať externý meta doplnok\" v nastaveniach rozloženia, alebo potvrďte, že nainštalovaný doplnok podporuje toto ID.</string>
     <string name="error_state_prefix_no_supported_metadata">Žiadny nainštalovaný doplnok nepodporuje metadáta pre </string>
     <string name="error_state_prefix_no_addon_for_id">Žiadny nainštalovaný doplnok nemohol poskytnúť metadáta pre id=</string>
     <string name="error_state_fix_no_supported_metadata">nainštalujte alebo aktualizujte doplnok, ktorý podporuje tento typ obsahu, a skúste znova.</string>
     <string name="error_state_prefix_tried_meta_addons">Vyskúšané meta doplnky:</string>
     <string name="error_state_fix_tried_meta_addons">nainštalujte doplnok, ktorý podporuje toto ID, alebo prekonfigurujte/aktualizujte doplnok a skúste znova.</string>
     <string name="error_state_issue_missing_metadata_for_id">nemá metadáta pre toto ID</string>
-    <string name="error_state_fix_missing_metadata_for_id">otvorte toto ID z iného doplnku, zakážte „Preferovať externý meta doplnok", alebo skontrolujte, či doplnok podporuje toto ID.</string>
+    <string name="error_state_fix_missing_metadata_for_id">otvorte toto ID z iného doplnku, zakážte „Preferovať externý meta doplnok\", alebo skontrolujte, či doplnok podporuje toto ID.</string>
     <string name="error_state_issue_addon_unreachable">nebol dostupný</string>
     <string name="error_state_fix_addon_unreachable">skontrolujte internetové pripojenie, overte, či URL doplnku stále funguje, a skúste znova.</string>
     <string name="error_state_issue_addon_connection_failed">odmietol pripojenie</string>
@@ -129,12 +129,12 @@
     <string name="error_state_fix_addon_generic">skúste znova, aktualizujte alebo preinštalujte doplnok, alebo vyskúšajte iný doplnok.</string>
     <string name="error_state_addon_issue_template">%1$s: %2$s.</string>
     <string name="error_meta_not_found">Metadáta nenájdené</string>
-    <string name="error_meta_no_supported_addon">Žiadny nainštalovaný doplnok nepodporuje metadáta pre „%1$s".</string>
+    <string name="error_meta_no_supported_addon">Žiadny nainštalovaný doplnok nepodporuje metadáta pre „%1$s\".</string>
     <string name="error_meta_no_addon_for_id">Žiadny nainštalovaný doplnok nemohol poskytnúť metadáta pre id=%1$s (typ=%2$s).</string>
     <string name="error_meta_tried_none">Vyskúšané meta doplnky: %1$s. Žiadny z nich neposkytol metadáta pre id=%2$s (typ=%3$s).</string>
     <string name="error_meta_tried_generic">Vyskúšané meta doplnky: %1$s. Metadáta sa nepodarilo načítať pre id=%2$s (typ=%3$s).</string>
     <string name="error_meta_tried_issues">Vyskúšané meta doplnky: %1$s. Metadáta sa nepodarilo načítať pre id=%2$s (typ=%3$s). Problémy: %4$s.</string>
-    <string name="error_stream_no_supported_addon">Žiadny nainštalovaný doplnok nepodporuje streamy pre „%1$s".</string>
+    <string name="error_stream_no_supported_addon">Žiadny nainštalovaný doplnok nepodporuje streamy pre „%1$s\".</string>
     <string name="error_stream_tried_none">Vyskúšané stream doplnky: %1$s. Žiadny z nich nevrátil streamy pre id=%2$s (typ=%3$s).</string>
     <string name="error_stream_tried_generic">Vyskúšané stream doplnky: %1$s. Streamy sa nepodarilo načítať pre id=%2$s (typ=%3$s).</string>
     <string name="error_stream_tried_issues">Vyskúšané stream doplnky: %1$s. Streamy sa nepodarilo načítať pre id=%2$s (typ=%3$s). Problémy: %4$s.</string>
@@ -428,8 +428,6 @@
     <string name="essential_stream_selection_subtitle">Vyberte manuálne alebo automaticky prehrajte prvý dostupný stream.</string>
     <string name="essential_autoplay_next_episode">Automaticky prehrať ďalšiu epizódu</string>
     <string name="essential_autoplay_next_episode_subtitle">Pokračovať na ďalšiu epizódu po skončení streamu.</string>
-    <string name="essential_p2p_streams">P2P streamy</string>
-    <string name="essential_p2p_streams_subtitle">Povoliť peer-to-peer zdroje streamov.</string>
     <string name="essential_subtitle_language_subtitle">Preferovaný jazyk titulkov.</string>
     <string name="essential_audio_language_subtitle">Preferovaný jazyk audia.</string>
     <!-- Account / sign-in error messages -->
@@ -1318,16 +1316,8 @@
     <string name="debrid_resolution_failed">Nepodarilo sa rozlíšiť tento Debrid stream.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P streamovanie</string>
-    <string name="p2p_consent_body">Tento stream používa peer-to-peer (P2P) technológiu. Povolením P2P beriete na vedomie a súhlasíte s tým, že:\n\n\u2022 Vaša IP adresa bude viditeľná pre ostatných účastníkov siete\n\u2022 Ste výhradne zodpovední za obsah, ku ktorému pristupujete\n\u2022 Potvrdzujete, že máte zákonné právo streamovať tento obsah vo vašej jurisdikcii\n\u2022 Nuvio nehostuje, nedistribuuje ani nekontroluje žiadny P2P obsah\n\u2022 Nuvio nenesie žiadnu zodpovednosť za právne dôsledky vyplývajúce z vášho používania P2P streamovania\n\nTúto funkciu používate výhradne na vlastné riziko. P2P je možné kedykoľvek zakázať v Nastaveniach.</string>
-    <string name="p2p_consent_enable">Povoliť P2P</string>
-    <string name="p2p_consent_cancel">Zrušiť</string>
-    <string name="settings_p2p_title">P2P streamovanie</string>
-    <string name="settings_p2p_subtitle">Povoliť peer-to-peer (torrent) streamy</string>
     <string name="settings_p2p_hide_stats_title">Skryť štatistiky torrentu</string>
     <string name="settings_p2p_hide_stats_subtitle">Skryť buffer, seeds, peers a rýchlosť sťahovania počas načítavania a prehrávania</string>
-    <string name="p2p_download_title">Sťahuje sa P2P engine</string>
-    <string name="p2p_download_subtitle">Toto je jednorazové sťahovanie potrebné pre P2P streamovanie.</string>
     <string name="stream_type_external">Externý</string>
     <string name="stream_player_picker_title">Ktorý prehrávač sa má použiť?</string>
     <string name="stream_player_internal">Interný</string>
@@ -2527,7 +2517,7 @@
 <string name="action_switch">Prepnúť</string>
 <string name="supporters_contributors_donation_progress_title">Tento mesiac server a údržba</string>
 <string name="supporters_contributors_donation_progress_complete">Pokryté. Ďalšia podpora ide na vývoj.</string>
-<string name="supporters_contributors_donation_progress_remaining">Po 100%, ďalšia podpora ide na vývoj.</string>
+<string name="supporters_contributors_donation_progress_remaining" formatted="false">Po 100%, ďalšia podpora ide na vývoj.</string>
 <string name="supporters_contributors_loading_donation_progress">Načítavanie pokroku financovania...</string>
 <string name="playback_external_forward_subtitles">Posielaj titulky do externého prehrávača</string>
 <string name="playback_external_forward_subtitles_sub">Načítaj titulky v tvojom preferovanom jazyku z doplnkov a posielaj ich do externého prehrávača.</string>
@@ -2798,7 +2788,7 @@
 <string name="playback_cache_vod_size">Veľkosť vyrovnávacej pamäte VOD</string>
 <string name="playback_cache_vod_size_sub">Maximálne využitie disku pre progresívnu vyrovnávaciu pamäť VOD (LRU-evicted).</string>
 <string name="playback_cache_info_range">Rozsah: %1$d – %2$d MB.</string>
-<string name="playback_cache_info_auto">Automatický režim sa zameriava na približne 10 %% voľného miesta.</string>
+<string name="playback_cache_info_auto" formatted="false">Automatický režim sa zameriava na približne 10 %% voľného miesta.</string>
 <string name="playback_cache_info_manual_headroom">Manuálny režim udržiava približne %1$d MB voľného miesta.</string>
 <string name="playback_cache_info_free_disk">Dostupné voľné miesto na disku: %1$s.</string>
 <string name="playback_cache_info_restart">Nová veľkosť vyrovnávacej pamäte sa uplatní po reštartovaní aplikácie pri zmene režimov alebo veľkostí.</string>

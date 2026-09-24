@@ -674,7 +674,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio sẽ luôn miễn phí và là mã nguồn mở. Nếu bạn muốn tài trợ dự án, bạn có thể góp phần trang trải thời gian và cơ sở hạ tầng cần thiết để duy trì dự án.</string>
     <string name="supporters_contributors_donation_progress_title">Máy chủ và bảo trì trong tháng này</string>
     <string name="supporters_contributors_donation_progress_complete">Đã đủ. Khoản tài trợ bổ sung hiện được dành cho việc phát triển.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Sau khi đạt 100%, khoản tài trợ bổ sung sẽ được dành cho việc phát triển.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Sau khi đạt 100%, khoản tài trợ bổ sung sẽ được dành cho việc phát triển.</string>
     <string name="supporters_contributors_loading_donation_progress">Đang tải tiến độ tài trợ…</string>
     <string name="supporters_contributors_donate_button">Quyên góp cho Nuvio</string>
     <string name="supporters_contributors_qr_title">Quét để quyên góp</string>
@@ -2641,7 +2641,7 @@
     <string name="collections_editor_back">Quay lại</string>
     <string name="collections_editor_edit_collection">Chỉnh sửa bộ sưu tập</string>
     <string name="collections_editor_catalog_count">%1$d danh mục</string>
-    <string name="collections_editor_source_count">%1$d nguồn · %2$s</string>
+    <string name="collections_editor_source_count">%1$d nguồn</string>
     <string name="collections_editor_sources">Nguồn</string>
     <string name="collections_editor_source">Nguồn</string>
     <string name="collections_editor_view_mode_tabs">Thẻ</string>
@@ -3103,7 +3103,7 @@
 
     <!-- Profile selection: PIN overlay messages -->
     <string name="profile_pin_saved_for_profile">Đã lưu mã PIN cho %1$s.</string>
-    <string name="profile_pin_lock_removed_for_profile">Đã gỡ khóa mã PIN cho %1$s. %1$s.</string>
+    <string name="profile_pin_lock_removed_for_profile">Đã gỡ khóa mã PIN cho %1$s.</string>
 
     <!-- Trakt: Related / comments / list items error fallbacks -->
     <string name="trakt_related_error_request_failed">Yêu cầu liên quan đến Trakt đã thất bại</string>
@@ -3253,7 +3253,7 @@
     <string name="playback_cache_vod_size">Dung lượng bộ nhớ đệm VOD</string>
     <string name="playback_cache_vod_size_sub">Dung lượng đĩa tối đa dành cho bộ nhớ đệm VOD lũy tiến (các mục ít được sử dụng gần đây sẽ bị xóa trước).</string>
     <string name="playback_cache_info_range">Phạm vi: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">Chế độ tự động sử dụng khoảng 10% dung lượng trống.</string>
+    <string name="playback_cache_info_auto" formatted="false">Chế độ tự động sử dụng khoảng 10% dung lượng trống.</string>
     <string name="playback_cache_info_manual_headroom">Chế độ thủ công giữ lại khoảng %1$d MB dung lượng dự phòng.</string>
     <string name="playback_cache_info_free_disk">Dung lượng đĩa trống: %1$s.</string>
     <string name="playback_cache_info_restart">Giới hạn bộ nhớ đệm mới sẽ có hiệu lực sau khi khởi động lại ứng dụng khi chuyển đổi giữa các chế độ hoặc dung lượng</string>

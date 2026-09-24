@@ -419,8 +419,6 @@
     <string name="essential_autoplay_next_episode">Autoafspil næste afsnit</string>
     <string name="essential_autoplay_next_episode_subtitle">Fortsæt til næste afsnit, når en stream er færdig.</string>
     <string name="external_auto_next_loading">Indlæser næste afsnit…</string>
-    <string name="essential_p2p_streams">P2P-streams</string>
-    <string name="essential_p2p_streams_subtitle">Tillad peer-to-peer-streamkilder.</string>
     <string name="essential_subtitle_language_subtitle">Foretrukket undertekstsprog.</string>
     <string name="essential_audio_language_subtitle">Foretrukket lydsprog.</string>
     <!-- Account / sign-in error messages -->
@@ -1378,16 +1376,8 @@
     <string name="debrid_resolution_failed">Kunne ikke løse denne Debrid-stream op.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P-streaming</string>
-    <string name="p2p_consent_body">Denne stream bruger peer-to-peer (P2P)-teknologi. Ved at aktivere P2P anerkender og accepterer du, at:\n\n\u2022 Din IP-adresse vil være synlig for andre peers i netværket\n\u2022 Du er eneansvarlig for det indhold, du tilgår\n\u2022 Du bekræfter, at du har den lovlige ret til at streame dette indhold i din jurisdiktion\n\u2022 Nuvio hoster, distribuerer eller kontrollerer ikke noget P2P-indhold\n\u2022 Nuvio er ikke ansvarlig for eventuelle juridiske konsekvenser som følge af din brug af P2P-streaming\n\nDu bruger denne funktion udelukkende på eget ansvar. P2P kan deaktiveres når som helst i Indstillinger.</string>
-    <string name="p2p_consent_enable">Aktivér P2P</string>
-    <string name="p2p_consent_cancel">Annullér</string>
-    <string name="settings_p2p_title">P2P-streaming</string>
-    <string name="settings_p2p_subtitle">Tillad peer-to-peer (torrent)-streams</string>
     <string name="settings_p2p_hide_stats_title">Skjul torrent-statistik</string>
     <string name="settings_p2p_hide_stats_subtitle">Skjul buffer, seeds, peers og downloadhastighed under indlæsning og afspilning</string>
-    <string name="p2p_download_title">Downloader P2P-motor</string>
-    <string name="p2p_download_subtitle">Dette er en engangsdownload, der kræves til P2P-streaming.</string>
     <string name="stream_type_external">Ekstern</string>
     <string name="stream_player_picker_title">Hvilken afspiller skal bruges?</string>
     <string name="stream_player_internal">Intern</string>
@@ -2657,7 +2647,7 @@
     <string name="playback_cache_vod_size">VOD-cachestørrelse</string>
     <string name="playback_cache_vod_size_sub">Maksimal diskbrug for progressiv VOD-cache (LRU-udryddet).</string>
     <string name="playback_cache_info_range">Interval: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">Automatisk tilstand sigter mod ca. 10% af ledig plads.</string>
+    <string name="playback_cache_info_auto" formatted="false">Automatisk tilstand sigter mod ca. 10% af ledig plads.</string>
     <string name="playback_cache_info_manual_headroom">Manuel tilstand holder ca. %1$dMB frirum.</string>
     <string name="playback_cache_info_free_disk">Ledig diskplads: %1$s.</string>
     <string name="playback_cache_info_restart">Ny cachegrænse træder i kraft efter genstart af appen, når der skiftes mellem tilstande/størrelser.</string>

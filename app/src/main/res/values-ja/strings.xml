@@ -419,8 +419,6 @@
     <string name="essential_autoplay_next_episode">次のエピソードを自動再生</string>
     <string name="essential_autoplay_next_episode_subtitle">ストリーム終了後に次のエピソードへ続行。</string>
     <string name="external_auto_next_loading">次のエピソードを読み込み中…</string>
-    <string name="essential_p2p_streams">P2Pストリーム</string>
-    <string name="essential_p2p_streams_subtitle">ピアツーピアストリームソースを許可。</string>
     <string name="essential_subtitle_language_subtitle">優先字幕言語。</string>
     <string name="essential_audio_language_subtitle">優先音声言語。</string>
     <!-- Account / sign-in error messages -->
@@ -523,7 +521,7 @@
     <string name="supporters_contributors_donate_copy">Nuvioは無料のオープンソースプロジェクトです。サポートしたい方は、開発・インフラの維持にご協力いただけます</string>
     <string name="supporters_contributors_donation_progress_title">今月のサーバー &amp; メンテナンス</string>
     <string name="supporters_contributors_donation_progress_complete">達成済み。追加のサポートは開発に充てられます。</string>
-    <string name="supporters_contributors_donation_progress_remaining">100% を超えると、追加のサポートは開発に充てられます。</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">100% を超えると、追加のサポートは開発に充てられます。</string>
     <string name="supporters_contributors_loading_donation_progress">資金調達の進捗を読み込み中…</string>
     <string name="supporters_contributors_donate_button">Nuvioに寄付</string>
     <string name="supporters_contributors_qr_title">QRをスキャンして寄付</string>
@@ -1382,16 +1380,8 @@
     <string name="debrid_resolution_failed">このDebridストリームを解決できませんでした。</string>
     <string name="stream_type_torrent">トレント</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2Pストリーミング</string>
-    <string name="p2p_consent_body">このストリームはピアツーピア（P2P）技術を使用します。P2Pを有効にすると、以下を了承したものとみなされます:\n\n\u2022 あなたのIPアドレスはネットワーク上の他のピアに公開されます\n\u2022 アクセスするコンテンツに対する責任はすべてあなた自身にあります\n\u2022 あなたの管轄区域でこのコンテンツをストリーミングする法的権利を有することを確認します\n\u2022 NuvioはP2Pコンテンツをホスト、配布、または制御しません\n\u2022 NuvioはP2Pストリーミングの使用に起因する法的結果に対して一切の責任を負いません\n\nこの機能は完全に自己責任で使用してください。P2Pはいつでも設定で無効にできます。</string>
-    <string name="p2p_consent_enable">P2Pを有効にする</string>
-    <string name="p2p_consent_cancel">キャンセル</string>
-    <string name="settings_p2p_title">P2Pストリーミング</string>
-    <string name="settings_p2p_subtitle">ピアツーピア（トレント）ストリームを許可</string>
     <string name="settings_p2p_hide_stats_title">トレント統計を非表示</string>
     <string name="settings_p2p_hide_stats_subtitle">読み込み中と再生中にバッファ、シード、ピア、ダウンロード速度を非表示</string>
-    <string name="p2p_download_title">P2Pエンジンをダウンロード中</string>
-    <string name="p2p_download_subtitle">P2Pストリーミングに必要な1回限りのダウンロードです。</string>
     <string name="stream_type_external">外部</string>
     <string name="stream_player_picker_title">使用するプレーヤーを選択してください</string>
     <string name="stream_player_internal">内部</string>
@@ -2658,7 +2648,7 @@
     <string name="playback_cache_vod_size">VODキャッシュサイズ</string>
     <string name="playback_cache_vod_size_sub">プログレッシブVODキャッシュの最大ディスク使用量（LRU削除）。</string>
     <string name="playback_cache_info_range">範囲: %1$d-%2$d MB。</string>
-    <string name="playback_cache_info_auto">自動モードは空き容量の約10%を目標とします。</string>
+    <string name="playback_cache_info_auto" formatted="false">自動モードは空き容量の約10%を目標とします。</string>
     <string name="playback_cache_info_manual_headroom">手動モードは約%1$dMBの余裕を確保します。</string>
     <string name="playback_cache_info_free_disk">利用可能な空きディスク: %1$s。</string>
     <string name="playback_cache_info_restart">新しいキャッシュ上限はモード/サイズ変更後にアプリ再起動で適用されます。</string>

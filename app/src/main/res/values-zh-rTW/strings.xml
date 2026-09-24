@@ -520,8 +520,6 @@
     <string name="essential_autoplay_next_episode">自動播放下一集</string>
     <string name="essential_autoplay_next_episode_subtitle">在串流播放結束後繼續播放下一集。</string>
     <string name="external_auto_next_loading">正在載入下一集…</string>
-    <string name="essential_p2p_streams">P2P 串流</string>
-    <string name="essential_p2p_streams_subtitle">允許點對點串流來源。</string>
     <string name="essential_subtitle_language_subtitle">偏好的字幕語言。</string>
     <string name="essential_audio_language_subtitle">偏好的音訊語言。</string>
     <!-- 帳戶/登入錯誤訊息 -->
@@ -657,7 +655,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio 將保持免費和開源。如果您想支持專案，可以幫助支付其背後的時間和基礎設施費用。</string>
     <string name="supporters_contributors_donation_progress_title">本月的伺服器與維護</string>
     <string name="supporters_contributors_donation_progress_complete">已覆蓋。額外的支持現在用於開發。</string>
-    <string name="supporters_contributors_donation_progress_remaining">達到 100% 後，額外的支持將用於開發。</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">達到 100% 後，額外的支持將用於開發。</string>
     <string name="supporters_contributors_loading_donation_progress">正在載入資金進度...</string>
     <string name="supporters_contributors_donate_button">支持 Nuvio</string>
     <string name="supporters_contributors_qr_title">掃描以支持</string>
@@ -1705,16 +1703,8 @@
     <string name="debrid_resolution_failed">無法解析此 Debrid 串流。</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P 串流</string>
-    <string name="p2p_consent_body">此串流使用點對點 (P2P) 技術。啟用 P2P 即表示您知悉並同意：\n\n\u2022 您的 IP 位址將對網路中的其他對等節點可見\n\u2022 您對所存取的內容負全部責任\n\u2022 您確認在您的司法管轄區內擁有串流此內容的合法權利\n\u2022 Nuvio 不託管、散佈或控制任何 P2P 內容\n\u2022 Nuvio 對您因使用 P2P 串流而產生的任何法律後果不承擔任何責任\n\n您完全自行承擔使用此功能的風險。P2P 可隨時在設定中停用。</string>
-    <string name="p2p_consent_enable">啟用 P2P</string>
-    <string name="p2p_consent_cancel">取消</string>
-    <string name="settings_p2p_title">P2P 串流</string>
-    <string name="settings_p2p_subtitle">允許點對點 (torrent) 串流</string>
     <string name="settings_p2p_hide_stats_title">隱藏 torrent 統計資料</string>
     <string name="settings_p2p_hide_stats_subtitle">在載入和播放期間隱藏緩衝、種子、對等節點和下載速度</string>
-    <string name="p2p_download_title">正在下載 P2P 引擎</string>
-    <string name="p2p_download_subtitle">這是 P2P 串流所需的一次性下載。</string>
     <string name="stream_type_external">外部</string>
     <string name="stream_player_picker_title">應使用哪個播放器？</string>
     <string name="stream_player_internal">內建</string>
@@ -3158,7 +3148,7 @@
     <string name="playback_cache_vod_size">VOD 快取大小</string>
     <string name="playback_cache_vod_size_sub">漸進式 VOD 快取的最大磁碟使用量 (LRU 淘汰)。</string>
     <string name="playback_cache_info_range">範圍：%1$d-%2$d MB。</string>
-    <string name="playback_cache_info_auto">自動模式目標約為可用空間的 10%。</string>
+    <string name="playback_cache_info_auto" formatted="false">自動模式目標約為可用空間的 10%。</string>
     <string name="playback_cache_info_manual_headroom">手動模式保留約 %1$dMB 的餘裕。</string>
     <string name="playback_cache_info_free_disk">可用磁碟空間：%1$s。</string>
     <string name="playback_cache_info_restart">在模式/大小之間切換後，新的快取上限會在應用程式重新啟動後生效。</string>

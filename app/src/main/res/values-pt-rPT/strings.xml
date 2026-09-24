@@ -254,7 +254,7 @@
     <string name="collections_editor_tmdb_watch_region_helper">Código de país ISO 3166-1 onde o título está disponível. Exemplo: PT, BR, US.</string>
     <string name="collections_editor_tmdb_quick_watch_regions">Regiões rápidas</string>
     <string name="collections_editor_tmdb_watch_providers">IDs dos serviços</string>
-    <string name="collections_editor_tmdb_watch_providers_helper">Utiliza os IDs dos serviços do TMDB. Separa vários com vírgulas para "E", ou com barras verticais para "OU".</string>
+    <string name="collections_editor_tmdb_watch_providers_helper">Utiliza os IDs dos serviços do TMDB. Separa vários com vírgulas para \"E\", ou com barras verticais para \"OU\".</string>
     <string name="collections_editor_tmdb_watch_providers_placeholder">8|337|350</string>
     <string name="collections_editor_tmdb_quick_watch_providers">Serviços rápidos</string>
     <string name="tmdb_error_load_source">Não foi possível carregar a fonte TMDB</string>
@@ -405,8 +405,6 @@
     <string name="essential_autoplay_next_episode">Reproduzir episódio seguinte automaticamente</string>
     <string name="essential_autoplay_next_episode_subtitle">Continua para o episódio seguinte após o término de um stream.</string>
     <string name="external_auto_next_loading">A carregar o episódio seguinte…</string>
-    <string name="essential_p2p_streams">Streams P2P</string>
-    <string name="essential_p2p_streams_subtitle">Permitir fontes de stream peer-to-peer.</string>
     <string name="essential_subtitle_language_subtitle">Idioma preferido das legendas.</string>
     <string name="essential_audio_language_subtitle">Idioma preferido do áudio.</string>
     <!-- Account / sign-in error messages -->
@@ -1337,16 +1335,8 @@
     <string name="debrid_resolution_failed">Não foi possível resolver este stream Debrid.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">Streaming P2P</string>
-    <string name="p2p_consent_body">Este stream utiliza tecnologia peer-to-peer (P2P). Ao ativar o P2P, reconheces e concordas que:\n\n\u2022 O teu endereço IP estará visível para outros utilizadores (peers) na rede\n\u2022 És o único responsável pelo conteúdo a que acedes\n\u2022 Confirmas que tens o direito legal de reproduzir este conteúdo na tua jurisdição\n\u2022 O Nuvio não aloja, distribui ou controla qualquer conteúdo P2P\n\u2022 O Nuvio não assume qualquer responsabilidade por quaisquer consequências legais decorrentes da tua utilização de streaming P2P\n\nUtilizas esta funcionalidade inteiramente por tua conta e risco. O P2P pode ser desativado a qualquer momento nas Definições.</string>
-    <string name="p2p_consent_enable">Ativar P2P</string>
-    <string name="p2p_consent_cancel">Cancelar</string>
-    <string name="settings_p2p_title">Streaming P2P</string>
-    <string name="settings_p2p_subtitle">Permitir streams peer-to-peer (torrent)</string>
     <string name="settings_p2p_hide_stats_title">Ocultar estatísticas de torrent</string>
     <string name="settings_p2p_hide_stats_subtitle">Ocultar buffer, seeds, peers e velocidade de transferência durante o carregamento e reprodução</string>
-    <string name="p2p_download_title">A transferir Motor P2P</string>
-    <string name="p2p_download_subtitle">Esta é uma transferência única necessária para streaming P2P.</string>
     <string name="stream_type_external">Externo</string>
     <string name="stream_player_picker_title">Que leitor deve ser utilizado?</string>
     <string name="stream_player_internal">Interno</string>
@@ -1870,7 +1860,7 @@
     <string name="trakt_status_syncing">A sincronizar...</string>
     <string name="trakt_status_sync_completed">Sincronização concluída</string>
     <string name="trakt_status_disconnected">Desligado do Trakt</string>
-    <string name="trakt_status_cw_window_updated">Janela de "Continuar a ver" atualizada</string>
+    <string name="trakt_status_cw_window_updated">Janela de \"Continuar a ver\" atualizada</string>
     <string name="trakt_status_rate_limited_slowing_polling">Taxa limite atingida, a abrandar a verificação...</string>
     <string name="trakt_user_fallback">Utilizador do Trakt</string>
     <string name="trakt_error_failed_start">Falha ao iniciar a autenticação do Trakt</string>
@@ -2075,7 +2065,7 @@
     <string name="collections_editor_tmdb_quick_companies">Estúdios rápidos</string>
     <string name="collections_editor_tmdb_quick_networks">Canais/Plataformas rápidos</string>
     <string name="collections_editor_tmdb_genres">IDs de género</string>
-    <string name="collections_editor_tmdb_genres_helper">Utiliza os números de género do TMDB. Separa vários com vírgulas para "E", ou com barras verticais para "OU".</string>
+    <string name="collections_editor_tmdb_genres_helper">Utiliza os números de género do TMDB. Separa vários com vírgulas para \"E\", ou com barras verticais para \"OU\".</string>
     <string name="collections_editor_tmdb_date_from">Lançamento ou emissão desde</string>
     <string name="collections_editor_tmdb_date_to">Lançamento ou emissão até</string>
     <string name="collections_editor_tmdb_date_helper">Utiliza o formato AAAA-MM-DD, por exemplo, 2024-01-01.</string>
@@ -2525,7 +2515,7 @@
     <string name="playback_cache_vod_size">Tamanho da cache VOD</string>
     <string name="playback_cache_vod_size_sub">Utilização máxima de disco para a cache VOD progressiva (removida por LRU).</string>
     <string name="playback_cache_info_range">Intervalo: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">O modo automático aponta para cerca de 10% do espaço livre.</string>
+    <string name="playback_cache_info_auto" formatted="false">O modo automático aponta para cerca de 10% do espaço livre.</string>
     <string name="playback_cache_info_manual_headroom">O modo manual mantém cerca de %1$d MB de margem.</string>
     <string name="playback_cache_info_free_disk">Espaço livre disponível: %1$s.</string>
     <string name="playback_cache_info_restart">O novo limite da cache aplica-se após reiniciar a app quando mudares de modo ou tamanho.</string>

@@ -508,8 +508,6 @@
     <string name="essential_autoplay_next_episode">Volgende aflevering automatisch afspelen</string>
     <string name="essential_autoplay_next_episode_subtitle">Ga verder met de volgende aflevering nadat een stream is afgelopen.</string>
     <string name="external_auto_next_loading">Volgende aflevering laden…</string>
-    <string name="essential_p2p_streams">P2P-streams</string>
-    <string name="essential_p2p_streams_subtitle">Peer-to-peer-streambronnen toestaan.</string>
     <string name="essential_subtitle_language_subtitle">Voorkeurstaal voor ondertiteling.</string>
     <string name="essential_audio_language_subtitle">Voorkeurstaal voor audio.</string>
     <!-- Account / sign-in error messages -->
@@ -644,7 +642,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio blijft gratis en opensource. Wil je het project steunen, dan kun je helpen de tijd en infrastructuur erachter te dekken.</string>
     <string name="supporters_contributors_donation_progress_title">Server &amp; onderhoud van deze maand</string>
     <string name="supporters_contributors_donation_progress_complete">Gedekt. Extra steun gaat nu naar de ontwikkeling.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Na 100% gaat extra steun naar de ontwikkeling.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Na 100% gaat extra steun naar de ontwikkeling.</string>
     <string name="supporters_contributors_loading_donation_progress">Financieringsvoortgang laden...</string>
     <string name="supporters_contributors_donate_button">Steun Nuvio</string>
     <string name="supporters_contributors_qr_title">Scan om te steunen</string>
@@ -1625,16 +1623,8 @@
     <string name="debrid_resolution_failed">Kon deze Debrid-stream niet ophalen.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P-streaming</string>
-    <string name="p2p_consent_body">Deze stream gebruikt peer-to-peer-technologie (P2P). Door P2P in te schakelen erken je en ga je ermee akkoord dat:\n\n\u2022 Je IP-adres zichtbaar is voor andere peers in het netwerk\n\u2022 Jij als enige verantwoordelijk bent voor de inhoud die je opent\n\u2022 Je bevestigt dat je het wettelijke recht hebt om deze inhoud in jouw rechtsgebied te streamen\n\u2022 Nuvio geen P2P-inhoud host, verspreidt of beheert\n\u2022 Nuvio geen aansprakelijkheid draagt voor juridische gevolgen van jouw gebruik van P2P-streaming\n\nJe gebruikt deze functie volledig op eigen risico. P2P kan altijd worden uitgeschakeld in de instellingen.</string>
-    <string name="p2p_consent_enable">P2P inschakelen</string>
-    <string name="p2p_consent_cancel">Annuleren</string>
-    <string name="settings_p2p_title">P2P-streaming</string>
-    <string name="settings_p2p_subtitle">Peer-to-peer-streams (torrent) toestaan</string>
     <string name="settings_p2p_hide_stats_title">Torrentstatistieken verbergen</string>
     <string name="settings_p2p_hide_stats_subtitle">Verberg buffer, seeds, peers en downloadsnelheid tijdens het laden en afspelen</string>
-    <string name="p2p_download_title">P2P-engine downloaden</string>
-    <string name="p2p_download_subtitle">Dit is een eenmalige download die nodig is voor P2P-streaming.</string>
     <string name="stream_type_external">Extern</string>
     <string name="stream_player_picker_title">Welke speler moet worden gebruikt?</string>
     <string name="stream_player_internal">Intern</string>
@@ -3077,7 +3067,7 @@
     <string name="playback_cache_vod_size">Grootte van VOD-cache</string>
     <string name="playback_cache_vod_size_sub">Maximaal schijfgebruik voor de progressieve VOD-cache (LRU-verwijdering).</string>
     <string name="playback_cache_info_range">Bereik: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">De automatische modus streeft naar ongeveer 10% van de vrije ruimte.</string>
+    <string name="playback_cache_info_auto" formatted="false">De automatische modus streeft naar ongeveer 10% van de vrije ruimte.</string>
     <string name="playback_cache_info_manual_headroom">De handmatige modus houdt ongeveer %1$d MB speling vrij.</string>
     <string name="playback_cache_info_free_disk">Beschikbare vrije schijfruimte: %1$s.</string>
     <string name="playback_cache_info_restart">Bij het wisselen tussen modi/groottes geldt de nieuwe cachelimiet pas na het opnieuw starten van de app.</string>

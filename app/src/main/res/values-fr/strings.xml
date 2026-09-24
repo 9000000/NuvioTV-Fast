@@ -468,7 +468,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio restera gratuit et open source. Si vous souhaitez soutenir le projet, vous pouvez aider à couvrir le temps et l’infrastructure nécessaires à son développement.</string>
     <string name="supporters_contributors_donation_progress_title">Serveur et maintenance de ce mois-ci</string>
     <string name="supporters_contributors_donation_progress_complete">Couvert. Le soutien supplémentaire va désormais au développement.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Au-delà de 100 %, le soutien supplémentaire va au développement.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Au-delà de 100 %, le soutien supplémentaire va au développement.</string>
     <string name="supporters_contributors_loading_donation_progress">Chargement de la progression du financement…</string>
     <string name="supporters_contributors_donate_button">Faire un don</string>
     <string name="supporters_contributors_qr_title">Scanner pour faire un don</string>
@@ -1107,16 +1107,8 @@
     <string name="stream_finding_source">Recherche de la source du flux</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">Streaming P2P</string>
-    <string name="p2p_consent_body">Ce flux utilise la technologie pair-à-pair (P2P). En activant le P2P, vous reconnaissez et acceptez que :\n\n\u2022 Votre adresse IP sera visible par les autres pairs du réseau\n\u2022 Vous êtes seul responsable du contenu auquel vous accédez\n\u2022 Vous confirmez avoir le droit légal de visionner ce contenu dans votre juridiction\n\u2022 Nuvio n’héberge, ne distribue ni ne contrôle aucun contenu P2P\n\u2022 Nuvio ne peut être tenu responsable des conséquences légales liées à votre utilisation du streaming P2P\n\nVous utilisez cette fonctionnalité entièrement à vos propres risques. Le P2P peut être désactivé à tout moment dans les paramètres.</string>
-    <string name="p2p_consent_enable">Activer le P2P</string>
-    <string name="p2p_consent_cancel">Annuler</string>
-    <string name="settings_p2p_title">Streaming P2P</string>
-    <string name="settings_p2p_subtitle">Autoriser les flux pair-à-pair (torrent)</string>
     <string name="settings_p2p_hide_stats_title">Masquer les statistiques torrent</string>
     <string name="settings_p2p_hide_stats_subtitle">Masquer la mémoire tampon, les seeders, les pairs et la vitesse de téléchargement pendant le chargement et la lecture</string>
-    <string name="p2p_download_title">Téléchargement du moteur P2P</string>
-    <string name="p2p_download_subtitle">Il s’agit d’un téléchargement unique requis pour le streaming P2P.</string>
     <string name="stream_type_external">Externe</string>
     <string name="stream_player_picker_title">Quel lecteur utiliser&#160;?</string>
     <string name="stream_player_internal">Interne</string>
@@ -2089,8 +2081,6 @@
     <string name="essential_autoplay_next_episode">Lecture automatique de l’épisode suivant</string>
     <string name="essential_autoplay_next_episode_subtitle">Enchaîne vers l’épisode suivant à la fin d’un flux.</string>
     <string name="external_auto_next_loading">Chargement de l’épisode suivant…</string>
-    <string name="essential_p2p_streams">Flux P2P</string>
-    <string name="essential_p2p_streams_subtitle">Autoriser les sources de flux pair-à-pair.</string>
     <string name="essential_subtitle_language_subtitle">Langue préférée pour les sous-titres.</string>
     <string name="essential_audio_language_subtitle">Langue audio préférée.</string>
     <!-- Messages d’erreur compte / connexion -->
@@ -2834,7 +2824,7 @@
     <string name="playback_cache_vod_size">Taille du cache VOD</string>
     <string name="playback_cache_vod_size_sub">Utilisation disque maximale pour le cache VOD progressif (éviction LRU).</string>
     <string name="playback_cache_info_range">Plage&#160;: %1$d-%2$d Mo.</string>
-    <string name="playback_cache_info_auto">Le mode automatique vise environ 10&#160;% de l’espace libre.</string>
+    <string name="playback_cache_info_auto" formatted="false">Le mode automatique vise environ 10&#160;% de l’espace libre.</string>
     <string name="playback_cache_info_manual_headroom">Le mode manuel garde environ %1$d Mo de marge.</string>
     <string name="playback_cache_info_free_disk">Espace disque libre&#160;: %1$s.</string>
     <string name="playback_cache_info_restart">Le nouveau plafond de cache s’applique après le redémarrage de l’application lors d’un changement de mode ou de taille.</string>

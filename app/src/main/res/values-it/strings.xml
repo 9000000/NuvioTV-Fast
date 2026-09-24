@@ -491,8 +491,6 @@
 <string name="essential_autoplay_next_episode">Riproduzione automatica episodio successivo</string>
 <string name="essential_autoplay_next_episode_subtitle">Passa all\'episodio successivo al termine dello streaming.</string>
 <string name="external_auto_next_loading">Caricamento del prossimo episodio…</string>
-<string name="essential_p2p_streams">Streaming P2P</string>
-<string name="essential_p2p_streams_subtitle">Consenti sorgenti di streaming peer-to-peer.</string>
 <string name="essential_subtitle_language_subtitle">Lingua preferita per i sottotitoli.</string>
 <string name="essential_audio_language_subtitle">Lingua preferita per l\'audio.</string>
     <!-- Account / sign-in error messages -->
@@ -628,7 +626,7 @@
 <string name="supporters_contributors_donate_copy">Nuvio è gratuito e open source. Se vuoi supportare il progetto, puoi aiutare a coprire il tempo e l\'infrastruttura dietro allo stesso.</string>
 <string name="supporters_contributors_donation_progress_title">Server e manutenzione di questo mese</string>
 <string name="supporters_contributors_donation_progress_complete">Coperto. Il supporto aggiuntivo ora va allo sviluppo.</string>
-<string name="supporters_contributors_donation_progress_remaining">Dopo il 100%, il supporto aggiuntivo va allo sviluppo.</string>
+<string name="supporters_contributors_donation_progress_remaining" formatted="false">Dopo il 100%, il supporto aggiuntivo va allo sviluppo.</string>
 <string name="supporters_contributors_loading_donation_progress">Caricamento dell\'avanzamento del finanziamento...</string>
 <string name="supporters_contributors_donate_button">Dona a Nuvio</string>
 <string name="supporters_contributors_qr_title">Scansiona per donare</string>
@@ -1015,7 +1013,7 @@
 <string name="layout_cw_sort_streaming">Stile streaming</string>
 <string name="layout_cw_sort_streaming_desc">Elementi usciti per primi, in arrivo alla fine</string>
 <string name="layout_cw_sort_split_upcoming">Riga separata per i prossimi</string>
-<string name="layout_cw_sort_split_upcoming_desc">Sposta gli episodi non ancora trasmessi in una riga separata "In arrivo"</string>
+<string name="layout_cw_sort_split_upcoming_desc">Sposta gli episodi non ancora trasmessi in una riga separata \"In arrivo\"</string>
 <string name="upcoming_section_title">In arrivo</string>
 <string name="layout_trailer_button">Mostra pulsante Trailer</string>
 <string name="layout_trailer_button_sub">Mostra il pulsante trailer nella pagina dei dettagli (solo quando il trailer è disponibile).</string>
@@ -1326,7 +1324,7 @@
 
 <string name="tmdb_language_dialog_title">Lingua TMDB</string>
 
-<string name="trakt_description">Sincronizza la tua watchlist, l\'avanzamento della visione, il "continua a guardare", gli scrobble e le liste personali con Trakt.</string>
+<string name="trakt_description">Sincronizza la tua watchlist, l\'avanzamento della visione, il \"continua a guardare\", gli scrobble e le liste personali con Trakt.</string>
 <string name="trakt_connected_as">Connesso come %1$s</string>
 <string name="trakt_account_login">Accesso Account</string>
 <string name="trakt_awaiting_instruction">Vai su trakt.tv/activate e inserisci questo codice:</string>
@@ -1619,16 +1617,8 @@
 <string name="debrid_resolution_failed">Impossibile risolvere questo flusso Debrid.</string>
 <string name="stream_type_torrent">Torrent</string>
 <string name="stream_type_youtube">YouTube</string>
-<string name="p2p_consent_title">Streaming P2P</string>
-<string name="p2p_consent_body">Questo flusso utilizza la tecnologia peer-to-peer (P2P). Abilitando il P2P, riconosci e accetti che:\n\n\u2022 Il tuo indirizzo IP sarà visibile agli altri peer nella rete\n\u2022 Sei l\'unico responsabile per i contenuti a cui accedi\n\u2022 Confermi di avere il diritto legale di trasmettere questo contenuto nella tua giurisdizione\n\u2022 Nuvio non ospita, distribuisce o controlla alcun contenuto P2P\n\u2022 Nuvio non si assume alcuna responsabilità per eventuali conseguenze legali derivanti dall\'uso dello streaming P2P\n\nL\'utilizzo di questa funzione è interamente a tuo rischio. Il P2P può essere disabilitato in qualsiasi momento nelle Impostazioni.</string>
-<string name="p2p_consent_enable">Abilita P2P</string>
-<string name="p2p_consent_cancel">Annulla</string>
-<string name="settings_p2p_title">Streaming P2P</string>
-<string name="settings_p2p_subtitle">Consenti flussi peer-to-peer (torrent)</string>
 <string name="settings_p2p_hide_stats_title">Nascondi statistiche torrent</string>
 <string name="settings_p2p_hide_stats_subtitle">Nascondi buffer, seed, peer e velocità di download durante il caricamento e la riproduzione</string>
-<string name="p2p_download_title">Download motore P2P</string>
-<string name="p2p_download_subtitle">Questo è un download una tantum richiesto per lo streaming P2P.</string>
 <string name="stream_type_external">Esterno</string>
 <string name="stream_player_picker_title">Quale player vuoi usare?</string>
 <string name="stream_player_internal">Interno</string>
@@ -2807,7 +2797,7 @@
 <string name="simkl_sync_info_description">Nuvio controlla automaticamente Simkl al massimo una volta ogni %1$d minuti. Le modifiche effettuate tramite un\'altra app o il sito web di Simkl possono impiegare fino a questo tempo per comparire.</string>
 <string name="simkl_sync_info_activity">Ogni aggiornamento verifica prima se Simkl segnala modifiche e scarica solo gli aggiornamenti. Questo rispetta le regole dell\'API di Simkl, riduce l\'uso di dati non necessario e aiuta a mantenere stabile il servizio.</string>
 <string name="simkl_sync_info_manual">Le modifiche effettuate in Nuvio vengono inviate a Simkl immediatamente. Usa Sincronizza ora ogni volta che vuoi che Nuvio controlli prima le modifiche remote.</string>
-<string name="simkl_sync_info_library_statuses">I contenuti inseriti nelle liste "In pausa" o "Abbandonati" di Simkl sono nascosti da Continua a guardare. Restano nascosti finché rimangono in una di queste liste.</string>
+<string name="simkl_sync_info_library_statuses">I contenuti inseriti nelle liste \"In pausa\" o \"Abbandonati\" di Simkl sono nascosti da Continua a guardare. Restano nascosti finché rimangono in una di queste liste.</string>
 <string name="simkl_sync_info_docs">Leggi la guida alla sincronizzazione Simkl</string>
 <string name="error_open_browser_failed">Impossibile aprire il browser</string>
 <string name="simkl_missing_credentials">SIMKL_CLIENT_ID mancante</string>
@@ -2823,7 +2813,7 @@
 <string name="simkl_error_authorization_revoked">L\'autorizzazione Simkl è stata revocata. Collegati di nuovo.</string>
 <string name="simkl_error_network">Impossibile raggiungere Simkl. Riprova.</string>
 <string name="tracking_removal_title">Rimuovere da %1$s?</string>
-<string name="tracking_removal_message">Rimuovendo "%1$s" da %2$s verrà cancellato anche il/la relativo/a %3$s su quel servizio. Questa azione non può essere annullata.</string>
+<string name="tracking_removal_message">Rimuovendo \"%1$s\" da %2$s verrà cancellato anche il/la relativo/a %3$s su quel servizio. Questa azione non può essere annullata.</string>
 <string name="tracking_removal_impact_history">cronologia visti</string>
 <string name="tracking_removal_impact_rating">valutazione</string>
 <string name="tracking_removal_impact_history_rating">cronologia visti e valutazione</string>
@@ -3070,7 +3060,7 @@
 <string name="playback_cache_vod_size">Dimensione cache VOD</string>
 <string name="playback_cache_vod_size_sub">Utilizzo massimo su disco per la cache VOD progressiva (evict LRU).</string>
 <string name="playback_cache_info_range">Intervallo: %1$d-%2$d MB.</string>
-<string name="playback_cache_info_auto">La modalità automatica punta a circa il 10%% dello spazio libero.</string>
+<string name="playback_cache_info_auto" formatted="false">La modalità automatica punta a circa il 10%% dello spazio libero.</string>
 <string name="playback_cache_info_manual_headroom">La modalità manuale mantiene circa %1$dMB di margine.</string>
 <string name="playback_cache_info_free_disk">Spazio libero disponibile: %1$s.</string>
 <string name="playback_cache_info_restart">Il nuovo limite cache si applica dopo il riavvio dell\'app quando si cambia modalità o dimensione.</string>

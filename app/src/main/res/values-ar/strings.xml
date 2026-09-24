@@ -110,14 +110,14 @@
     <string name="error_state_possible_fix">حل محتمل: %1$s</string>
     <string name="error_state_fix_retry_soon">حاول مجدداً بعد قليل.</string>
     <string name="error_state_issue_no_metadata_any_addon">تعذر تحميل تفاصيل هذا المعرف لأن أياً من الإضافات المثبتة لم توفر بيانات وصفية.</string>
-    <string name="error_state_fix_no_metadata_any_addon">جرب إضافة أخرى، أو عطل "تفضيل جلب بيانات الإضافات الخارجية" في إعدادات الواجهة، أو تأكد أن هناك إضافة مثبتة تدعم هذا المعرف.</string>
+    <string name="error_state_fix_no_metadata_any_addon">جرب إضافة أخرى، أو عطل \"تفضيل جلب بيانات الإضافات الخارجية\" في إعدادات الواجهة، أو تأكد أن هناك إضافة مثبتة تدعم هذا المعرف.</string>
     <string name="error_state_prefix_no_supported_metadata">لا توجد إضافة مثبتة تدعم البيانات الوصفية لـ </string>
     <string name="error_state_prefix_no_addon_for_id">لا توجد إضافة مثبتة قادرة على توفير بيانات وصفية للمعرف=</string>
     <string name="error_state_fix_no_supported_metadata">ثبت أو حدث إضافة تدعم هذا النوع من المحتوى، ثم أعد المحاولة.</string>
     <string name="error_state_prefix_tried_meta_addons">تمت تجربة إضافات البيانات الوصفية:</string>
     <string name="error_state_fix_tried_meta_addons">ثبت إضافة تدعم هذا المعرف، أو أعد تكوين/تحديث الإضافة وأعد المحاولة.</string>
     <string name="error_state_issue_missing_metadata_for_id">لا تملك بيانات وصفية لهذا المعرف</string>
-    <string name="error_state_fix_missing_metadata_for_id">افتح هذا المعرف من إضافة مختلفة، أو عطل "تفضيل جلب بيانات الإضافات الخارجية"، أو تأكد من أن الإضافة تدعم هذا المعرف.</string>
+    <string name="error_state_fix_missing_metadata_for_id">افتح هذا المعرف من إضافة مختلفة، أو عطل \"تفضيل جلب بيانات الإضافات الخارجية\"، أو تأكد من أن الإضافة تدعم هذا المعرف.</string>
     <string name="error_state_issue_addon_unreachable">تعذر الوصول إليها</string>
     <string name="error_state_fix_addon_unreachable">تحقق من اتصالك بالإنترنت، وتأكد من أن رابط الإضافة لا يزال يعمل، ثم أعد المحاولة.</string>
     <string name="error_state_issue_addon_connection_failed">رفضت الاتصال</string>
@@ -189,7 +189,7 @@
     <string name="hero_mark_watched">تحديد كمشاهد</string>
     <string name="hero_mark_unwatched">تحديد كغير مشاهد</string>
     <string name="hero_play_trailer">تشغيل الإعلان</string>
-    <string name="hero_press_back_trailer">اضغط "رجوع" للخروج من الإعلان</string>
+    <string name="hero_press_back_trailer">اضغط \"رجوع\" للخروج من الإعلان</string>
     <string name="cd_rating">التقييم</string>
 
     <!-- EpisodesSection -->
@@ -423,8 +423,6 @@
     <string name="essential_stream_selection_subtitle">إختر يدوياً أو قم بتشغيل أول مصدر متاح تلقائياً.</string>
     <string name="essential_autoplay_next_episode">تشغيل الحلقة التالية تلقائياً</string>
     <string name="essential_autoplay_next_episode_subtitle">المتابعة إلى الحلقة التالية بعد انتهاء البث.</string>
-    <string name="essential_p2p_streams">مصادر التورنت (P2P)</string>
-    <string name="essential_p2p_streams_subtitle">السماح بمصادر ملفات التورنت (P2P).</string>
     <string name="essential_subtitle_language_subtitle">لغة الترجمة المفضلة.</string>
     <string name="essential_audio_language_subtitle">لغة الصوت المفضلة.</string>
     <!-- Account / sign-in error messages -->
@@ -811,16 +809,16 @@
     <string name="layout_classic_focus_gradient_sub">دمج ألوان العمل الفني في الجانب الأيمن من الصفحة الرئيسية الكلاسيكية.</string>
     <string name="layout_show_hero">إظهار القسم المميز</string>
     <string name="layout_show_hero_sub">عرض شريط القسم المميز في أعلى الرئيسية.</string>
-    <string name="layout_show_discover">إظهار "استكشاف" في البحث</string>
-    <string name="layout_show_discover_sub">إظهار قسم "استكشاف" عندما يكون حقل البحث فارغاً.</string>
-    <string name="layout_discover_location_action">مكان "استكشاف"</string>
-    <string name="layout_discover_location_dialog_title">مكان قسم "استكشاف"</string>
+    <string name="layout_show_discover">إظهار \"استكشاف\" في البحث</string>
+    <string name="layout_show_discover_sub">إظهار قسم \"استكشاف\" عندما يكون حقل البحث فارغاً.</string>
+    <string name="layout_discover_location_action">مكان \"استكشاف\"</string>
+    <string name="layout_discover_location_dialog_title">مكان قسم \"استكشاف\"</string>
     <string name="layout_discover_location_in_search">إظهار في علامة تبويب البحث</string>
-    <string name="layout_discover_location_in_search_desc">يظهر قسم "استكشاف" داخل علامة تبويب البحث.</string>
+    <string name="layout_discover_location_in_search_desc">يظهر قسم \"استكشاف\" داخل علامة تبويب البحث.</string>
     <string name="layout_discover_location_in_sidebar">إظهار في القائمة الجانبية</string>
-    <string name="layout_discover_location_in_sidebar_desc">إضافة علامة تبويب مستقلة لميزة "استكشاف" في القائمة الجانبية.</string>
+    <string name="layout_discover_location_in_sidebar_desc">إضافة علامة تبويب مستقلة لميزة \"استكشاف\" في القائمة الجانبية.</string>
     <string name="layout_poster_labels">إظهار عناوين البطاقات</string>
-    <string name="layout_poster_labels_sub">إظهار العناوين تحت البطاقات في القوائم , و"عرض الكل".</string>
+    <string name="layout_poster_labels_sub">إظهار العناوين تحت البطاقات في القوائم , و\"عرض الكل\".</string>
     <string name="layout_addon_name">إظهار اسم الإضافة</string>
     <string name="layout_addon_name_sub">إظهار اسم المصدر تحت عناوين القوائم.</string>
     <string name="layout_catalog_type">إظهار نوع القوائم</string>
@@ -839,7 +837,7 @@
     <string name="layout_blur_unwatched_sub">تعتيم صور الحلقات حتى تشاهدها لتجنب حرق الأحداث.</string>
     <string name="layout_blur_cw_next_up">تعتيم غير المشاهد في متابعة المشاهدة</string>
     <string name="layout_blur_cw_next_up_sub">تعتيم صور الحلقات التالية في متابعة المشاهدة لتجنب حرق الأحداث.</string>
-    <string name="layout_next_up_furthest_episode">ترتيب "التالي" من اخر حلقة تمت مشاهدتها</string>
+    <string name="layout_next_up_furthest_episode">ترتيب \"التالي\" من اخر حلقة تمت مشاهدتها</string>
     <string name="layout_next_up_furthest_episode_sub">يحدد الحلقة التالية بناءً على أعلى رقم حلقة شاهدته سابقاً. عطل هذا الخيار عند إعادة مشاهدة المسلسل ليعتمد على الحلقة الأخيرة التي شاهدتها للتو.</string>
     <string name="layout_show_unaired_next_up">إظهار الحلقات غير المعروضة بعد</string>
     <string name="layout_show_unaired_next_up_sub">إظهار الحلقات القادمة في متابعة المشاهدة قبل موعد عرضها.</string>
@@ -1174,9 +1172,9 @@
     <string name="trakt_comments_dialog_subtitle">إختر ما إذا كانت صفحات التفاصيل ستعرض مراجعات Trakt عند اتصال حسابك.</string>
     <string name="trakt_comments_now_shown">يتم الآن عرض مراجعات Trakt في صفحات التفاصيل</string>
     <string name="trakt_comments_now_hidden">تم الآن إخفاء مراجعات Trakt في صفحات التفاصيل</string>
-    <string name="trakt_more_like_this_source_title">مصدر "مقترحات مشابهة"</string>
+    <string name="trakt_more_like_this_source_title">مصدر \"مقترحات مشابهة\"</string>
     <string name="trakt_more_like_this_source_subtitle">إختر مصدر التوصيات في صفحات التفاصيل</string>
-    <string name="trakt_more_like_this_source_dialog_title">مصدر "مقترحات مشابهة"</string>
+    <string name="trakt_more_like_this_source_dialog_title">مصدر \"مقترحات مشابهة\"</string>
     <string name="trakt_more_like_this_source_dialog_subtitle">حدد مصدر التوصيات المعروضة بصفحة التفاصيل.</string>
     <string name="trakt_more_like_this_source_trakt">Trakt</string>
     <string name="trakt_more_like_this_source_tmdb">TMDB</string>
@@ -1376,16 +1374,8 @@
     <string name="debrid_resolution_failed">تعذر جلب رابط ديبريد.</string>
     <string name="stream_type_torrent">تورنت</string>
     <string name="stream_type_youtube">يوتيوب</string>
-    <string name="p2p_consent_title">التورنت P2P</string>
-    <string name="p2p_consent_body">يستخدم هذا البث تقنية الند للند (P2P). بتفعيل P2P، أنت تقر وتوافق على الآتي:\n\n\u2022 سيكون عنوان IP الخاص بك مرئياً للأقران الآخرين في الشبكة\n\u2022 أنت وحدك المسؤول عن المحتوى الذي تصل إليه\n\u2022 أنت تؤكد أن لديك الحق القانوني لبث هذا المحتوى في ولايتك القضائية\n\u2022 لا تستضيف Nuvio أو توزع أو تتحكم في أي محتوى P2P\n\u2022 لا تتحمل Nuvio أي مسؤولية عن أي عواقب قانونية تنشأ عن استخدامك لبث P2P\n\nأنت تستخدم هذه الميزة على مسؤوليتك الخاصة بالكامل. يمكن تعطيل P2P في أي وقت من الإعدادات.</string>
-    <string name="p2p_consent_enable">تفعيل التورنت</string>
-    <string name="p2p_consent_cancel">إلغاء</string>
-    <string name="settings_p2p_title">تشغيل ملفات التورنت</string>
-    <string name="settings_p2p_subtitle">السماح بتشغيل ملفات التورنت</string>
     <string name="settings_p2p_hide_stats_title">إخفاء إحصائيات التورنت</string>
     <string name="settings_p2p_hide_stats_subtitle">إخفاء التخزين المؤقت، والمزودين، وعدد المتصلين، وسرعة التنزيل أثناء التحميل والتشغيل</string>
-    <string name="p2p_download_title">جاري تنزيل محرك التورنت</string>
-    <string name="p2p_download_subtitle">هذا التنزيل مطلوب لمرة واحدة فقط لتشغيل التورنت.</string>
     <string name="stream_type_external">خارجي</string>
     <string name="stream_player_picker_title">ما هو المشغل الذي تود استخدامه؟</string>
     <string name="stream_player_internal">داخلي</string>
@@ -1413,7 +1403,7 @@
     <string name="playback_show_loading_status">إظهار حالة التحميل</string>
     <string name="playback_show_loading_status_sub">عرض خطوات التقدم أثناء تهيئة المشغل.</string>
     <string name="player_sync_line">مزامنة السطر</string>
-    <string name="subtitle_timing_press_sync">اضغط "مزامنة" عند سماع النص.</string>
+    <string name="subtitle_timing_press_sync">اضغط \"مزامنة\" عند سماع النص.</string>
     <string name="subtitle_timing_sync_button">مزامنة</string>
     <string name="subtitle_timing_select_addon_first">إختر ملف ترجمة من إضافة أولًا.</string>
     <string name="subtitle_auto_sync_select_addon_track">إختر ملف ترجمة من إضافة للمزامنة التلقائية.</string>
@@ -1589,11 +1579,11 @@
 
 
     <!-- SearchScreen -->
-    <string name="search_keyboard_hint">اضغط على "تم" في لوحة المفاتيح للبحث</string>
+    <string name="search_keyboard_hint">اضغط على \"تم\" في لوحة المفاتيح للبحث</string>
     <string name="search_placeholder">أبحث عن أفلام &amp; مسلسلات</string>
     <string name="search_start_title">ابدأ البحث</string>
     <string name="search_start_subtitle">أدخل حرفين على الأقل</string>
-    <string name="search_start_subtitle_no_discover">ميزة "استكشاف" معطلة. أدخل حرفين على الأقل</string>
+    <string name="search_start_subtitle_no_discover">ميزة \"استكشاف\" معطلة. أدخل حرفين على الأقل</string>
     <string name="search_recent_title">سجل البحث</string>
     <string name="search_recent_clear">مسح السجل</string>
     <string name="search_voice_no_speech">لم يتم رصد صوت. حاول مجدداً.</string>
@@ -1682,10 +1672,10 @@
     <string name="library_sync_btn">مزامنة</string>
     <string name="library_syncing_btn">جاري المزامنة\u2026</string>
     <string name="cloud_library_connect_action">ربط الحساب</string>
-    <string name="cloud_library_connect_message">قم بربط حسابك في إعدادات "الخدمات المتصلة" لتصفح وتشغيل الملفات من مكتبتك السحابية.</string>
+    <string name="cloud_library_connect_message">قم بربط حسابك في إعدادات \"الخدمات المتصلة\" لتصفح وتشغيل الملفات من مكتبتك السحابية.</string>
     <string name="cloud_library_connect_title">لا يوجد حساب سحابي متصل</string>
     <string name="cloud_library_disabled_action">فتح الخدمات المتصلة</string>
-    <string name="cloud_library_disabled_message">قم بتفعيل "المكتبة السحابية" من إعدادات الخدمات المتصلة لتصفح ملفات الحسابات المربوطة.</string>
+    <string name="cloud_library_disabled_message">قم بتفعيل \"المكتبة السحابية\" من إعدادات الخدمات المتصلة لتصفح ملفات الحسابات المربوطة.</string>
     <string name="cloud_library_disabled_title">المكتبة السحابية معطلة</string>
     <string name="cloud_library_empty_message">لا توجد ملفات قابلة للتشغيل تطابق فلاتر البحث الحالية.</string>
     <string name="cloud_library_empty_title">لا يوجد شيء هنا بعد</string>
@@ -1933,8 +1923,8 @@
     <string name="profile_pin_current_required">الملف محمي برمز PIN.أدخل الرمز الحالي لتغييره.</string>
 
     <!-- Search -->
-    <string name="discover_disabled_title">ميزة "استكشاف" معطلة</string>
-    <string name="discover_disabled_subtitle">فعل "استكشاف" من إعدادات التنسيق</string>
+    <string name="discover_disabled_title">ميزة \"استكشاف\" معطلة</string>
+    <string name="discover_disabled_subtitle">فعل \"استكشاف\" من إعدادات التنسيق</string>
 
     <!-- Error messages (shared) -->
     <string name="error_network_required">اتصل بشبكة انترنت لاستخدام هذه الميزة</string>
@@ -2083,7 +2073,7 @@
     <string name="collections_editor_focus_glow">توهج التركيز</string>
     <string name="collections_editor_focus_glow_desc">تفعيل توهج التلفاز الافتراضي لبطاقات هذه المجموعة</string>
     <string name="collections_editor_view_mode">وضع العرض</string>
-    <string name="collections_editor_show_all_tab">عرض علامة "الكل"</string>
+    <string name="collections_editor_show_all_tab">عرض علامة \"الكل\"</string>
     <string name="collections_editor_show_all_tab_desc">دمج جميع الفهارس في علامة تبويب واحدة</string>
     <string name="collections_editor_folders">المجلدات</string>
     <string name="collections_editor_add_folder">إضافة مجلد</string>
@@ -2286,7 +2276,7 @@
     <string name="collection_editor_folder_count_one">%1$d عنصر</string>
     <string name="collection_editor_folder_count_other">%1$d عنصر</string>
     <string name="collections_editor_delete_folder_title">حذف المجلد؟</string>
-    <string name="collections_editor_delete_folder_subtitle">هذا سيحذف "%1$s" ومحتوياته نهائياً.</string>
+    <string name="collections_editor_delete_folder_subtitle">هذا سيحذف \"%1$s\" ومحتوياته نهائياً.</string>
     <string name="collections_editor_tmdb_movie_title_placeholder">أفلام Marvel، إنتاجات Netflix، Pixar</string>
     <string name="collections_editor_tmdb_tv_title_placeholder">أفضل أفلام الأكشن، دراما كورية</string>
     <string name="collections_editor_tmdb_person_title_placeholder">أفلام توم هانكس، الممثلون المفضلون</string>
@@ -2379,18 +2369,18 @@
     <string name="collections_import_error_empty_input">الإدخال فارغ</string>
     <string name="collections_import_error_expected_array">تنسيق غير صالح: متوقع شكل قائمة (Array)</string>
     <string name="collections_import_error_empty_array">شكل قائمة فارغة: لم يتم العثور على مجموعات</string>
-    <string name="collections_import_error_missing_id">المجموعة %1$d: معرف "id" مفقود أو غير صالح</string>
-    <string name="collections_import_error_missing_title">المجموعة "%1$s": عنوان "title" مفقود أو غير صالح</string>
-    <string name="collections_import_error_folders_array">المجموعة "%1$s": يجب أن تكون حقول المجلدات "folders" شكل قائمة</string>
-    <string name="collections_import_error_folder_invalid">المجموعة "%1$s"، المجلد %2$d: تنسيق غير صالح</string>
-    <string name="collections_import_error_folder_missing_id">المجموعة "%1$s"، المجلد %2$d: المعرف "id" مفقود</string>
-    <string name="collections_import_error_folder_missing_title">المجموعة "%1$s"، المجلد "%2$s": العنوان "title" مفقود</string>
-    <string name="collections_import_error_sources_array">المجموعة "%1$s"، المجلد "%2$s": يجب أن تكون المصادر "sources" شكل قائمة</string>
-    <string name="collections_import_error_invalid_tile_shape">المجموعة "%1$s"، المجلد "%2$s": شكل الصورة المصغرة غير صالح "%3$s"</string>
-    <string name="collections_import_error_source_invalid">المجموعة "%1$s"، المجلد "%2$s"، المصدر %3$d: تنسيق غير صالح</string>
-    <string name="collections_import_error_source_required_fields">المجموعة "%1$s"، المجلد "%2$s"، المصدر %3$d: حقول مطلوبة مفقودة</string>
-    <string name="collections_import_error_missing_tmdb_type">المجموعة "%1$s"، المجلد "%2$s"، المصدر %3$d: نوع مصدر TMDB مفقود</string>
-    <string name="collections_import_error_missing_trakt_list_id">المجموعة "%1$s"، المجلد "%2$s"، المصدر %3$d: معرف قائمة Trakt مفقود</string>
+    <string name="collections_import_error_missing_id">المجموعة %1$d: معرف \"id\" مفقود أو غير صالح</string>
+    <string name="collections_import_error_missing_title">المجموعة \"%1$s\": عنوان \"title\" مفقود أو غير صالح</string>
+    <string name="collections_import_error_folders_array">المجموعة \"%1$s\": يجب أن تكون حقول المجلدات \"folders\" شكل قائمة</string>
+    <string name="collections_import_error_folder_invalid">المجموعة \"%1$s\"، المجلد %2$d: تنسيق غير صالح</string>
+    <string name="collections_import_error_folder_missing_id">المجموعة \"%1$s\"، المجلد %2$d: المعرف \"id\" مفقود</string>
+    <string name="collections_import_error_folder_missing_title">المجموعة \"%1$s\"، المجلد \"%2$s\": العنوان \"title\" مفقود</string>
+    <string name="collections_import_error_sources_array">المجموعة \"%1$s\"، المجلد \"%2$s\": يجب أن تكون المصادر \"sources\" شكل قائمة</string>
+    <string name="collections_import_error_invalid_tile_shape">المجموعة \"%1$s\"، المجلد \"%2$s\": شكل الصورة المصغرة غير صالح \"%3$s\"</string>
+    <string name="collections_import_error_source_invalid">المجموعة \"%1$s\"، المجلد \"%2$s\"، المصدر %3$d: تنسيق غير صالح</string>
+    <string name="collections_import_error_source_required_fields">المجموعة \"%1$s\"، المجلد \"%2$s\"، المصدر %3$d: حقول مطلوبة مفقودة</string>
+    <string name="collections_import_error_missing_tmdb_type">المجموعة \"%1$s\"، المجلد \"%2$s\"، المصدر %3$d: نوع مصدر TMDB مفقود</string>
+    <string name="collections_import_error_missing_trakt_list_id">المجموعة \"%1$s\"، المجلد \"%2$s\"، المصدر %3$d: معرف قائمة Trakt مفقود</string>
     <string name="collections_import_error_json_parse">خطأ في تحليل JSON: %1$s</string>
 
     <!-- Library messages -->
@@ -2615,7 +2605,7 @@
     <string name="audio_enable_downmix_subtitle">يستخدم مسار الدمج (Downmix) في FFmpeg. يتطلب تفضيل مفككات التطبيق (FFmpeg). عند التعطيل، يتبع الصوت المسار السابق لنظام أندرويد/الجهاز.</string>
     <string name="audio_force_optical_passthrough">فرض تحويل AC-3 (بصري/SPDIF)</string>
     <string name="audio_force_optical_passthrough_sub">يحوّل الصيغ متعددة القنوات (TrueHD وDTS وAAC وغيرها) إلى دولبي ديجيتال 5.1 في الوقت الفعلي لاتصالات البصري/SPDIF.</string>
-    <string name="audio_strip_hdr10plus_sub">إزالة البيانات الوصفية الديناميكية HDR10+ من البثوث. عند تفعيل "التحويل إلى DV8.1" أيضًا، تجري الإزالة بعد التحويل.</string>
+    <string name="audio_strip_hdr10plus_sub">إزالة البيانات الوصفية الديناميكية HDR10+ من البثوث. عند تفعيل \"التحويل إلى DV8.1\" أيضًا، تجري الإزالة بعد التحويل.</string>
     <string name="audio_strip_hdr10plus_title">إزالة بيانات HDR10+ الوصفية</string>
     <string name="auth_email_hint">سجّل الدخول مباشرة بحسابك على خادمك المستضاف ذاتيًا.</string>
     <string name="auth_email_instruction">أدخل بريدك الإلكتروني وكلمة المرور للمتابعة.</string>
@@ -2662,7 +2652,7 @@
     <string name="custom_server_error_no_auth">الخادم لا يعلن عن طريقة تسجيل دخول مدعومة.</string>
     <string name="custom_server_error_not_self_hosted">مستند الاكتشاف لا يحدد خادمًا مستضافًا ذاتيًا.</string>
     <string name="custom_server_error_official_active">‏api.nuvio.tv هو الخادم الرسمي وهو محدد بالفعل.</string>
-    <string name="custom_server_error_official_available">‏api.nuvio.tv هو الخادم الرسمي. أغلق هذه النافذة واختر "استخدام الخادم الرسمي" للعودة إليه.</string>
+    <string name="custom_server_error_official_available">‏api.nuvio.tv هو الخادم الرسمي. أغلق هذه النافذة واختر \"استخدام الخادم الرسمي\" للعودة إليه.</string>
     <string name="custom_server_error_response_too_large">مستند الاكتشاف أكبر من الحجم المسموح.</string>
     <string name="custom_server_error_service">مستند الاكتشاف ليس لهذا التطبيق.</string>
     <string name="custom_server_error_version">هذه النسخة من مستند الاكتشاف غير مدعومة.</string>
@@ -2745,10 +2735,10 @@
     <string name="layout_cw_card_style_card">بطاقة</string>
     <string name="layout_cw_card_style_poster">ملصق</string>
     <string name="layout_cw_card_style_wide">عريض</string>
-    <string name="layout_cw_enabled">إظهار "متابعة المشاهدة"</string>
-    <string name="layout_cw_enabled_sub">إظهار صف "متابعة المشاهدة" في الشاشة الرئيسية.</string>
+    <string name="layout_cw_enabled">إظهار \"متابعة المشاهدة\"</string>
+    <string name="layout_cw_enabled_sub">إظهار صف \"متابعة المشاهدة\" في الشاشة الرئيسية.</string>
     <string name="layout_cw_sort_split_upcoming">صف منفصل للقادم</string>
-    <string name="layout_cw_sort_split_upcoming_desc">نقل الحلقات التي لم تُعرض بعد إلى صف "القادم" المنفصل</string>
+    <string name="layout_cw_sort_split_upcoming_desc">نقل الحلقات التي لم تُعرض بعد إلى صف \"القادم\" المنفصل</string>
     <string name="layout_episode_ratings">تقييمات الحلقات</string>
     <string name="layout_episode_ratings_sub">اختر تقييمات الحلقات الظاهرة.</string>
     <string name="layout_overall_ratings">التقييمات العامة</string>
@@ -2802,7 +2792,7 @@
     <string name="playback_buffer_min_sub">أدنى مقدار وسائط للتخزين المؤقت. سيحاول المشغل ضمان توفر هذا القدر على الأقل من المحتوى مخزنًا أمام موضع التشغيل الحالي دائمًا.</string>
     <string name="playback_buffer_target">حجم المخزون الهدف</string>
     <string name="playback_buffer_target_danger_warning">خطر: فوق حد التحذير (%1$d م.ب). احتمال تعطل مرتفع.</string>
-    <string name="playback_buffer_target_managed_hint">يُدار بواسطة ميزانية ذاكرة الجهاز. أطفئ "ميزانية ذاكرة مُدارة" لضبط هذا.</string>
+    <string name="playback_buffer_target_managed_hint">يُدار بواسطة ميزانية ذاكرة الجهاز. أطفئ \"ميزانية ذاكرة مُدارة\" لضبط هذا.</string>
     <string name="playback_buffer_target_sub">أقصى ذاكرة عشوائية مستخدمة للتخزين المسبق. يُحسب الحد الأقصى من ذاكرة جهازك المتاحة (حد الكومة لكل تطبيق في أندرويد)، لذا الأجهزة ذات الذاكرة الأكبر تحصل على حدود أكبر تلقائيًا.</string>
     <string name="playback_buffer_target_warning">تحذير: فوق الحد الآمن للجهاز (%1$d م.ب). قد يتعطل التطبيق أثناء التشغيل.</string>
     <string name="playback_buffer_value_same_as_min">‏%1$d ثانية (مثل الأدنى)</string>
@@ -2810,7 +2800,7 @@
     <string name="playback_cache_auto_size">حجم تلقائي</string>
     <string name="playback_cache_auto_size_sub">عند التفعيل، يُحسب حجم الذاكرة المؤقتة من المساحة الحرة على القرص. أطفئه لاختيار الحجم يدويًا.</string>
     <string name="playback_cache_header">الذاكرة المؤقتة على القرص</string>
-    <string name="playback_cache_info_auto">يستهدف الوضع التلقائي حوالي 10% من المساحة الحرة.</string>
+    <string name="playback_cache_info_auto" formatted="false">يستهدف الوضع التلقائي حوالي 10% من المساحة الحرة.</string>
     <string name="playback_cache_info_free_disk">المساحة الحرة المتوفرة: %1$s.</string>
     <string name="playback_cache_info_manual_headroom">يحافظ الوضع اليدوي على حوالي %1$d م.ب مساحة احتياطية.</string>
     <string name="playback_cache_info_range">النطاق: %1$d-%2$d م.ب.</string>
@@ -2948,8 +2938,8 @@
     <string name="simkl_sync_info_activity">يتحقق كل تحديث أولًا مما إذا كان Simkl يبلغ عن تغييرات وينزل التحديثات فقط. هذا يتبع قواعد واجهة Simkl البرمجية ويقلل استهلاك البيانات غير الضروري ويساعد في إبقاء الخدمة مستقرة.</string>
     <string name="simkl_sync_info_description">يتحقق Nuvio تلقائيًا من Simkl بمعدل مرة كل %1$d دقيقة كحد أقصى. التغييرات عبر تطبيق آخر أو موقع Simkl قد تستغرق ذلك الوقت لتظهر.</string>
     <string name="simkl_sync_info_docs">قراءة دليل مزامنة Simkl</string>
-    <string name="simkl_sync_info_library_statuses">المسلسلات الموضوعة في قائمتي "متوقف مؤقتًا" أو "متروك" في Simkl تُخفى من متابعة المشاهدة. وتبقى مخفية ما دامت في أي من القائمتين.</string>
-    <string name="simkl_sync_info_manual">التغييرات التي تجريها في Nuvio تُرسل إلى Simkl فورًا. استخدم "مزامنة الآن" عندما تريد من Nuvio التحقق من التغييرات البعيدة أبكر.</string>
+    <string name="simkl_sync_info_library_statuses">المسلسلات الموضوعة في قائمتي \"متوقف مؤقتًا\" أو \"متروك\" في Simkl تُخفى من متابعة المشاهدة. وتبقى مخفية ما دامت في أي من القائمتين.</string>
+    <string name="simkl_sync_info_manual">التغييرات التي تجريها في Nuvio تُرسل إلى Simkl فورًا. استخدم \"مزامنة الآن\" عندما تريد من Nuvio التحقق من التغييرات البعيدة أبكر.</string>
     <string name="simkl_sync_info_title">كيف تعمل مزامنة Simkl</string>
     <string name="simkl_sync_now">مزامنة الآن</string>
     <string name="simkl_user_fallback">مستخدم Simkl</string>
@@ -2980,7 +2970,7 @@
     <string name="subtitle_delay_reset">تصفير</string>
     <string name="support_nuvio_name">ادعم Nuvio</string>
     <string name="supporters_contributors_donation_progress_complete">تمت التغطية. الدعم الإضافي الآن يذهب للتطوير.</string>
-    <string name="supporters_contributors_donation_progress_remaining">بعد 100%، الدعم الإضافي يذهب للتطوير.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">بعد 100%، الدعم الإضافي يذهب للتطوير.</string>
     <string name="supporters_contributors_donation_progress_title">خوادم وصيانة هذا الشهر</string>
     <string name="supporters_contributors_loading_donation_progress">جارٍ تحميل تقدم التمويل...</string>
     <string name="supporters_level_supporter">داعم</string>

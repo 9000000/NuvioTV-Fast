@@ -415,8 +415,6 @@
     <string name="essential_autoplay_next_episode">Автоматично следващ епизод</string>
     <string name="essential_autoplay_next_episode_subtitle">Продължи към следващия епизод след края на потока.</string>
     <string name="external_auto_next_loading">Зареждане на следващия епизод…</string>
-    <string name="essential_p2p_streams">P2P потоци</string>
-    <string name="essential_p2p_streams_subtitle">Разреши peer-to-peer източници на потоци.</string>
     <string name="essential_subtitle_language_subtitle">Предпочитан език за субтитри.</string>
     <string name="essential_audio_language_subtitle">Предпочитан език за аудио.</string>
     <!-- Account / sign-in error messages -->
@@ -1370,16 +1368,8 @@
     <string name="debrid_resolution_failed">Не можахме да разрешим този Debrid поток.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P стрийминг</string>
-    <string name="p2p_consent_body">Този поток използва peer-to-peer (P2P) технология. С активирането на P2P, ти потвърждаваш и се съгласяваш, че:\n\n\u2022 Твоят IP адрес ще бъде видим за други пиъри в мрежата\n\u2022 Ти си единствено отговорен за съдържанието, до което имаш достъп\n\u2022 Потвърждаваш, че имаш законното право да стриймваш това съдържание в твоята юрисдикция\n\u2022 Nuvio не хоства, разпространява или контролира никакво P2P съдържание\n\u2022 Nuvio не носи отговорност за каквито и да е правни последствия, произтичащи от използването ти на P2P стрийминг\n\nИзползваш тази функция изцяло на свой риск. P2P може да се деактивира по всяко време в Настройки.</string>
-    <string name="p2p_consent_enable">Включи P2P</string>
-    <string name="p2p_consent_cancel">Отказ</string>
-    <string name="settings_p2p_title">P2P стрийминг</string>
-    <string name="settings_p2p_subtitle">Разреши peer-to-peer (torrent) потоци</string>
     <string name="settings_p2p_hide_stats_title">Скрий torrent статистики</string>
     <string name="settings_p2p_hide_stats_subtitle">Скрий буфер, seeds, peers и скорост на изтегляне по време на зареждане и възпроизвеждане</string>
-    <string name="p2p_download_title">Изтегляне на P2P двигател</string>
-    <string name="p2p_download_subtitle">Това е еднократно изтегляне, необходимо за P2P стрийминг.</string>
     <string name="stream_type_external">Външен</string>
     <string name="stream_player_picker_title">Кой плейър да се използва?</string>
     <string name="stream_player_internal">Вграден</string>
@@ -2645,7 +2635,7 @@
     <string name="playback_cache_vod_size">VOD размер на кеша</string>
     <string name="playback_cache_vod_size_sub">Максимална употреба на диск за progressive VOD кеш (LRU-evicted).</string>
     <string name="playback_cache_info_range">Диапазон: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">Автоматичният режим цели около 10% от свободното пространство.</string>
+    <string name="playback_cache_info_auto" formatted="false">Автоматичният режим цели около 10% от свободното пространство.</string>
     <string name="playback_cache_info_manual_headroom">Ръчният режим запазва около %1$dMB headroom.</string>
     <string name="playback_cache_info_free_disk">Свободно дисково пространство: %1$s.</string>
     <string name="playback_cache_info_restart">Новият лимит на кеша се прилага след рестартиране на приложението при смяна между режими/размери.</string>

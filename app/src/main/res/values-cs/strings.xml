@@ -433,8 +433,6 @@
     <string name="essential_autoplay_next_episode">Automaticky přehrát další epizodu</string>
     <string name="essential_autoplay_next_episode_subtitle">Po skončení streamu pokračovat další epizodou.</string>
     <string name="external_auto_next_loading">Načítání další epizody…</string>
-    <string name="essential_p2p_streams">P2P streamy</string>
-    <string name="essential_p2p_streams_subtitle">Povolit zdroje streamů typu peer-to-peer.</string>
     <string name="essential_subtitle_language_subtitle">Preferovaný jazyk titulků.</string>
     <string name="essential_audio_language_subtitle">Preferovaný jazyk zvuku.</string>
     <!-- Account / sign-in error messages -->
@@ -562,7 +560,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio zůstane zdarma a open source. Pokud chcete projekt podpořit, můžete pomoci pokrýt čas a infrastrukturu za ním.</string>
     <string name="supporters_contributors_donation_progress_title">Server a údržba tento měsíc</string>
     <string name="supporters_contributors_donation_progress_complete">Pokryto. Další podpora nyní jde na vývoj.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Po dosažení 100% jde další podpora na vývoj.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Po dosažení 100% jde další podpora na vývoj.</string>
     <string name="supporters_contributors_loading_donation_progress">Načítání stavu financování...</string>
     <string name="supporters_contributors_donate_button">Přispět Nuvio</string>
     <string name="supporters_contributors_qr_title">Naskenujte pro darování</string>
@@ -1456,16 +1454,8 @@
     <string name="debrid_resolution_failed">Tento stream Debrid se nepodařilo získat.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P streamování</string>
-    <string name="p2p_consent_body">Tento stream používá technologii peer-to-peer (P2P). Povolením P2P berete na vědomí a souhlasíte, že:\n\n\u2022 Vaše IP adresa bude viditelná pro ostatní peer v síti\n\u2022 Jste výhradně odpovědní za obsah, ke kterému přistupujete\n\u2022 Potvrzujete, že máte zákonné právo streamovat tento obsah ve vaší jurisdikci\n\u2022 Nuvio nehostuje, nedistribuuje ani nekontroluje žádný P2P obsah\n\u2022 Nuvio nenese žádnou odpovědnost za jakékoli právní důsledky vyplývající z vašeho použití P2P streamování\n\nTuto funkci používáte výhradně na vlastní riziko. P2P lze kdykoli zakázat v Nastavení.</string>
-    <string name="p2p_consent_enable">Povolit P2P</string>
-    <string name="p2p_consent_cancel">Zrušit</string>
-    <string name="settings_p2p_title">P2P streamování</string>
-    <string name="settings_p2p_subtitle">Povolit peer-to-peer (torrent) streamy</string>
     <string name="settings_p2p_hide_stats_title">Skrýt statistiky torrentu</string>
     <string name="settings_p2p_hide_stats_subtitle">Skrýt vyrovnávací paměť, seedy, peery a rychlost stahování během načítání a přehrávání</string>
-    <string name="p2p_download_title">Stahování P2P enginu</string>
-    <string name="p2p_download_subtitle">Toto je jednorázové stažení vyžadované pro P2P streamování.</string>
     <string name="stream_type_external">Externí</string>
     <string name="stream_player_picker_title">Jaký přehrávač by měl být použit?</string>
     <string name="stream_player_internal">Interní</string>
@@ -2769,7 +2759,7 @@
     <string name="playback_cache_vod_size">Velikost cache VOD</string>
     <string name="playback_cache_vod_size_sub">Maximální využití disku pro progresivní cache VOD (mazáno metodou LRU).</string>
     <string name="playback_cache_info_range">Rozsah: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">Automatický režim cílí přibližně na 10 % volného místa.</string>
+    <string name="playback_cache_info_auto" formatted="false">Automatický režim cílí přibližně na 10 % volného místa.</string>
     <string name="playback_cache_info_manual_headroom">Ruční režim ponechává přibližně %1$dMB rezervy.</string>
     <string name="playback_cache_info_free_disk">Dostupné volné místo na disku: %1$s.</string>
     <string name="playback_cache_info_restart">Nový limit cache se uplatní po restartu aplikace při změně mezi režimy/velikostmi.</string>

@@ -407,8 +407,6 @@
     <string name="essential_stream_selection_subtitle">கைமுறையாக தேர்வு செய்யவும் அல்லது முதல் ஸ்ட்ரீமை தானாக இயக்கவும்.</string>
     <string name="essential_autoplay_next_episode">அடுத்த அத்தியாயம் தானியங்கு இயக்கம்</string>
     <string name="essential_autoplay_next_episode_subtitle">ஒரு ஸ்ட்ரீம் முடிந்ததும் அடுத்த அத்தியாயத்தை தொடர்க.</string>
-    <string name="essential_p2p_streams">P2P ஸ்ட்ரீம்கள்</string>
-    <string name="essential_p2p_streams_subtitle">பயனர்-பயனர் ஸ்ட்ரீம் மூலங்களை அனுமதி.</string>
     <string name="essential_subtitle_language_subtitle">விருப்பமான வசனவரி மொழி.</string>
     <string name="essential_audio_language_subtitle">விருப்பமான ஒலி மொழி.</string>
     <!-- Account / sign-in error messages -->
@@ -1160,16 +1158,8 @@
     <string name="stream_finding_source">ஸ்ட்ரீம் மூலத்தை கண்டுபிடிக்கிறது</string>
     <string name="stream_type_torrent">டோரண்ட்</string>
     <string name="stream_type_youtube">யூடியூப்</string>
-    <string name="p2p_consent_title">பீடூபீ ஸ்ட்ரீமிங்</string>
-    <string name="p2p_consent_body">இந்த ஸ்ட்ரீம் பியர்-டு-பியர் (பீடூபீ) தொழில்நுட்பத்தை பயன்படுத்துகிறது. பீடூபீயை இயக்குவதன் மூலம், நீங்கள் பின்வருவனவற்றை ஒப்புக்கொள்கிறீர்கள்:\n\n\u2022 உங்கள் ஐபி முகவரி பிணையத்தில் உள்ள பிற பியர்களுக்கு தெரியும்\n\u2022 நீங்கள் அணுகும் உள்ளடக்கத்திற்கு முழுப் பொறுப்பு உங்களுக்கே\n\u2022 உங்கள் சட்டப்பரப்பில் இந்த உள்ளடக்கத்தை ஸ்ட்ரீம் செய்ய சட்டப்பூர்வ உரிமை உங்களிடம் உள்ளது என்பதை உறுதிப்படுத்துகிறீர்கள்\n\u2022 நுவியோ எந்த பீடூபீ உள்ளடக்கத்தையும் ஹோஸ்ட் செய்யாது, பகிராது அல்லது கட்டுப்படுத்தாது\n\u2022 பீடூபீ ஸ்ட்ரீமிங்கைப் பயன்படுத்துவதால் ஏற்படும் எந்த சட்ட விளைவுகளுக்கும் நுவியோ பொறுப்பேற்காது\n\nஇந்த அம்சத்தை முழுமையாக உங்கள் சொந்த ஆபத்தில் பயன்படுத்துகிறீர்கள். அமைப்புகளில் எப்போது வேண்டுமானாலும் பீடூபீயை முடக்கலாம்.</string>
-    <string name="p2p_consent_enable">பீடூபீயை இயக்கு</string>
-    <string name="p2p_consent_cancel">ரத்து செய்</string>
-    <string name="settings_p2p_title">பீடூபீ ஸ்ட்ரீமிங்</string>
-    <string name="settings_p2p_subtitle">பியர்-டு-பியர் (டோரண்ட்) ஸ்ட்ரீம்களை அனுமதி</string>
     <string name="settings_p2p_hide_stats_title">டோரண்ட் புள்ளிவிவரங்களை மறை</string>
     <string name="settings_p2p_hide_stats_subtitle">ஏற்றுதல் மற்றும் இயக்கத்தின் போது பஃபர், சீட்ஸ், பியர்ஸ் மற்றும் பதிவிறக்க வேகத்தை மறை</string>
-    <string name="p2p_download_title">பீடூபீ என்ஜின் பதிவிறக்கம் செய்யப்படுகிறது</string>
-    <string name="p2p_download_subtitle">இது பீடூபீ ஸ்ட்ரீமிங்கிற்கு தேவையான ஒருமுறை பதிவிறக்கம்.</string>
     <string name="stream_type_external">வெளிப்புறம்</string>
     <string name="stream_player_picker_title">எந்த பிளேயர் பயன்படுத்தப்பட வேண்டும்?</string>
     <string name="stream_player_internal">உள்ளமைவு</string>

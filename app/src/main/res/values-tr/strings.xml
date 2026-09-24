@@ -525,8 +525,6 @@
     <string name="essential_autoplay_next_episode">Sonraki bölümü otomatik oynat</string>
     <string name="essential_autoplay_next_episode_subtitle">Bir yayın bittikten sonra sonraki bölüme geç.</string>
     <string name="external_auto_next_loading">Sonraki bölüm yükleniyor…</string>
-    <string name="essential_p2p_streams">P2P yayınları</string>
-    <string name="essential_p2p_streams_subtitle">Eşler arası (peer-to-peer) yayın kaynaklarına izin ver.</string>
     <string name="essential_subtitle_language_subtitle">Tercih edilen altyazı dili.</string>
     <string name="essential_audio_language_subtitle">Tercih edilen ses dili.</string>
     <!-- Account / sign-in error messages -->
@@ -664,7 +662,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio tamamen ücretsiz ve açık kaynak kalmaya devam edecektir. Ancak projeye destek olmak isterseniz, geliştirme süremi ve altyapı giderlerini karşılamama yardımcı olabilirsiniz.</string>
     <string name="supporters_contributors_donation_progress_title">Bu ayki sunucu ve bakım masrafları</string>
     <string name="supporters_contributors_donation_progress_complete">Karşılandı. Ek destekler artık geliştirmelere aktarılıyor.</string>
-    <string name="supporters_contributors_donation_progress_remaining">%100\'e ulaştıktan sonra, gelen ek destekler geliştirmelere aktarılır.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">%100\'e ulaştıktan sonra, gelen ek destekler geliştirmelere aktarılır.</string>
     <string name="supporters_contributors_loading_donation_progress">Destek ilerlemesi yükleniyor...</string>
     <string name="supporters_contributors_donate_button">Nuvio\'ya Destek Ol</string>
     <string name="supporters_contributors_qr_title">Bağış yapmak için kodu taratın</string>
@@ -1438,7 +1436,7 @@
     <string name="trakt_cw_window_title">İzlemeye Devam Etme Penceresi</string>
     <string name="trakt_cw_window_subtitle">Trakt aktivitenizin ne kadarının \u0027izlemeye devam ediliyor\u0027 kısmında görüneceğini seçin.</string>
     <string name="trakt_unaired_dialog_title">Yayınlanmamış Sıradaki Bölümler</string>
-    <string name="trakt_unaired_dialog_subtitle">Yaklaşan bölümlerin yayınlanmadan önce "İzlemeye Devam Et" sekmesine dahil edilip edilmeyeceğini seçin.</string>
+    <string name="trakt_unaired_dialog_subtitle">Yaklaşan bölümlerin yayınlanmadan önce \"İzlemeye Devam Et\" sekmesine dahil edilip edilmeyeceğini seçin.</string>
     <string name="trakt_show_unaired">Yayınlanmamış bölümleri göster</string>
     <string name="trakt_hide_unaired">Yayınlanmamış bölümleri gizle</string>
     <string name="trakt_all_history">Tüm geçmiş</string>
@@ -1661,16 +1659,8 @@
     <string name="debrid_resolution_failed">Bu Debrid yayını çözümlenemedi.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P Yayın</string>
-    <string name="p2p_consent_body">Bu yayın eşler arası (P2P) teknolojisini kullanmaktadır. P2P\'yi etkinleştirerek şunları kabul etmiş olursunuz:\n\n\u2022 IP adresiniz ağdaki diğer kullanıcılara görünür hale gelecektir\n\u2022 Eriştiğiniz içerikten yalnızca siz sorumlusunuz\n\u2022 Bulunduğunuz yerde bu içeriği yasal olarak izleme hakkınız olduğunu onaylayıyorsunuz\n\u2022 Nuvio hiçbir P2P içeriği barındırmaz, dağıtmaz veya kontrol etmez\n\u2022 Nuvio, P2P yayını kullanımınızdan doğabilecek hukuki sonuçlardan sorumlu değildir\n\nBu özelliği tamamen kendi riskinizle kullanırsınız. P2P, istediğiniz zaman Ayarlar\'dan kapatılabilir.</string>
-    <string name="p2p_consent_enable">P2P\'yi Etkinleştir</string>
-    <string name="p2p_consent_cancel">İptal</string>
-    <string name="settings_p2p_title">P2P Yayın</string>
-    <string name="settings_p2p_subtitle">Eşler arası (torrent) yayınlara izin ver</string>
     <string name="settings_p2p_hide_stats_title">Torrent istatistiklerini gizle</string>
     <string name="settings_p2p_hide_stats_subtitle">Yükleme ve oynatma sırasında tampon, tohum, eş ve indirme hızı bilgisini gizle</string>
-    <string name="p2p_download_title">P2P Motoru İndiriliyor</string>
-    <string name="p2p_download_subtitle">Bu, P2P yayın için gereken tek seferlik bir indirmedir.</string>
     <string name="stream_type_external">Harici</string>
     <string name="stream_player_picker_title">Hangi oynatıcı kullanılsın?</string>
     <string name="stream_player_internal">Dahili Oynatıcı</string>
@@ -2445,7 +2435,7 @@
     <string name="playback_cache_vod_size">VOD Önbellek Boyutu</string>
     <string name="playback_cache_vod_size_sub">Aşamalı VOD önbelleği için en fazla disk kullanımı.</string>
     <string name="playback_cache_info_range">Aralık: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">Otomatik mod, boş alanın yaklaşık %10\'unu hedefler.</string>
+    <string name="playback_cache_info_auto" formatted="false">Otomatik mod, boş alanın yaklaşık %10\'unu hedefler.</string>
     <string name="playback_cache_info_manual_headroom">Manuel mod, yaklaşık %1$d MB boş alan payı bırakır.</string>
     <string name="playback_cache_info_free_disk">Kullanılabilir boş alan: %1$s.</string>
     <string name="playback_cache_info_restart">Modlar veya boyutlar arasında geçiş yapıldığında, yeni önbellek sınırı uygulama yeniden başlatıldıktan sonra geçerli olur.</string>
@@ -2718,9 +2708,9 @@
     <!-- Collection Editor -->
     <string name="collections_delete_confirm_title">Koleksiyon silinsin mi?</string>
     <string name="collections_delete_confirm">Sil</string>
-    <string name="collections_delete_confirm_subtitle">"%1$s" kalıcı olarak silinecek. Bu işlem geri alınamaz.</string>
+    <string name="collections_delete_confirm_subtitle">\"%1$s\" kalıcı olarak silinecek. Bu işlem geri alınamaz.</string>
     <string name="collections_editor_delete_folder_title">Klasör silinsin mi?</string>
-    <string name="collections_editor_delete_folder_subtitle">"%1$s" ve içindekiler kalıcı olarak silinecek.</string>
+    <string name="collections_editor_delete_folder_subtitle">\"%1$s\" ve içindekiler kalıcı olarak silinecek.</string>
     <string name="collections_editor_row_title">Satır Başlığı</string>
     <string name="collections_editor_save">Kaydet</string>
     <string name="collections_editor_backdrop">Arka Plan Görseli</string>
@@ -3133,7 +3123,7 @@
     <string name="simkl_error_authorization_revoked">Simkl yetkisi iptal edildi. Tekrar bağlan.</string>
     <string name="simkl_error_network">Simkl\'a ulaşılamıyor. Tekrar dene.</string>
     <string name="tracking_removal_title">%1$s üzerinden kaldırılsın mı?</string>
-    <string name="tracking_removal_message">"%1$s" kaydını %2$s üzerinden kaldırmak, oradaki %3$s da siler. Bu geri alınamaz.</string>
+    <string name="tracking_removal_message">\"%1$s\" kaydını %2$s üzerinden kaldırmak, oradaki %3$s da siler. Bu geri alınamaz.</string>
     <string name="tracking_removal_impact_history">izleme geçmişini</string>
     <string name="tracking_removal_impact_rating">puanını</string>
     <string name="tracking_removal_impact_history_rating">izleme geçmişini ve puanını</string>

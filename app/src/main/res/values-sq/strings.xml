@@ -455,8 +455,6 @@
     <string name="essential_autoplay_next_episode">Luaj automatikisht episodin tjetër</string>
     <string name="essential_autoplay_next_episode_subtitle">Vazhdo te episodi tjetër pasi të përfundojë transmetimi.</string>
     <string name="external_auto_next_loading">Duke ngarkuar episodin tjetër…</string>
-    <string name="essential_p2p_streams">Transmetime P2P</string>
-    <string name="essential_p2p_streams_subtitle">Lejo burime transmetimi peer-to-peer.</string>
     <string name="essential_subtitle_language_subtitle">Gjuha e preferuar e titrave.</string>
     <string name="essential_audio_language_subtitle">Gjuha e preferuar e audios.</string>
     <!-- Account / sign-in error messages -->
@@ -583,7 +581,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio do të mbetet falas dhe me burim të hapur. Nëse dëshironi ta mbështesni projektin, mund të ndihmoni në mbulimin e kohës dhe infrastrukturës pas tij.</string>
     <string name="supporters_contributors_donation_progress_title">Serveri dhe mirëmbajtja e këtij muaji</string>
     <string name="supporters_contributors_donation_progress_complete">U mbulua. Mbështetja shtesë tani shkon për zhvillim.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Pas 100%, mbështetja shtesë shkon për zhvillim.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Pas 100%, mbështetja shtesë shkon për zhvillim.</string>
     <string name="supporters_contributors_loading_donation_progress">Duke ngarkuar progresin e financimit...</string>
     <string name="supporters_contributors_donate_button">Mbështet Nuvio</string>
     <string name="supporters_contributors_qr_title">Skano për të mbështetur</string>
@@ -1499,16 +1497,8 @@
     <string name="debrid_resolution_failed">Nuk mund të zgjidhej ky transmetim Debrid.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">Transmetim P2P</string>
-    <string name="p2p_consent_body">Ky transmetim përdor teknologjinë peer-to-peer (P2P). Duke aktivizuar P2P, pranon dhe konfirmon se:\n\n\u2022 Adresa jote IP do të jetë e dukshme për pjesëmarrësit e tjerë në rrjet\n\u2022 Je vetëm ti përgjegjës për përmbajtjen që qasesh\n\u2022 Konfirmon se ke të drejtën ligjore për ta transmetuar këtë përmbajtje në juridiksionin tënd\n\u2022 Nuvio nuk hoston, shpërndan apo kontrollon asnjë përmbajtje P2P\n\u2022 Nuvio nuk mban përgjegjësi për pasoja ligjore që mund të lindin nga përdorimi yt i transmetimit P2P\n\nKëtë veçori e përdor tërësisht me rrezikun tënd. P2P mund të çaktivizohet në çdo kohë te Cilësimet.</string>
-    <string name="p2p_consent_enable">Aktivizo P2P</string>
-    <string name="p2p_consent_cancel">Anulo</string>
-    <string name="settings_p2p_title">Transmetim P2P</string>
-    <string name="settings_p2p_subtitle">Lejo transmetimet peer-to-peer (torrent)</string>
     <string name="settings_p2p_hide_stats_title">Fshih statistikat e torrentit</string>
     <string name="settings_p2p_hide_stats_subtitle">Fshih buffer-in, seed-et, peer-at dhe shpejtësinë e shkarkimit gjatë ngarkimit dhe riprodhimit</string>
-    <string name="p2p_download_title">Duke shkarkuar motorin P2P</string>
-    <string name="p2p_download_subtitle">Ky është një shkarkim njëherësh që kërkohet për transmetimin P2P.</string>
     <string name="stream_type_external">I jashtëm</string>
     <string name="stream_player_picker_title">Cili luajtës duhet të përdoret?</string>
     <string name="stream_player_internal">I brendshëm</string>
@@ -2834,7 +2824,7 @@
     <string name="playback_cache_vod_size">Madhësia e cache-it VOD</string>
     <string name="playback_cache_vod_size_sub">Përdorimi maksimal i diskut për cache-in progresiv VOD (hiqet me LRU).</string>
     <string name="playback_cache_info_range">Diapazoni: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">Modaliteti automatik synon rreth 10% të hapësirës së lirë.</string>
+    <string name="playback_cache_info_auto" formatted="false">Modaliteti automatik synon rreth 10% të hapësirës së lirë.</string>
     <string name="playback_cache_info_manual_headroom">Modaliteti manual mban rreth %1$dMB hapësirë rezervë.</string>
     <string name="playback_cache_info_free_disk">Hapësira e lirë në disk: %1$s.</string>
     <string name="playback_cache_info_restart">Kufiri i ri i cache-it zbatohet pas rinisjes së aplikacionit kur ndryshohet modaliteti/madhësia.</string>

@@ -518,8 +518,6 @@
     <string name="essential_autoplay_next_episode">Automatski pusti sledeću epizodu</string>
     <string name="essential_autoplay_next_episode_subtitle">Nastavite na sledeću epizodu nakon što se strim završi.</string>
     <string name="external_auto_next_loading">Učitavanje sledeće epizode…</string>
-    <string name="essential_p2p_streams">P2P strimovi</string>
-    <string name="essential_p2p_streams_subtitle">Dozvoli P2P izvore strimovanja.</string>
     <string name="essential_subtitle_language_subtitle">Željeni jezik titlova.</string>
     <string name="essential_audio_language_subtitle">Željeni jezik zvuka.</string>
     <!-- Account / sign-in error messages -->
@@ -655,7 +653,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio će ostati besplatan i otvorenog koda. Ako želite da podržite projekat, možete pomoći da se pokrije vreme i infrastruktura iza njega.</string>
     <string name="supporters_contributors_donation_progress_title">Ovomesečni server i održavanje</string>
     <string name="supporters_contributors_donation_progress_complete">Pokriveno. Dodatna podrška sada ide na razvoj.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Nakon 100%, dodatna podrška ide na razvoj.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Nakon 100%, dodatna podrška ide na razvoj.</string>
     <string name="supporters_contributors_loading_donation_progress">Učitavanje napretka finansiranja...</string>
     <string name="supporters_contributors_donate_button">Podržite Nuvio</string>
     <string name="supporters_contributors_qr_title">Skenirajte da podržite</string>
@@ -798,7 +796,7 @@
     <string name="audio_decoder_prefer_app">Daj prednost dekoderima aplikacije (FFmpeg)</string>
     <string name="audio_decoder_priority">Prioritet dekodera</string>
     <string name="audio_enable_downmix_title">Omogući miksovanje na manje kanala</string>
-    <string name="audio_enable_downmix_subtitle">Koristi FFmpeg putanju za miksovanje na manje kanala. Zahteva "Daj prednost dekoderima aplikacije (FFmpeg)". Kada je onemogućeno, zvuk prati prethodnu Android/uređaj putanju.</string>
+    <string name="audio_enable_downmix_subtitle">Koristi FFmpeg putanju za miksovanje na manje kanala. Zahteva \"Daj prednost dekoderima aplikacije (FFmpeg)\". Kada je onemogućeno, zvuk prati prethodnu Android/uređaj putanju.</string>
     <string name="audio_tunneled">Tunelirana reprodukcija (Tunneled Playback)</string>
     <string name="audio_tunneled_sub">Sinhronizacija zvuka/videa na nivou hardvera. Može poboljšati reprodukciju na nekim Android TV uređajima</string>
     <string name="audio_force_optical_passthrough">Forsiraj AC-3 transkodiranje (Optički/SPDIF)</string>
@@ -819,7 +817,7 @@
     <string name="audio_dv5_to_dv81_title">Pretvori DV5 u DV8.1</string>
     <string name="audio_dv5_to_dv81_sub">Šalje strimove profila 5 kao profil 8.1 za izlaz kompatibilan sa HDR10. Pomaže na uređajima koji nemaju nativni DV5 dekoder.</string>
     <string name="audio_strip_hdr10plus_title">Ukloni HDR10+ metapodatke</string>
-    <string name="audio_strip_hdr10plus_sub">Ukloni HDR10+ dinamičke metapodatke iz strimova. Kada je takođe omogućeno "Pretvori u DV8.1", uklanjanje se vrši nakon konverzije.</string>
+    <string name="audio_strip_hdr10plus_sub">Ukloni HDR10+ dinamičke metapodatke iz strimova. Kada je takođe omogućeno \"Pretvori u DV8.1\", uklanjanje se vrši nakon konverzije.</string>
     <string name="audio_dv7_preserve_mapping_title">Sačuvaj DV preslikavanje (DV7 u DV8.1)</string>
     <string name="audio_dv7_preserve_mapping_sub">Zadržava originalno mapiranje tonova koje je zamislio autor, uz cenu malo veće obrade po kadru.</string>
     <string name="dv7_libdovi_mode_caption" translatable="false">Conversion mode (auto-selected, do not change unless instructed). Pick one to force it; None uses auto. Active only when DV7 Handling is Convert to DV8.1.</string>
@@ -995,7 +993,7 @@
     <string name="layout_discover_location_in_sidebar">Prikaži u bočnom panelu</string>
     <string name="layout_discover_location_in_sidebar_desc">Otkrij dobija sopstvenu stavku u bočnom panelu.</string>
     <string name="layout_poster_labels">Prikaži oznake postera</string>
-    <string name="layout_poster_labels_sub">Prikaži naslove ispod postera u redovima, mreži i prikazu "Vidi sve".</string>
+    <string name="layout_poster_labels_sub">Prikaži naslove ispod postera u redovima, mreži i prikazu \"Vidi sve\".</string>
     <string name="layout_addon_name">Prikaži ime dodatka</string>
     <string name="layout_addon_name_sub">Prikaži naziv izvora ispod naslova kataloga.</string>
     <string name="layout_catalog_type">Prikaži tip kataloga</string>
@@ -1408,9 +1406,9 @@
     <string name="trakt_comments_dialog_subtitle">Izaberite da li stranice sa metapodacima treba da prikazuju Trakt recenzije kada je vaš nalog povezan.</string>
     <string name="trakt_comments_now_shown">Trakt recenzije na stranicama metapodataka su sada prikazane</string>
     <string name="trakt_comments_now_hidden">Trakt recenzije na stranicama metapodataka su sada sakrivene</string>
-    <string name="trakt_more_like_this_source_title">Izvor za "Sličan sadržaj"</string>
+    <string name="trakt_more_like_this_source_title">Izvor za \"Sličan sadržaj\"</string>
     <string name="trakt_more_like_this_source_subtitle">Izaberite odakle dolaze preporuke na ekranima sa detaljima i ekranima nakon reprodukcije</string>
-    <string name="trakt_more_like_this_source_dialog_title">Izvor za "Sličan sadržaj"</string>
+    <string name="trakt_more_like_this_source_dialog_title">Izvor za \"Sličan sadržaj\"</string>
     <string name="trakt_more_like_this_source_dialog_subtitle">Izaberite izvor za preporuke prikazane na ekranima sa detaljima i ekranima nakon reprodukcije.</string>
     <string name="trakt_more_like_this_source_trakt">Trakt</string>
     <string name="trakt_more_like_this_source_tmdb">TMDB</string>
@@ -1650,16 +1648,8 @@
     <string name="debrid_resolution_failed">Nije moguće razrešiti ovaj Debrid strim.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P strimovanje</string>
-    <string name="p2p_consent_body">Ovaj strim koristi peer-to-peer (P2P) tehnologiju. Omogućavanjem P2P-a potvrđujete i saglasni ste da:\n\n\u2022 Vaša IP adresa će biti vidljiva drugim korisnicima u mreži\n\u2022 Vi ste isključivo odgovorni za sadržaj kom pristupate\n\u2022 Potvrđujete da imate zakonsko pravo na strimovanje ovog sadržaja u vašoj jurisdikciji\n\u2022 Nuvio ne hostuje, ne distribuira i ne kontroliše P2P sadržaj\n\u2022 Nuvio ne snosi nikakvu odgovornost za pravne posledice proistekle iz vašeg korišćenja P2P strimovanja\n\nOvu funkciju koristite isključivo na sopstvenu odgovornost. P2P se može onemogućiti u bilo kom trenutku u Podešavanjima.</string>
-    <string name="p2p_consent_enable">Omogući P2P</string>
-    <string name="p2p_consent_cancel">Otkaži</string>
-    <string name="settings_p2p_title">P2P strimovanje</string>
-    <string name="settings_p2p_subtitle">Dozvoli peer-to-peer (torrent) strimove</string>
     <string name="settings_p2p_hide_stats_title">Sakrij torrent statistiku</string>
     <string name="settings_p2p_hide_stats_subtitle">Sakrij bafer, seed-ove, peer-ove i brzinu preuzimanja tokom učitavanja i reprodukcije</string>
-    <string name="p2p_download_title">Preuzimanje P2P mehanizma</string>
-    <string name="p2p_download_subtitle">Ovo je jednokratno preuzimanje potrebno za P2P strimovanje.</string>
     <string name="stream_type_external">Spoljni</string>
     <string name="stream_player_picker_title">Koji plejer treba koristiti?</string>
     <string name="stream_player_internal">Interni</string>
@@ -3105,7 +3095,7 @@
     <string name="playback_cache_vod_size">VOD veličina keša</string>
     <string name="playback_cache_vod_size_sub">Maksimalno zauzeće diska za progresivni VOD keš (sa LRU brisanjem najstarijih podataka).</string>
     <string name="playback_cache_info_range">Opseg: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">Automatski režim cilja oko 10% slobodnog prostora.</string>
+    <string name="playback_cache_info_auto" formatted="false">Automatski režim cilja oko 10% slobodnog prostora.</string>
     <string name="playback_cache_info_manual_headroom">Ručni režim zadržava oko %1$dMB rezerve.</string>
     <string name="playback_cache_info_free_disk">Dostupno slobodnog prostora: %1$s.</string>
     <string name="playback_cache_info_restart">Novo ograničenje keša se primenjuje nakon ponovnog pokretanja aplikacije pri promeni režima ili veličine.</string>

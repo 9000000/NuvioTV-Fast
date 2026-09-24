@@ -423,8 +423,6 @@
     <string name="essential_stream_selection_subtitle">Pilih secara manual atau putar otomatis stream yang pertama tersedia.</string>
     <string name="essential_autoplay_next_episode">Putar otomatis episode berikutnya</string>
     <string name="essential_autoplay_next_episode_subtitle">Lanjutkan ke episode berikutnya setelah stream selesai.</string>
-    <string name="essential_p2p_streams">Stream P2P</string>
-    <string name="essential_p2p_streams_subtitle">Izinkan sumber stream peer-to-peer.</string>
     <string name="essential_subtitle_language_subtitle">Bahasa subtitle yang diutamakan.</string>
     <string name="essential_audio_language_subtitle">Bahasa audio yang diutamakan.</string>
     <!-- Account / sign-in error messages -->
@@ -1312,16 +1310,8 @@
     <string name="debrid_resolution_failed">Tidak dapat mengurai stream Debrid ini.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">Streaming P2P</string>
-    <string name="p2p_consent_body">Stream ini menggunakan teknologi peer-to-peer (P2P). Dengan mengaktifkan P2P, Anda mengakui dan menyetujui bahwa:\n\n\u2022 Alamat IP Anda akan terlihat oleh peer lain di jaringan\n\u2022 Anda sepenuhnya bertanggung jawab atas konten yang Anda akses\n\u2022 Anda mengonfirmasi bahwa Anda memiliki hak hukum untuk streaming konten ini di yurisdiksi Anda\n\u2022 Nuvio tidak menyelenggarakan, mendistribusikan, atau mengontrol konten P2P apa pun\n\u2022 Nuvio tidak bertanggung jawab atas konsekuensi hukum apa pun yang timbul dari penggunaan streaming P2P Anda\n\nAnda menggunakan fitur ini sepenuhnya atas risiko Anda sendiri. P2P dapat dinonaktifkan kapan saja di Pengaturan.</string>
-    <string name="p2p_consent_enable">Aktifkan P2P</string>
-    <string name="p2p_consent_cancel">Batal</string>
-    <string name="settings_p2p_title">Streaming P2P</string>
-    <string name="settings_p2p_subtitle">Izinkan stream peer-to-peer (torrent)</string>
     <string name="settings_p2p_hide_stats_title">Sembunyikan statistik torrent</string>
     <string name="settings_p2p_hide_stats_subtitle">Sembunyikan buffer, seed, peer, dan kecepatan unduhan selama pemuatan dan pemutaran</string>
-    <string name="p2p_download_title">Mengunduh Mesin P2P</string>
-    <string name="p2p_download_subtitle">Ini unduhan satu kali yang diperlukan untuk streaming P2P.</string>
     <string name="stream_type_external">Eksternal</string>
     <string name="stream_player_picker_title">Pemutar apa yang harus digunakan?</string>
     <string name="stream_player_internal">Internal</string>

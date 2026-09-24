@@ -1237,9 +1237,9 @@
     <string name="trakt_comments_dialog_subtitle">Wybierz, czy strony metadanych mają pokazywać recenzje Trakt gdy konto jest połączone.</string>
     <string name="trakt_comments_now_shown">Recenzje Trakt na stronach metadanych są teraz widoczne</string>
     <string name="trakt_comments_now_hidden">Recenzje Trakt na stronach metadanych są teraz ukryte</string>
-    <string name="trakt_more_like_this_source_title">Źródło „Podobne"</string>
+    <string name="trakt_more_like_this_source_title">Źródło „Podobne\"</string>
     <string name="trakt_more_like_this_source_subtitle">Wybierz skąd pobierane są rekomendacje na stronach szczegółów</string>
-    <string name="trakt_more_like_this_source_dialog_title">Źródło „Podobne"</string>
+    <string name="trakt_more_like_this_source_dialog_title">Źródło „Podobne\"</string>
     <string name="trakt_more_like_this_source_dialog_subtitle">Wybierz źródło rekomendacji wyświetlanych na stronach szczegółów.</string>
     <string name="trakt_more_like_this_source_trakt">Trakt</string>
     <string name="trakt_more_like_this_source_tmdb">TMDB</string>
@@ -1632,14 +1632,6 @@
     <string name="action_load_more">Załaduj więcej</string>
 
     <!-- P2P -->
-    <string name="p2p_consent_title">Streaming P2P</string>
-    <string name="p2p_consent_body">Ten stream korzysta z technologii peer-to-peer (P2P). Włączając P2P, potwierdzasz i zgadzasz się, że:\n\n\u2022 Twój adres IP będzie widoczny dla innych uczestników sieci\n\u2022 Ponosisz wyłączną odpowiedzialność za treści, do których uzyskujesz dostęp\n\u2022 Potwierdzasz, że masz prawo do streamowania tych treści w swojej jurysdykcji\n\u2022 Nuvio nie hostuje, nie dystrybuuje ani nie kontroluje żadnych treści P2P\n\u2022 Nuvio nie ponosi odpowiedzialności za jakiekolwiek konsekwencje prawne wynikające z korzystania ze streamingu P2P\n\nKorzystasz z tej funkcji wyłącznie na własne ryzyko. P2P można wyłączyć w dowolnym momencie w Ustawieniach.</string>
-    <string name="p2p_consent_cancel">Anuluj</string>
-    <string name="p2p_consent_enable">Włącz P2P</string>
-    <string name="p2p_download_title">Pobieranie silnika P2P</string>
-    <string name="p2p_download_subtitle">Jednorazowe pobieranie wymagane do streamingu P2P.</string>
-    <string name="settings_p2p_title">Streaming P2P</string>
-    <string name="settings_p2p_subtitle">Zezwól na streamy peer-to-peer (torrent)</string>
     <string name="settings_p2p_hide_stats_title">Ukryj statystyki torrentów</string>
     <string name="settings_p2p_hide_stats_subtitle">Ukryj bufor, seedy, peery i prędkość pobierania podczas ładowania i odtwarzania</string>
 
@@ -2181,8 +2173,6 @@
     <string name="essential_audio_language_subtitle">Preferowany język audio.</string>
     <string name="essential_autoplay_next_episode">Automatyczne odtwarzanie następnego odcinka</string>
     <string name="essential_autoplay_next_episode_subtitle">Kontynuuj do następnego odcinka po zakończeniu streamu.</string>
-    <string name="essential_p2p_streams">Streamy P2P</string>
-    <string name="essential_p2p_streams_subtitle">Zezwalaj na źródła streamów peer-to-peer.</string>
     <string name="essential_playback_basics">Podstawy odtwarzania</string>
     <string name="essential_playback_header_subtitle">Proste ustawienia odtwarzania, napisów, audio i P2P.</string>
     <string name="essential_playback_header_title">Odtwarzanie</string>
@@ -2702,7 +2692,7 @@
     <string name="playback_cache_vod_size_sub">Maksymalne użycie dysku dla progresywnego cache VOD (usuwanie LRU).</string>
     <string name="playback_cache_auto_size">Automatyczny rozmiar</string>
     <string name="playback_cache_auto_size_sub">Gdy włączony, rozmiar cache jest obliczany z wolnego miejsca na dysku. Wyłącz, aby wybrać rozmiar ręcznie.</string>
-    <string name="playback_cache_info_auto">Tryb automatyczny celuje w ok. 10%% wolnego miejsca.</string>
+    <string name="playback_cache_info_auto" formatted="false">Tryb automatyczny celuje w ok. 10%% wolnego miejsca.</string>
     <string name="playback_cache_info_free_disk">Wolne miejsce na dysku: %1$s.</string>
     <string name="playback_cache_info_manual_headroom">Tryb ręczny zachowuje ok. %1$dMB zapasu.</string>
     <string name="playback_cache_info_range">Zakres: %1$d–%2$d MB.</string>
@@ -3035,7 +3025,7 @@
     <!-- Supporters / donation progress -->
     <string name="supporters_contributors_donation_progress_title">Serwer i utrzymanie w tym miesiącu</string>
     <string name="supporters_contributors_donation_progress_complete">Pokryto. Dodatkowe wsparcie idzie teraz na rozwój.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Po 100%, dodatkowe wsparcie idzie na rozwój.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Po 100%, dodatkowe wsparcie idzie na rozwój.</string>
     <string name="supporters_contributors_loading_donation_progress">Ładowanie postępu finansowania...</string>
 
     <!-- Missing translations added -->

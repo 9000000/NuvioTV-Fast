@@ -395,9 +395,7 @@
     <string name="essential_stream_selection_subtitle">Izberite ročno ali samodejno predvajajte prvi razpoložljivi vir.</string>
     <string name="essential_autoplay_next_episode">Samodejno predvajaj naslednjo epizodo</string>
     <string name="essential_autoplay_next_episode_subtitle">Nadaljuj na naslednjo epizodo po koncu predvajanja vira.</string>
-    <string name="essential_p2p_streams">Viri P2P</string>
-    <string name="essential_p2p_streams_subtitle">Dovoli vire P2P (peer-to-peer).</string>
-    <string name="essential_subtitle_language_subtitle">Želeni jezik podnapisov.</string>
+          <string name="essential_subtitle_language_subtitle">Želeni jezik podnapisov.</string>
     <string name="essential_audio_language_subtitle">Želeni jezik zvoka.</string>
     <!-- Account / sign-in error messages -->
     <string name="account_error_incorrect_pin">Nepravilen PIN.</string>
@@ -1124,16 +1122,9 @@
     <string name="stream_finding_source">Iskanje vira prenosa</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-	<string name="p2p_consent_title">P2P pretakanje</string>
-    <string name="p2p_consent_body">To pretakanje uporablja tehnologijo peer-to-peer (P2P). Z omogočanjem P2P potrjujete in se strinjate z naslednjim:\n\n\u2022 Vaš IP naslov bo viden drugim uporabnikom v omrežju\n\u2022 Sami ste izključno odgovorni za vsebino, do katere dostopate\n\u2022 Potrjujete, da imate zakonsko pravico do pretakanja te vsebine v vaši državi/jurisdikciji\n\u2022 Nuvio ne gosti, distribuira ali nadzoruje nobene P2P vsebine\n\u2022 Nuvio ne prevzema nobene odgovornosti za morebitne pravne posledice, ki bi izhajale iz vaše uporabe P2P pretakanja\n\nTo funkcijo uporabljate izključno na lastno odgovornost. P2P lahko kadar koli onemogočite v nastavitvah.</string>
-    <string name="p2p_consent_enable">Omogoči P2P</string>
-    <string name="p2p_consent_cancel">Prekliči</string>
-    <string name="settings_p2p_title">P2P pretakanje</string>
-    <string name="settings_p2p_subtitle">Dovoli peer-to-peer (torrent) pretakanje</string>
-    <string name="settings_p2p_hide_stats_title">Skrij statistiko torrentov</string>
+                   <string name="settings_p2p_hide_stats_title">Skrij statistiko torrentov</string>
     <string name="settings_p2p_hide_stats_subtitle">Skrij medpomnilnik, sejalce (seeds), vrstnike (peers) in hitrost prenosa med nalaganjem in predvajanjem</string>
-    <string name="p2p_download_title">Prenašanje P2P pogona</string>
-    <string name="p2p_download_subtitle">To je enkraten prenos, potreben za P2P pretakanje.</string>													   
+      													   
 	<string name="stream_type_external">Zunanje</string>
     <string name="stream_player_picker_title">Kateri predvajalnik naj se uporabi?</string>
     <string name="stream_player_internal">Notranji</string>

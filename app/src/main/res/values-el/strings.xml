@@ -81,18 +81,18 @@
   <string name="web_import_no_json">Δεν δόθηκε JSON</string>
   <string name="web_import_expected_array">Αναμενόταν πίνακας JSON συλλογών</string>
   <string name="web_import_empty_array">Κενός πίνακας: δεν βρέθηκαν συλλογές</string>
-  <string name="web_import_error_collection_invalid_id">Συλλογή {index}: λείπει ή δεν είναι έγκυρο το "id"</string>
-  <string name="web_import_error_collection_invalid_title">Συλλογή "{collection}": λείπει ή δεν είναι έγκυρο το "title"</string>
-  <string name="web_import_error_collection_folders_array">Συλλογή "{collection}": το "folders" πρέπει να είναι πίνακας</string>
-  <string name="web_import_error_folder_invalid_format">Συλλογή "{collection}", φάκελος {index}: μη έγκυρη μορφή</string>
-  <string name="web_import_error_folder_missing_id">Συλλογή "{collection}", φάκελος {index}: λείπει το "id"</string>
-  <string name="web_import_error_folder_missing_title">Συλλογή "{collection}", φάκελος "{folder}": λείπει το "title"</string>
-  <string name="web_import_error_sources_array">Συλλογή "{collection}", φάκελος "{folder}": το "sources" πρέπει να είναι πίνακας</string>
-  <string name="web_import_error_invalid_tile_shape">Συλλογή "{collection}", φάκελος "{folder}": μη έγκυρο tileShape "{shape}"</string>
-  <string name="web_import_error_source_invalid_format">Συλλογή "{collection}", φάκελος "{folder}", πηγή {index}: μη έγκυρη μορφή</string>
-  <string name="web_import_error_source_missing_addon_fields">Συλλογή "{collection}", φάκελος "{folder}", πηγή {index}: λείπουν υποχρεωτικά πεδία (addonId, type, catalogId)</string>
-  <string name="web_import_error_source_missing_tmdb_type">Συλλογή "{collection}", φάκελος "{folder}", πηγή {index}: λείπει τύπος πηγής TMDB</string>
-  <string name="web_import_error_source_missing_trakt_id">Συλλογή "{collection}", φάκελος "{folder}", πηγή {index}: λείπει ID λίστας Trakt</string>
+  <string name="web_import_error_collection_invalid_id">Συλλογή {index}: λείπει ή δεν είναι έγκυρο το \"id\"</string>
+  <string name="web_import_error_collection_invalid_title">Συλλογή \"{collection}\": λείπει ή δεν είναι έγκυρο το \"title\"</string>
+  <string name="web_import_error_collection_folders_array">Συλλογή \"{collection}\": το \"folders\" πρέπει να είναι πίνακας</string>
+  <string name="web_import_error_folder_invalid_format">Συλλογή \"{collection}\", φάκελος {index}: μη έγκυρη μορφή</string>
+  <string name="web_import_error_folder_missing_id">Συλλογή \"{collection}\", φάκελος {index}: λείπει το \"id\"</string>
+  <string name="web_import_error_folder_missing_title">Συλλογή \"{collection}\", φάκελος \"{folder}\": λείπει το \"title\"</string>
+  <string name="web_import_error_sources_array">Συλλογή \"{collection}\", φάκελος \"{folder}\": το \"sources\" πρέπει να είναι πίνακας</string>
+  <string name="web_import_error_invalid_tile_shape">Συλλογή \"{collection}\", φάκελος \"{folder}\": μη έγκυρο tileShape \"{shape}\"</string>
+  <string name="web_import_error_source_invalid_format">Συλλογή \"{collection}\", φάκελος \"{folder}\", πηγή {index}: μη έγκυρη μορφή</string>
+  <string name="web_import_error_source_missing_addon_fields">Συλλογή \"{collection}\", φάκελος \"{folder}\", πηγή {index}: λείπουν υποχρεωτικά πεδία (addonId, type, catalogId)</string>
+  <string name="web_import_error_source_missing_tmdb_type">Συλλογή \"{collection}\", φάκελος \"{folder}\", πηγή {index}: λείπει τύπος πηγής TMDB</string>
+  <string name="web_import_error_source_missing_trakt_id">Συλλογή \"{collection}\", φάκελος \"{folder}\", πηγή {index}: λείπει ID λίστας Trakt</string>
   <string name="web_import_success">Εισήχθησαν {count} συλλογές. Ελέγξτε τες και πατήστε Αποθήκευση αλλαγών για εφαρμογή.</string>
   <string name="web_import_invalid_json">Μη έγκυρο JSON</string>
   <!-- HomeScreen -->
@@ -254,7 +254,7 @@
   <string name="detail_comments_badge_review">Κριτική</string>
   <string name="detail_comments_badge_spoiler">Σπόιλερ</string>
   <string name="detail_comments_badge_rating">%1$d/10</string>
-  <string name="detail_comments_likes">%1$d επισημάνσεις "Μου αρέσει"</string>
+  <string name="detail_comments_likes">%1$d επισημάνσεις \"Μου αρέσει\"</string>
   <string name="tmdb_entity_kind_company">Εταιρεία παραγωγής</string>
   <string name="tmdb_entity_kind_network">Δίκτυο</string>
   <string name="tmdb_entity_rail_popular">Δημοφιλή</string>
@@ -465,8 +465,6 @@
   <string name="essential_stream_selection_subtitle">Επιλέξτε χειροκίνητα ή αυτόματη αναπαραγωγή της πρώτης διαθέσιμης ροής.</string>
   <string name="essential_autoplay_next_episode">Αυτόματη αναπαραγωγή επόμενου επεισοδίου</string>
   <string name="essential_autoplay_next_episode_subtitle">Συνέχεια στο επόμενο επεισόδιο μετά το τέλος μιας ροής.</string>
-  <string name="essential_p2p_streams">Ροές P2P</string>
-  <string name="essential_p2p_streams_subtitle">Να επιτρέπονται πηγές ροής peer-to-peer.</string>
   <string name="essential_subtitle_language_subtitle">Προτιμώμενη γλώσσα υπότιτλων.</string>
   <string name="essential_audio_language_subtitle">Προτιμώμενη γλώσσα ήχου.</string>
   <!-- Account / sign-in error messages -->
@@ -1516,24 +1514,8 @@
   <string name="debrid_resolution_failed">Δεν ήταν δυνατή η επίλυση αυτής της ροής Debrid.</string>
   <string name="stream_type_torrent">Torrent</string>
   <string name="stream_type_youtube">YouTube</string>
-  <string name="p2p_consent_title">Ροή P2P</string>
-  <string name="p2p_consent_body">Αυτή η ροή χρησιμοποιεί τεχνολογία peer-to-peer (P2P). Ενεργοποιώντας το P2P, αναγνωρίζετε και αποδέχεστε ότι:
-
-• Η διεύθυνση IP σας θα είναι ορατή σε άλλους ομότιμους κόμβους (peers) στο δίκτυο
-• Είστε αποκλειστικά υπεύθυνοι για το περιεχόμενο που προσπελάζετε
-• Επιβεβαιώνετε ότι έχετε το νομικό δικαίωμα να κάνετε streaming αυτού του περιεχομένου στη δικαιοδοσία σας
-• Το Nuvio δεν φιλοξενεί, δεν διανέμει και δεν ελέγχει κανένα περιεχόμενο P2P
-• Το Nuvio δεν φέρει καμία ευθύνη για νομικές συνέπειες που προκύπτουν από τη χρήση του P2P streaming
-
-Χρησιμοποιείτε αυτή τη λειτουργία αποκλειστικά με δική σας ευθύνη. Το P2P μπορεί να απενεργοποιηθεί οποιαδήποτε στιγμή στις Ρυθμίσεις.</string>
-  <string name="p2p_consent_enable">Ενεργοποίηση P2P</string>
-  <string name="p2p_consent_cancel">Ακύρωση</string>
-  <string name="settings_p2p_title">Ροή P2P</string>
-  <string name="settings_p2p_subtitle">Να επιτρέπονται ροές peer-to-peer (torrent)</string>
   <string name="settings_p2p_hide_stats_title">Απόκρυψη στατιστικών torrent</string>
   <string name="settings_p2p_hide_stats_subtitle">Απόκρυψη buffer, seeds, peers και ταχύτητας λήψης κατά τη φόρτωση και την αναπαραγωγή</string>
-  <string name="p2p_download_title">Λήψη μηχανής P2P</string>
-  <string name="p2p_download_subtitle">Αυτή είναι μια εφάπαξ λήψη που απαιτείται για ροή P2P.</string>
   <string name="stream_type_external">Εξωτερικό</string>
   <string name="stream_player_picker_title">Ποιο πρόγραμμα αναπαραγωγής να χρησιμοποιηθεί;</string>
   <string name="stream_player_internal">Εσωτερικό</string>
@@ -2420,7 +2402,7 @@
   <string name="collections_editor_trakt_list_with_id">Λίστα Trakt %1$d</string>
   <string name="collections_editor_trakt_public_list">Δημόσια λίστα Trakt</string>
   <string name="collections_editor_trakt_items_count">%1$d στοιχεία</string>
-  <string name="collections_editor_trakt_likes_count">%1$d επισημάνσεις "Μου αρέσει"</string>
+  <string name="collections_editor_trakt_likes_count">%1$d επισημάνσεις \"Μου αρέσει\"</string>
   <string name="collections_editor_error_valid_tmdb_id_or_url">Εισαγάγετε ένα έγκυρο ID ή URL TMDB</string>
   <string name="collections_editor_error_load_tmdb_source">Δεν ήταν δυνατή η φόρτωση της πηγής TMDB</string>
   <string name="collections_editor_error_trakt_list_id_or_url">Εισαγάγετε ID ή URL λίστας Trakt</string>
@@ -2580,18 +2562,18 @@
   <string name="collections_import_error_empty_input">Κενή είσοδος</string>
   <string name="collections_import_error_expected_array">Μη έγκυρη μορφή: αναμενόταν πίνακας</string>
   <string name="collections_import_error_empty_array">Κενός πίνακας: δεν βρέθηκαν συλλογές</string>
-  <string name="collections_import_error_missing_id">Συλλογή %1$d: λείπει ή είναι μη έγκυρο το "id"</string>
-  <string name="collections_import_error_missing_title">Συλλογή "%1$s": λείπει ή είναι μη έγκυρο το "title"</string>
-  <string name="collections_import_error_folders_array">Συλλογή "%1$s": το "folders" πρέπει να είναι πίνακας</string>
-  <string name="collections_import_error_folder_invalid">Συλλογή "%1$s", φάκελος %2$d: μη έγκυρη μορφή</string>
-  <string name="collections_import_error_folder_missing_id">Συλλογή "%1$s", φάκελος %2$d: λείπει το "id"</string>
-  <string name="collections_import_error_folder_missing_title">Συλλογή "%1$s", φάκελος "%2$s": λείπει το "title"</string>
-  <string name="collections_import_error_sources_array">Συλλογή "%1$s", φάκελος "%2$s": το "sources" πρέπει να είναι πίνακας</string>
-  <string name="collections_import_error_invalid_tile_shape">Συλλογή "%1$s", φάκελος "%2$s": μη έγκυρο tileShape "%3$s"</string>
-  <string name="collections_import_error_source_invalid">Συλλογή "%1$s", φάκελος "%2$s", πηγή %3$d: μη έγκυρη μορφή</string>
-  <string name="collections_import_error_source_required_fields">Συλλογή "%1$s", φάκελος "%2$s", πηγή %3$d: λείπουν υποχρεωτικά πεδία</string>
-  <string name="collections_import_error_missing_tmdb_type">Συλλογή "%1$s", φάκελος "%2$s", πηγή %3$d: λείπει τύπος πηγής TMDB</string>
-  <string name="collections_import_error_missing_trakt_list_id">Συλλογή "%1$s", φάκελος "%2$s", πηγή %3$d: λείπει ID λίστας Trakt</string>
+  <string name="collections_import_error_missing_id">Συλλογή %1$d: λείπει ή είναι μη έγκυρο το \"id\"</string>
+  <string name="collections_import_error_missing_title">Συλλογή \"%1$s\": λείπει ή είναι μη έγκυρο το \"title\"</string>
+  <string name="collections_import_error_folders_array">Συλλογή \"%1$s\": το \"folders\" πρέπει να είναι πίνακας</string>
+  <string name="collections_import_error_folder_invalid">Συλλογή \"%1$s\", φάκελος %2$d: μη έγκυρη μορφή</string>
+  <string name="collections_import_error_folder_missing_id">Συλλογή \"%1$s\", φάκελος %2$d: λείπει το \"id\"</string>
+  <string name="collections_import_error_folder_missing_title">Συλλογή \"%1$s\", φάκελος \"%2$s\": λείπει το \"title\"</string>
+  <string name="collections_import_error_sources_array">Συλλογή \"%1$s\", φάκελος \"%2$s\": το \"sources\" πρέπει να είναι πίνακας</string>
+  <string name="collections_import_error_invalid_tile_shape">Συλλογή \"%1$s\", φάκελος \"%2$s\": μη έγκυρο tileShape \"%3$s\"</string>
+  <string name="collections_import_error_source_invalid">Συλλογή \"%1$s\", φάκελος \"%2$s\", πηγή %3$d: μη έγκυρη μορφή</string>
+  <string name="collections_import_error_source_required_fields">Συλλογή \"%1$s\", φάκελος \"%2$s\", πηγή %3$d: λείπουν υποχρεωτικά πεδία</string>
+  <string name="collections_import_error_missing_tmdb_type">Συλλογή \"%1$s\", φάκελος \"%2$s\", πηγή %3$d: λείπει τύπος πηγής TMDB</string>
+  <string name="collections_import_error_missing_trakt_list_id">Συλλογή \"%1$s\", φάκελος \"%2$s\", πηγή %3$d: λείπει ID λίστας Trakt</string>
   <string name="collections_import_error_json_parse">Σφάλμα ανάλυσης JSON: %1$s</string>
   <!-- Library messages -->
   <string name="library_synced">Η βιβλιοθήκη συγχρονίστηκε</string>
@@ -2891,7 +2873,7 @@
   <string name="playback_cache_vod_size">Μέγεθος VOD Cache</string>
   <string name="playback_cache_vod_size_sub">Μέγιστη χρήση δίσκου για progressive VOD cache (διαγραφή με LRU).</string>
   <string name="playback_cache_info_range">Εύρος: %1$d-%2$d MB.</string>
-  <string name="playback_cache_info_auto">Η αυτόματη λειτουργία στοχεύει περίπου στο 10% του ελεύθερου χώρου.</string>
+  <string name="playback_cache_info_auto" formatted="false">Η αυτόματη λειτουργία στοχεύει περίπου στο 10% του ελεύθερου χώρου.</string>
   <string name="playback_cache_info_manual_headroom">Η χειροκίνητη λειτουργία κρατά περίπου %1$dMB ελεύθερο περιθώριο.</string>
   <string name="playback_cache_info_free_disk">Διαθέσιμος ελεύθερος δίσκος: %1$s.</string>
   <string name="playback_cache_info_restart">Το νέο όριο cache εφαρμόζεται μετά από επανεκκίνηση της εφαρμογής όταν αλλάζετε λειτουργία ή μέγεθος.</string>
@@ -3027,7 +3009,7 @@
   <string name="diag_label_rebuffers">Επαναφορτίσεις buffer</string>
   <string name="player_report_issue">Αναφορά προβλήματος</string>
   <string name="unit_size_gb">%1$s GB</string>
-  <string name="supporters_contributors_donation_progress_remaining">Μετά το 100%, η επιπλέον υποστήριξη διατίθεται στην ανάπτυξη.</string>
+  <string name="supporters_contributors_donation_progress_remaining" formatted="false">Μετά το 100%, η επιπλέον υποστήριξη διατίθεται στην ανάπτυξη.</string>
   <string name="stream_test_btn_measuring_parallel1">Μέτρηση παράλληλης (1MB)...</string>
   <string name="stream_test_btn_running">Εκτελείται...</string>
   <string name="diag_value_none">Καμία</string>

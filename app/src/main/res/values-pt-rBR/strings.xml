@@ -265,7 +265,7 @@
     <string name="collections_editor_tmdb_watch_region_helper">Código do país (ISO 3166-1) onde o título está disponível. Exemplo: BR, US.</string>
     <string name="collections_editor_tmdb_quick_watch_regions">Regiões rápidas</string>
     <string name="collections_editor_tmdb_watch_providers">IDs de plataformas de streaming</string>
-    <string name="collections_editor_tmdb_watch_providers_helper">Use os IDs das plataformas no TMDB. Separe múltiplos por vírgula para "E", ou barras verticais (|) para "OU".</string>
+    <string name="collections_editor_tmdb_watch_providers_helper">Use os IDs das plataformas no TMDB. Separe múltiplos por vírgula para \"E\", ou barras verticais (|) para \"OU\".</string>
     <string name="collections_editor_tmdb_watch_providers_placeholder">8|337|350</string>
     <string name="collections_editor_tmdb_without_watch_providers">IDs de provedores de streaming excluídos</string>
     <string name="collections_editor_tmdb_without_watch_providers_helper">Excluir títulos disponíveis nesses provedores de streaming (segundo os números do TMDB) na região selecionada.</string>
@@ -514,8 +514,6 @@
     <string name="essential_autoplay_next_episode">Autorreproduzir próximo episódio</string>
     <string name="essential_autoplay_next_episode_subtitle">Ir para o próximo episódio automaticamente após termino</string>
     <string name="external_auto_next_loading">Carregando próximo episódio…</string>
-    <string name="essential_p2p_streams">Streams P2P (Torrent)</string>
-    <string name="essential_p2p_streams_subtitle">Permitir fontes P2P (BitTorrent)</string>
     <string name="essential_subtitle_language_subtitle">Idioma preferido da legenda</string>
     <string name="essential_audio_language_subtitle">Idioma preferido do áudio</string>
     <!-- Account / sign-in error messages -->
@@ -610,8 +608,8 @@
     <string name="advanced_memory_only_vertical_scroll_subtitle">Não carrega imagens ao rolar as fileiras</string>
     <string name="advanced_compose_highlighter">Destacador de interface</string>
     <string name="advanced_compose_highlighter_subtitle">Destaca elementos recarregados na tela</string>
-    <string name="advanced_clear_cw_cache">Limpar cache de "Continuar Assistindo"</string>
-    <string name="advanced_clear_cw_cache_subtitle">Apaga dados do "Continuar Assistindo"</string>
+    <string name="advanced_clear_cw_cache">Limpar cache de \"Continuar Assistindo\"</string>
+    <string name="advanced_clear_cw_cache_subtitle">Apaga dados do \"Continuar Assistindo\"</string>
     <string name="advanced_clear_cw_cache_done">Cache limpo com sucesso</string>
     <string name="advanced_remember_last_profile">Lembrar último perfil selecionado</string>
     <string name="advanced_confirm_exit">Sair completamente ao fechar</string>
@@ -651,7 +649,7 @@
     <string name="supporters_contributors_donate_copy">O Nuvio continuará sendo gratuito e de código aberto. Se você quiser apoiar o projeto, pode ajudar com os custos de tempo e infraestrutura.</string>
     <string name="supporters_contributors_donation_progress_title">Servidores e manutenção deste mês</string>
     <string name="supporters_contributors_donation_progress_complete">Coberto. Apoio adicional será direcionado ao desenvolvimento.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Após atingir 100%, o apoio extra é destinado ao desenvolvimento.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Após atingir 100%, o apoio extra é destinado ao desenvolvimento.</string>
     <string name="supporters_contributors_loading_donation_progress">Carregando progresso do financiamento...</string>
     <string name="supporters_contributors_donate_button">Apoiar o Nuvio</string>
     <string name="supporters_contributors_qr_title">Escaneie para apoiar</string>
@@ -815,10 +813,10 @@
     <string name="audio_dv5_to_dv81_title">Converter DV 5 para DV 8.1</string>
     <string name="audio_dv5_to_dv81_sub">Ajuda a corrigir as cores da imagem em aparelhos que não possuem suporte nativo ao formato Dolby Vision 5.</string>
     <string name="audio_strip_hdr10plus_title">Remover metadados HDR10+</string>
-    <string name="audio_strip_hdr10plus_sub">Remove os metadados dinâmicos HDR10+ dos streams. Quando a "Conversão para DV8.1" também estiver ativada, a remoção ocorrerá após a conversão.</string>
+    <string name="audio_strip_hdr10plus_sub">Remove os metadados dinâmicos HDR10+ dos streams. Quando a \"Conversão para DV8.1\" também estiver ativada, a remoção ocorrerá após a conversão.</string>
     <string name="audio_dv7_preserve_mapping_title">Manter cores originais (Mapeamento DV)</string>
     <string name="audio_dv7_preserve_mapping_sub">Preserva as cores e o brilho exatos planejados pelo diretor, mas exige um pouco mais do processador do aparelho.</string>
-    <string name="dv7_libdovi_mode_caption">Modo de conversão (Automático). Não altere a menos que seja instruído. Escolha uma opção para forçá-la ou "Nenhum" para o padrão. Funciona apenas se a conversão para DV 8.1 estiver ativa.</string>
+    <string name="dv7_libdovi_mode_caption">Modo de conversão (Automático). Não altere a menos que seja instruído. Escolha uma opção para forçá-la ou \"Nenhum\" para o padrão. Funciona apenas se a conversão para DV 8.1 estiver ativa.</string>
     <string name="dv7_libdovi_mode_row_title">Modo de conversão</string>
     <string name="dv7_libdovi_mode_none_title">Nenhum</string>
     <string name="dv7_libdovi_mode_none_sub">Sem alterações forçadas. Usa o modo de conversão escolhido automaticamente pelo sistema.</string>
@@ -1026,8 +1024,8 @@
     <string name="layout_episode_options_overlay_artwork_desc">Usar o layout em tela cheia com a arte do episódio.</string>
     <string name="layout_episode_options_overlay_blur">Desfoque</string>
     <string name="layout_episode_options_overlay_blur_desc">Usar o layout em tela cheia com a arte do episódio desfocada.</string>
-    <string name="layout_blur_cw_next_up">Desfocar no "Continuar Assistindo"</string>
-    <string name="layout_blur_cw_next_up_sub">Desfocar miniaturas de episódios não assistidos em "Continuar Assistindo para evitar spoilers.</string>
+    <string name="layout_blur_cw_next_up">Desfocar no \"Continuar Assistindo\"</string>
+    <string name="layout_blur_cw_next_up_sub">Desfocar miniaturas de episódios não assistidos em \"Continuar Assistindo para evitar spoilers.</string>
     <string name="layout_next_up_furthest_episode">Próximo pelo último episódio assistido</string>
     <string name="layout_next_up_furthest_episode_sub">Usa o episódio mais avançado. Desative para rever.</string>
     <string name="layout_show_unaired_next_up">Mostrar episódios não lançados</string>
@@ -1197,7 +1195,7 @@
     <string name="debrid_prepare_instant_playback">Preparar links</string>
     <string name="debrid_prepare_instant_playback_description">Resolver links de vídeo antes do início da reprodução.</string>
     <string name="debrid_prepare_stream_count">Links para preparar</string>
-    <string name="debrid_prepare_stream_count_warning">Use um número menor sempre que possível. Os serviços conectados podem limitar a quantidade de links que você pode resolver em um determinado período. Abrir a tela de um filme ou episódio pode consumir esses limites mesmo que você não aperte "Assistir", pois os links são preparados antecipadamente.</string>
+    <string name="debrid_prepare_stream_count_warning">Use um número menor sempre que possível. Os serviços conectados podem limitar a quantidade de links que você pode resolver em um determinado período. Abrir a tela de um filme ou episódio pode consumir esses limites mesmo que você não aperte \"Assistir\", pois os links são preparados antecipadamente.</string>
     <string name="debrid_prepare_count_one">1 link</string>
     <string name="debrid_prepare_count_many">%1$d links</string>
     <string name="debrid_stream_max_results_title">Máximo de resultados</string>
@@ -1559,7 +1557,7 @@
     <string name="profile_pin_overlay_change_verify_heading">Insira o PIN atual para alterar o de %1$s.</string>
     <string name="profile_pin_overlay_change_verify_support">Digite o PIN atual antes de definir um novo.</string>
     <string name="profile_pin_overlay_remove_verify_kicker">Verificação de segurança necessária.</string>
-    <string name="profile_pin_overlay_remove_verify_heading">Insira o PIN atual para remover o bloqueio.</string>
+    <string name="profile_pin_overlay_remove_verify_heading">Insira o PIN atual para remover o bloqueio de %1$s.</string>
     <string name="profile_pin_overlay_remove_verify_support">Digite o PIN atual para desativar esta proteção.</string>
     <string name="profile_pin_overlay_delete_verify_heading">Digite o PIN atual para excluir %1$s.</string>
     <string name="profile_pin_overlay_delete_verify_support">Digite o PIN de 4 dígitos antes de excluir este perfil.</string>
@@ -1567,7 +1565,7 @@
     <string name="profile_pin_overlay_confirm_support">Digite os mesmos 4 dígitos novamente para finalizar.</string>
     <string name="profile_pin_overlay_mismatch">Os PINs não coincidem. Tente novamente.</string>
     <string name="profile_pin_overlay_forgot_hint">Esqueceu o PIN? Redefina-o pelo site do Nuvio na sua conta.</string>
-    <string name="profile_pin_overlay_back_hint">Pressione "Voltar" para cancelar.</string>
+    <string name="profile_pin_overlay_back_hint">Pressione \"Voltar\" para cancelar.</string>
 
    
      <!-- Essential addon setup wizard -->
@@ -1646,16 +1644,8 @@
     <string name="debrid_resolution_failed">Não foi possível processar esta fonte Debrid.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">Fontes P2P</string>
-    <string name="p2p_consent_body">Esta fonte usa tecnologia peer-to-peer (P2P). Ao habilitar o P2P, você reconhece e concorda que:\n\n\u2022 Seu endereço IP ficará visível para outros peers na rede\n\u2022 Você é o único responsável pelo conteúdo que acessa\n\u2022 Você confirma que possui o direito legal de transmitir este conteúdo em sua jurisdição\n\u2022 O Nuvio não hospeda, distribui ou controla nenhum conteúdo P2P\n\u2022 O Nuvio não se responsabiliza por quaisquer consequências legais decorrentes do uso de streaming P2P\n\nVocê usa este recurso inteiramente por sua conta e risco. O P2P pode ser desativado a qualquer momento nas Configurações.</string>
-    <string name="p2p_consent_enable">Ativar P2P</string>
-    <string name="p2p_consent_cancel">Cancelar</string>
-    <string name="settings_p2p_title">Fonte P2P</string>
-    <string name="settings_p2p_subtitle">Permitir Fonte peer-to-peer (torrent)</string>
     <string name="settings_p2p_hide_stats_title">Ocultar estatísticas do torrent</string>
     <string name="settings_p2p_hide_stats_subtitle">Ocultar buffer, seeds, peers e velocidade de download durante o carregamento e reprodução</string>
-    <string name="p2p_download_title">Baixando motor P2P</string>
-    <string name="p2p_download_subtitle">Este é um download único necessário para fonte P2P.</string>
     <string name="stream_type_external">Link Externo</string>
     <string name="stream_player_picker_title">Qual player deseja usar?</string>
     <string name="stream_player_internal">Player Interno</string>
@@ -1876,7 +1866,7 @@
     <string name="display_mode_resolution">Resolução</string>
 
 
-    <string name="search_keyboard_hint">Pressione "Concluir" no teclado para pesquisar</string>
+    <string name="search_keyboard_hint">Pressione \"Concluir\" no teclado para pesquisar</string>
     <string name="search_placeholder">Buscar filmes e séries</string>
     <string name="search_start_title">Comece a pesquisar</string>
     <string name="search_start_subtitle">Digite ao menos 2 caracteres</string>
@@ -1984,7 +1974,7 @@
     <string name="library_empty_local_title">Nenhum %1$s ainda</string>
     <string name="library_empty_trakt_title">Nenhum %1$s nesta lista</string>
     <string name="library_empty_local_subtitle">Comece a salvar seus favoritos para vê-los aqui</string>
-    <string name="library_empty_trakt_subtitle">Use "+" nos detalhes para adicionar itens à biblioteca ou outras listas</string>
+    <string name="library_empty_trakt_subtitle">Use \"+\" nos detalhes para adicionar itens à biblioteca ou outras listas</string>
     <string name="library_empty_trakt_not_auth_title">Trakt não conectado</string>
     <string name="library_empty_trakt_not_auth_subtitle">Conecte sua conta Trakt em Configurações para ver sua biblioteca</string>
     <string name="library_empty_simkl_title">Nenhum %1$s neste status</string>
@@ -2462,7 +2452,7 @@
     <string name="collections_editor_focus_glow">Brilho de foco</string>
     <string name="collections_editor_focus_glow_desc">Usar brilho nativo da TV nos cartões desta coleção</string>
     <string name="collections_editor_view_mode">Modo de visualização</string>
-    <string name="collections_editor_show_all_tab">Mostrar aba "Todos"</string>
+    <string name="collections_editor_show_all_tab">Mostrar aba \"Todos\"</string>
     <string name="collections_editor_show_all_tab_desc">Combinar todos os catálogos em uma aba</string>
     <string name="collections_editor_folders">Pastas</string>
     <string name="collections_editor_add_folder">Adicionar pasta</string>
@@ -2767,18 +2757,18 @@
     <string name="collections_import_error_empty_input">Entrada vazia</string>
     <string name="collections_import_error_expected_array">Formato inválido: esperada uma lista (array)</string>
     <string name="collections_import_error_empty_array">Lista vazia: nenhuma coleção encontrada</string>
-    <string name="collections_import_error_missing_id">Coleção %1$d: "id" ausente ou inválido</string>
-    <string name="collections_import_error_missing_title">Coleção "%1$s": "title" ausente ou inválido</string>
-    <string name="collections_import_error_folders_array">Coleção "%1$s": "folders" deve ser uma lista (array)</string>
-    <string name="collections_import_error_folder_invalid">Coleção "%1$s", pasta %2$d: formato inválido</string>
-    <string name="collections_import_error_folder_missing_id">Coleção "%1$s", pasta %2$d: "id" ausente</string>
-    <string name="collections_import_error_folder_missing_title">Coleção "%1$s", pasta "%2$s": "title" ausente</string>
-    <string name="collections_import_error_sources_array">Coleção "%1$s", pasta "%2$s": "sources" deve ser uma lista (array)</string>
-    <string name="collections_import_error_invalid_tile_shape">Coleção "%1$s", pasta "%2$s": tileShape inválido "%3$s"</string>
-    <string name="collections_import_error_source_invalid">Coleção "%1$s", pasta "%2$s", fonte %3$d: formato inválido</string>
-    <string name="collections_import_error_source_required_fields">Coleção "%1$s", pasta "%2$s", fonte %3$d: campos obrigatórios ausentes</string>
-    <string name="collections_import_error_missing_tmdb_type">Coleção "%1$s", pasta "%2$s", fonte %3$d: tipo TMDB ausente</string>
-    <string name="collections_import_error_missing_trakt_list_id">Coleção "%1$s", pasta "%2$s", fonte %3$d: ID de lista Trakt ausente</string>
+    <string name="collections_import_error_missing_id">Coleção %1$d: \"id\" ausente ou inválido</string>
+    <string name="collections_import_error_missing_title">Coleção \"%1$s\": \"title\" ausente ou inválido</string>
+    <string name="collections_import_error_folders_array">Coleção \"%1$s\": \"folders\" deve ser uma lista (array)</string>
+    <string name="collections_import_error_folder_invalid">Coleção \"%1$s\", pasta %2$d: formato inválido</string>
+    <string name="collections_import_error_folder_missing_id">Coleção \"%1$s\", pasta %2$d: \"id\" ausente</string>
+    <string name="collections_import_error_folder_missing_title">Coleção \"%1$s\", pasta \"%2$s\": \"title\" ausente</string>
+    <string name="collections_import_error_sources_array">Coleção \"%1$s\", pasta \"%2$s\": \"sources\" deve ser uma lista (array)</string>
+    <string name="collections_import_error_invalid_tile_shape">Coleção \"%1$s\", pasta \"%2$s\": tileShape inválido \"%3$s\"</string>
+    <string name="collections_import_error_source_invalid">Coleção \"%1$s\", pasta \"%2$s\", fonte %3$d: formato inválido</string>
+    <string name="collections_import_error_source_required_fields">Coleção \"%1$s\", pasta \"%2$s\", fonte %3$d: campos obrigatórios ausentes</string>
+    <string name="collections_import_error_missing_tmdb_type">Coleção \"%1$s\", pasta \"%2$s\", fonte %3$d: tipo TMDB ausente</string>
+    <string name="collections_import_error_missing_trakt_list_id">Coleção \"%1$s\", pasta \"%2$s\", fonte %3$d: ID de lista Trakt ausente</string>
     <string name="collections_import_error_json_parse">Erro na leitura do arquivo JSON: %1$s</string>
 
     <!-- Library messages -->
@@ -3099,7 +3089,7 @@
     <string name="playback_cache_vod_size">Tamanho do cache de VOD</string>
     <string name="playback_cache_vod_size_sub">Uso máximo de disco para cache de VOD progressivo (removido via LRU).</string>
     <string name="playback_cache_info_range">Intervalo: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">O modo automático usa cerca de 10% do espaço livre.</string>
+    <string name="playback_cache_info_auto" formatted="false">O modo automático usa cerca de 10% do espaço livre.</string>
     <string name="playback_cache_info_manual_headroom">O modo manual mantém cerca de %1$dMB de margem.</string>
     <string name="playback_cache_info_free_disk">Espaço livre disponível: %1$s.</string>
     <string name="playback_cache_info_restart">O novo limite de cache é aplicado após reiniciar o app ao trocar de modo ou tamanho.</string>

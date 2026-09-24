@@ -420,8 +420,6 @@
     <string name="essential_autoplay_next_episode">Автовідтворення наступного епізоду</string>
     <string name="essential_autoplay_next_episode_subtitle">Продовжити з наступним епізодом після закінчення потоку.</string>
     <string name="external_auto_next_loading">Завантаження наступного епізоду…</string>
-    <string name="essential_p2p_streams">P2P потоки</string>
-    <string name="essential_p2p_streams_subtitle">Дозволити P2P-джерела потоків.</string>
     <string name="essential_subtitle_language_subtitle">Бажана мова субтитрів.</string>
     <string name="essential_audio_language_subtitle">Бажана мова аудіо.</string>
     <!-- Account / sign-in error messages -->
@@ -1372,16 +1370,8 @@
     <string name="debrid_resolution_failed">Не вдалося отримати цей потік Debrid.</string>
     <string name="stream_type_torrent">Торент</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P Стримінг</string>
-    <string name="p2p_consent_body">Цей потік використовує технологію P2P. Вмикаючи P2P, ви визнаєте та погоджуєтесь з тим, що:\n\n\u2022 Ваша IP-адреса буде видима іншим учасникам мережі\n\u2022 Ви несете повну відповідальність за контент, до якого звертаєтесь\n\u2022 Ви підтверджуєте законність стримінгу у вашій юрисдикції\n\u2022 Nuvio не розміщує, не розповсюджує та не контролює P2P-контент\n\u2022 Nuvio не несе відповідальності за юридичні наслідки\n\nВи використовуєте цю функцію на власний ризик. P2P можна вимкнути в Налаштуваннях.</string>
-    <string name="p2p_consent_enable">Увімкнути P2P</string>
-    <string name="p2p_consent_cancel">Скасувати</string>
-    <string name="settings_p2p_title">P2P Стримінг</string>
-    <string name="settings_p2p_subtitle">Дозволити P2P (торент) потоки</string>
     <string name="settings_p2p_hide_stats_title">Приховати статистику торента</string>
     <string name="settings_p2p_hide_stats_subtitle">Приховати буфер, сіди, піри та швидкість завантаження під час завантаження та відтворення</string>
-    <string name="p2p_download_title">Завантаження рушія P2P</string>
-    <string name="p2p_download_subtitle">Це одноразове завантаження, необхідне для P2P-стримінгу.</string>
     <string name="stream_type_external">Зовнішній</string>
     <string name="stream_player_picker_title">Який плеєр використовувати?</string>
     <string name="stream_player_internal">Вбудований</string>
@@ -2468,9 +2458,9 @@
 
     <!-- Torrent service / TorrServer binary errors -->
     <string name="torrent_error_add_failed">Не вдалося додати торент</string>
-    <string name="torrent_error_binary_missing">Бінарний файл торента відсутній</string>
-    <string name="torrent_error_process_died">Процес торента завершився</string>
-    <string name="torrent_error_start_timeout">Час очікування запуску торента вичерпано</string>
+    <string name="torrent_error_binary_missing">Бінарний файл TorrServer не знайдено за шляхом %1$s</string>
+    <string name="torrent_error_process_died">Процес TorrServer завершився під час запуску (код виходу %1$d)</string>
+    <string name="torrent_error_start_timeout">Не вдалося запустити TorrServer протягом %1$d с</string>
 
     <!-- Player runtime: stream / external link errors -->
     <string name="player_torrent_starting_engine">Запуск рушія P2P…</string>
@@ -2649,7 +2639,7 @@
     <string name="playback_cache_vod_size">Розмір кешу VOD</string>
     <string name="playback_cache_vod_size_sub">Максимальне використання диску для прогресивного кешу VOD (з витісненням LRU).</string>
     <string name="playback_cache_info_range">Діапазон: %1$d–%2$d МБ.</string>
-    <string name="playback_cache_info_auto">Автоматичний режим займає приблизно 10% вільного місця.</string>
+    <string name="playback_cache_info_auto" formatted="false">Автоматичний режим займає приблизно 10% вільного місця.</string>
     <string name="playback_cache_info_manual_headroom">Ручний режим залишає ~%1$dМБ резерву.</string>
     <string name="playback_cache_info_free_disk">Доступно вільного місця: %1$s.</string>
     <string name="playback_cache_info_restart">Новий ліміт кешу застосовується після перезапуску застосунку при зміні режиму/розміру.</string>
@@ -2679,7 +2669,7 @@
     <string name="action_switch">Перемкнути</string>
     <string name="supporters_contributors_donation_progress_title">Сервер і обслуговування цього місяця</string>
     <string name="supporters_contributors_donation_progress_complete">Покрито. Додаткова підтримка тепер спрямовується на розробку.</string>
-    <string name="supporters_contributors_donation_progress_remaining">Після 100% додаткова підтримка спрямовується на розробку.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Після 100% додаткова підтримка спрямовується на розробку.</string>
     <string name="supporters_contributors_loading_donation_progress">Завантаження прогресу фінансування...</string>
     <string name="audio_force_optical_passthrough">Примусове транскодування AC-3 (Optical/SPDIF)</string>
     <string name="audio_force_optical_passthrough_sub">Транскодує багатоканальні формати (TrueHD, DTS, AAC тощо) у Dolby Digital 5.1 в реальному часі для підключень Optical/SPDIF.</string>

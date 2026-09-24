@@ -441,7 +441,7 @@
     <string name="tracking_simkl_features_title">תכונות Simkl</string>
     <string name="tracking_simkl_features_subtitle">הגדרות ייעודיות ל-Simkl</string>
     <string name="tracking_simkl_anime_id_title">העדפת מזהה אנימה</string>
-    <string name="tracking_simkl_anime_id_subtitle">"קובע כיצד סדרות אנימה מזוהות. בחירה ב-MAL או Kitsu נותנת לכל עונה רשומה נפרדת במקום לקבץ תחת מזהה IMDB אחד.</string>
+    <string name="tracking_simkl_anime_id_subtitle">\"קובע כיצד סדרות אנימה מזוהות. בחירה ב-MAL או Kitsu נותנת לכל עונה רשומה נפרדת במקום לקבץ תחת מזהה IMDB אחד.</string>
     <string name="tracking_simkl_anime_id_imdb">העדף IMDB</string>
     <string name="tracking_simkl_anime_id_mal">העדף MyAnimeList</string>
     <string name="tracking_simkl_anime_id_kitsu">העדף Kitsu</string>
@@ -484,8 +484,6 @@
     <string name="essential_autoplay_next_episode">הפעלה אוטומטית של הפרק הבא</string>
     <string name="essential_autoplay_next_episode_subtitle">המשך לפרק הבא לאחר סיום ה-Stream.</string>
     <string name="external_auto_next_loading">טוען את הפרק הבא…</string>
-    <string name="essential_p2p_streams">סטרימינג P2P</string>
-    <string name="essential_p2p_streams_subtitle">אפשר מקורות Stream מסוג עמית-לעמית (חינמי אך טעינה איטית).</string>
     <string name="essential_subtitle_language_subtitle">שפת הכתוביות המועדפת.</string>
     <string name="essential_audio_language_subtitle">שפת האודיו המועדפת.</string>
     <!-- Account / sign-in error messages -->
@@ -616,7 +614,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio יישאר חינמי וקוד פתוח. אם ברצונך לתמוך בפרויקט, תוכל לעזור לכסות את הזמן והתשתית שמאחוריו.</string>
     <string name="supporters_contributors_donation_progress_title">שרת ותחזוקה לחודש זה</string>
     <string name="supporters_contributors_donation_progress_complete">מכוסה. תמיכה נוספת תלך כעת לפיתוח.</string>
-    <string name="supporters_contributors_donation_progress_remaining">לאחר 100%, תמיכה נוספת הולכת לפיתוח.</string>
+    <string name="supporters_contributors_donation_progress_remaining" formatted="false">לאחר 100%, תמיכה נוספת הולכת לפיתוח.</string>
     <string name="supporters_contributors_loading_donation_progress">טוען התקדמות מימון…</string>
     <string name="supporters_contributors_donate_button">תרום ל-Nuvio</string>
     <string name="supporters_contributors_qr_title">סרוק לתרומה</string>
@@ -1233,7 +1231,7 @@
     <string name="settings_fusion_badge_preview_title">תצוגה מקדימה של תג Fusion</string>
     <string name="settings_fusion_badge_preview_count">%1$d תגים בסגנון Fusion מכתובת זו</string>
     <string name="settings_fusion_badge_preview_empty">אין תמונות תג בסגנון Fusion בכתובת זו.</string>
-    <string name="settings_fusion_badge_group_title">קבוצה %1$d"</string>
+    <string name="settings_fusion_badge_group_title">קבוצה %1$d\"</string>
     <string name="settings_fusion_badge_other_group_title">תגי Fusion אחרים</string>
     <string name="stream_badge_qr_instruction">סרוק את קוד ה-QR הזה בטלפון שלך כדי לנהל כתובות תג Fusion.</string>
     <string name="streams_size">גודל %1$s</string>
@@ -1553,15 +1551,8 @@
     <string name="debrid_resolution_failed">לא ניתן היה לפענח את מקור ה-Debrid הזה.</string>
     <string name="stream_type_torrent">טורנט</string>
     <string name="stream_type_youtube">יוטיוב</string>
-    <string name="p2p_consent_title">סטרימינג P2P</string>
-    <string name="p2p_consent_enable">הפעל P2P</string>
-    <string name="p2p_consent_cancel">ביטול</string>
-    <string name="settings_p2p_title">סטרימינג P2P</string>
-    <string name="settings_p2p_subtitle">אפשר מקורות עמית-לעמית (חינמי אך טעינה איטית).</string>
     <string name="settings_p2p_hide_stats_title">הסתר נתוני טורנט</string>
     <string name="settings_p2p_hide_stats_subtitle">הסתר מאגר נתונים, seeds, peers ומהירות הורדה במהלך טעינה והפעלה</string>
-    <string name="p2p_download_title">מוריד מנוע P2P</string>
-    <string name="p2p_download_subtitle">זוהי הורדה חד-פעמית הנדרשת עבור סטרימינג P2P.</string>
     <string name="stream_type_external">חיצוני</string>
     <string name="stream_player_picker_title">באיזה נגן להשתמש?</string>
     <string name="stream_player_internal">פנימי</string>
@@ -2336,7 +2327,7 @@
     <string name="collections_fetch_url">משוך URL</string>
     <string name="collections_fetching">מושך…</string>
     <string name="collections_valid_json">JSON תקין</string>
-    <string name="collections_valid_summary">%1$d אוספים, %2%d תיקיות</string>
+    <string name="collections_valid_summary">%1$d אוספים, %2$d תיקיות</string>
     <string name="collections_confirm_import">אשר ייבוא</string>
     <string name="collections_folder_count">%1$d תיקיות</string>
 
@@ -2855,7 +2846,7 @@
     <string name="web_stream_badge_deleted">.כתובת URL של התג נמחקה</string>
     <string name="web_stream_badge_load_error">לא ניתן היה לטעון את הגדרות תגי המקורות</string>
     <string name="web_stream_badge_error_url_required">.הזן כתובת URL של JSON לתג</string>
-    <string name="web_stream_badge_error_url_scheme">".כתובת ה-URL של התג חייבת להתחיל ב-http:// או https://</string>
+    <string name="web_stream_badge_error_url_scheme">\".כתובת ה-URL של התג חייבת להתחיל ב-http:// או https://</string>
 
     <!-- Playback — Buffer & Network settings -->
     <string name="web_stream_badge_error_import_limit">You can import up to %1$d badge URLs.</string>
@@ -2883,7 +2874,7 @@
     <string name="playback_cache_vod_size">גודל מטמון VOD</string>
     <string name="playback_cache_vod_size_sub">שימוש מקסימלי בדיסק עבור מטמון VOD פרוגרסיבי (מפונה לפי LRU).</string>
     <string name="playback_cache_info_range">טווח: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto">מצב אוטומטי מכוון לכ-10% משטח פנוי.</string>
+    <string name="playback_cache_info_auto" formatted="false">מצב אוטומטי מכוון לכ-10% משטח פנוי.</string>
     <string name="playback_cache_info_manual_headroom">מצב ידני שומר כ-%1$dMB שטח אחסון.</string>
     <string name="playback_cache_info_free_disk">שטח דיסק פנוי זמין: %1$s.</string>
     <string name="playback_cache_info_restart">מגבלת המטמון החדשה חלה לאחר הפעלה מחדש של האפליקציה בעת מעבר בין מצבים/גדלים.</string>
