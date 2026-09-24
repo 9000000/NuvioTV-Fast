@@ -223,11 +223,37 @@ private fun LiveTvContent(
         state.channels.mapNotNull { it.group?.trim() }.filter { it.isNotBlank() }.distinct().sorted()
     }
 
-    // Tất cả playlist có kênh, sắp xếp theo tên
-    val allPlaylists = remember(state.playlists, state.channels) {
+    // Tất cả playlist có kênh (bao gồm M3U, Xtream và Stalker Portal)
+    val allPlaylists = remember(state.playlists, state.channels, state.xtreamSettings, state.stalkerSettings) {
         val idsWithChannels = state.channels.mapNotNull { it.playlistId }.toSet()
-        state.playlists.filter { it.isEnabled && it.id in idsWithChannels }
+        val standardPlaylists = state.playlists.filter { it.isEnabled && it.id in idsWithChannels }
             .sortedBy { it.name }
+
+        buildList {
+            addAll(standardPlaylists)
+            if (state.xtreamSettings.isConfigured && state.xtreamSettings.isEnabled && XTREAM_PLAYLIST_ID in idsWithChannels) {
+                add(
+                    LiveTvPlaylist(
+                        id = XTREAM_PLAYLIST_ID,
+                        name = "Xtream",
+                        type = LiveTvPlaylistType.Url,
+                        source = state.xtreamSettings.serverUrl,
+                        isEnabled = true
+                    )
+                )
+            }
+            if (state.stalkerSettings.isConfigured && state.stalkerSettings.isEnabled && STALKER_PLAYLIST_ID in idsWithChannels) {
+                add(
+                    LiveTvPlaylist(
+                        id = STALKER_PLAYLIST_ID,
+                        name = "Stalker Portal",
+                        type = LiveTvPlaylistType.Url,
+                        source = state.stalkerSettings.portalUrl,
+                        isEnabled = true
+                    )
+                )
+            }
+        }
     }
 
     val selectedPlaylistName = remember(selectedPlaylistId, allPlaylists) {

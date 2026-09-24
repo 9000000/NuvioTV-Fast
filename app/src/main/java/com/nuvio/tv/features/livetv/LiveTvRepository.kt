@@ -325,6 +325,43 @@ object LiveTvRepository {
     fun removeStalker() = saveStalkerSettings(LiveTvStalkerSettings())
     fun removeXtream() = saveXtreamSettings(LiveTvXtreamSettings())
 
+    suspend fun testAndSaveXtreamSettings(settings: LiveTvXtreamSettings): Result<Int> = withContext(Dispatchers.IO) {
+        val normalized = settings.copy(
+            serverUrl = settings.serverUrl.trim().trimEnd('/').substringBefore("/player_api.php").trimEnd('/'),
+            username = settings.username.trim(),
+            password = settings.password.trim(),
+        )
+        runCatching {
+            val channels = fetchXtreamChannels(normalized)
+            if (channels.isEmpty()) {
+                throw IllegalStateException("Đăng nhập thành công nhưng không tìm thấy kênh nào (0 kênh).")
+            }
+            withContext(Dispatchers.Main) {
+                saveXtreamSettings(normalized)
+            }
+            channels.size
+        }
+    }
+
+    suspend fun testAndSaveStalkerSettings(settings: LiveTvStalkerSettings): Result<Int> = withContext(Dispatchers.IO) {
+        val normalized = settings.copy(
+            portalUrl = settings.portalUrl.trim().trimEnd('/'),
+            macAddress = settings.macAddress.trim().uppercase(),
+            username = settings.username.trim(),
+            password = settings.password.trim(),
+        )
+        runCatching {
+            val channels = fetchStalkerChannels(normalized)
+            if (channels.isEmpty()) {
+                throw IllegalStateException("Bắt tay thành công nhưng không tìm thấy kênh nào (0 kênh).")
+            }
+            withContext(Dispatchers.Main) {
+                saveStalkerSettings(normalized)
+            }
+            channels.size
+        }
+    }
+
     suspend fun prepareForPlayback(channel: LiveTvChannel): LiveTvChannel {
         var prepared = if (channel.stalkerCommand.isNullOrBlank()) channel
         else preparePortalChannelForPlayback(channel, _uiState.value.stalkerSettings)

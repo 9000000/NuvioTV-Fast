@@ -9,8 +9,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import java.net.URLEncoder
 
-private const val STALKER_PLAYLIST_ID = "provider:stalker"
-private const val XTREAM_PLAYLIST_ID = "provider:xtream"
+internal const val STALKER_PLAYLIST_ID = "provider:stalker"
+internal const val XTREAM_PLAYLIST_ID = "provider:xtream"
 
 private val portalJson = Json { ignoreUnknownKeys = true; isLenient = true }
 private val playlistRequestHeaders = mapOf("Accept" to "application/json, text/plain, */*", "User-Agent" to "Nuvio/1.0")

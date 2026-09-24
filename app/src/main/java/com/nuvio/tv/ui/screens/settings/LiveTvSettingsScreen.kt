@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.nuvio.tv.ui.screens.addon.QrCodeOverlay
@@ -73,6 +75,8 @@ import com.nuvio.tv.features.livetv.LiveTvPlaylistType
 import com.nuvio.tv.features.livetv.LiveTvRepository
 import com.nuvio.tv.features.livetv.LiveTvStalkerSettings
 import com.nuvio.tv.features.livetv.LiveTvXtreamSettings
+import com.nuvio.tv.features.livetv.STALKER_PLAYLIST_ID
+import com.nuvio.tv.features.livetv.XTREAM_PLAYLIST_ID
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -264,6 +268,7 @@ fun LiveTvSettingsContent(
 
                     item(key = "xtream_account_row") {
                         val isConfigured = uiState.xtreamSettings.isConfigured
+                        val channelCount = uiState.channels.count { it.playlistId == XTREAM_PLAYLIST_ID }
                         SettingsActionRow(
                             title = if (isConfigured) {
                                 "Xtream: ${uiState.xtreamSettings.username} @ ${uiState.xtreamSettings.serverUrl}"
@@ -272,7 +277,8 @@ fun LiveTvSettingsContent(
                             },
                             subtitle = stringResource(R.string.livetv_xtream_desc),
                             value = if (isConfigured) {
-                                "✅ " + stringResource(R.string.livetv_connected)
+                                if (channelCount > 0) "✅ Đã kết nối ($channelCount kênh)"
+                                else "✅ " + stringResource(R.string.livetv_connected)
                             } else {
                                 stringResource(R.string.livetv_not_connected)
                             },
@@ -297,6 +303,7 @@ fun LiveTvSettingsContent(
 
                     item(key = "stalker_account_row") {
                         val isConfigured = uiState.stalkerSettings.isConfigured
+                        val channelCount = uiState.channels.count { it.playlistId == STALKER_PLAYLIST_ID }
                         SettingsActionRow(
                             title = if (isConfigured) {
                                 "Stalker: ${uiState.stalkerSettings.macAddress} @ ${uiState.stalkerSettings.portalUrl}"
@@ -305,7 +312,8 @@ fun LiveTvSettingsContent(
                             },
                             subtitle = stringResource(R.string.livetv_stalker_desc),
                             value = if (isConfigured) {
-                                "✅ " + stringResource(R.string.livetv_connected)
+                                if (channelCount > 0) "✅ Đã kết nối ($channelCount kênh)"
+                                else "✅ " + stringResource(R.string.livetv_connected)
                             } else {
                                 stringResource(R.string.livetv_not_connected)
                             },
@@ -351,11 +359,8 @@ fun LiveTvSettingsContent(
     if (showXtreamDialog) {
         LiveTvXtreamDialog(
             settings = uiState.xtreamSettings,
-            onConnect = { server, user, pass ->
-                LiveTvRepository.saveXtreamSettings(
-                    LiveTvXtreamSettings(serverUrl = server, username = user, password = pass)
-                )
-                showXtreamDialog = false
+            onConnect = { newSettings ->
+                LiveTvRepository.testAndSaveXtreamSettings(newSettings)
             },
             onDisconnect = {
                 LiveTvRepository.removeXtream()
@@ -368,11 +373,8 @@ fun LiveTvSettingsContent(
     if (showStalkerDialog) {
         LiveTvStalkerDialog(
             settings = uiState.stalkerSettings,
-            onConnect = { portal, mac, user, pass ->
-                LiveTvRepository.saveStalkerSettings(
-                    LiveTvStalkerSettings(portalUrl = portal, macAddress = mac, username = user, password = pass)
-                )
-                showStalkerDialog = false
+            onConnect = { newSettings ->
+                LiveTvRepository.testAndSaveStalkerSettings(newSettings)
             },
             onDisconnect = {
                 LiveTvRepository.removeStalker()
@@ -561,45 +563,91 @@ private fun LiveTvPlaylistDialog(
 @Composable
 private fun LiveTvXtreamDialog(
     settings: LiveTvXtreamSettings,
-    onConnect: (server: String, user: String, pass: String) -> Unit,
+    onConnect: suspend (LiveTvXtreamSettings) -> Result<Int>,
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var server by remember(settings.serverUrl) { mutableStateOf(settings.serverUrl) }
     var user by remember(settings.username) { mutableStateOf(settings.username) }
     var pass by remember(settings.password) { mutableStateOf(settings.password) }
+    var isConnecting by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
 
     NuvioDialog(
-        onDismiss = onDismiss,
+        onDismiss = { if (!isConnecting) onDismiss() },
         title = stringResource(R.string.livetv_section_xtream),
         subtitle = "Connect to Xtream Codes IPTV with your server credentials",
         width = 680.dp
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (errorMessage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = NuvioTheme.colors.Error.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = errorMessage ?: "",
+                        color = NuvioTheme.colors.Error,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+
             TVTextField(
                 value = server,
-                onValueChange = { server = it },
+                onValueChange = { server = it; errorMessage = null },
                 placeholder = "Server URL (e.g. http://server.com:8080)",
-                modifier = Modifier.focusRequester(focusRequester)
+                modifier = Modifier.focusRequester(focusRequester),
+                enabled = !isConnecting
             )
 
             TVTextField(
                 value = user,
-                onValueChange = { user = it },
-                placeholder = "Username"
+                onValueChange = { user = it; errorMessage = null },
+                placeholder = "Username",
+                enabled = !isConnecting
             )
 
             TVTextField(
                 value = pass,
-                onValueChange = { pass = it },
+                onValueChange = { pass = it; errorMessage = null },
                 placeholder = "Password",
-                isPassword = true
+                isPassword = true,
+                enabled = !isConnecting
             )
+
+            if (isConnecting) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.width(20.dp).height(20.dp),
+                        strokeWidth = 2.dp,
+                        color = NuvioTheme.colors.Primary
+                    )
+                    Text(
+                        text = "Đang kết nối và kiểm tra danh sách kênh Xtream...",
+                        color = NuvioTheme.colors.TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+            }
 
             Row(
                 modifier = Modifier
@@ -607,7 +655,7 @@ private fun LiveTvXtreamDialog(
                     .padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
             ) {
-                if (settings.isConfigured) {
+                if (settings.isConfigured && !isConnecting) {
                     Button(
                         onClick = onDisconnect,
                         colors = ButtonDefaults.colors(
@@ -621,6 +669,7 @@ private fun LiveTvXtreamDialog(
 
                 Button(
                     onClick = onDismiss,
+                    enabled = !isConnecting,
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioTheme.colors.BackgroundCard,
                         contentColor = NuvioTheme.colors.TextPrimary
@@ -631,17 +680,30 @@ private fun LiveTvXtreamDialog(
 
                 Button(
                     onClick = {
-                        if (server.isNotBlank() && user.isNotBlank() && pass.isNotBlank()) {
-                            onConnect(server.trim(), user.trim(), pass.trim())
+                        if (server.isNotBlank() && user.isNotBlank() && pass.isNotBlank() && !isConnecting) {
+                            coroutineScope.launch {
+                                isConnecting = true
+                                errorMessage = null
+                                val result = onConnect(
+                                    LiveTvXtreamSettings(serverUrl = server.trim(), username = user.trim(), password = pass.trim())
+                                )
+                                isConnecting = false
+                                result.onSuccess { count ->
+                                    Toast.makeText(context, "Kết nối Xtream thành công! ($count kênh)", Toast.LENGTH_SHORT).show()
+                                    onDismiss()
+                                }.onFailure { error ->
+                                    errorMessage = error.localizedMessage ?: "Kết nối thất bại. Vui lòng kiểm tra lại thông tin."
+                                }
+                            }
                         }
                     },
-                    enabled = server.isNotBlank() && user.isNotBlank() && pass.isNotBlank(),
+                    enabled = server.isNotBlank() && user.isNotBlank() && pass.isNotBlank() && !isConnecting,
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioTheme.colors.Primary,
                         contentColor = NuvioTheme.colors.OnPrimary
                     )
                 ) {
-                    Text(stringResource(R.string.livetv_connect))
+                    Text(if (isConnecting) "Đang kết nối..." else stringResource(R.string.livetv_connect))
                 }
             }
         }
@@ -651,7 +713,7 @@ private fun LiveTvXtreamDialog(
 @Composable
 private fun LiveTvStalkerDialog(
     settings: LiveTvStalkerSettings,
-    onConnect: (portal: String, mac: String, user: String, pass: String) -> Unit,
+    onConnect: suspend (LiveTvStalkerSettings) -> Result<Int>,
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -659,44 +721,91 @@ private fun LiveTvStalkerDialog(
     var mac by remember(settings.macAddress) { mutableStateOf(settings.macAddress) }
     var user by remember(settings.username) { mutableStateOf(settings.username) }
     var pass by remember(settings.password) { mutableStateOf(settings.password) }
+    var isConnecting by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
 
     NuvioDialog(
-        onDismiss = onDismiss,
+        onDismiss = { if (!isConnecting) onDismiss() },
         title = stringResource(R.string.livetv_section_stalker),
         subtitle = "Connect to MAG Stalker Portal using your Portal URL and MAC Address",
         width = 680.dp
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (errorMessage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = NuvioTheme.colors.Error.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = errorMessage ?: "",
+                        color = NuvioTheme.colors.Error,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+
             TVTextField(
                 value = portal,
-                onValueChange = { portal = it },
+                onValueChange = { portal = it; errorMessage = null },
                 placeholder = "Portal URL (e.g. http://portal.domain/c/)",
-                modifier = Modifier.focusRequester(focusRequester)
+                modifier = Modifier.focusRequester(focusRequester),
+                enabled = !isConnecting
             )
 
             TVTextField(
                 value = mac,
-                onValueChange = { mac = it.uppercase() },
-                placeholder = "MAC Address (e.g. 00:1A:79:XX:XX:XX)"
+                onValueChange = { mac = it.uppercase(); errorMessage = null },
+                placeholder = "MAC Address (e.g. 00:1A:79:XX:XX:XX)",
+                enabled = !isConnecting
             )
 
             TVTextField(
                 value = user,
-                onValueChange = { user = it },
-                placeholder = "Username (Optional)"
+                onValueChange = { user = it; errorMessage = null },
+                placeholder = "Username (Optional)",
+                enabled = !isConnecting
             )
 
             TVTextField(
                 value = pass,
-                onValueChange = { pass = it },
+                onValueChange = { pass = it; errorMessage = null },
                 placeholder = "Password (Optional)",
-                isPassword = true
+                isPassword = true,
+                enabled = !isConnecting
             )
+
+            if (isConnecting) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.width(20.dp).height(20.dp),
+                        strokeWidth = 2.dp,
+                        color = NuvioTheme.colors.Primary
+                    )
+                    Text(
+                        text = "Đang kết nối tới Stalker Portal và tải danh sách kênh...",
+                        color = NuvioTheme.colors.TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+            }
 
             Row(
                 modifier = Modifier
@@ -704,7 +813,7 @@ private fun LiveTvStalkerDialog(
                     .padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
             ) {
-                if (settings.isConfigured) {
+                if (settings.isConfigured && !isConnecting) {
                     Button(
                         onClick = onDisconnect,
                         colors = ButtonDefaults.colors(
@@ -718,6 +827,7 @@ private fun LiveTvStalkerDialog(
 
                 Button(
                     onClick = onDismiss,
+                    enabled = !isConnecting,
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioTheme.colors.BackgroundCard,
                         contentColor = NuvioTheme.colors.TextPrimary
@@ -728,17 +838,30 @@ private fun LiveTvStalkerDialog(
 
                 Button(
                     onClick = {
-                        if (portal.isNotBlank() && mac.isNotBlank()) {
-                            onConnect(portal.trim(), mac.trim(), user.trim(), pass.trim())
+                        if (portal.isNotBlank() && mac.isNotBlank() && !isConnecting) {
+                            coroutineScope.launch {
+                                isConnecting = true
+                                errorMessage = null
+                                val result = onConnect(
+                                    LiveTvStalkerSettings(portalUrl = portal.trim(), macAddress = mac.trim(), username = user.trim(), password = pass.trim())
+                                )
+                                isConnecting = false
+                                result.onSuccess { count ->
+                                    Toast.makeText(context, "Kết nối Stalker Portal thành công! ($count kênh)", Toast.LENGTH_SHORT).show()
+                                    onDismiss()
+                                }.onFailure { error ->
+                                    errorMessage = error.localizedMessage ?: "Kết nối thất bại. Vui lòng kiểm tra lại thông tin."
+                                }
+                            }
                         }
                     },
-                    enabled = portal.isNotBlank() && mac.isNotBlank(),
+                    enabled = portal.isNotBlank() && mac.isNotBlank() && !isConnecting,
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioTheme.colors.Primary,
                         contentColor = NuvioTheme.colors.OnPrimary
                     )
                 ) {
-                    Text(stringResource(R.string.livetv_connect))
+                    Text(if (isConnecting) "Đang kết nối..." else stringResource(R.string.livetv_connect))
                 }
             }
         }
@@ -751,13 +874,14 @@ private fun TVTextField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
-    isPassword: Boolean = false
+    isPassword: Boolean = false,
+    enabled: Boolean = true
 ) {
     Card(
         onClick = {},
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.colors(
-            containerColor = NuvioTheme.colors.BackgroundElevated,
+            containerColor = if (enabled) NuvioTheme.colors.BackgroundElevated else NuvioTheme.colors.BackgroundElevated.copy(alpha = 0.5f),
             focusedContainerColor = NuvioTheme.colors.BackgroundElevated
         ),
         border = CardDefaults.border(
@@ -777,9 +901,10 @@ private fun TVTextField(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
+                enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = TextStyle(
-                    color = NuvioTheme.colors.TextPrimary,
+                    color = if (enabled) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextMuted,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium
                 ),
