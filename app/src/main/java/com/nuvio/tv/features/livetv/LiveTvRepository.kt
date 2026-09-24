@@ -483,7 +483,10 @@ object LiveTvRepository {
             // 2. Nếu đã có extension rõ ràng và không phải link redirect động, trả về ngay để tránh tốn độ trễ khởi chạy
             val hasStaticExtension = currentUrl.contains(".m3u8", ignoreCase = true) ||
                 currentUrl.contains(".mpd", ignoreCase = true) ||
-                currentUrl.contains(".ts", ignoreCase = true)
+                currentUrl.contains(".ts", ignoreCase = true) ||
+                currentUrl.contains(".flv", ignoreCase = true) ||
+                currentUrl.contains(".mp4", ignoreCase = true) ||
+                currentUrl.contains(".mkv", ignoreCase = true)
 
             val isDynamicUrl = currentUrl.contains(".php", ignoreCase = true) ||
                 currentUrl.contains(".ashx", ignoreCase = true) ||
@@ -495,6 +498,9 @@ object LiveTvRepository {
                     currentUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
                     currentUrl.contains(".mpd", ignoreCase = true) -> "mpd"
                     currentUrl.contains(".ts", ignoreCase = true) -> "ts"
+                    currentUrl.contains(".flv", ignoreCase = true) -> "flv"
+                    currentUrl.contains(".mp4", ignoreCase = true) -> "mp4"
+                    currentUrl.contains(".mkv", ignoreCase = true) -> "mkv"
                     else -> null
                 }
                 return@withContext StreamResolutionResult(currentUrl, type)
@@ -524,6 +530,9 @@ object LiveTvRepository {
                                 contentType.contains("application/vnd.apple.mpegurl") || contentType.contains("application/x-mpegurl") || contentType.contains("mpegurl") -> "m3u8"
                                 contentType.contains("video/mp2t") -> "ts"
                                 contentType.contains("application/dash+xml") -> "mpd"
+                                contentType.contains("video/x-flv") || contentType.contains("video/flv") || contentType.contains("flv") -> "flv"
+                                contentType.contains("video/mp4") -> "mp4"
+                                contentType.contains("video/x-matroska") -> "mkv"
                                 else -> null
                             }
                         }
@@ -541,6 +550,9 @@ object LiveTvRepository {
                     currentUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
                     currentUrl.contains(".mpd", ignoreCase = true) -> "mpd"
                     currentUrl.contains(".ts", ignoreCase = true) -> "ts"
+                    currentUrl.contains(".flv", ignoreCase = true) -> "flv"
+                    currentUrl.contains(".mp4", ignoreCase = true) -> "mp4"
+                    currentUrl.contains(".mkv", ignoreCase = true) -> "mkv"
                     else -> null
                 }
             }
@@ -914,6 +926,10 @@ internal fun parseM3uPlaylist(
                         effectiveManifestType == "mpd" || streamUrl.contains(".mpd", ignoreCase = true) -> "mpd"
                         effectiveManifestType == "hls" || effectiveManifestType == "m3u8" || streamUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
                         effectiveManifestType == "ism" || effectiveManifestType == "isml" || streamUrl.contains(".ism", ignoreCase = true) -> "ism"
+                        effectiveManifestType == "flv" || streamUrl.contains(".flv", ignoreCase = true) -> "flv"
+                        effectiveManifestType == "ts" || streamUrl.contains(".ts", ignoreCase = true) -> "ts"
+                        effectiveManifestType == "mp4" || streamUrl.contains(".mp4", ignoreCase = true) -> "mp4"
+                        effectiveManifestType == "mkv" || streamUrl.contains(".mkv", ignoreCase = true) -> "mkv"
                         else -> null
                     }
 
@@ -1021,7 +1037,7 @@ private fun isValidStreamUrl(line: String): Boolean {
     if (trimmed.contains("://")) return true
     val lower = trimmed.lowercase()
     return lower.endsWith(".m3u8") || lower.endsWith(".mpd") || lower.endsWith(".ts") ||
-        lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".ism")
+        lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".ism") || lower.endsWith(".flv")
 }
 
 private fun parseUrlAndPipeHeaders(line: String): Pair<String, Map<String, String>> {

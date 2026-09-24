@@ -538,7 +538,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     }
 
     private fun shouldUseVodCache(url: String): Boolean {
-        if (isTorrServerUrl(url)) return false
+        if (isTorrServerUrl(url) || IptvHeaderProvider.isIptvStream(url)) return false
         val scheme = Uri.parse(url).scheme?.lowercase()
         return scheme == "https" || scheme == "http"
     }
@@ -1101,6 +1101,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 "audio/x-matroska",
                 "video/mkv",
                 "audio/mkv" -> MimeTypes.VIDEO_MATROSKA
+
+                "video/x-flv",
+                "video/flv" -> MimeTypes.VIDEO_FLV
+
+                "video/mp2t" -> MimeTypes.VIDEO_MP2T
                 else -> null
             }
         }
@@ -1232,6 +1237,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 extension == "webm" -> MimeTypes.VIDEO_WEBM
                 extension == "mp4" || extension == "m4v" -> MimeTypes.VIDEO_MP4
                 extension == "ts" || extension == "mts" || extension == "m2ts" -> MimeTypes.VIDEO_MP2T
+                extension == "flv" -> MimeTypes.VIDEO_FLV
                 extension == "mov" -> MIME_VIDEO_QUICK_TIME
                 extension == "avi" -> MimeTypes.VIDEO_AVI
                 extension == "mpeg" || extension == "mpg" -> MimeTypes.VIDEO_MPEG
@@ -1271,6 +1277,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                             "webm" -> return MimeTypes.VIDEO_WEBM
                             "mp4", "m4v" -> return MimeTypes.VIDEO_MP4
                             "ts", "mts", "m2ts" -> return MimeTypes.VIDEO_MP2T
+                            "flv" -> return MimeTypes.VIDEO_FLV
                             "mov" -> return MIME_VIDEO_QUICK_TIME
                             "avi" -> return MimeTypes.VIDEO_AVI
                             "mpeg", "mpg" -> return MimeTypes.VIDEO_MPEG
@@ -1294,6 +1301,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                     "application/vnd.ms-sstr+xml",
                     "smoothstreaming",
                     "ss" -> return MimeTypes.APPLICATION_SS
+                    "video/x-flv",
+                    "video/flv",
+                    "flv" -> return MimeTypes.VIDEO_FLV
                 }
             }
 
@@ -1308,6 +1318,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 PLAYLIST_HLS_PATTERN.containsMatchIn(value) -> MimeTypes.APPLICATION_M3U8
                 DELIMITED_MPD_PATTERN.containsMatchIn(value) -> MimeTypes.APPLICATION_MPD
                 DELIMITED_SS_PATTERN.containsMatchIn(value) -> MimeTypes.APPLICATION_SS
+                DELIMITED_FLV_PATTERN.containsMatchIn(value) -> MimeTypes.VIDEO_FLV
                 else -> null
             }
         }
@@ -1331,6 +1342,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private val PLAYLIST_HLS_PATTERN = Regex("/(playlist|hls|manifest|master|vs)/(?!stream$|list$|info$|details$)[a-zA-Z0-9_/-]+$")
         private val DELIMITED_MPD_PATTERN = Regex("(^|[=/_.?&-])mpd($|[=/_.?&-])")
         private val DELIMITED_SS_PATTERN = Regex("(^|[=/_.?&-])(ism|isml)($|[=/_.?&-])")
+        private val DELIMITED_FLV_PATTERN = Regex("(^|[=/_.?&-])flv($|[=/_.?&-])")
 
         /**
          * Extracts `user:pass` from a URL's userinfo component and converts it
