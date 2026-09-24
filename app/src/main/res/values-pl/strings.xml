@@ -489,6 +489,15 @@
     <string name="layout_custom_poster_qr">Skonfiguruj przez telefon</string>
     <string name="custom_poster_qr_instruction">Zeskanuj kod QR telefonem, aby wkleić wzorzec URL plakatów</string>
 
+    <!-- Custom Poster URL - Screen Toggles -->
+    <string name="layout_custom_poster_apply_to">Stosuj niestandardowe plakaty w:</string>
+    <string name="layout_custom_poster_screen_home">Strona główna</string>
+    <string name="layout_custom_poster_screen_continue_watching">Kontynuuj oglądanie</string>
+    <string name="layout_custom_poster_screen_collections">Kolekcje</string>
+    <string name="layout_custom_poster_screen_library">Biblioteka</string>
+    <string name="layout_custom_poster_screen_search">Wyszukiwanie</string>
+    <string name="layout_custom_poster_screen_details">Strona szczegółów</string>
+
     <!-- Custom Poster Web Page -->
     <string name="web_custom_poster_title">Niestandardowe źródło plakatów</string>
     <string name="web_custom_poster_subtitle">Wklej wzorzec URL poniżej i naciśnij Zapisz.</string>
