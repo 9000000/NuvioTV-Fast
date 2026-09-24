@@ -235,6 +235,7 @@
     <string name="detail_tab_trailer">Trailer</string>
     <string name="detail_more_like_this_powered_by_tmdb">Powered by TMDB</string>
     <string name="detail_more_like_this_powered_by_trakt">Powered by Trakt</string>
+    <string name="detail_more_like_this_powered_by_simkl">Powered by Simkl</string>
     <string name="detail_comments_title">Comments</string>
     <string name="detail_comments_subtitle">Reviews from Trakt</string>
     <string name="detail_comments_subtitle_episode">Reviews from Trakt for S%1$dE%2$d</string>
@@ -1469,6 +1470,7 @@
     <string name="trakt_more_like_this_source_dialog_subtitle">Select the source for recommendations shown on detail and post-play screens.</string>
     <string name="trakt_more_like_this_source_trakt">Trakt</string>
     <string name="trakt_more_like_this_source_tmdb">TMDB</string>
+    <string name="trakt_more_like_this_source_simkl">Simkl</string>
     <string name="trakt_cached_label">Cached</string>
     <string name="trakt_stat_movies">Movies</string>
     <string name="trakt_stat_shows">Shows</string>

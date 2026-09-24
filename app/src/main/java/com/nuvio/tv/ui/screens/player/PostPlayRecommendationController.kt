@@ -17,6 +17,8 @@ import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.WatchedSeriesStateHolder
 import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.TraktRelatedService
+import com.nuvio.tv.data.simkl.SimklAuthRepository
+import com.nuvio.tv.data.simkl.SimklRelatedService
 import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
@@ -51,6 +53,8 @@ internal class PostPlayRecommendationController(
     private val traktRelatedService: TraktRelatedService,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val simklRelatedService: SimklRelatedService,
+    private val simklAuthRepository: SimklAuthRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val watchProgressRepository: WatchProgressRepository,
     private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
@@ -615,7 +619,15 @@ internal class PostPlayRecommendationController(
         val candidates = withTimeoutOrNull(10_000L) {
             val sourcePreference = traktSettingsDataStore.moreLikeThisSource.first()
             val traktAuthenticated = traktAuthDataStore.isAuthenticated.first()
-            if (sourcePreference == MoreLikeThisSourcePreference.TRAKT && traktAuthenticated) {
+            if (sourcePreference == MoreLikeThisSourcePreference.SIMKL && simklAuthRepository.state.value.isAuthenticated) {
+                runCatching {
+                    simklRelatedService.getRelated(
+                        meta = meta,
+                        fallbackItemId = playbackController.contentId,
+                        fallbackItemType = playbackController.contentType
+                    )
+                }.getOrDefault(emptyList())
+            } else if (sourcePreference == MoreLikeThisSourcePreference.TRAKT && traktAuthenticated) {
                 runCatching {
                     traktRelatedService.getRelated(
                         meta = meta,
