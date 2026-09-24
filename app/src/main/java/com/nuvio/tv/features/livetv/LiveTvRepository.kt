@@ -412,8 +412,12 @@ object LiveTvRepository {
     }
 
     suspend fun prepareForPlayback(channel: LiveTvChannel): LiveTvChannel {
-        var prepared = if (channel.stalkerCommand.isNullOrBlank()) channel
-        else preparePortalChannelForPlayback(channel, _uiState.value.stalkerSettings)
+        val isStalker = channel.playlistId == STALKER_PLAYLIST_ID || !channel.stalkerCommand.isNullOrBlank()
+        var prepared = if (isStalker) {
+            preparePortalChannelForPlayback(channel, _uiState.value.stalkerSettings)
+        } else {
+            channel
+        }
 
         // Resolve ClearKey HTTP URL to JWK JSON if needed
         val drmKey = prepared.drmKey
@@ -529,7 +533,7 @@ object LiveTvRepository {
                 )
             }
 
-            val channels = loadedChannels.distinctBy { it.streamUrl }
+            val channels = loadedChannels.distinctBy { it.id.ifBlank { it.streamUrl } }
             val finalChannels = if (channels.isEmpty() && currentState.channels.isNotEmpty()) {
                 currentState.channels
             } else {
