@@ -84,6 +84,8 @@ data class LayoutSettingsUiState(
     val continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
     val continueWatchingCardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
     val customPosterUrlPattern: String = "",
+    val customPosterEnabledScreens: Set<com.nuvio.tv.core.poster.CustomPosterScreen> =
+        com.nuvio.tv.core.poster.CustomPosterScreen.ALL,
 )
 
 data class CatalogInfo(
@@ -144,6 +146,10 @@ sealed class LayoutSettingsEvent {
     data object ResetCardDepthStyle : LayoutSettingsEvent()
     data class SetCustomPosterUrlPattern(val pattern: String) : LayoutSettingsEvent()
     data object ClearCustomPosterSettings : LayoutSettingsEvent()
+    data class SetCustomPosterScreenEnabled(
+        val screen: com.nuvio.tv.core.poster.CustomPosterScreen,
+        val enabled: Boolean
+    ) : LayoutSettingsEvent()
 }
 
 @HiltViewModel
@@ -399,6 +405,13 @@ class LayoutSettingsViewModel @Inject constructor(
                     updateUiStateIfChanged { it.copy(customPosterUrlPattern = pattern) }
                 }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.customPosterEnabledScreens
+                .distinctUntilChanged()
+                .collect { screens ->
+                    updateUiStateIfChanged { it.copy(customPosterEnabledScreens = screens) }
+                }
+        }
         loadAvailableCatalogs()
     }
 
@@ -452,6 +465,7 @@ class LayoutSettingsViewModel @Inject constructor(
             LayoutSettingsEvent.ResetCardDepthStyle -> resetCardDepthStyle()
             is LayoutSettingsEvent.SetCustomPosterUrlPattern -> setCustomPosterUrlPattern(event.pattern)
             LayoutSettingsEvent.ClearCustomPosterSettings -> clearCustomPosterSettings()
+            is LayoutSettingsEvent.SetCustomPosterScreenEnabled -> setCustomPosterScreenEnabled(event.screen, event.enabled)
         }
     }
 
@@ -855,6 +869,14 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun clearCustomPosterSettings() {
         viewModelScope.launch {
             layoutPreferenceDataStore.clearCustomPosterSettings()
+        }
+    }
+
+    private fun setCustomPosterScreenEnabled(screen: com.nuvio.tv.core.poster.CustomPosterScreen, enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.customPosterEnabledScreens
+            val updated = if (enabled) current + screen else current - screen
+            layoutPreferenceDataStore.setCustomPosterEnabledScreens(updated)
         }
     }
 
