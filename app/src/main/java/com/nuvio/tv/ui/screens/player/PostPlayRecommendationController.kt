@@ -78,6 +78,8 @@ internal class PostPlayRecommendationController(
         val postPlayMovieThresholdPercent: Int,
         val isNextEpisodeMetadataResolved: Boolean,
         val nextEpisodeHasAired: Boolean?,
+        val nextEpisodeAvailable: Boolean?,
+        val nextEpisodeReleased: String?,
         val hasError: Boolean,
         val hasBlockingInteraction: Boolean,
         val playbackEnded: Boolean,
@@ -135,6 +137,8 @@ internal class PostPlayRecommendationController(
                     postPlayMovieThresholdPercent = playerSettings.postPlayMovieThresholdPercent,
                     isNextEpisodeMetadataResolved = playerState.isNextEpisodeMetadataResolved,
                     nextEpisodeHasAired = playerState.nextEpisode?.hasAired,
+                    nextEpisodeAvailable = playerState.nextEpisode?.available,
+                    nextEpisodeReleased = playerState.nextEpisode?.released,
                     hasError = !playerState.error.isNullOrBlank(),
                     hasBlockingInteraction = playerState.blocksPostPlayRecommendation(),
                     playbackEnded = playerState.playbackEnded,
@@ -251,6 +255,8 @@ internal class PostPlayRecommendationController(
             contentType = snapshot.contentType,
             isNextEpisodeMetadataResolved = snapshot.isNextEpisodeMetadataResolved,
             nextEpisodeHasAired = snapshot.nextEpisodeHasAired,
+            nextEpisodeAvailable = snapshot.nextEpisodeAvailable,
+            nextEpisodeReleased = snapshot.nextEpisodeReleased,
             enabled = snapshot.postPlayRecommendationsEnabled
         )
         if (!shouldUseRecommendation || snapshot.hasError) {
