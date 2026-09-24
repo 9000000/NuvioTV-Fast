@@ -643,6 +643,8 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             }
 
         } finally {
+            // Release the claim only if it is still ours: a later focus may have claimed another item.
+            if (pendingTmdbEnrichItemId == item.id) pendingTmdbEnrichItemId = null
             if (_enrichingItemId.value == item.id) {
                 setEnrichingItemId(null)
                 // If enrichment completed but no enriched data exists for this item,
