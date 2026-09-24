@@ -82,12 +82,12 @@ private fun formatMacAddress(mac: String): String {
 }
 
 private fun extractPlayableUrl(raw: String, serverBaseUrl: String): String {
-    val trimmed = raw.trim()
+    val trimmed = raw.trim().trim('"', '\'')
     if (trimmed.isBlank()) return ""
 
     val match = PLAYABLE_URL_REGEX.find(trimmed)
     if (match != null) {
-        return match.value.trim()
+        return match.value.trim().trim('"', '\'')
     }
 
     val cleaned = trimmed
@@ -100,6 +100,7 @@ private fun extractPlayableUrl(raw: String, serverBaseUrl: String): String {
         .trim()
         .substringBefore(' ')
         .trim()
+        .trim('"', '\'')
 
     if (cleaned.startsWith("/") || cleaned.contains(".m3u8", ignoreCase = true) || cleaned.contains(".ts", ignoreCase = true)) {
         val base = serverBaseUrl.trimEnd('/')
@@ -137,10 +138,25 @@ private fun extractLinkFromCreateResponse(element: JsonElement, serverBaseUrl: S
         }
         val dataArray = jsField["data"] as? JsonArray
         val firstItem = dataArray?.firstOrNull() as? JsonObject
-        val firstCmd = firstItem?.string("cmd") ?: firstItem?.string("url")
+        val firstCmd = firstItem?.string("cmd") ?: firstItem?.string("url") ?: firstItem?.string("stream_url")
         if (!firstCmd.isNullOrBlank()) {
             val url = extractPlayableUrl(firstCmd, serverBaseUrl)
             if (url.isNotBlank()) return url
+        }
+    } else if (jsField is JsonArray) {
+        val firstItem = jsField.firstOrNull()
+        if (firstItem is JsonPrimitive) {
+            val str = firstItem.contentOrNull?.trim()
+            if (!str.isNullOrBlank()) {
+                val url = extractPlayableUrl(str, serverBaseUrl)
+                if (url.isNotBlank()) return url
+            }
+        } else if (firstItem is JsonObject) {
+            val cmd = firstItem.string("cmd") ?: firstItem.string("url") ?: firstItem.string("stream_url")
+            if (!cmd.isNullOrBlank()) {
+                val url = extractPlayableUrl(cmd, serverBaseUrl)
+                if (url.isNotBlank()) return url
+            }
         }
     }
 
@@ -264,6 +280,7 @@ private fun parseChannelsFromStalkerData(
     pageHint: Int = 1
 ): List<LiveTvChannel> {
     val result = mutableListOf<LiveTvChannel>()
+    val streamHeaders = stalkerStreamHeaders(session.settings)
     dataArray.forEachIndexed { index, element ->
         val item = element as? JsonObject ?: return@forEachIndexed
         val name = item.string("name") ?: item.string("title") ?: return@forEachIndexed
@@ -271,6 +288,13 @@ private fun parseChannelsFromStalkerData(
         val command = item.string("cmd") ?: item.string("mc_cmd") ?: item.string("url") ?: id
         val rawUrl = extractPlayableUrl(command, serverBaseUrl)
         val streamUrl = if (rawUrl.isNotBlank()) rawUrl else command
+
+        val detectedType = when {
+            streamUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
+            streamUrl.contains(".mpd", ignoreCase = true) -> "mpd"
+            streamUrl.contains(".ts", ignoreCase = true) -> "ts"
+            else -> "m3u8"
+        }
 
         result.add(
             LiveTvChannel(
@@ -281,8 +305,9 @@ private fun parseChannelsFromStalkerData(
                 group = (item.string("tv_genre_id") ?: item.string("genre_id"))?.let(genres::get),
                 playlistId = STALKER_PLAYLIST_ID,
                 playlistName = "Stalker Portal",
-                headers = stalkerHeaders(session.settings, session.token),
+                headers = streamHeaders,
                 stalkerCommand = command,
+                streamType = detectedType,
             )
         )
     }
@@ -290,32 +315,42 @@ private fun parseChannelsFromStalkerData(
 }
 
 internal suspend fun preparePortalChannelForPlayback(channel: LiveTvChannel, settings: LiveTvStalkerSettings): LiveTvChannel {
-    val command = channel.stalkerCommand?.takeIf(String::isNotBlank)
-        ?: channel.id.removePrefix("stalker:").takeIf(String::isNotBlank)
-        ?: channel.streamUrl.takeIf(String::isNotBlank)
-        ?: return channel
-
     val normalized = settings.normalized()
     val serverBaseUrl = normalized.portalServerBaseUrl()
+    val streamHeaders = stalkerStreamHeaders(normalized)
 
-    val resolvedUrl = requestCreateLink(normalized, command, serverBaseUrl, forceRefreshSession = false)
-        ?: requestCreateLink(normalized, command, serverBaseUrl, forceRefreshSession = true)
+    val existingHttpUrl = channel.streamUrl.takeIf {
+        it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)
+    }
 
-    val finalUrl = resolvedUrl?.takeIf(String::isNotBlank) ?: channel.streamUrl
-    val session = cachedStalkerSession
+    val rawCommand = channel.stalkerCommand?.takeIf(String::isNotBlank)
+        ?: channel.id.removePrefix("stalker:").takeIf(String::isNotBlank)
+        ?: channel.streamUrl.takeIf(String::isNotBlank)
+
+    val resolvedUrl = if (!rawCommand.isNullOrBlank()) {
+        requestCreateLink(normalized, rawCommand, serverBaseUrl, forceRefreshSession = false)
+            ?: requestCreateLink(normalized, rawCommand, serverBaseUrl, forceRefreshSession = true)
+    } else null
+
+    val channelIdOnly = channel.id.removePrefix("stalker:")
+    var finalUrl = resolvedUrl?.takeIf(String::isNotBlank)
+        ?: existingHttpUrl
+        ?: channel.streamUrl
+
+    if (finalUrl.contains("stream=&") && channelIdOnly.isNotBlank()) {
+        finalUrl = finalUrl.replace("stream=&", "stream=$channelIdOnly&")
+    }
 
     val detectedType = when {
         finalUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
         finalUrl.contains(".mpd", ignoreCase = true) -> "mpd"
         finalUrl.contains(".ts", ignoreCase = true) -> "ts"
-        else -> channel.streamType ?: "ts"
+        else -> channel.streamType ?: "m3u8"
     }
-
-    val streamHeaders = stalkerHeaders(normalized, session?.token)
 
     return channel.copy(
         streamUrl = finalUrl,
-        headers = channel.headers + streamHeaders,
+        headers = streamHeaders,
         streamType = detectedType,
     )
 }
@@ -327,23 +362,59 @@ private suspend fun requestCreateLink(
     forceRefreshSession: Boolean
 ): String? {
     val session = runCatching { stalkerSession(settings, forceRefresh = forceRefreshSession) }.getOrNull() ?: return null
-    return runCatching {
-        val response = stalkerRequest(
-            settings = session.settings,
-            token = session.token,
-            type = "itv",
-            action = "create_link",
-            extra = mapOf(
-                "cmd" to command,
-                "series" to "",
-                "forced_storage" to "0",
-                "disable_ad" to "0",
-                "download" to "0"
-            ),
-            endpointOverride = session.endpoint
-        )
-        extractLinkFromCreateResponse(response, serverBaseUrl)
-    }.getOrNull()
+
+    val candidateCmds = linkedSetOf<String>().apply {
+        val trimmed = command.trim()
+        if (trimmed.isNotBlank()) add(trimmed)
+        val cleaned = trimmed
+            .removePrefix("ffmpeg ")
+            .removePrefix("ffrt ")
+            .removePrefix("ffrt2 ")
+            .removePrefix("ffrt3 ")
+            .removePrefix("auto ")
+            .removePrefix("spdif ")
+            .trim()
+            .trim('"', '\'')
+        if (cleaned.isNotBlank()) {
+            add(cleaned)
+            if (cleaned.startsWith("/media/")) {
+                add("auto $cleaned")
+                val numOnly = cleaned.substringAfter("/media/").substringBefore('.').trim()
+                if (numOnly.isNotEmpty() && numOnly.all { it.isDigit() }) {
+                    add(numOnly)
+                    add("auto $numOnly")
+                    add("/media/$numOnly")
+                }
+            } else if (cleaned.all { it.isDigit() }) {
+                add("auto /media/$cleaned.m3u8")
+                add("/media/$cleaned.m3u8")
+            }
+        }
+    }
+
+    for (cmd in candidateCmds) {
+        val resolved = runCatching {
+            val response = stalkerRequest(
+                settings = session.settings,
+                token = session.token,
+                type = "itv",
+                action = "create_link",
+                extra = mapOf(
+                    "cmd" to cmd,
+                    "forced_storage" to "0",
+                    "disable_ad" to "0"
+                ),
+                endpointOverride = session.endpoint
+            )
+            extractLinkFromCreateResponse(response, serverBaseUrl)
+        }.getOrNull()
+
+        if (!resolved.isNullOrBlank()) {
+            return resolved
+        }
+    }
+
+    return null
 }
 
 private suspend fun stalkerSession(
@@ -377,7 +448,8 @@ private suspend fun stalkerSession(
                 continue
             }
 
-            // Kích hoạt token và xác thực cấu hình thiết bị STB (MAG254 profile)
+            // Kích hoạt profile thiết bị STB (MAG254 profile).
+            // LƯU Ý: Không gửi auth_second_step=1 vì sẽ khiến server hủy kích hoạt token nếu không có pass hash.
             runCatching {
                 stalkerRequest(
                     settings = normalized,
@@ -388,8 +460,7 @@ private suspend fun stalkerSession(
                         "hd" to "1",
                         "ver" to "ImageDescription: 0.2.18-r14-pub-250; ImageDate: Fri Jan 15 15:20:44 EET 2016; PORTAL version: 5.1.0; API Version: JS API version: 328; STB API version: 134; Player Engine version: 0x566",
                         "stb_type" to "MAG254",
-                        "sn" to "0000000000000",
-                        "auth_second_step" to "1"
+                        "sn" to "0000000000000"
                     ),
                     endpointOverride = endpoint
                 )
@@ -427,18 +498,28 @@ private suspend fun stalkerRequest(
     val query = parameters.entries.joinToString("&", prefix = if ('?' in endpoint) "&" else "?") { (key, value) ->
         "${key.urlEncode()}=${value.urlEncode()}"
     }
-    val response = httpGetTextWithHeaders(endpoint + query, stalkerHeaders(settings, token))
+    val response = httpGetTextWithHeaders(endpoint + query, stalkerApiHeaders(settings, token))
     val cleanedJson = response.trim().removePrefix("\uFEFF")
     return portalJson.parseToJsonElement(cleanedJson)
 }
 
-private fun stalkerHeaders(settings: LiveTvStalkerSettings, token: String?): Map<String, String> = buildMap {
+/** Headers dành riêng cho các API call tới Stalker middleware PHP */
+private fun stalkerApiHeaders(settings: LiveTvStalkerSettings, token: String?): Map<String, String> = buildMap {
     put("User-Agent", "Mozilla/5.0 (QtEmbedded; U; Linux; MAG254; en) AppleWebKit/533.3 MAG200 stbapp ver: 4 rev: 2721 Mobile Safari/533.3")
     put("X-User-Agent", "Model: MAG254; Link: Ethernet")
     put("Referer", settings.portalBaseUrl())
     put("Cookie", "mac=${settings.macAddress}; stb_lang=en; timezone=Europe%2FIstanbul")
     put("Accept", "application/json, text/javascript, */*; q=0.01")
     if (!token.isNullOrBlank()) put("Authorization", "Bearer $token")
+}
+
+/** Headers dành riêng cho ExoPlayer phát video stream (không chứa Accept json hay Authorization token để tránh bị từ chối 401/406) */
+private fun stalkerStreamHeaders(settings: LiveTvStalkerSettings): Map<String, String> = buildMap {
+    put("User-Agent", "Mozilla/5.0 (QtEmbedded; U; Linux; MAG254; en) AppleWebKit/533.3 MAG200 stbapp ver: 4 rev: 2721 Mobile Safari/533.3")
+    put("X-User-Agent", "Model: MAG254; Link: Ethernet")
+    put("Referer", settings.portalBaseUrl())
+    put("Cookie", "mac=${settings.macAddress}; stb_lang=en; timezone=Europe%2FIstanbul")
+    put("Accept", "*/*")
 }
 
 private fun LiveTvXtreamSettings.normalized() = copy(

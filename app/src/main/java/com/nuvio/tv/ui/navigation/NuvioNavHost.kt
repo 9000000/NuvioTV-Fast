@@ -163,6 +163,7 @@ private fun PlaybackNavHost(
                         val playableChannel = runCatching {
                             LiveTvRepository.prepareForPlayback(channel)
                         }.getOrDefault(channel)
+                        val streamType = playableChannel.streamType?.takeIf(String::isNotBlank) ?: "m3u8"
                         val route = Screen.Player.createRoute(
                             streamUrl = playableChannel.streamUrl,
                             title = playableChannel.name,
@@ -170,7 +171,8 @@ private fun PlaybackNavHost(
                             logo = playableChannel.logoUrl,
                             contentType = "livetv",
                             drmType = playableChannel.drmType,
-                            drmKey = playableChannel.drmKey
+                            drmKey = playableChannel.drmKey,
+                            filename = "live.$streamType"
                         )
                         navController.navigate(route)
                     }
