@@ -9,6 +9,8 @@ import com.nuvio.tv.core.server.LiveTvConfigServer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.json.JSONObject
+import com.nuvio.tv.ui.screens.player.ClearKeyUtil
+import com.nuvio.tv.ui.screens.player.IptvHeaderProvider
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.random.Random
@@ -323,9 +325,26 @@ object LiveTvRepository {
     fun removeStalker() = saveStalkerSettings(LiveTvStalkerSettings())
     fun removeXtream() = saveXtreamSettings(LiveTvXtreamSettings())
 
-    suspend fun prepareForPlayback(channel: LiveTvChannel): LiveTvChannel =
-        if (channel.stalkerCommand.isNullOrBlank()) channel
+    suspend fun prepareForPlayback(channel: LiveTvChannel): LiveTvChannel {
+        var prepared = if (channel.stalkerCommand.isNullOrBlank()) channel
         else preparePortalChannelForPlayback(channel, _uiState.value.stalkerSettings)
+
+        // Resolve ClearKey HTTP URL to JWK JSON if needed
+        val drmKey = prepared.drmKey
+        val isClearKey = prepared.drmType?.contains("clearkey", ignoreCase = true) == true ||
+            (prepared.drmType.isNullOrBlank() && drmKey != null && !drmKey.startsWith("http", ignoreCase = true))
+
+        if (isClearKey && drmKey != null && (drmKey.startsWith("http://", ignoreCase = true) || drmKey.startsWith("https://", ignoreCase = true))) {
+            val resolvedJwk = withContext(Dispatchers.IO) {
+                ClearKeyUtil.fetchClearKeyJson(drmKey, prepared.headers)
+            }
+            if (!resolvedJwk.isNullOrBlank()) {
+                prepared = prepared.copy(drmKey = resolvedJwk)
+            }
+        }
+
+        return prepared
+    }
 
     fun refresh() {
         ensureLoaded()
@@ -515,6 +534,8 @@ internal fun parseM3uPlaylist(
     playlist: LiveTvPlaylist? = null,
 ): List<LiveTvChannel> {
     val channels = mutableListOf<LiveTvChannel>()
+    val playlistDefaultHeaders = mutableMapOf<String, String>()
+    var firstChannelAdded = false
     var pending = PendingM3uEntry()
 
     payload.lineSequence()
@@ -522,6 +543,12 @@ internal fun parseM3uPlaylist(
         .filter(String::isNotBlank)
         .forEach { line ->
             when {
+                line.startsWith("#EXTM3U", ignoreCase = true) -> {
+                    val ua = readM3uAttribute(line, "http-user-agent") ?: readM3uAttribute(line, "user-agent")
+                    if (!ua.isNullOrBlank()) playlistDefaultHeaders["User-Agent"] = ua
+                    val ref = readM3uAttribute(line, "http-referrer") ?: readM3uAttribute(line, "referrer") ?: readM3uAttribute(line, "referer")
+                    if (!ref.isNullOrBlank()) playlistDefaultHeaders["Referer"] = ref
+                }
                 line.startsWith("#EXTINF", ignoreCase = true) -> {
                     val info = parseExtInf(line)
                     pending.info = info
@@ -621,9 +648,18 @@ internal fun parseM3uPlaylist(
                     val key = opt.substringBefore('=').trim()
                     val value = opt.substringAfter('=', "").trim()
                     when {
-                        key.equals("http-user-agent", ignoreCase = true) -> pending.headers["User-Agent"] = value
-                        key.equals("http-referrer", ignoreCase = true) -> pending.headers["Referer"] = value
-                        key.equals("http-origin", ignoreCase = true) -> pending.headers["Origin"] = value
+                        key.equals("http-user-agent", ignoreCase = true) || key.equals("user-agent", ignoreCase = true) -> {
+                            pending.headers["User-Agent"] = value
+                            if (!firstChannelAdded) playlistDefaultHeaders["User-Agent"] = value
+                        }
+                        key.equals("http-referrer", ignoreCase = true) || key.equals("referrer", ignoreCase = true) || key.equals("referer", ignoreCase = true) -> {
+                            pending.headers["Referer"] = value
+                            if (!firstChannelAdded) playlistDefaultHeaders["Referer"] = value
+                        }
+                        key.equals("http-origin", ignoreCase = true) || key.equals("origin", ignoreCase = true) -> {
+                            pending.headers["Origin"] = value
+                            if (!firstChannelAdded) playlistDefaultHeaders["Origin"] = value
+                        }
                     }
                 }
                 line.startsWith("#") -> Unit
@@ -636,7 +672,6 @@ internal fun parseM3uPlaylist(
                     val (cleanLicenseKey, licensePipeHeaders) = pending.licenseKey?.let { parseUrlAndPipeHeaders(it) }
                         ?: (null to emptyMap())
 
-                    val combinedHeaders = (pending.headers + pipeHeaders + licensePipeHeaders).toMap()
                     val info = pending.info
                     val streamUrl = rawUrl
                     val name = info?.name?.takeIf(String::isNotBlank)
@@ -670,6 +705,18 @@ internal fun parseM3uPlaylist(
                         else -> null
                     }
 
+                    val combinedHeaders = buildMap {
+                        putAll(playlistDefaultHeaders)
+                        putAll(pending.headers)
+                        putAll(pipeHeaders)
+                        putAll(licensePipeHeaders)
+                        if (!containsKey("User-Agent")) {
+                            if (detectedDrmType != null || detectedStreamType == "mpd" || IptvHeaderProvider.isIptvStream(streamUrl)) {
+                                put("User-Agent", IptvHeaderProvider.DEFAULT_IPTV_USER_AGENT)
+                            }
+                        }
+                    }
+
                     val group = pending.group ?: info?.group?.takeIf(String::isNotBlank)
 
                     channels += LiveTvChannel(
@@ -685,7 +732,9 @@ internal fun parseM3uPlaylist(
                         drmType = detectedDrmType,
                         drmKey = effectiveKey,
                     )
+                    firstChannelAdded = true
                     pending = PendingM3uEntry()
+                    pending.headers.putAll(playlistDefaultHeaders)
                 }
             }
         }
@@ -799,9 +848,12 @@ private fun parseExtInf(line: String): M3uInfo {
         ?: readM3uAttribute(line, "inputstream.adaptive.manifest_type")
 
     val inlineHeaders = mutableMapOf<String, String>()
-    readM3uAttribute(line, "http-user-agent")?.takeIf(String::isNotBlank)?.let { inlineHeaders["User-Agent"] = it }
-    readM3uAttribute(line, "http-referrer")?.takeIf(String::isNotBlank)?.let { inlineHeaders["Referer"] = it }
-    readM3uAttribute(line, "http-origin")?.takeIf(String::isNotBlank)?.let { inlineHeaders["Origin"] = it }
+    (readM3uAttribute(line, "http-user-agent") ?: readM3uAttribute(line, "user-agent"))
+        ?.takeIf(String::isNotBlank)?.let { inlineHeaders["User-Agent"] = it }
+    (readM3uAttribute(line, "http-referrer") ?: readM3uAttribute(line, "referrer") ?: readM3uAttribute(line, "referer"))
+        ?.takeIf(String::isNotBlank)?.let { inlineHeaders["Referer"] = it }
+    (readM3uAttribute(line, "http-origin") ?: readM3uAttribute(line, "origin"))
+        ?.takeIf(String::isNotBlank)?.let { inlineHeaders["Origin"] = it }
 
     return M3uInfo(
         name = name,

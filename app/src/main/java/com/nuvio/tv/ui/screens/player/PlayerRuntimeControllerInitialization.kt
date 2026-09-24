@@ -219,8 +219,12 @@ internal fun PlayerRuntimeController.initializePlayer(
             mpvHi10pGnextSoftwareFallbackEnabledSetting =
                 playerSettings.mpvHi10pGnextSoftwareFallbackEnabled
             mpvHardwareDecodeModeSetting = playerSettings.mpvHardwareDecodeMode
+            val hasDrm = !currentDrmKey.isNullOrBlank() || !currentDrmType.isNullOrBlank()
             var effectiveInternalPlayerEngine = overrideInternalPlayerEngine ?: playerSettings.internalPlayerEngine
-            if (effectiveInternalPlayerEngine == InternalPlayerEngine.AUTO) {
+            if (hasDrm) {
+                // MPV engine does not support Widevine or ClearKey DRM on Android; force ExoPlayer
+                effectiveInternalPlayerEngine = InternalPlayerEngine.EXOPLAYER
+            } else if (effectiveInternalPlayerEngine == InternalPlayerEngine.AUTO) {
                 effectiveInternalPlayerEngine = resolveAutoInternalPlayerEngine()
             }
             runtimeInternalPlayerEngineOverride = overrideInternalPlayerEngine
@@ -1941,6 +1945,9 @@ internal fun PlayerRuntimeController.initializePlayer(
 }
 
 internal suspend fun PlayerRuntimeController.resolveAutoInternalPlayerEngine(): InternalPlayerEngine {
+    if (!currentDrmKey.isNullOrBlank() || !currentDrmType.isNullOrBlank()) {
+        return InternalPlayerEngine.EXOPLAYER
+    }
     val streamMetadataText = buildString {
         currentFilename?.let { appendLine(it) }
         streamName?.let { appendLine(it) }

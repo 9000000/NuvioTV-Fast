@@ -197,6 +197,19 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         val allLicenseHeaders = sanitizedHeaders + drmPipeHeaders
+        val effectiveLicenseHeaders = buildMap {
+            putAll(allLicenseHeaders)
+            if (!containsKey("User-Agent")) {
+                val streamUa = sanitizedHeaders.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
+                put("User-Agent", streamUa ?: IptvHeaderProvider.DEFAULT_IPTV_USER_AGENT)
+            }
+        }
+
+        val drmDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(
+            context = context,
+            defaultHeaders = effectiveLicenseHeaders,
+            streamUrl = cleanDrmKey
+        )
 
         val isClearKey = drmType?.equals("clearkey", ignoreCase = true) == true ||
             drmType?.equals("org.w3.clearkey", ignoreCase = true) == true ||
@@ -208,7 +221,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val isPlayReady = drmType?.contains("playready", ignoreCase = true) == true
 
         val clearKeyJson = if (isClearKey && cleanDrmKey.isNotBlank()) {
-            ClearKeyUtil.normalizeToJwkJson(cleanDrmKey)
+            ClearKeyUtil.normalizeToJwkJson(cleanDrmKey) ?: runCatching {
+                if (cleanDrmKey.startsWith("http://", ignoreCase = true) || cleanDrmKey.startsWith("https://", ignoreCase = true)) {
+                    ClearKeyUtil.fetchClearKeyJson(cleanDrmKey, effectiveLicenseHeaders)
+                } else null
+            }.getOrNull()
         } else null
 
         val drmSessionManagerProvider: DrmSessionManagerProvider? = when {
@@ -217,21 +234,38 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                     val drmCallback = LocalMediaDrmCallback(clearKeyJson.toByteArray(Charsets.UTF_8))
                     val drmSessionManager = DefaultDrmSessionManager.Builder()
                         .setUuidAndExoMediaDrmProvider(C.CLEARKEY_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
-                        .setMultiSession(false)
+                        .setMultiSession(true)
+                        .setPlayClearSamplesWithoutKeys(true)
                         .build(drmCallback)
                     DrmSessionManagerProvider { drmSessionManager }
                 }.onFailure {
                     Log.e("PlayerMediaSourceFactory", "Failed to build ClearKey DrmSessionManager", it)
                 }.getOrNull()
             }
+            isClearKey && cleanDrmKey.startsWith("http", ignoreCase = true) -> {
+                runCatching {
+                    val drmCallback = HttpMediaDrmCallback(cleanDrmKey, drmDataSourceFactory).apply {
+                        effectiveLicenseHeaders.forEach { (k, v) -> setKeyRequestProperty(k, v) }
+                    }
+                    val drmSessionManager = DefaultDrmSessionManager.Builder()
+                        .setUuidAndExoMediaDrmProvider(C.CLEARKEY_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
+                        .setMultiSession(true)
+                        .setPlayClearSamplesWithoutKeys(true)
+                        .build(drmCallback)
+                    DrmSessionManagerProvider { drmSessionManager }
+                }.onFailure {
+                    Log.e("PlayerMediaSourceFactory", "Failed to build ClearKey HTTP DrmSessionManager", it)
+                }.getOrNull()
+            }
             isWidevine && cleanDrmKey.isNotBlank() -> {
                 runCatching {
-                    val drmCallback = HttpMediaDrmCallback(cleanDrmKey, httpDataSourceFactory).apply {
-                        allLicenseHeaders.forEach { (k, v) -> setKeyRequestProperty(k, v) }
+                    val drmCallback = HttpMediaDrmCallback(cleanDrmKey, drmDataSourceFactory).apply {
+                        effectiveLicenseHeaders.forEach { (k, v) -> setKeyRequestProperty(k, v) }
                     }
                     val drmSessionManager = DefaultDrmSessionManager.Builder()
                         .setUuidAndExoMediaDrmProvider(C.WIDEVINE_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
-                        .setMultiSession(false)
+                        .setMultiSession(true)
+                        .setPlayClearSamplesWithoutKeys(true)
                         .build(drmCallback)
                     DrmSessionManagerProvider { drmSessionManager }
                 }.onFailure {
@@ -240,12 +274,13 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
             isPlayReady && cleanDrmKey.isNotBlank() -> {
                 runCatching {
-                    val drmCallback = HttpMediaDrmCallback(cleanDrmKey, httpDataSourceFactory).apply {
-                        allLicenseHeaders.forEach { (k, v) -> setKeyRequestProperty(k, v) }
+                    val drmCallback = HttpMediaDrmCallback(cleanDrmKey, drmDataSourceFactory).apply {
+                        effectiveLicenseHeaders.forEach { (k, v) -> setKeyRequestProperty(k, v) }
                     }
                     val drmSessionManager = DefaultDrmSessionManager.Builder()
                         .setUuidAndExoMediaDrmProvider(C.PLAYREADY_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
-                        .setMultiSession(false)
+                        .setMultiSession(true)
+                        .setPlayClearSamplesWithoutKeys(true)
                         .build(drmCallback)
                     DrmSessionManagerProvider { drmSessionManager }
                 }.onFailure {
@@ -266,24 +301,33 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
         when {
             isClearKey && (drmSessionManagerProvider != null || cleanDrmKey.isNotBlank()) -> {
-                mediaItemBuilder.setDrmConfiguration(
-                    MediaItem.DrmConfiguration.Builder(C.CLEARKEY_UUID).build()
-                )
+                val drmConfigBuilder = MediaItem.DrmConfiguration.Builder(C.CLEARKEY_UUID)
+                    .setMultiSession(true)
+                if (cleanDrmKey.startsWith("http", ignoreCase = true)) {
+                    drmConfigBuilder.setLicenseUri(cleanDrmKey)
+                    if (effectiveLicenseHeaders.isNotEmpty()) {
+                        drmConfigBuilder.setLicenseRequestHeaders(effectiveLicenseHeaders)
+                    }
+                }
+                mediaItemBuilder.setDrmConfiguration(drmConfigBuilder.build())
             }
             isWidevine && cleanDrmKey.isNotBlank() -> {
                 val drmConfigBuilder = MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
                     .setLicenseUri(cleanDrmKey)
-                    .setMultiSession(false)
-                if (allLicenseHeaders.isNotEmpty()) {
-                    drmConfigBuilder.setLicenseRequestHeaders(allLicenseHeaders)
+                    .setMultiSession(true)
+                if (effectiveLicenseHeaders.isNotEmpty()) {
+                    drmConfigBuilder.setLicenseRequestHeaders(effectiveLicenseHeaders)
                 }
                 mediaItemBuilder.setDrmConfiguration(drmConfigBuilder.build())
             }
             isPlayReady && cleanDrmKey.isNotBlank() -> {
                 val drmConfigBuilder = MediaItem.DrmConfiguration.Builder(C.PLAYREADY_UUID)
                     .setLicenseUri(cleanDrmKey)
-                    .setLicenseRequestHeaders(allLicenseHeaders)
-                    .build()
+                    .setMultiSession(true)
+                if (effectiveLicenseHeaders.isNotEmpty()) {
+                    drmConfigBuilder.setLicenseRequestHeaders(effectiveLicenseHeaders)
+                }
+                mediaItemBuilder.setDrmConfiguration(drmConfigBuilder.build())
             }
         }
 

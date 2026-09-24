@@ -173,4 +173,29 @@ class LiveTvM3uParserTest {
         assertEquals("VLC/3.0", ch.headers["User-Agent"])
         assertEquals("https://referrer.example.com", ch.headers["Referer"])
     }
+
+    @Test
+    fun parseM3uPlaylist_playlistLevelUserAgentInheritance() {
+        val payload = """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="update", Update
+            #EXTVLCOPT:http-user-agent=Dalvik/2.1.0
+            https://example.com/update.mp4
+            #EXTINF:-1 tvg-id="VTV2" group-title="Dự phòng", VTV2
+            #KODIPROP:inputstream.adaptive.manifest_type=mpd
+            #KODIPROP:inputstream.adaptive.license_type=widevine
+            #KODIPROP:inputstream.adaptive.license_key=https://tv.vietanhtv.top/mytv2/key.php
+            https://s7485.cdn.mytvnet.vn/pkg20/manifest.mpd
+        """.trimIndent()
+
+        val channels = parseM3uPlaylist(payload)
+        assertEquals(2, channels.size)
+
+        val vtv2 = channels[1]
+        assertEquals("VTV2", vtv2.name)
+        assertEquals("Dalvik/2.1.0", vtv2.headers["User-Agent"])
+        assertEquals("widevine", vtv2.drmType)
+        assertEquals("https://tv.vietanhtv.top/mytv2/key.php", vtv2.drmKey)
+    }
 }
+

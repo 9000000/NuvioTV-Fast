@@ -79,7 +79,61 @@ internal object ClearKeyUtil {
             }.getOrNull()
         }
 
+        // Case 3: URL containing embedded id parameter (e.g. key.php?id=kid:key)
+        if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+            val queryId = runCatching {
+                android.net.Uri.parse(trimmed).getQueryParameter("id")
+            }.getOrNull()
+            if (!queryId.isNullOrBlank() && queryId.contains(':')) {
+                val parsed = normalizeToJwkJson(queryId)
+                if (parsed != null) return parsed
+            }
+        }
+
         return null
+    }
+
+    /**
+     * Fetches ClearKey JWK JSON from an HTTP URL endpoint (e.g. cleankey.php).
+     */
+    fun fetchClearKeyJson(url: String, headers: Map<String, String> = emptyMap()): String? {
+        if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+            return null
+        }
+
+        // Fast path: embedded id parameter
+        val queryId = runCatching {
+            android.net.Uri.parse(url).getQueryParameter("id")
+        }.getOrNull()
+        if (!queryId.isNullOrBlank() && queryId.contains(':')) {
+            val parsed = normalizeToJwkJson(queryId)
+            if (parsed != null) return parsed
+        }
+
+        return runCatching {
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            conn.instanceFollowRedirects = true
+            val effectiveUa = headers.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
+                ?: IptvHeaderProvider.DEFAULT_IPTV_USER_AGENT
+            conn.setRequestProperty("User-Agent", effectiveUa)
+            headers.forEach { (k, v) ->
+                if (!k.equals("User-Agent", ignoreCase = true)) {
+                    conn.setRequestProperty(k, v)
+                }
+            }
+            if (conn.responseCode in 200..299) {
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                normalizeToJwkJson(body)
+            } else {
+                Log.w(TAG, "ClearKey URL returned HTTP ${conn.responseCode}: $url")
+                null
+            }
+        }.getOrElse {
+            Log.w(TAG, "Failed to fetch ClearKey from URL: $url", it)
+            null
+        }
     }
 
     private fun buildJwkKeyEntry(rawKid: String, rawKey: String): JSONObject? {

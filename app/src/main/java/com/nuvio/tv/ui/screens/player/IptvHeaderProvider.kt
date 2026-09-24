@@ -10,9 +10,9 @@ import java.util.Locale
 object IptvHeaderProvider {
 
     /**
-     * Default User-Agent that mimics VLC player for maximum compatibility
+     * Default User-Agent that mimics Android IPTV players (TiviMate/Kodi) for maximum compatibility
      */
-    private const val DEFAULT_IPTV_USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20"
+    const val DEFAULT_IPTV_USER_AGENT = "Dalvik/2.1.0"
 
     /**
      * Known IPTV patterns that typically require headers
@@ -24,7 +24,13 @@ object IptvHeaderProvider {
         "/hls/",
         "/stream/",
         ".ts", // Transport Stream files
-        ".m3u8" // HLS playlists
+        ".m3u8", // HLS playlists
+        ".mpd", // DASH manifests
+        "manifest",
+        "mytv",
+        "seenow",
+        "tv360",
+        "fptplay"
     )
 
     /**
