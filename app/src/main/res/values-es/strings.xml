@@ -238,6 +238,7 @@
     <string name="detail_tab_trailer">Tráiler</string>
     <string name="detail_more_like_this_powered_by_tmdb">Con tecnología de TMDB</string>
     <string name="detail_more_like_this_powered_by_trakt">Con tecnología de Trakt</string>
+    <string name="detail_more_like_this_powered_by_simkl">Con tecnología de Simkl</string>
     <string name="detail_comments_title">Comentarios</string>
     <string name="detail_comments_subtitle">Reseñas de Trakt</string>
     <string name="detail_comments_subtitle_episode">Reseñas de Trakt para T%1$dE%2$d</string>
@@ -1122,6 +1123,15 @@
     <string name="layout_custom_poster_qr">Configurar desde teléfono</string>
     <string name="custom_poster_qr_instruction">Escanea el código QR con tu teléfono para pegar un patrón de URL de póster</string>
 
+    <!-- Custom Poster URL - Screen Toggles -->
+    <string name="layout_custom_poster_apply_to">Aplicar pósteres personalizados a:</string>
+    <string name="layout_custom_poster_screen_home">Inicio</string>
+    <string name="layout_custom_poster_screen_continue_watching">Continuar viendo</string>
+    <string name="layout_custom_poster_screen_collections">Colecciones</string>
+    <string name="layout_custom_poster_screen_library">Biblioteca</string>
+    <string name="layout_custom_poster_screen_search">Buscar</string>
+    <string name="layout_custom_poster_screen_details">Pantalla de detalles</string>
+
     <!-- Custom Poster Web Page -->
     <string name="web_custom_poster_title">Fuente de póster personalizada</string>
     <string name="web_custom_poster_subtitle">Pega un patrón de URL de póster abajo y pulsa Guardar.</string>
@@ -1457,6 +1467,7 @@
     <string name="trakt_more_like_this_source_dialog_subtitle">Selecciona la fuente de las recomendaciones que se muestran en las pantallas de detalles y posreproducción.</string>
     <string name="trakt_more_like_this_source_trakt">Trakt</string>
     <string name="trakt_more_like_this_source_tmdb">TMDB</string>
+    <string name="trakt_more_like_this_source_simkl">Simkl</string>
     <string name="trakt_cached_label">En caché</string>
     <string name="trakt_stat_movies">Películas</string>
     <string name="trakt_stat_shows">Series</string>
@@ -1998,6 +2009,7 @@
     <string name="library_sort_added_asc">Añadido ↑</string>
     <string name="library_sort_title_asc">Título A-Z</string>
     <string name="library_sort_title_desc">Título Z-A</string>
+    <string name="library_error_sort_failed">No se pudo cargar el orden. Se muestra el orden del proveedor.</string>
     <string name="library_manage_lists">Administrar listas</string>
     <string name="library_manage_trakt_lists">Administrar listas de Trakt</string>
     <string name="library_no_lists">Sin listas personales aún.</string>
