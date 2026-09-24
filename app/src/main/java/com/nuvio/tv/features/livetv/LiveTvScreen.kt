@@ -99,7 +99,7 @@ fun LiveTvScreen(
     onChannelSelected: (LiveTvChannel) -> Unit,
     onNavigateToSettings: () -> Unit = {}
 ) {
-    LaunchedEffect(Unit) { LiveTvRepository.ensureLoaded() }
+    LaunchedEffect(Unit) { LiveTvRepository.onScreenEntered() }
     val state by LiveTvRepository.uiState.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize().background(NuvioTheme.colors.Background)) {
@@ -110,7 +110,7 @@ fun LiveTvScreen(
             !state.hasPlaylist -> LiveTvEmptyState(onNavigateToSettings)
             state.errorMessage != null && state.channels.isEmpty() -> LiveTvErrorState(
                 message = state.errorMessage!!,
-                onRetry = { LiveTvRepository.refresh() },
+                onRetry = { LiveTvRepository.refresh(force = true, showLoadingIfHasChannels = true) },
                 onNavigateToSettings = onNavigateToSettings
             )
             else -> LiveTvContent(
@@ -120,7 +120,7 @@ fun LiveTvScreen(
                     onChannelSelected(channel)
                 },
                 onToggleFavorite = { LiveTvRepository.toggleFavoriteChannel(it) },
-                onRefresh = { LiveTvRepository.refresh() },
+                onRefresh = { LiveTvRepository.refresh(force = true, showLoadingIfHasChannels = true) },
                 onNavigateToSettings = onNavigateToSettings
             )
         }

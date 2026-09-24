@@ -111,20 +111,65 @@ object LiveTvRepository {
         val playlists = loadSavedPlaylists()
         val recentIds = loadRecentChannelIds()
         val lastWatched = recentIds.firstOrNull() ?: LiveTvStorage.loadLastWatchedChannelId()
+        val stalker = LiveTvStorage.loadStalkerSettings()
+        val xtream = LiveTvStorage.loadXtreamSettings()
+        val cachedChannels = LiveTvStorage.loadChannelsCache()
+
         _uiState.value = LiveTvUiState(
             playlistUrl = playlists.firstEnabledUrlSource(),
             playlists = playlists,
-            stalkerSettings = LiveTvStorage.loadStalkerSettings(),
-            xtreamSettings = LiveTvStorage.loadXtreamSettings(),
+            stalkerSettings = stalker,
+            xtreamSettings = xtream,
+            channels = cachedChannels,
             favoriteChannelIds = loadFavoriteChannelIds(),
             lastWatchedChannelId = lastWatched,
             recentChannelIds = recentIds,
             isNavigationEnabled = LiveTvStorage.loadNavigationEnabled() ?: true,
+            isLoading = false,
         )
         publishNavigationVisibility()
+
         if (_uiState.value.hasPlaylist) {
-            refresh()
+            val signature = computeConfigSignature(playlists, stalker, xtream)
+            val savedSignature = LiveTvStorage.loadCacheConfigSignature()
+            val isExpired = LiveTvStorage.isCacheExpired()
+            val shouldRefresh = cachedChannels.isEmpty() || signature != savedSignature || isExpired
+            if (shouldRefresh) {
+                refresh(force = true, showLoadingIfHasChannels = cachedChannels.isEmpty())
+            }
         }
+    }
+
+    fun onScreenEntered() {
+        ensureLoaded()
+        if (_uiState.value.hasPlaylist) {
+            val signature = computeConfigSignature()
+            val savedSignature = LiveTvStorage.loadCacheConfigSignature()
+            val isExpired = LiveTvStorage.isCacheExpired()
+            val shouldRefresh = _uiState.value.channels.isEmpty() || signature != savedSignature || isExpired
+            if (shouldRefresh) {
+                refresh(force = true, showLoadingIfHasChannels = _uiState.value.channels.isEmpty())
+            }
+        }
+    }
+
+    fun computeConfigSignature(
+        playlists: List<LiveTvPlaylist> = _uiState.value.playlists,
+        stalker: LiveTvStalkerSettings = _uiState.value.stalkerSettings,
+        xtream: LiveTvXtreamSettings = _uiState.value.xtreamSettings,
+    ): String {
+        val enabledPlaylists = playlists
+            .filter { it.isEnabled }
+            .map { "${it.id}:${it.type.name}:${it.source}" }
+            .sorted()
+            .joinToString(";")
+        val stalkerPart = if (stalker.isConfigured && stalker.isEnabled) {
+            "${stalker.portalUrl}|${stalker.macAddress}"
+        } else ""
+        val xtreamPart = if (xtream.isConfigured && xtream.isEnabled) {
+            "${xtream.serverUrl}|${xtream.username}"
+        } else ""
+        return "$enabledPlaylists##$stalkerPart##$xtreamPart"
     }
 
     fun savePlaylistUrl(url: String) {
@@ -256,7 +301,9 @@ object LiveTvRepository {
         )
         publishNavigationVisibility()
         if (playlists.any { it.isEnabled }) {
-            refresh()
+            refresh(force = true)
+        } else if (!_uiState.value.stalkerSettings.isConfigured && !_uiState.value.xtreamSettings.isConfigured) {
+            LiveTvStorage.clearChannelsCache()
         }
     }
 
@@ -281,8 +328,10 @@ object LiveTvRepository {
             errorMessage = null,
         )
         publishNavigationVisibility()
-        if (playlists.any { it.isEnabled }) {
-            refresh()
+        if (playlists.any { it.isEnabled } || _uiState.value.stalkerSettings.isConfigured || _uiState.value.xtreamSettings.isConfigured) {
+            refresh(force = true)
+        } else {
+            LiveTvStorage.clearChannelsCache()
         }
     }
 
@@ -383,7 +432,9 @@ object LiveTvRepository {
         return prepared
     }
 
-    fun refresh() {
+    private var refreshJob: Job? = null
+
+    fun refresh(force: Boolean = true, showLoadingIfHasChannels: Boolean = true) {
         ensureLoaded()
         val currentState = _uiState.value
         val playlists = currentState.playlists
@@ -395,6 +446,7 @@ object LiveTvRepository {
                 isLoading = false,
                 errorMessage = null,
             )
+            LiveTvStorage.clearChannelsCache()
             publishNavigationVisibility()
             return
         }
@@ -410,11 +462,25 @@ object LiveTvRepository {
                 isLoading = false,
                 errorMessage = null,
             )
+            LiveTvStorage.clearChannelsCache()
             return
         }
 
-        _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-        scope.launch {
+        val signature = computeConfigSignature()
+        val savedSignature = LiveTvStorage.loadCacheConfigSignature()
+        val isExpired = LiveTvStorage.isCacheExpired()
+
+        if (!force && !isExpired && signature == savedSignature && currentState.channels.isNotEmpty()) {
+            return
+        }
+
+        val showLoading = showLoadingIfHasChannels || currentState.channels.isEmpty()
+        if (showLoading) {
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+        }
+
+        refreshJob?.cancel()
+        refreshJob = scope.launch {
             val loadedChannels = mutableListOf<LiveTvChannel>()
             val failedPlaylistNames = mutableListOf<String>()
 
@@ -464,18 +530,30 @@ object LiveTvRepository {
             }
 
             val channels = loadedChannels.distinctBy { it.streamUrl }
+            val finalChannels = if (channels.isEmpty() && currentState.channels.isNotEmpty()) {
+                currentState.channels
+            } else {
+                channels
+            }
+
             _uiState.value = _uiState.value.copy(
                 playlistUrl = playlists.firstEnabledUrlSource(),
                 playlists = playlists,
-                channels = channels,
+                channels = finalChannels,
                 isLoading = false,
                 errorMessage = when {
-                    channels.isEmpty() && failedPlaylistNames.isNotEmpty() -> "Playlist could not be loaded."
-                    channels.isEmpty() -> "No channels found in these playlists."
+                    finalChannels.isEmpty() && failedPlaylistNames.isNotEmpty() -> "Playlist could not be loaded."
+                    finalChannels.isEmpty() -> "No channels found in these playlists."
                     failedPlaylistNames.isNotEmpty() -> "Some playlists could not be loaded: ${failedPlaylistNames.joinToString()}"
                     else -> null
                 },
             )
+
+            if (channels.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    LiveTvStorage.saveChannelsCache(channels, signature)
+                }
+            }
         }
     }
 

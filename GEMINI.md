@@ -27,10 +27,27 @@ Tệp này kiểm soát hành vi của AI Agent.
    - Tên biến, hàm, file: **TIẾNG ANH** (camelCase, snake_case...).
    - Comment trong code: **TIẾNG ANH** (để chuẩn hóa).
 
+## 🧠 Tự Động Nhận Diện Kỹ Năng Tự Nhiên (Natural Skill Auto-Routing)
+> **Nguyên tắc cốt lõi**: KHÔNG BAO GIỜ bắt người dùng phải gõ lệnh slash `/`. Khi người dùng chat bằng ngôn ngữ tự nhiên (Tiếng Việt hoặc Tiếng Anh), AI PHẢI chủ động nhận diện ý định (Intent Recognition) và tự động áp dụng kỹ năng chuyên sâu tương ứng:
+
+- 🎨 **Giao diện, Màu sắc, Animation, Responsive, Đẹp hơn, UI/UX**: Tự động áp dụng `ui-ux-pro-max-skill`, `frontend-trends-2026`, `tailwind-patterns`.
+- ⚡ **Tối giản, Làm nhanh, Lười, YAGNI, Không over-engineering, Code ngắn**: Tự động áp dụng `ponytail`, `clean-code`.
+- 🐛 **Báo lỗi, Crash, Bug, Fix, Không chạy được, Exception**: Tự động áp dụng `systematic-debugging`, `debugger`.
+- 🗄️ **Database, Supabase, Postgres, Prisma, Tạo bảng, Query SQL**: Tự động áp dụng `postgres-best-practices`, `prisma-expert`, `neon-postgres`.
+- 🔐 **Đăng nhập, Phân quyền, Auth, Tài khoản, Clerk**: Tự động áp dụng `clerk-auth`, `auth-implementation-patterns`.
+- 💳 **Thanh toán, Bán hàng, Stripe, Gói cước, Checkout**: Tự động áp dụng `stripe-integration`, `pricing-strategy`, `micro-saas-launcher`.
+- 🚀 **Deploy, Đưa web lên mạng, Hosting, Vercel, VPS**: Tự động áp dụng `vercel-deployment`, `server-management`.
+- 📱 **Mobile App, Ứng dụng điện thoại, Flutter, React Native**: Tự động áp dụng `flutter-expert`, `react-native-architecture`.
+- 🐳 **Docker, Container, Dockerfile, Docker Compose**: Tự động áp dụng `docker-expert`.
+- 🤖 **AI Prompt, Chatbot, RAG, Hỏi đáp tài liệu, LLM**: Tự động áp dụng `prompt-engineering`, `llm-app-patterns`, `rag-implementation`.
+- 🌐 **Cào dữ liệu, Duyệt web, Scrape, Tìm kiếm mạng**: Tự động áp dụng `firecrawl-scraper`, `browser-automation`, `tavily-web`.
+- 🧪 **Kiểm thử, Viết test, TDD, E2E**: Tự động áp dụng `tdd-master-workflow`, `e2e-testing-patterns`.
+- 📈 **Lên top Google, SEO, Tìm kiếm AI (ChatGPT, Perplexity)**: Tự động áp dụng `seo-expert-kit`, `geo-fundamentals`.
+
 ## Khả năng cốt lõi
 
-Agent có quyền truy cập **TOÀN BỘ** kỹ năng (Web, Mobile, DevOps, AI, Security).
-Vui lòng sử dụng các kỹ năng phù hợp nhất cho **Phát triển chung**.
+Agent có quyền truy cập **TOÀN BỘ** kỹ năng tinh hoa (Web, Mobile, DevOps, AI, Security).
+Vui lòng chủ động sử dụng các kỹ năng phù hợp nhất cho **Vibe Coding**.
 
 - Thao tác tệp (đọc, ghi, tìm kiếm)
 - Lệnh terminal
@@ -94,31 +111,9 @@ Sử dụng các lệnh sau để kích hoạt quy trình tác chiến chuyên s
 - **/update-docs**: Đồng bộ tài liệu với mã nguồn.
 - **/visually**: Trực quan hóa logic & kiến trúc.
 
-## ⚡ Tích hợp Superpowers (obra/superpowers)
-Hệ thống kỹ năng phương pháp luận phát triển phần mềm chuẩn Superpowers đã được tích hợp vào `.agent/skills/`:
-- **using-superpowers**: Tự động nhận diện và kích hoạt kỹ năng phù hợp trước khi hành động.
-- **brainstorming**: Khám phá ý định người dùng, làm rõ yêu cầu và thống nhất thiết kế trước khi bắt tay vào triển khai.
-- **writing-plans** & **executing-plans**: Lập kế hoạch theo từng task nhỏ, độc lập, bám sát TDD, DRY, YAGNI và thực thi tuần tự.
-- **subagent-driven-development** & **dispatching-parallel-agents**: Điều phối các subagent độc lập xử lý task song song hoặc chuyên sâu.
-- **systematic-debugging**: Quy trình 4 pha gỡ lỗi triệt để (Reproduce -> Isolate -> Understand -> Fix & Verify), cấm đoán mò mẫm hay sửa triệu chứng.
-- **test-driven-development**: Chu kỳ Red -> Green -> Refactor nghiêm ngặt.
-- **verification-before-completion**: Kiểm chứng kết quả bằng test và chạy thực tế trước khi xác nhận hoàn tất.
-- **requesting-code-review** & **receiving-code-review**: Đánh giá và tiếp thu phản hồi chất lượng mã nguồn.
-- **finishing-a-development-branch**: Dọn dẹp, tổng kết và đóng gói nhánh phát triển an toàn.
-
-## 🦹 Tích hợp Ponytail (DietrichGebert/ponytail)
-Bộ kỹ năng "Lazy Senior Developer Mode" tối giản mã nguồn, loại bỏ over-engineering đã được tích hợp vào `.agent/skills/` và `.agent/rules/ponytail.md`:
-- **ponytail**: Chế độ tối giản cốt lõi - leo thang tối giản: YAGNI -> Tận dụng code cũ -> Stdlib -> Native feature -> Dependency có sẵn -> 1 dòng -> Code tối thiểu.
-- **ponytail-review**: Rà soát code chỉ để săn tìm sự phức tạp thừa thãi (chỉ ra dòng nào cần xóa, đơn giản hóa, dùng stdlib).
-- **ponytail-audit**: Quét toàn bộ repository để tìm code thừa, abstraction vô nghĩa hoặc thư viện không cần thiết.
-- **ponytail-debt**: Thu thập các comment `ponytail:` để theo dõi các điểm đánh đổi/đơn giản hóa có chủ đích.
-- **ponytail-gain**: Bảng điểm thống kê hiệu quả giảm thiểu dòng code và chi phí.
-- **ponytail-help**: Bảng hướng dẫn tra cứu nhanh các lệnh của Ponytail.
-
 ## Hướng dẫn tùy chỉnh
 
 Thêm các hướng dẫn cụ thể cho dự án của bạn tại đây.
 
 ---
 *Được tạo bởi Antigravity IDE*
-
