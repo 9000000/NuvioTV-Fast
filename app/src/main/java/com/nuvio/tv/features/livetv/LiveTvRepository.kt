@@ -412,11 +412,23 @@ object LiveTvRepository {
     }
 
     suspend fun prepareForPlayback(channel: LiveTvChannel): LiveTvChannel {
-        val isStalker = channel.playlistId == STALKER_PLAYLIST_ID || !channel.stalkerCommand.isNullOrBlank()
-        var prepared = if (isStalker) {
-            preparePortalChannelForPlayback(channel, _uiState.value.stalkerSettings)
+        var prepared = channel
+
+        val isStalker = prepared.playlistId == STALKER_PLAYLIST_ID || !prepared.stalkerCommand.isNullOrBlank()
+        prepared = if (isStalker) {
+            preparePortalChannelForPlayback(prepared, _uiState.value.stalkerSettings)
         } else {
-            channel
+            val playlistSource = _uiState.value.playlists.firstOrNull { it.id == prepared.playlistId }?.source
+                ?: _uiState.value.playlistUrl
+            val resolution = resolveStreamMetadata(prepared.streamUrl, prepared.headers, playlistSource)
+            if (resolution.finalUrl != prepared.streamUrl || resolution.detectedType != null) {
+                prepared.copy(
+                    streamUrl = resolution.finalUrl,
+                    streamType = resolution.detectedType ?: prepared.streamType
+                )
+            } else {
+                prepared
+            }
         }
 
         // Resolve ClearKey HTTP URL to JWK JSON if needed
@@ -434,6 +446,107 @@ object LiveTvRepository {
         }
 
         return prepared
+    }
+
+    private data class StreamResolutionResult(
+        val finalUrl: String,
+        val detectedType: String?
+    )
+
+    private suspend fun resolveStreamMetadata(
+        initialUrl: String,
+        headers: Map<String, String>,
+        playlistSourceUrl: String?
+    ): StreamResolutionResult = withContext(Dispatchers.IO) {
+        runCatching {
+            var currentUrl = initialUrl
+
+            // 1. Smart DNS Fallback: Nếu stream host bị lỗi DNS (NXDOMAIN) nhưng có chung root domain với playlist host, tự động fallback sang playlist host
+            val playlistHost = playlistSourceUrl?.let { runCatching { URL(it).host }.getOrNull() }?.takeIf { it.isNotBlank() }
+            val streamHost = runCatching { URL(currentUrl).host }.getOrNull()
+
+            if (!streamHost.isNullOrBlank() && !playlistHost.isNullOrBlank() && !streamHost.equals(playlistHost, ignoreCase = true)) {
+                val streamParts = streamHost.split('.')
+                val playlistParts = playlistHost.split('.')
+                if (streamParts.size >= 2 && playlistParts.size >= 2) {
+                    val streamRootDomain = streamParts.takeLast(2).joinToString(".")
+                    val playlistRootDomain = playlistParts.takeLast(2).joinToString(".")
+                    if (streamRootDomain.equals(playlistRootDomain, ignoreCase = true)) {
+                        val isResolvable = runCatching { java.net.InetAddress.getByName(streamHost) != null }.getOrDefault(false)
+                        if (!isResolvable) {
+                            currentUrl = currentUrl.replaceFirst(streamHost, playlistHost)
+                        }
+                    }
+                }
+            }
+
+            // 2. Nếu đã có extension rõ ràng và không phải link redirect động, trả về ngay để tránh tốn độ trễ khởi chạy
+            val hasStaticExtension = currentUrl.contains(".m3u8", ignoreCase = true) ||
+                currentUrl.contains(".mpd", ignoreCase = true) ||
+                currentUrl.contains(".ts", ignoreCase = true)
+
+            val isDynamicUrl = currentUrl.contains(".php", ignoreCase = true) ||
+                currentUrl.contains(".ashx", ignoreCase = true) ||
+                currentUrl.contains("/get", ignoreCase = true) ||
+                !hasStaticExtension
+
+            if (!isDynamicUrl && currentUrl == initialUrl) {
+                val type = when {
+                    currentUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
+                    currentUrl.contains(".mpd", ignoreCase = true) -> "mpd"
+                    currentUrl.contains(".ts", ignoreCase = true) -> "ts"
+                    else -> null
+                }
+                return@withContext StreamResolutionResult(currentUrl, type)
+            }
+
+            // 3. Dynamic Stream Resolver: Tự động follow redirects (301, 302, 307, 308) và phát hiện MIME type thực tế từ server
+            var redirectCount = 0
+            var detectedType: String? = null
+            while (redirectCount < 5) {
+                val connection = (URL(currentUrl).openConnection() as? HttpURLConnection) ?: break
+                connection.instanceFollowRedirects = false
+                headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
+                connection.connectTimeout = 3000
+                connection.readTimeout = 3000
+                try {
+                    val code = connection.responseCode
+                    val contentType = connection.contentType?.lowercase()
+                    if (code in 300..399) {
+                        val location = connection.getHeaderField("Location")
+                        connection.disconnect()
+                        if (location.isNullOrBlank()) break
+                        currentUrl = if (location.startsWith("http")) location else URL(URL(currentUrl), location).toString()
+                        redirectCount++
+                    } else {
+                        if (contentType != null) {
+                            detectedType = when {
+                                contentType.contains("application/vnd.apple.mpegurl") || contentType.contains("application/x-mpegurl") || contentType.contains("mpegurl") -> "m3u8"
+                                contentType.contains("video/mp2t") -> "ts"
+                                contentType.contains("application/dash+xml") -> "mpd"
+                                else -> null
+                            }
+                        }
+                        connection.disconnect()
+                        break
+                    }
+                } catch (e: Exception) {
+                    connection.disconnect()
+                    break
+                }
+            }
+
+            if (detectedType == null) {
+                detectedType = when {
+                    currentUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
+                    currentUrl.contains(".mpd", ignoreCase = true) -> "mpd"
+                    currentUrl.contains(".ts", ignoreCase = true) -> "ts"
+                    else -> null
+                }
+            }
+
+            StreamResolutionResult(currentUrl, detectedType)
+        }.getOrDefault(StreamResolutionResult(initialUrl, null))
     }
 
     private var refreshJob: Job? = null
