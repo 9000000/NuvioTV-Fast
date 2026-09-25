@@ -2981,10 +2981,6 @@
     <string name="network_fast_error_token_missing">fast.com: Không tìm thấy token trong gói</string>
 
     <!-- Torrent service / TorrServer binary errors -->
-    <string name="torrent_error_add_failed">Không thể thêm torrent</string>
-    <string name="torrent_error_binary_missing">Không tìm thấy tệp thực thi TorrServer tại %1$s</string>
-    <string name="torrent_error_process_died">Tiến trình TorrServer đã dừng khi khởi động (mã thoát %1$d)</string>
-    <string name="torrent_error_start_timeout">TorrServer đã không thể khởi động trong vòng %1$d giây</string>
 
     <!-- Player runtime: stream / external link errors -->
     <string name="player_torrent_starting_engine">Đang khởi động lõi P2P…</string>
