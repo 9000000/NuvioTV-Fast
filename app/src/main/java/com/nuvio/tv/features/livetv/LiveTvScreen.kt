@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -702,8 +703,8 @@ private fun LiveTvContent(
             enter = fadeIn() + slideInVertically { -it / 3 },
             exit = fadeOut() + slideOutVertically { -it / 3 },
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 110.dp, end = 24.dp)
+                .align(Alignment.TopStart)
+                .padding(top = 124.dp, start = 28.dp)
                 .zIndex(10f)
         ) {
             PlaylistDropdownPanel(
@@ -843,7 +844,9 @@ private fun PlaylistDropdownPanel(
 
             // Playlist list
             LazyColumn(
-                modifier = Modifier.widthIn(min = 230.dp, max = 340.dp),
+                modifier = Modifier
+                    .widthIn(min = 230.dp, max = 340.dp)
+                    .heightIn(max = 420.dp),
                 contentPadding = PaddingValues(vertical = 6.dp)
             ) {
                 // DEFAULT VIEW item (chỉ hiện khi đang chọn 1 playlist cụ thể để có thể quay về mặc định)

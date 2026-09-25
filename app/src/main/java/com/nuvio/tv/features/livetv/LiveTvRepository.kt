@@ -9,6 +9,7 @@ import com.nuvio.tv.core.server.LiveTvConfigServer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.json.JSONObject
+import com.nuvio.tv.core.network.DynamicHostFallback
 import com.nuvio.tv.ui.screens.player.ClearKeyUtil
 import com.nuvio.tv.ui.screens.player.IptvHeaderProvider
 import java.net.HttpURLConnection
@@ -424,6 +425,16 @@ object LiveTvRepository {
         val isStalker = prepared.playlistId == STALKER_PLAYLIST_ID || !prepared.stalkerCommand.isNullOrBlank()
         if (isStalker) {
             prepared = preparePortalChannelForPlayback(prepared, _uiState.value.stalkerSettings)
+        } else {
+            val playlistSource = _uiState.value.playlists.firstOrNull { it.id == prepared.playlistId }?.source
+                ?: _uiState.value.playlistUrl
+            val resolution = resolveStreamMetadata(prepared.streamUrl, prepared.headers, playlistSource)
+            if (resolution.finalUrl != prepared.streamUrl || resolution.detectedType != null) {
+                prepared = prepared.copy(
+                    streamUrl = resolution.finalUrl,
+                    streamType = resolution.detectedType ?: prepared.streamType
+                )
+            }
         }
 
         // Resolve ClearKey HTTP URL to JWK JSON if needed (with short timeout to avoid blocking)
@@ -458,41 +469,37 @@ object LiveTvRepository {
         playlistSourceUrl: String?
     ): StreamResolutionResult = withContext(Dispatchers.IO) {
         runCatching {
-            var currentUrl = initialUrl
+            // Register playlist host as known-good so DynamicHostFallback can fallback to it
+            if (!playlistSourceUrl.isNullOrBlank()) {
+                DynamicHostFallback.registerWorkingHost(playlistSourceUrl)
+            }
 
-            // 1. Smart DNS Fallback: Nếu stream host bị lỗi DNS (NXDOMAIN) nhưng có chung root domain với playlist host, tự động fallback sang playlist host
-            val playlistHost = playlistSourceUrl?.let { runCatching { URL(it).host }.getOrNull() }?.takeIf { it.isNotBlank() }
-            val streamHost = runCatching { URL(currentUrl).host }.getOrNull()
+            // 1. Smart DNS Fallback via DynamicHostFallback (zero hardcoded domains)
+            var currentUrl = DynamicHostFallback.normalizeUrlWithFallback(
+                url = initialUrl,
+                preferredFallbackHost = playlistSourceUrl?.let {
+                    runCatching { URL(it).host }.getOrNull()
+                }
+            )
 
-            if (!streamHost.isNullOrBlank() && !playlistHost.isNullOrBlank() && !streamHost.equals(playlistHost, ignoreCase = true)) {
-                val streamParts = streamHost.split('.')
-                val playlistParts = playlistHost.split('.')
-                if (streamParts.size >= 2 && playlistParts.size >= 2) {
-                    val streamRootDomain = streamParts.takeLast(2).joinToString(".")
-                    val playlistRootDomain = playlistParts.takeLast(2).joinToString(".")
-                    if (streamRootDomain.equals(playlistRootDomain, ignoreCase = true)) {
-                        val isResolvable = runCatching { java.net.InetAddress.getByName(streamHost) != null }.getOrDefault(false)
-                        if (!isResolvable) {
-                            currentUrl = currentUrl.replaceFirst(streamHost, playlistHost)
+            // If fallback changed nothing, also try DNS resolution check
+            if (currentUrl == initialUrl) {
+                val streamHost = runCatching { URL(initialUrl).host }.getOrNull()
+                if (!streamHost.isNullOrBlank()) {
+                    val isResolvable = runCatching {
+                        java.net.InetAddress.getByName(streamHost) != null
+                    }.getOrDefault(false)
+                    if (!isResolvable) {
+                        val fallback = DynamicHostFallback.getFallbackHost(streamHost)
+                        if (!fallback.isNullOrBlank()) {
+                            currentUrl = initialUrl.replaceFirst(streamHost, fallback)
                         }
                     }
                 }
             }
 
-            // 2. Nếu đã có extension rõ ràng và không phải link redirect động, trả về ngay để tránh tốn độ trễ khởi chạy
-            val hasStaticExtension = currentUrl.contains(".m3u8", ignoreCase = true) ||
-                currentUrl.contains(".mpd", ignoreCase = true) ||
-                currentUrl.contains(".ts", ignoreCase = true) ||
-                currentUrl.contains(".flv", ignoreCase = true) ||
-                currentUrl.contains(".mp4", ignoreCase = true) ||
-                currentUrl.contains(".mkv", ignoreCase = true)
-
-            val isDynamicUrl = currentUrl.contains(".php", ignoreCase = true) ||
-                currentUrl.contains(".ashx", ignoreCase = true) ||
-                currentUrl.contains("/get", ignoreCase = true) ||
-                !hasStaticExtension
-
-            if (!isDynamicUrl && currentUrl == initialUrl) {
+            // 2. Early return for known static extensions (avoid unnecessary network probe)
+            if (!DynamicHostFallback.isDynamicLiveStreamUrl(currentUrl) && currentUrl == initialUrl) {
                 val type = when {
                     currentUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
                     currentUrl.contains(".mpd", ignoreCase = true) -> "mpd"
@@ -505,7 +512,7 @@ object LiveTvRepository {
                 return@withContext StreamResolutionResult(currentUrl, type)
             }
 
-            // 3. Dynamic Stream Resolver: Tự động follow redirects (301, 302, 307, 308) và phát hiện MIME type thực tế từ server
+            // 3. Dynamic Stream Resolver: follow redirects and detect MIME from server
             var redirectCount = 0
             var detectedType: String? = null
             while (redirectCount < 5) {
@@ -615,7 +622,11 @@ object LiveTvRepository {
             enabledPlaylists.forEach { playlist ->
                 val result = runCatching {
                     val payload = when (playlist.type) {
-                        LiveTvPlaylistType.Url -> withContext(Dispatchers.Default) { httpGetText(playlist.source) }
+                        LiveTvPlaylistType.Url -> withContext(Dispatchers.Default) {
+                            // Register working host before fetching so fallback is available immediately
+                            DynamicHostFallback.registerWorkingHost(playlist.source)
+                            httpGetText(playlist.source)
+                        }
                         LiveTvPlaylistType.LocalFile -> playlist.source
                     }
                     parseM3uPlaylist(payload, playlist)
@@ -916,7 +927,8 @@ internal fun parseM3uPlaylist(
                         ?: (null to emptyMap())
 
                     val info = pending.info
-                    val streamUrl = rawUrl
+                    val playlistHost = playlist?.source?.let { runCatching { URL(it).host }.getOrNull() }
+                    val streamUrl = DynamicHostFallback.normalizeUrlWithFallback(rawUrl, preferredFallbackHost = playlistHost)
                     val name = info?.name?.takeIf(String::isNotBlank)
                         ?: streamUrl.substringAfterLast('/').substringBefore('?').ifBlank { "Channel" }
 
@@ -929,6 +941,7 @@ internal fun parseM3uPlaylist(
                         effectiveManifestType == "ts" || streamUrl.contains(".ts", ignoreCase = true) -> "ts"
                         effectiveManifestType == "mp4" || streamUrl.contains(".mp4", ignoreCase = true) -> "mp4"
                         effectiveManifestType == "mkv" || streamUrl.contains(".mkv", ignoreCase = true) -> "mkv"
+                        DynamicHostFallback.isDynamicLiveStreamUrl(streamUrl) -> "m3u8"
                         else -> null
                     }
 
