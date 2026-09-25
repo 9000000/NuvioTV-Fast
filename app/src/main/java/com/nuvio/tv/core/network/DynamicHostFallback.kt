@@ -65,8 +65,6 @@ object DynamicHostFallback {
 
     /**
      * Extracts effective root domain from a hostname without hardcoded domain lists.
-     * e.g., "vpsttt.vietanhtv.top" -> "vietanhtv.top"
-     * e.g., "stream.server.com.vn" -> "server.com.vn"
      */
     fun extractRootDomain(host: String): String {
         val parts = host.lowercase().trim().split('.')
