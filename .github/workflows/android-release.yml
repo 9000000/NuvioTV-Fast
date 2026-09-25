@@ -95,6 +95,7 @@ jobs:
 
       - name: Generate release notes
         env:
+          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
           PREVIOUS_BUMP: ${{ steps.release.outputs.previous_bump }}
           CURRENT_BUMP: ${{ steps.release.outputs.current_bump }}
           EXCLUDE_COMMITS: ${{ inputs.exclude_commits }}
@@ -119,6 +120,17 @@ jobs:
               echo "No release-note commits were found, creating fallback notes."
               echo "Release ${{ steps.release.outputs.title }} (${{ steps.release.outputs.tag }})" > release-notes.md
             fi
+          fi
+
+          if [[ "${RELEASE_PRERELEASE}" == "true" ]]; then
+            {
+              printf '%s\n' \
+                '> [!IMPORTANT]' \
+                '> **Beta builds are for testing purposes and may contain bugs, regressions, or unexpected issues.** If you prefer a reliable experience, we recommend staying on the **Stable** channel.' \
+                ''
+              cat release-notes.md
+            } > release-notes.tmp
+            mv release-notes.tmp release-notes.md
           fi
 
           {
