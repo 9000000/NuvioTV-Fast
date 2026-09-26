@@ -77,7 +77,7 @@ fun CatalogSeeAllScreen(
     addonId: String,
     type: String,
     searchViewModel: SearchViewModel? = null,
-    serverCollection: ServerCollectionViewModel? = null,
+    serverCatalog: ServerCatalogViewModel? = null,
     viewModel: HomeViewModel = hiltViewModel(),
     posterOptionsViewModel: com.nuvio.tv.ui.components.posteroptions.PosterOptionsViewModel = hiltViewModel(),
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -111,16 +111,16 @@ fun CatalogSeeAllScreen(
     val homeCatalogRow = fullCatalogRows.find {
         it.legacyKey() == catalogKey
     }
-    val serverRow = serverCollection?.row?.collectAsState()
-    val serverFailed = serverCollection?.failed?.collectAsState()
+    val serverRow = serverCatalog?.row?.collectAsState()
+    val serverFailed = serverCatalog?.failed?.collectAsState()
     val catalogRow = when {
-        serverCollection != null -> serverRow?.value
+        serverCatalog != null -> serverRow?.value
         isSearchMode -> searchCatalogRow
         else -> homeCatalogRow
     }
 
     LaunchedEffect(catalogKey, isSearchMode, catalogRow != null) {
-        if (!isSearchMode && serverCollection == null && catalogRow == null) {
+        if (!isSearchMode && serverCatalog == null && catalogRow == null) {
             viewModel.requestLazyCatalogLoad(catalogKey)
         }
     }
@@ -153,8 +153,8 @@ fun CatalogSeeAllScreen(
                 if (total > 0 && lastVisible >= total - 10) {
                     val row = catalogRow
                     if (row != null && row.hasMore && !row.isLoading) {
-                        if (serverCollection != null) {
-                            serverCollection.loadMore()
+                        if (serverCatalog != null) {
+                            serverCatalog.loadMore()
                         } else if (isSearchMode) {
                             searchViewModel.onEvent(
                                 SearchEvent.LoadMoreCatalog(row.catalogId, row.addonId, row.apiType)

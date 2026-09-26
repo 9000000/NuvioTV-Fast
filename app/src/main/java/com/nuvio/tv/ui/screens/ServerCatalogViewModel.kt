@@ -18,11 +18,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class ServerCollectionViewModel @Inject constructor(
+class ServerCatalogViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val serverCatalog: ServerCatalog
 ) : ViewModel() {
-    private val ref = ServerItemRef.parse(savedStateHandle.get<String>("itemId"))
+    private val collection = ServerItemRef.parse(savedStateHandle.get<String>("itemId"))
+    private val connectionId = savedStateHandle.get<String>("addonId")?.let(ServerCatalog::connectionIdFromAddonId)
+    private val libraryId = savedStateHandle.get<String>("catalogId")
     private val _row = MutableStateFlow<CatalogRow?>(null)
     private val _failed = MutableStateFlow(false)
     val row: StateFlow<CatalogRow?> = _row.asStateFlow()
@@ -30,7 +32,13 @@ class ServerCollectionViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            _row.value = ref?.let { loadOrNull { serverCatalog.collectionRow(it) } }
+            _row.value = loadOrNull {
+                when {
+                    collection != null -> serverCatalog.collectionRow(collection)
+                    connectionId != null && libraryId != null -> serverCatalog.libraryRow(connectionId, libraryId)
+                    else -> null
+                }
+            }
             _failed.value = _row.value == null
         }
     }
@@ -48,7 +56,7 @@ class ServerCollectionViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadOrNull(block: suspend () -> CatalogRow): CatalogRow? =
+    private suspend fun loadOrNull(block: suspend () -> CatalogRow?): CatalogRow? =
         try {
             block()
         } catch (error: CancellationException) {

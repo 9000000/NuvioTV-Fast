@@ -133,6 +133,22 @@ class ServerCatalog @Inject constructor(
         return page(row, skip = 0)
     }
 
+    suspend fun libraryRow(connectionId: String, libraryId: String): CatalogRow {
+        val connection = repository.connection(connectionId) ?: throw ServerException(ServerFailure.NOT_FOUND)
+        val library = connection.libraries.firstOrNull { it.id == libraryId } ?: throw ServerException(ServerFailure.NOT_FOUND)
+        val row = CatalogRow(
+            addonId = addonId(connection.id),
+            addonName = repository.sourceLabel(connection),
+            addonBaseUrl = baseUrl(connection.id),
+            catalogId = library.id,
+            catalogName = ServerLibraryRef(connection, library).title,
+            type = library.kind.domainType(),
+            rawType = library.kind.contentType,
+            items = emptyList()
+        )
+        return page(row, skip = 0)
+    }
+
     suspend fun page(row: CatalogRow, skip: Int): CatalogRow =
         catalog(row.addonBaseUrl, row.addonId, row.addonName, row.catalogId, row.catalogName, row.apiType, skip, row.extraArgs)
 
@@ -243,5 +259,7 @@ class ServerCatalog @Inject constructor(
         fun baseUrl(connectionId: String): String = BASE_URL_PREFIX + connectionId
 
         fun addonId(connectionId: String): String = ADDON_ID_PREFIX + connectionId
+
+        fun connectionIdFromAddonId(addonId: String): String? = addonId.takeIf(::isServerAddonId)?.removePrefix(ADDON_ID_PREFIX)
     }
 }

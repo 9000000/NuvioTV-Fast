@@ -6,11 +6,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.nuvio.tv.ui.screens.CatalogSeeAllScreen
-import com.nuvio.tv.ui.screens.ServerCollectionViewModel
+import com.nuvio.tv.ui.screens.ServerCatalogViewModel
 import com.nuvio.tv.ui.screens.home.HomeViewModel
 
 @Composable
-internal fun ServerCollectionDestination(
+internal fun ServerCatalogDestination(
     navController: NavHostController,
     backStackEntry: NavBackStackEntry
 ) {
@@ -18,12 +18,12 @@ internal fun ServerCollectionDestination(
         runCatching { navController.getBackStackEntry(Screen.Home.route) }.getOrNull()
     }
     val homeViewModel: HomeViewModel = hiltViewModel(homeBackStackEntry ?: backStackEntry)
-    val serverCollection: ServerCollectionViewModel = hiltViewModel(backStackEntry)
+    val serverCatalog: ServerCatalogViewModel = hiltViewModel(backStackEntry)
     CatalogSeeAllScreen(
         catalogId = "",
         addonId = "",
         type = "",
-        serverCollection = serverCollection,
+        serverCatalog = serverCatalog,
         viewModel = homeViewModel,
         onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
             navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
