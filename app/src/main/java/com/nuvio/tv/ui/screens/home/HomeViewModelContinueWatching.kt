@@ -1211,7 +1211,7 @@ private fun shouldTreatAsInProgressForContinueWatching(progress: WatchProgress):
         progress.source != WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS
 }
 
-private fun HomeViewModel.shouldUseAsCompletedSeed(progress: WatchProgress): Boolean {
+internal fun HomeViewModel.shouldUseAsCompletedSeed(progress: WatchProgress): Boolean {
     if (isMalformedNextUpSeedContentId(progress.contentId)) return false
     return watchProgressRepository.shouldUseAsNextUpSeed(progress, System.currentTimeMillis())
 }
@@ -2318,6 +2318,9 @@ internal fun resolveNextUpVideoFromMeta(
 }
 
 private const val CW_META_NEGATIVE_CACHE_TTL_MS = 5 * 60_000L
+
+internal suspend fun HomeViewModel.resolveCwMeta(progress: WatchProgress) =
+    resolveMetaForProgress(progress, cwMetaCache)
 
 private suspend fun HomeViewModel.resolveMetaForProgress(
     progress: WatchProgress,

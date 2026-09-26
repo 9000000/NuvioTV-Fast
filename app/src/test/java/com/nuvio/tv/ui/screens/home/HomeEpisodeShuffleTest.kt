@@ -20,6 +20,10 @@ class HomeEpisodeShuffleTest {
         thumbnail = null, released = "2999-01-01", hasAired = false, airDateLabel = "Soon",
         lastWatched = 100, sortTimestamp = 100, isReleaseAlert = true, isNewSeasonRelease = true
     ))
+    private val finishedCard = ContinueWatchingItem.NextUp(NextUpInfo(
+        "show", "series", "Show", null, null, null, "show:1:5", 1, 5, null,
+        thumbnail = null, lastWatched = 50, sortTimestamp = 50, seedSeason = 1, seedEpisode = 5
+    ))
     private val state = HomeUiState(upcomingItems = listOf(upcoming))
     private val profile = EpisodeShuffleProfile(1, true, mapOf("show" to EpisodeShuffleSettings(true, false)))
     private val shuffle = EpisodeShuffle()
@@ -120,13 +124,31 @@ class HomeEpisodeShuffleTest {
         assertEquals(1, project(profile = all, watched = allWatched).continueWatchingItems.size)
     }
 
+    @Test
+    fun `finished show with shuffle on returns with a random episode`() {
+        val card = project(HomeUiState(), finished = listOf(finishedCard)).continueWatchingItems.single()
+            as ContinueWatchingItem.NextUp
+        assertTrue(card.shufflePlayback)
+        assertTrue(videos.any { it.id == card.info.videoId && it.episode == card.info.episode })
+        assertEquals(5, card.info.seedEpisode)
+    }
+
+    @Test
+    fun `finished show needs shuffle on and never duplicates an existing card`() {
+        val otherShowOnly = profile.copy(shows = mapOf("other" to EpisodeShuffleSettings(true, false)))
+        assertTrue(project(HomeUiState(), otherShowOnly, finished = listOf(finishedCard)).continueWatchingItems.isEmpty())
+        val output = project(finished = listOf(finishedCard))
+        assertEquals(1, output.continueWatchingItems.size + output.upcomingItems.size)
+    }
+
     private fun project(
         input: HomeUiState = state,
         profile: EpisodeShuffleProfile = this.profile,
         watched: Map<String, Set<Pair<Int, Int>>> = emptyMap(),
         visit: Long = 1,
-        catalogue: List<Video>? = videos
-    ) = applyHomeShuffle(input, profile, watched, shuffle, visit, ContinueWatchingSortMode.SPLIT_UPCOMING) { _, _ -> catalogue }
+        catalogue: List<Video>? = videos,
+        finished: List<ContinueWatchingItem.NextUp> = emptyList()
+    ) = applyHomeShuffle(input, profile, watched, shuffle, visit, ContinueWatchingSortMode.SPLIT_UPCOMING, finished) { _, _ -> catalogue }
 
     private fun progress() = WatchProgress("show", "series", "Show", null, null, null,
         "show:1:3", 1, 3, "Episode 3", 34000, 100000, 100, progressPercent = 34f)
