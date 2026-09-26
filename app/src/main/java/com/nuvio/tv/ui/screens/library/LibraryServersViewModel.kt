@@ -37,8 +37,20 @@ class LibraryServersViewModel @Inject constructor(
     private val _shelves = MutableStateFlow<List<LibraryServerShelf>?>(null)
     val shelves: StateFlow<List<LibraryServerShelf>?> = _shelves.asStateFlow()
     private var loadJob: Job? = null
+    private var loadedRevision: Int? = null
+    var focusedShelfKey: String? = null
+        private set
+    val focusedIndexes = mutableMapOf<String, Int>()
+
+    fun onItemFocused(shelfKey: String, index: Int) {
+        focusedShelfKey = shelfKey
+        focusedIndexes[shelfKey] = index
+    }
 
     fun load() {
+        val revision = servers.value.revision
+        if (loadedRevision == revision && _shelves.value != null) return
+        loadedRevision = revision
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             _shelves.value = coroutineScope {

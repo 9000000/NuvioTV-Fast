@@ -152,6 +152,9 @@ fun LibraryScreen(
     val selectorFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
     var pendingPrimaryFocus by remember { mutableStateOf(true) }
+    var serverFocusTarget by remember {
+        mutableStateOf(serversViewModel.focusedShelfKey?.let { key -> serversViewModel.focusedIndexes[key]?.let { key to it } })
+    }
     var lastFocusedPosterKey by rememberSaveable { mutableStateOf<String?>(null) }
     val visibleItemKeys = remember(uiState.visibleItems) {
         uiState.visibleItems.map { "${it.type}:${it.id}" }
@@ -207,6 +210,9 @@ fun LibraryScreen(
     }
 
     LaunchedEffect(uiState.isLoading, uiState.sourceMode, uiState.listTabs.size) {
+        if (!uiState.isLoading && pendingPrimaryFocus && viewMode == LibraryViewMode.Servers && serverFocusTarget != null) {
+            pendingPrimaryFocus = false
+        }
         if (!uiState.isLoading && pendingPrimaryFocus) {
             val restoreKey = lastFocusedPosterKey
             val restoreIndex = restoreKey?.let { visibleItemIndexByKey[it] }
@@ -496,6 +502,15 @@ fun LibraryScreen(
                 shelves = serverShelves,
                 posterCardStyle = posterCardStyle,
                 rowInset = NuvioTheme.spacing.xxxl,
+                focusTarget = serverFocusTarget,
+                focusedIndexes = serversViewModel.focusedIndexes,
+                onItemFocused = { shelfKey, index ->
+                    val target = serverFocusTarget
+                    if (target == null || target == shelfKey to index) {
+                        serverFocusTarget = null
+                        serversViewModel.onItemFocused(shelfKey, index)
+                    }
+                },
                 isWatched = { item ->
                     val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
                     if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds

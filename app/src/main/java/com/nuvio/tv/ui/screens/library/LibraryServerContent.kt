@@ -26,6 +26,9 @@ internal fun LazyGridScope.libraryServerContent(
     shelves: List<LibraryServerShelf>?,
     posterCardStyle: PosterCardStyle,
     rowInset: Dp,
+    focusTarget: Pair<String, Int>?,
+    focusedIndexes: Map<String, Int>,
+    onItemFocused: (String, Int) -> Unit,
     isWatched: (MetaPreview) -> Boolean,
     onItemClick: (String, String, String) -> Unit,
     onSeeAll: (CatalogRow) -> Unit,
@@ -62,7 +65,10 @@ internal fun LazyGridScope.libraryServerContent(
                         showCatalogTypeSuffix = false,
                         isItemWatched = isWatched,
                         onItemLongPress = onItemLongPress,
-                        modifier = Modifier.bleed(rowInset)
+                        modifier = Modifier.bleed(rowInset),
+                        focusedItemIndex = focusTarget?.takeIf { it.first == shelf.key }?.second ?: -1,
+                        restorerFocusedIndex = focusedIndexes[shelf.key] ?: -1,
+                        onItemFocused = { index -> onItemFocused(shelf.key, index) }
                     )
                 }
             } else if (failure != null) {
