@@ -8,6 +8,7 @@ import com.nuvio.tv.data.mediaserver.ServerMediaKind
 import com.nuvio.tv.data.mediaserver.ServerPlaybackTarget
 import com.nuvio.tv.data.mediaserver.ServerTitle
 import com.nuvio.tv.data.mediaserver.ServerUserState
+import com.nuvio.tv.data.mediaserver.domainType
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaCastMember
@@ -27,7 +28,7 @@ internal class MediaBrowserMapper(
         val kind = item.mediaKind() ?: return null
         return MetaPreview(
             id = ref(item.id),
-            type = kind.contentType(),
+            type = kind.domainType(),
             rawType = kind.contentType,
             name = item.name.orEmpty(),
             poster = item.primaryImage(),
@@ -73,7 +74,7 @@ internal class MediaBrowserMapper(
         val cast = item.people.filter { it.type.equals("Actor", ignoreCase = true) && !it.name.isNullOrBlank() }
         return Meta(
             id = ref(item.id),
-            type = kind.contentType(),
+            type = kind.domainType(),
             rawType = kind.contentType,
             name = item.name.orEmpty(),
             poster = item.primaryImage(),
@@ -191,12 +192,6 @@ internal class MediaBrowserMapper(
             else -> start.toString()
         }
     }
-}
-
-internal fun ServerMediaKind.contentType(): ContentType = when (this) {
-    ServerMediaKind.MOVIE -> ContentType.MOVIE
-    ServerMediaKind.SERIES -> ContentType.SERIES
-    ServerMediaKind.COLLECTION -> ContentType.UNKNOWN
 }
 
 internal fun BaseItem.mediaKind(): ServerMediaKind? = when {

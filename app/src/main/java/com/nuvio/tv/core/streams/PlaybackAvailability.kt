@@ -6,13 +6,16 @@ import com.nuvio.tv.domain.model.ScraperInfo
 import com.nuvio.tv.domain.model.Video
 
 internal fun Addon.supportsStreamResource(type: String, videoId: String): Boolean =
+    supportsResource("stream", type, videoId)
+
+internal fun Addon.supportsResource(name: String, type: String, id: String): Boolean =
     resources.any { resource ->
-        resource.name == "stream" &&
+        resource.name == name &&
             (resource.types.isEmpty() || resource.types.contains(type)) &&
             run {
                 val prefixes = resource.idPrefixes?.takeIf { it.isNotEmpty() }
                     ?: idPrefixes.takeIf { it.isNotEmpty() }
-                prefixes == null || prefixes.any { videoId.startsWith(it) }
+                prefixes == null || prefixes.any { id.startsWith(it) }
             }
     }
 

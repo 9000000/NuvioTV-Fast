@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.mediaserver
 
 import com.nuvio.tv.core.tracking.TrackingExternalIds
+import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.Subtitle
@@ -19,6 +20,12 @@ enum class ServerMediaKind(val contentType: String) {
             else -> null
         }
     }
+}
+
+fun ServerMediaKind.domainType(): ContentType = when (this) {
+    ServerMediaKind.MOVIE -> ContentType.MOVIE
+    ServerMediaKind.SERIES -> ContentType.SERIES
+    ServerMediaKind.COLLECTION -> ContentType.UNKNOWN
 }
 
 @Serializable
