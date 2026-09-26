@@ -509,6 +509,9 @@ internal fun PlayerRuntimeController.tryParsingErrorProbeFallback(
             if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                 return@launch
             }
+            if (tryServerFallback()) {
+                return@launch
+            }
             if (attemptAutoRetry(error, detailedError)) {
                 return@launch
             }

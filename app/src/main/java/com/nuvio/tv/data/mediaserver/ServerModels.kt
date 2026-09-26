@@ -107,7 +107,9 @@ private fun String.unescapeSegment(): String? {
 data class ServerPlaybackTarget(
     val item: ServerItemRef,
     val mediaSourceId: String?
-)
+) {
+    fun key(): String = "${item.encode()}:${mediaSourceId.orEmpty()}"
+}
 
 data class ServerPage<T>(
     val items: List<T>,

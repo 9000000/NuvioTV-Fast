@@ -10,16 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ServerRepositoryTest {
-    private class MemoryPersistence : ServerPersistence {
-        val values = mutableMapOf<Int, String>()
-        override fun read(profileId: Int): String? = values[profileId]
-        override fun write(profileId: Int, value: String?) {
-            if (value == null) values.remove(profileId) else values[profileId] = value
-        }
-        override fun clear() = values.clear()
-    }
-
-    private val persistence = MemoryPersistence()
+    private val persistence = MemoryServerPersistence()
     private val repository = ServerRepository(
         persistence = persistence,
         providers = emptyList(),

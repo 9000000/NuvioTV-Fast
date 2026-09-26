@@ -1628,6 +1628,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                         if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                             return
                         }
+                        if (tryServerFallback()) {
+                            return
+                        }
                         if (attemptAutoRetry(error, detailedError)) {
                             return
                         }

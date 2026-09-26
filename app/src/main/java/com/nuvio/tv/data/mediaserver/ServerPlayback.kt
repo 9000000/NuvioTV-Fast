@@ -1,0 +1,180 @@
+package com.nuvio.tv.data.mediaserver
+
+import android.os.SystemClock
+import android.util.Log
+import com.nuvio.tv.data.local.InternalPlayerEngine
+import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.abs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+
+@Singleton
+class ServerPlayback internal constructor(
+    private val repository: ServerRepository,
+    private val directPlayAll: suspend () -> Boolean,
+    private val scope: CoroutineScope,
+    private val clock: () -> Long
+) {
+    @Inject
+    constructor(repository: ServerRepository, playerSettings: PlayerSettingsDataStore) : this(
+        repository = repository,
+        directPlayAll = { playerSettings.playerSettings.first().internalPlayerEngine == InternalPlayerEngine.MVP_PLAYER },
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        clock = SystemClock::elapsedRealtime
+    )
+
+    private val lock = Any()
+    private val active = mutableMapOf<String, ActivePlayback>()
+
+    suspend fun prepare(target: ServerPlaybackTarget): ServerPlaybackSession {
+        val capabilities = capabilities()
+        val (provider, session, playback) = repository.call(target.item.connectionId) { provider, session ->
+            Triple(provider, session, provider.preparePlayback(session, ServerPlaybackRequest(target, capabilities)))
+        }
+        val orphans = synchronized(lock) {
+            val unstarted = active.filterValues { !it.started }.keys.toList()
+            active[playback.url] = ActivePlayback(provider, session, playback)
+            unstarted.mapNotNull(active::remove)
+        }
+        orphans.forEach { it.stop() }
+        return playback
+    }
+
+    fun canFallback(url: String?): Boolean =
+        url?.let { synchronized(lock) { active[it] } }?.playback?.playMethod == ServerPlayMethod.DIRECT_PLAY
+
+    suspend fun fallback(url: String?): ServerPlaybackSession? {
+        val failed = url?.let { synchronized(lock) { active[it] } } ?: return null
+        if (failed.playback.playMethod != ServerPlayMethod.DIRECT_PLAY) return null
+        return restart(url, failed, audioStreamIndex = null)
+    }
+
+    suspend fun switchAudio(url: String?, audioStreamIndex: Int): ServerPlaybackSession? {
+        val current = url?.let { synchronized(lock) { active[it] } } ?: return null
+        if (current.playback.playMethod == ServerPlayMethod.DIRECT_PLAY) return null
+        return restart(url, current, audioStreamIndex)
+    }
+
+    fun audioTracks(url: String?): List<ServerAudioTrack> {
+        val playback = url?.let { synchronized(lock) { active[it] } }?.playback ?: return emptyList()
+        if (playback.playMethod == ServerPlayMethod.DIRECT_PLAY || playback.audioTracks.size < 2) return emptyList()
+        return playback.audioTracks
+    }
+
+    fun isServerSource(url: String?): Boolean = url != null && synchronized(lock) { url in active }
+
+    fun onPlaybackSnapshot(url: String?, positionMs: Long, isPlaying: Boolean, isLoading: Boolean, isEnded: Boolean) {
+        val playback = url?.let { synchronized(lock) { active[it] } } ?: return
+        if (isEnded) {
+            playback.lastPositionMs = positionMs
+            stop(url)
+            return
+        }
+        playback.onSnapshot(positionMs, isPlaying, isLoading)
+    }
+
+    fun stop(url: String?) {
+        val playback = url?.let { synchronized(lock) { active.remove(it) } } ?: return
+        playback.stop()
+    }
+
+    private suspend fun restart(url: String, current: ActivePlayback, audioStreamIndex: Int?): ServerPlaybackSession? {
+        val request = ServerPlaybackRequest(
+            target = current.playback.target,
+            capabilities = capabilities().copy(allowDirectPlay = false),
+            audioStreamIndex = audioStreamIndex
+        )
+        val playback = try {
+            current.provider.preparePlayback(current.session, request)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.w(TAG, "Playback restart failed: ${error.serverFailure()}")
+            return null
+        }
+        stop(url)
+        synchronized(lock) { active[playback.url] = ActivePlayback(current.provider, current.session, playback) }
+        return playback
+    }
+
+    private suspend fun capabilities() = ServerPlayerCapabilities(directPlayAll = directPlayAll())
+
+    private inner class ActivePlayback(
+        val provider: ServerProvider,
+        val session: ServerSession,
+        val playback: ServerPlaybackSession
+    ) {
+        private val events = Channel<ServerPlaybackEvent>(Channel.UNLIMITED)
+        var started = false
+            private set
+        var lastPositionMs = 0L
+        private var paused = false
+        private var lastReportPositionMs = 0L
+        private var lastReportAtMs = 0L
+
+        init {
+            scope.launch {
+                for (event in events) {
+                    try {
+                        withTimeoutOrNull(REPORT_TIMEOUT_MS) { provider.report(session, playback, event) }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        Log.w(TAG, "Playback report ${event.type} failed: ${error.serverFailure()}")
+                    }
+                }
+            }
+        }
+
+        fun onSnapshot(positionMs: Long, isPlaying: Boolean, isLoading: Boolean) = synchronized(lock) {
+            lastPositionMs = positionMs
+            if (!started) {
+                if (isPlaying && !isLoading) {
+                    started = true
+                    send(ServerPlaybackEventType.START, positionMs, isPaused = false)
+                }
+                return@synchronized
+            }
+            if (isLoading) return@synchronized
+            val now = clock()
+            val elapsed = now - lastReportAtMs
+            val expected = lastReportPositionMs + if (paused) 0L else elapsed
+            when {
+                paused == isPlaying -> {
+                    paused = !isPlaying
+                    send(if (paused) ServerPlaybackEventType.PAUSE else ServerPlaybackEventType.RESUME, positionMs, paused)
+                }
+                abs(positionMs - expected) > SEEK_THRESHOLD_MS ||
+                    (isPlaying && elapsed >= PROGRESS_INTERVAL_MS) -> {
+                    send(ServerPlaybackEventType.PROGRESS, positionMs, paused)
+                }
+            }
+        }
+
+        fun stop() = synchronized(lock) {
+            send(ServerPlaybackEventType.STOP, lastPositionMs, isPaused = true)
+            events.close()
+        }
+
+        private fun send(type: ServerPlaybackEventType, positionMs: Long, isPaused: Boolean) {
+            lastReportAtMs = clock()
+            lastReportPositionMs = positionMs
+            events.trySend(ServerPlaybackEvent(type, positionMs, isPaused))
+        }
+    }
+
+    private companion object {
+        const val TAG = "ServerPlayback"
+        const val PROGRESS_INTERVAL_MS = 10_000L
+        const val SEEK_THRESHOLD_MS = 5_000L
+        const val REPORT_TIMEOUT_MS = 10_000L
+    }
+}
