@@ -222,6 +222,7 @@ private fun ModernCatalogRowItem(
     requester: FocusRequester,
     isTargetItem: Boolean = false,
     useLandscapePosters: Boolean,
+    alwaysShowLandscapeClearlogo: Boolean = false,
     showLabels: Boolean,
     placeholderShimmerOffsetState: State<Float>?,
     posterCardCornerRadius: Dp,
@@ -371,6 +372,7 @@ private fun ModernCatalogRowItem(
     ModernCarouselCard(
         item = item,
         useLandscapeOverlayTreatment = useLandscapePosters,
+        alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
         showLabels = showLabels,
         placeholderShimmerOffsetState = placeholderShimmerOffsetState,
         cardCornerRadius = posterCardCornerRadius,
@@ -441,6 +443,7 @@ internal fun ModernRowSection(
     onPendingRowFocusCleared: () -> Unit,
     onRowItemFocused: (String, Int, Boolean) -> Unit,
     useLandscapePosters: Boolean,
+    alwaysShowLandscapeClearlogo: Boolean = false,
     showLabels: Boolean,
     posterCardCornerRadius: Dp,
     focusedPosterBackdropTrailerMuted: Boolean,
@@ -1009,6 +1012,7 @@ internal fun ModernRowSection(
                                 requester = requester,
                                 isTargetItem = isTargetItem,
                                 useLandscapePosters = useLandscapePosters,
+                                alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
                                 showLabels = showLabels,
                                 placeholderShimmerOffsetState = placeholderShimmerOffsetState,
                                 posterCardCornerRadius = posterCardCornerRadius,
@@ -1055,6 +1059,7 @@ internal fun ModernRowSection(
 private fun ModernCarouselCard(
     item: ModernCarouselItem,
     useLandscapeOverlayTreatment: Boolean,
+    alwaysShowLandscapeClearlogo: Boolean = false,
     showLabels: Boolean,
     placeholderShimmerOffsetState: State<Float>? = null,
     cardCornerRadius: Dp,
@@ -1238,7 +1243,7 @@ private fun ModernCarouselCard(
             !isCollectionFolder &&
             !effectiveLogoUrl.isNullOrBlank() &&
             !landscapeLogoLoadFailed &&
-            (isBackdropExpanded || item.metaPreview?.landscapePoster.isNullOrBlank() || customPosterLoadFailed)
+            (alwaysShowLandscapeClearlogo || isBackdropExpanded || item.metaPreview?.landscapePoster.isNullOrBlank() || customPosterLoadFailed)
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
     val backgroundCardColor = NuvioTheme.colors.BackgroundCard
