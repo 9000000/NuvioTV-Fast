@@ -24,7 +24,7 @@ class ServerCatalogViewModel @Inject constructor(
 ) : ViewModel() {
     private val collection = ServerItemRef.parse(savedStateHandle.get<String>("itemId"))
     private val connectionId = savedStateHandle.get<String>("addonId")?.let(ServerCatalog::connectionIdFromAddonId)
-    private val libraryId = savedStateHandle.get<String>("catalogId")
+    private val catalogId = savedStateHandle.get<String>("catalogId")
     private val _row = MutableStateFlow<CatalogRow?>(null)
     private val _failed = MutableStateFlow(false)
     val row: StateFlow<CatalogRow?> = _row.asStateFlow()
@@ -35,7 +35,7 @@ class ServerCatalogViewModel @Inject constructor(
             _row.value = loadOrNull {
                 when {
                     collection != null -> serverCatalog.collectionRow(collection)
-                    connectionId != null && libraryId != null -> serverCatalog.libraryRow(connectionId, libraryId)
+                    connectionId != null && catalogId != null -> serverCatalog.row(connectionId, catalogId)
                     else -> null
                 }
             }

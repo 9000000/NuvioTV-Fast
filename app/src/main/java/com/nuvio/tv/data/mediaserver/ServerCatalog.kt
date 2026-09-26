@@ -133,17 +133,17 @@ class ServerCatalog @Inject constructor(
         return page(row, skip = 0)
     }
 
-    suspend fun libraryRow(connectionId: String, libraryId: String): CatalogRow {
-        val connection = repository.connection(connectionId) ?: throw ServerException(ServerFailure.NOT_FOUND)
-        val library = connection.libraries.firstOrNull { it.id == libraryId } ?: throw ServerException(ServerFailure.NOT_FOUND)
+    suspend fun row(connectionId: String, catalogId: String): CatalogRow {
+        val addon = repository.connection(connectionId)?.let(::addonFor) ?: throw ServerException(ServerFailure.NOT_FOUND)
+        val descriptor = addon.catalogs.firstOrNull { it.id == catalogId } ?: throw ServerException(ServerFailure.NOT_FOUND)
         val row = CatalogRow(
-            addonId = addonId(connection.id),
-            addonName = repository.sourceLabel(connection),
-            addonBaseUrl = baseUrl(connection.id),
-            catalogId = library.id,
-            catalogName = ServerLibraryRef(connection, library).title,
-            type = library.kind.domainType(),
-            rawType = library.kind.contentType,
+            addonId = addon.id,
+            addonName = addon.displayName,
+            addonBaseUrl = addon.baseUrl,
+            catalogId = descriptor.id,
+            catalogName = descriptor.name,
+            type = descriptor.type,
+            rawType = descriptor.apiType,
             items = emptyList()
         )
         return page(row, skip = 0)

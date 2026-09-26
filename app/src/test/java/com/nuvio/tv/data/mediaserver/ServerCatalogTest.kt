@@ -169,6 +169,23 @@ class ServerCatalogTest {
     }
 
     @Test
+    fun opensAnyServerRowByCatalogId() = runTest {
+        val (catalog, _, connection) = catalog()
+
+        val library = catalog.row(connection.id, FakeServerProvider.MOVIE_LIBRARY.id)
+        assertEquals("Box · Movies", library.catalogName)
+        assertEquals(ServerCatalog.PAGE_SIZE, library.items.size)
+        assertTrue(library.hasMore)
+
+        val resume = catalog.row(connection.id, "resume")
+        assertEquals("Box · Continue watching", resume.catalogName)
+        assertEquals(1, resume.items.size)
+
+        val missing = runCatching { catalog.row(connection.id, "unknown") }.exceptionOrNull()
+        assertEquals(ServerFailure.NOT_FOUND, missing?.serverFailure())
+    }
+
+    @Test
     fun loadsNativeDetails() = runTest {
         val (catalog, _, connection) = catalog()
         val details = catalog.details(ServerItemRef(connection.id, FakeServerProvider.SHOW_ID))
