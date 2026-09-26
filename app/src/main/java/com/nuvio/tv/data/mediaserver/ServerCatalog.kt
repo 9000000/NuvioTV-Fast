@@ -17,6 +17,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -44,6 +45,8 @@ class ServerCatalog @Inject constructor(
     private val repository: ServerRepository,
     private val addonRepository: AddonRepository
 ) {
+    val detailsLoaded = MutableSharedFlow<ServerItemDetails>(extraBufferCapacity = DETAILS_BUFFER)
+
     val addons: Flow<List<Addon>> = repository.uiState
         .map { state -> state.enabledConnections.mapNotNull(::addonFor) }
         .distinctUntilChanged()
@@ -135,6 +138,7 @@ class ServerCatalog @Inject constructor(
 
     suspend fun details(ref: ServerItemRef): ServerItemDetails =
         repository.call(ref.connectionId) { provider, session -> provider.details(session, ref.itemId) }
+            .also { detailsLoaded.tryEmit(it) }
 
     private fun addonFor(connection: ServerConnection): Addon? {
         val provider = repository.provider(connection) ?: return null
@@ -219,6 +223,7 @@ class ServerCatalog @Inject constructor(
     companion object {
         const val PAGE_SIZE = 50
         private const val SEARCH_LIMIT = 30
+        private const val DETAILS_BUFFER = 16
         private const val RESUME_ID = "resume"
         private const val COLLECTION_PREFIX = "collection:"
         private const val BASE_URL_PREFIX = "nuvio-server://"

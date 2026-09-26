@@ -13,6 +13,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -86,6 +88,12 @@ class ServerMatcher @Inject constructor(
                 provider.findEpisode(session, seriesId, season, episode)
             } ?: return@mapNotNull null
             match.takeIf { datesCompatible(catalogDate, it.premiereDate) }?.let { ServerItemRef(connection.id, it.itemId) }
+        }
+    }
+
+    fun start() {
+        scope.launch {
+            repository.uiState.map { it.revision }.distinctUntilChanged().collect { warm() }
         }
     }
 
