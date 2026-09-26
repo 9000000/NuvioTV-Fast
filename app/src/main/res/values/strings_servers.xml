@@ -44,6 +44,7 @@
     <string name="servers_audio_switch_failed">Couldn\'t switch the audio track.</string>
     <string name="servers_watched_failed">Could not update watched state on the server.</string>
     <string name="servers_resume_row">Continue watching</string>
+    <string name="home_empty_no_sources_title">No content sources</string>
     <string name="library_server_title_unsupported">Titles from your media server can\'t be added to this library. Turn on Use addon metadata for the server to save them here.</string>
     <string name="library_source_servers">Servers</string>
     <string name="library_servers_empty_title">No libraries selected</string>

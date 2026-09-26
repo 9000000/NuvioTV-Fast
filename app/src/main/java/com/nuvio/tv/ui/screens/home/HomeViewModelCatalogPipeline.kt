@@ -198,7 +198,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     try {
         if (addons.isEmpty()) {
             catalogsLoadInProgress = false
-            _uiState.update { it.copy(isLoading = false, error = appContext.getString(R.string.home_error_no_addons)) }
+            _uiState.update { it.copy(isLoading = false, error = appContext.getString(R.string.home_empty_no_sources_title)) }
             return
         }
 
