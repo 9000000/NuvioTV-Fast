@@ -5,8 +5,11 @@ import com.nuvio.tv.core.profile.ProfileScopedCredentialStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,6 +47,11 @@ class ServerRepository(
     @Volatile
     private var generation = 0L
     private var tokens = emptyMap<String, String>()
+    private var pendingPush = false
+    private var syncedKeys: Set<String>? = null
+    private var localVersion = 0L
+    private val mutableLocalChanges = MutableSharedFlow<Int>(extraBufferCapacity = 8)
+    val localChanges: SharedFlow<Int> = mutableLocalChanges.asSharedFlow()
 
     fun ensureLoaded() {
         val profileId = activeProfileId
@@ -186,6 +194,55 @@ class ServerRepository(
         }
     }
 
+    fun syncSnapshot(profileId: Int): ServerSyncSnapshot? {
+        ensureLoaded()
+        if (loadedProfileId != profileId) return null
+        val currentTokens = synchronized(lock) { tokens }
+        return ServerSyncSnapshot(
+            profileId = profileId,
+            version = localVersion,
+            servers = mutableState.value.connections.mapNotNull { connection ->
+                currentTokens[connection.credentialRef]?.let(connection::toSynced)
+            },
+            pendingPush = pendingPush,
+            syncedKeys = syncedKeys
+        )
+    }
+
+    fun applySync(snapshot: ServerSyncSnapshot, servers: List<SyncedServer>, keys: Set<String>): Boolean {
+        if (loadedProfileId != snapshot.profileId || localVersion != snapshot.version) return false
+        val current = mutableState.value.connections
+        val currentByKey = current.associateBy { serverKey(it.providerId, it.remoteServerId, it.remoteUserId) }
+        val currentTokens = synchronized(lock) { tokens }
+        val usedIds = mutableSetOf<String>()
+        val updatedTokens = mutableMapOf<String, String>()
+        val connections = servers.map { server ->
+            val local = currentByKey[server.key]
+            val credentialRef = local?.credentialRef ?: newId("k")
+            val id = local?.id ?: server.id.takeUnless { id -> current.any { it.id == id } || id in usedIds } ?: newId("c")
+            usedIds += id
+            updatedTokens[credentialRef] = server.token
+            if (local != null && currentTokens[credentialRef] != server.token) setFailure(local.id, null)
+            server.toConnection(id, credentialRef)
+        }
+        (current.map { it.id } - usedIds).forEach { setFailure(it, null) }
+        pendingPush = false
+        syncedKeys = keys
+        if (connections == current && updatedTokens == currentTokens) {
+            persist(current, currentTokens)
+        } else {
+            save(connections, updatedTokens, local = false)
+        }
+        return true
+    }
+
+    fun markPushed(snapshot: ServerSyncSnapshot) {
+        if (loadedProfileId != snapshot.profileId) return
+        syncedKeys = snapshot.servers.mapTo(mutableSetOf()) { it.key }
+        if (localVersion == snapshot.version) pendingPush = false
+        persist(mutableState.value.connections, synchronized(lock) { tokens })
+    }
+
     override fun removeProfile(profileId: Int) {
         runCatching { persistence.write(profileId, null) }
             .onFailure { Log.w(TAG, "Unable to remove server connections", it) }
@@ -196,6 +253,8 @@ class ServerRepository(
         generation++
         synchronized(lock) { tokens = emptyMap() }
         loadedProfileId = null
+        pendingPush = false
+        syncedKeys = null
         runCatching { persistence.clear() }.onFailure { Log.w(TAG, "Unable to clear server storage", it) }
         mutableState.value = ServersUiState(revision = mutableState.value.revision + 1)
     }
@@ -204,6 +263,8 @@ class ServerRepository(
         generation++
         val stored = readStored(profileId)
         synchronized(lock) { tokens = stored.tokens }
+        pendingPush = stored.pendingPush
+        syncedKeys = stored.syncedKeys?.toSet()
         loadedProfileId = profileId
         mutableState.value = ServersUiState(
             connections = stored.connections,
@@ -217,15 +278,26 @@ class ServerRepository(
         save(connections, synchronized(lock) { tokens })
     }
 
-    private fun save(connections: List<ServerConnection>, updatedTokens: Map<String, String>) {
+    private fun save(connections: List<ServerConnection>, updatedTokens: Map<String, String>, local: Boolean = true) {
         val profileId = loadedProfileId ?: return
         val retained = updatedTokens.filterKeys { ref -> connections.any { it.credentialRef == ref } }
-        runCatching {
-            persistence.write(profileId, json.encodeToString(StoredServers.serializer(), StoredServers(connections, retained)))
-        }.onFailure { Log.w(TAG, "Unable to save server connections", it) }
+        if (local) {
+            pendingPush = true
+            localVersion++
+        }
+        persist(connections, retained)
         synchronized(lock) { tokens = retained }
         generation++
         mutableState.update { it.copy(connections = connections, revision = it.revision + 1) }
+        if (local) mutableLocalChanges.tryEmit(profileId)
+    }
+
+    private fun persist(connections: List<ServerConnection>, currentTokens: Map<String, String>) {
+        val profileId = loadedProfileId ?: return
+        val stored = StoredServers(connections, currentTokens, pendingPush, syncedKeys?.toList())
+        runCatching {
+            persistence.write(profileId, json.encodeToString(StoredServers.serializer(), stored))
+        }.onFailure { Log.w(TAG, "Unable to save server connections", it) }
     }
 
     private fun setFailure(connectionId: String, failure: ServerFailure?) {
