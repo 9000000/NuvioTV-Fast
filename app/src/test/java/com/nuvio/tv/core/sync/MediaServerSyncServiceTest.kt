@@ -27,6 +27,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -123,6 +124,16 @@ class MediaServerSyncServiceTest {
         assertTrue(calls.isEmpty())
     }
 
+    @Test
+    fun pushesEveryFieldEvenWhenDefault() = runBlocking {
+        repository.store(connection("local-a", server = "s1").copy(enabled = true, useCatalogMetadata = false), token = "token-a")
+
+        service.syncFromRemote(1).getOrThrow()
+
+        assertEquals(1, remote!!.size)
+        assertTrue(remote!!.single().enabled)
+    }
+
     private fun connection(id: String, server: String) = ServerConnection(
         id = id,
         providerId = "fake",
@@ -161,7 +172,9 @@ class MediaServerSyncServiceTest {
                     })
                 ).toString()
                 "sync_push_media_servers" -> {
-                    remote = params.getValue("p_servers").jsonArray.map { Json.decodeFromJsonElement<SyncedServer>(it) }
+                    val servers = params.getValue("p_servers").jsonArray
+                    servers.forEach { server -> check(server.jsonObject.keys == REQUIRED_KEYS) { "Rejected ${server.jsonObject.keys}" } }
+                    remote = servers.map { Json.decodeFromJsonElement<SyncedServer>(it) }
                     "\"2026-09-26T00:00:00Z\""
                 }
                 else -> error("Unexpected RPC $name")
@@ -169,5 +182,12 @@ class MediaServerSyncServiceTest {
             PostgrestResult(body, Headers.Empty, postgrest)
         }
         return postgrest
+    }
+
+    private companion object {
+        val REQUIRED_KEYS = setOf(
+            "id", "provider_id", "name", "address", "remote_server_id", "remote_user_id",
+            "user_name", "token", "libraries", "enabled", "use_catalog_metadata"
+        )
     }
 }

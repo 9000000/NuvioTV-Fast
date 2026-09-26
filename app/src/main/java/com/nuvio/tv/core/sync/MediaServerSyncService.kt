@@ -8,6 +8,7 @@ import com.nuvio.tv.data.mediaserver.ServerRepository
 import com.nuvio.tv.data.mediaserver.ServerSyncSnapshot
 import com.nuvio.tv.data.mediaserver.SyncedServer
 import com.nuvio.tv.data.mediaserver.mergeSyncedServers
+import com.nuvio.tv.data.mediaserver.toSyncPayload
 import com.nuvio.tv.data.remote.supabase.SupabaseMediaServers
 import com.nuvio.tv.domain.model.AuthState
 import io.github.jan.supabase.postgrest.Postgrest
@@ -25,9 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 
 @Singleton
@@ -122,7 +121,7 @@ class MediaServerSyncService @Inject constructor(
     private suspend fun push(snapshot: ServerSyncSnapshot) {
         val params = buildJsonObject {
             put("p_profile_id", snapshot.profileId)
-            put("p_servers", Json.encodeToJsonElement(snapshot.servers))
+            put("p_servers", snapshot.servers.toSyncPayload())
             putSyncOriginClientId(syncClientIdentity)
         }
         withJwtRefreshRetry {
