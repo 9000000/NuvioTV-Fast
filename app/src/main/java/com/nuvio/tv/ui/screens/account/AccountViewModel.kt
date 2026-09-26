@@ -70,7 +70,6 @@ class AccountViewModel @Inject constructor(
     private val watchedItemsSyncService: WatchedItemsSyncService,
     private val profileSettingsSyncService: ProfileSettingsSyncService,
     private val providerCredentialSyncService: ProviderCredentialSyncService,
-    private val mediaServerSyncService: com.nuvio.tv.core.sync.MediaServerSyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
@@ -715,7 +714,6 @@ class AccountViewModel @Inject constructor(
         val profileId = profileManager.activeProfileId.value
         profileSettingsSyncService.pushCurrentProfileToRemote()
         providerCredentialSyncService.syncFromRemote(profileId)
-        mediaServerSyncService.syncFromRemote(profileId)
         pluginSyncService.pushToRemote()
         addonSyncService.pushToRemote()
         watchProgressSyncService.pushToRemote(profileId)
@@ -730,7 +728,6 @@ class AccountViewModel @Inject constructor(
             val profileId = profileManager.activeProfileId.value
             profileSettingsSyncService.pullCurrentProfileFromRemote()
             providerCredentialSyncService.syncFromRemote(profileId).getOrElse { throw it }
-            mediaServerSyncService.syncFromRemote(profileId)
             pluginManager.isSyncingFromRemote = true
             val remotePlugins = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
             pluginManager.reconcileWithRemoteRepoUrls(

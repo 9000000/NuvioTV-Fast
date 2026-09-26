@@ -19,7 +19,9 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -39,11 +41,12 @@ class MediaServerSyncServiceTest {
     private var remote: List<SyncedServer>? = null
     private val calls = mutableListOf<String>()
     private val authState = MutableStateFlow<AuthState>(AuthState.FullAccount("user", "user@example.com"))
+    private val activeProfileId = MutableStateFlow(1)
     private val repository = ServerRepository(MemoryServerPersistence(), listOf(FakeServerProvider()), CoroutineScope(Dispatchers.Unconfined))
     private val service = MediaServerSyncService(
         postgrest = postgrest(),
         authManager = mockk<AuthManager>(relaxed = true) { every { authState } returns this@MediaServerSyncServiceTest.authState },
-        profileManager = mockk<ProfileManager> { every { activeProfileId } returns MutableStateFlow(1) },
+        profileManager = mockk<ProfileManager> { every { activeProfileId } returns this@MediaServerSyncServiceTest.activeProfileId },
         repository = repository,
         syncClientIdentity = mockk { every { currentClientId() } returns "tv-test" }
     )
@@ -112,6 +115,20 @@ class MediaServerSyncServiceTest {
         service.syncFromRemote(1).getOrThrow()
 
         assertTrue(remote!!.isEmpty())
+    }
+
+    @Test
+    fun switchingProfilesPullsThatProfilesServers() = runBlocking {
+        remote = listOf(synced("a", server = "s1", token = "shared"))
+
+        activeProfileId.value = 6
+
+        withTimeout(5_000L) {
+            while (repository.uiState.value.connections.isEmpty()) delay(20)
+        }
+        assertEquals(listOf("s1"), repository.uiState.value.connections.map { it.remoteServerId })
+        assertEquals("shared", repository.session("a")?.token)
+        assertTrue(calls.contains("sync_pull_media_servers"))
     }
 
     @Test

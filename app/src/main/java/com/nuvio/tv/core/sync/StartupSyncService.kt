@@ -59,7 +59,6 @@ class StartupSyncService @Inject constructor(
     private val watchedItemsSyncService: WatchedItemsSyncService,
     private val profileSettingsSyncService: ProfileSettingsSyncService,
     private val providerCredentialSyncService: ProviderCredentialSyncService,
-    private val mediaServerSyncService: MediaServerSyncService,
     private val profileSyncService: ProfileSyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
@@ -548,11 +547,6 @@ class StartupSyncService @Inject constructor(
             }
             .onFailure { error ->
                 Log.e(TAG, "Failed to sync provider credentials, keeping local credentials", error)
-            }
-
-        mediaServerSyncService.syncFromRemote(profileId)
-            .onFailure { error ->
-                Log.e(TAG, "Failed to sync media servers, keeping local servers", error)
             }
 
         coroutineScope {

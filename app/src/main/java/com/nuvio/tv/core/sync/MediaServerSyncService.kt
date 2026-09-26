@@ -21,7 +21,10 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,6 +47,7 @@ class MediaServerSyncService @Inject constructor(
 
     init {
         observeLocalChanges()
+        observeAccountAndProfile()
     }
 
     suspend fun syncFromRemote(
@@ -62,6 +66,19 @@ class MediaServerSyncService @Inject constructor(
         foregroundPullJob = scope.launch {
             if (!force) delay(FOREGROUND_DELAY_MS)
             syncFromRemote()
+        }
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun observeAccountAndProfile() {
+        scope.launch {
+            combine(authManager.authState, profileManager.activeProfileId) { state, profileId ->
+                (state as? AuthState.FullAccount)?.let { it.userId to profileId }
+            }
+                .distinctUntilChanged()
+                .debounce(PROFILE_SYNC_DEBOUNCE_MS)
+                .filterNotNull()
+                .collect { (_, profileId) -> syncFromRemote(profileId) }
         }
     }
 
@@ -88,6 +105,7 @@ class MediaServerSyncService @Inject constructor(
 
     private suspend fun sync(profileId: Int, pushOnly: Boolean): Boolean {
         if (!canSync(profileId)) return false
+        repository.selectProfile(profileId)
         val local = repository.syncSnapshot(profileId) ?: return false
         if (local.syncedKeys != null && (pushOnly || local.pendingPush)) {
             if (local.pendingPush) push(local)
@@ -146,6 +164,7 @@ class MediaServerSyncService @Inject constructor(
     private companion object {
         const val TAG = "MediaServerSync"
         const val PUSH_DEBOUNCE_MS = 500L
+        const val PROFILE_SYNC_DEBOUNCE_MS = 1000L
         const val FOREGROUND_DELAY_MS = 2500L
         const val FOREGROUND_MIN_INTERVAL_MS = 60_000L
     }
