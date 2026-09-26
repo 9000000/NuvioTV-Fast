@@ -228,6 +228,7 @@ class PlayerRuntimeController(
     internal var currentVideoBitrate: Int? = null
     internal var currentStreamUrl: String
     internal var reportedServerUrl: String? = null
+    internal var serverAudioChosenByUser = false
     internal var currentStreamResponseHeaders: Map<String, String> = emptyMap()
     internal var currentStreamCacheKey: String? = null
     internal var currentStreamMimeType: String?

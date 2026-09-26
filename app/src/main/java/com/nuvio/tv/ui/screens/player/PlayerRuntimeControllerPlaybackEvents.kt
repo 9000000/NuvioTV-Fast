@@ -1282,7 +1282,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 message = "index=${event.index}"
             )
             if (_uiState.value.serverAudioTracks.isNotEmpty()) {
-                switchServerAudio(event.index)
+                selectServerAudio(event.index)
             } else {
                 rememberAudioSelection(event.index)
                 selectAudioTrack(event.index)

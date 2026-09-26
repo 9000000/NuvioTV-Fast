@@ -90,7 +90,12 @@ internal fun PlayerRuntimeController.tryServerFallback(): Boolean {
     return true
 }
 
-internal fun PlayerRuntimeController.switchServerAudio(index: Int) {
+internal fun PlayerRuntimeController.selectServerAudio(index: Int) {
+    serverAudioChosenByUser = true
+    switchServerAudio(index)
+}
+
+private fun PlayerRuntimeController.switchServerAudio(index: Int) {
     if (_uiState.value.serverAudioTracks.any { it.isSelected && it.index == index }) return
     val url = currentStreamUrl
     val positionMs = _playbackTimeline.value.currentPosition
@@ -127,4 +132,12 @@ private fun PlayerRuntimeController.refreshServerAudioTracks() {
         TrackInfo(index = track.index, name = track.label, language = track.language, isSelected = track.selected)
     }
     _uiState.update { it.copy(serverAudioTracks = tracks, isServerStream = reportedServerUrl != null) }
+    if (!serverAudioChosenByUser) applyPreferredServerAudio(tracks)
+}
+
+private fun PlayerRuntimeController.applyPreferredServerAudio(tracks: List<TrackInfo>) {
+    val preferred = mpvPreferredAudioLanguages.firstNotNullOfOrNull { target ->
+        tracks.firstOrNull { PlayerSubtitleUtils.matchesLanguageCode(it.language, target) }
+    } ?: return
+    if (!preferred.isSelected) switchServerAudio(preferred.index)
 }
