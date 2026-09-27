@@ -241,12 +241,14 @@ internal fun PlayerRuntimeController.initializePlayer(
             )
             flushPendingPlaybackRawEventLines()
             val deviceAspectMode = deviceLocalPlayerPreferences.aspectMode.first()
+            val tunneledSurfaceFill = deviceLocalPlayerPreferences.tunneledSurfaceFill.first()
             _uiState.update {
                 it.copy(
                     internalPlayerEngine = effectiveInternalPlayerEngine,
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode,
                     resizeMode = playerSettings.resizeMode,
                     aspectMode = deviceAspectMode,
+                    tunneledSurfaceFill = tunneledSurfaceFill,
                     playbackIssueReportsEnabled = playerSettings.playbackIssueReportsEnabled,
                     tunnelingEnabled = playerSettings.effectiveTunnelingEnabled &&
                             effectiveInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER

@@ -708,6 +708,7 @@ class PlayerRuntimeController(
         observeStreamBadgeSettings()
         observeDeviceLocalAspectMode()
         observeDeviceLocalTransparentLetterbox()
+        observeDeviceLocalTunneledSurfaceFill()
         observePlayerStatsHud()
     }
 

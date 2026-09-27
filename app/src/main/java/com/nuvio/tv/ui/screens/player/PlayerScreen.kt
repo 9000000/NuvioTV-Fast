@@ -962,6 +962,8 @@ fun PlayerScreen(
                             isPlaying = uiState.isPlaying,
                             isBuffering = uiState.isBuffering,
                             aspectMode = uiState.aspectMode,
+                            tunnelingEnabled = uiState.tunnelingEnabled,
+                            tunneledSurfaceFill = uiState.tunneledSurfaceFill,
                             useLibass = uiState.useLibass,
                             libassRenderType = uiState.libassRenderType,
                             subtitleStyle = uiState.subtitleStyle,
@@ -1767,6 +1769,8 @@ private fun ExoPlayerSurface(
     isPlaying: Boolean,
     isBuffering: Boolean,
     aspectMode: AspectMode,
+    tunnelingEnabled: Boolean,
+    tunneledSurfaceFill: Boolean,
     useLibass: Boolean,
     libassRenderType: LibassRenderType,
     subtitleStyle: SubtitleStyleSettings,
@@ -1775,6 +1779,8 @@ private fun ExoPlayerSurface(
 ) {
     val context = LocalContext.current
     val latestAspectMode by rememberUpdatedState(aspectMode)
+    val latestTunnelingEnabled by rememberUpdatedState(tunnelingEnabled)
+    val latestTunneledSurfaceFill by rememberUpdatedState(tunneledSurfaceFill)
     val latestBindSubtitleView by rememberUpdatedState(onBindSubtitleView)
     val latestSubtitleStyle by rememberUpdatedState(subtitleStyle)
     val playerView = remember(context, player) {
@@ -1835,13 +1841,21 @@ private fun ExoPlayerSurface(
                     0f
                 }
                 playerView.post {
-                    playerView.applyExoAspectMode(latestAspectMode)
+                    playerView.syncExoSurfaceLayout(
+                        tunnelingEnabled = latestTunnelingEnabled,
+                        tunneledSurfaceFill = latestTunneledSurfaceFill,
+                        aspectMode = latestAspectMode
+                    )
                 }
             }
 
             override fun onRenderedFirstFrame() {
                 playerView.post {
-                    playerView.applyExoAspectMode(latestAspectMode)
+                    playerView.syncExoSurfaceLayout(
+                        tunnelingEnabled = latestTunnelingEnabled,
+                        tunneledSurfaceFill = latestTunneledSurfaceFill,
+                        aspectMode = latestAspectMode
+                    )
                 }
             }
 
@@ -1855,7 +1869,11 @@ private fun ExoPlayerSurface(
         }
         player.addListener(listener)
         playerView.post {
-            playerView.applyExoAspectMode(latestAspectMode)
+            playerView.syncExoSurfaceLayout(
+                tunnelingEnabled = latestTunnelingEnabled,
+                tunneledSurfaceFill = latestTunneledSurfaceFill,
+                aspectMode = latestAspectMode
+            )
         }
         onDispose {
             player.removeListener(listener)
@@ -1865,7 +1883,11 @@ private fun ExoPlayerSurface(
     DisposableEffect(playerView) {
         val listener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             playerView.post {
-                playerView.applyExoAspectMode(latestAspectMode)
+                playerView.syncExoSurfaceLayout(
+                    tunnelingEnabled = latestTunnelingEnabled,
+                    tunneledSurfaceFill = latestTunneledSurfaceFill,
+                    aspectMode = latestAspectMode
+                )
             }
         }
         val removeListener = addExoAspectLayoutChangeListener(playerView, listener)
@@ -1881,8 +1903,12 @@ private fun ExoPlayerSurface(
         }
     }
 
-    LaunchedEffect(playerView, aspectMode) {
-        playerView.applyExoAspectMode(aspectMode)
+    LaunchedEffect(playerView, aspectMode, tunnelingEnabled, tunneledSurfaceFill) {
+        playerView.syncExoSurfaceLayout(
+            tunnelingEnabled = tunnelingEnabled,
+            tunneledSurfaceFill = tunneledSurfaceFill,
+            aspectMode = aspectMode
+        )
     }
 
     LaunchedEffect(playerView, player, useLibass, libassRenderType) {
@@ -1909,6 +1935,21 @@ private fun PlayerView.enableComposeSurfaceSyncWorkaroundIfAvailable() {
 private fun PlayerView.applyExoAspectMode(mode: AspectMode) {
     setTag(R.id.player_view_aspect_mode_tag, mode)
     applyExoAspectMode(this, mode)
+}
+
+private fun PlayerView.syncExoSurfaceLayout(
+    tunnelingEnabled: Boolean,
+    tunneledSurfaceFill: Boolean,
+    aspectMode: AspectMode
+) {
+    val targetResizeMode = PlayerDisplayModeUtils.exoSurfaceResizeMode(
+        tunnelingEnabled = tunnelingEnabled,
+        tunneledSurfaceFill = tunneledSurfaceFill
+    )
+    if (resizeMode != targetResizeMode) {
+        resizeMode = targetResizeMode
+    }
+    applyExoAspectMode(aspectModeAppliedToExoSurface(tunnelingEnabled, aspectMode))
 }
 
 private data class SubtitleAppliedConfig(

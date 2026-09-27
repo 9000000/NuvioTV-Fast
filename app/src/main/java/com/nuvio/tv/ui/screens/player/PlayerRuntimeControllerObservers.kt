@@ -1017,3 +1017,19 @@ internal fun PlayerRuntimeController.observeDeviceLocalTransparentLetterbox() {
             }
     }
 }
+
+internal fun PlayerRuntimeController.observeDeviceLocalTunneledSurfaceFill() {
+    scope.launch {
+        deviceLocalPlayerPreferences.tunneledSurfaceFill
+            .distinctUntilChanged()
+            .collect { fill ->
+                if (_uiState.value.tunneledSurfaceFill != fill) {
+                    Log.d(
+                        PlayerRuntimeController.TAG,
+                        "Tunneled surface fill restored from device-local prefs: $fill"
+                    )
+                    _uiState.update { it.copy(tunneledSurfaceFill = fill) }
+                }
+            }
+    }
+}
