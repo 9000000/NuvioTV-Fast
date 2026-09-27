@@ -21,6 +21,7 @@ import javax.inject.Singleton
  *
  * Currently stores:
  *  - aspectMode  (player aspect ratio mode)
+ *  - tunneledSurfaceFill  (ExoPlayer surface fill while tunneling; does not affect aspectMode)
  *  - playerStatsHudButtonEnabled  (whether stats overlay button is available in stream info)
  *  - playerStatsHudActive  (whether playback stats HUD is turned on by the user)
  */
@@ -37,6 +38,7 @@ class DeviceLocalPlayerPreferences @Inject constructor(
     }
 
     private val aspectModeKey = stringPreferencesKey("aspect_mode")
+    private val tunneledSurfaceFillKey = booleanPreferencesKey("tunneled_surface_fill")
     private val playerStatsHudButtonEnabledKey = booleanPreferencesKey("player_stats_hud_enabled")
     private val playerStatsHudActiveKey = booleanPreferencesKey("player_stats_hud_active")
 
@@ -49,6 +51,16 @@ class DeviceLocalPlayerPreferences @Inject constructor(
     suspend fun setAspectMode(mode: AspectMode) {
         store.edit { prefs ->
             prefs[aspectModeKey] = mode.name
+        }
+    }
+
+    val tunneledSurfaceFill: Flow<Boolean> = store.data.map { prefs ->
+        prefs[tunneledSurfaceFillKey] ?: false
+    }
+
+    suspend fun setTunneledSurfaceFill(fill: Boolean) {
+        store.edit { prefs ->
+            prefs[tunneledSurfaceFillKey] = fill
         }
     }
 
