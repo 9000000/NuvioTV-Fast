@@ -1,10 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import android.widget.Toast
 import androidx.media3.common.C
 import androidx.media3.extractor.ExtractorsFactory
 import com.nuvio.tv.R
@@ -22,20 +19,28 @@ import com.nuvio.tv.ui.screens.player.autosync.maxAlignmentShiftMs
 import com.nuvio.tv.ui.screens.player.autosync.replaceAutoSyncSidecarSubtitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
 
-/** Thin TV adapter around the feature-owned Mobile AutoSync V2 pipeline. */
-private val autoSyncToastHandler = Handler(Looper.getMainLooper())
+// Thin TV adapter around the feature-owned Mobile AutoSync V2 pipeline.
 
-private fun PlayerRuntimeController.showAutoSyncToast(
-    message: String,
-    duration: Int = Toast.LENGTH_SHORT,
-) {
-    autoSyncToastHandler.post {
-        Toast.makeText(context, message, duration).show()
+/**
+ * AutoSync only reports a failure (a success is shown by the "Auto synced" chip in the subtitle
+ * list). It uses the player's own short message pill, not a system toast, so it never brings up
+ * the player controls or takes focus.
+ */
+private fun PlayerRuntimeController.showAutoSyncFailure(message: String) {
+    hideStreamSourceIndicatorJob?.cancel()
+    _uiState.update { it.copy(showStreamSourceIndicator = true, streamSourceIndicatorText = message) }
+    hideStreamSourceIndicatorJob = scope.launch {
+        delay(AUTO_SYNC_FAILURE_MESSAGE_MS)
+        _uiState.update { it.copy(showStreamSourceIndicator = false) }
     }
 }
+
+private const val AUTO_SYNC_FAILURE_MESSAGE_MS = 4_000L
+
 /**
  * Wraps Nuvio's extractors so AutoSync can observe embedded subtitle timing (output is forwarded
  * unchanged), and starts AutoSync's embedded subtitle index download while the stream opens.
@@ -95,7 +100,7 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
     val useLibass = requestedUseLibassByUser || activePlayerUsesLibass
 
     if (!canAttachAddonSubtitleViaSidecar(selectedSubtitle)) {
-        showAutoSyncToast(context.getString(R.string.autosync_toast_failed_unsupported))
+        showAutoSyncFailure(context.getString(R.string.autosync_toast_failed_unsupported))
         return
     }
 
@@ -119,7 +124,7 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
         },
     )
     if (!started) {
-        showAutoSyncToast(context.getString(R.string.autosync_toast_failed))
+        showAutoSyncFailure(context.getString(R.string.autosync_toast_failed))
         return
     }
 
@@ -198,7 +203,7 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
                 if (activeSidecarSubtitleKey == null) {
                     startSidecarAddonSubtitle(selectedSubtitle)
                 }
-                showAutoSyncToast(context.buildAutoSyncFailureToast(analysisOutcome))
+                showAutoSyncFailure(context.buildAutoSyncFailureToast(analysisOutcome))
                 return@launch
             }
 
@@ -261,7 +266,7 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
                 if (activeSidecarSubtitleKey == null) {
                     startSidecarAddonSubtitle(selectedSubtitle)
                 }
-                showAutoSyncToast(context.getString(R.string.autosync_toast_failed))
+                showAutoSyncFailure(context.getString(R.string.autosync_toast_failed))
                 return@launch
             }
 
@@ -277,18 +282,6 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
             setSubtitleDelayMs(targetMs = 0, showOverlay = false)
             AutoSyncSyncedSubtitle.mark(chosenSubtitle.url)
 
-            // Timing kept within the tolerance changes nothing on screen, so there is nothing to say.
-            if (withinToleranceMs == null) {
-                showAutoSyncToast(
-                    context.getString(
-                        if (chosenSubtitle.url != selectedUrl) {
-                            R.string.autosync_toast_synced_replaced
-                        } else {
-                            R.string.autosync_toast_synced
-                        },
-                    ),
-                )
-            }
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Throwable) {
@@ -297,7 +290,7 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
             if (activeSidecarSubtitleKey == null) {
                 startSidecarAddonSubtitle(selectedSubtitle)
             }
-            showAutoSyncToast(context.getString(R.string.autosync_toast_failed))
+            showAutoSyncFailure(context.getString(R.string.autosync_toast_failed))
         }
     }.also { job ->
         job.invokeOnCompletion { selectedBodyDeferred.complete(null) }

@@ -37,39 +37,42 @@ internal fun LazyListScope.autoSyncSettingsItems(
         }
     }
 
-    item(key = "subtitle_auto_sync_tolerance") {
-        val context = LocalContext.current
-        AutoSyncPreferences.ensureLoaded(context)
-        val toleranceMs by AutoSyncPreferences.syncToleranceMs.collectAsStateWithLifecycle()
+    // Tolerance and search depth only matter while AutoSync is on.
+    if (AutoSyncPreferences.enabledState.value) {
+        item(key = "subtitle_auto_sync_tolerance") {
+            val context = LocalContext.current
+            AutoSyncPreferences.ensureLoaded(context)
+            val toleranceMs by AutoSyncPreferences.syncToleranceMs.collectAsStateWithLifecycle()
 
-        SliderSettingsItem(
-            icon = Icons.Default.Timer,
-            title = stringResource(R.string.autosync_tolerance_title),
-            subtitle = stringResource(R.string.autosync_tolerance_description),
-            values = AutoSyncPreferences.syncToleranceOptionsMs,
-            selected = toleranceMs,
-            valueText = if (toleranceMs > 0) {
-                stringResource(R.string.autosync_tolerance_value, toleranceMs)
-            } else {
-                stringResource(R.string.autosync_tolerance_off)
-            },
-            onValueChange = { AutoSyncPreferences.setSyncToleranceMs(context, it) },
-            enabled = enabled,
-        )
-    }
+            SliderSettingsItem(
+                icon = Icons.Default.Timer,
+                title = stringResource(R.string.autosync_tolerance_title),
+                subtitle = stringResource(R.string.autosync_tolerance_description),
+                values = AutoSyncPreferences.syncToleranceOptionsMs,
+                selected = toleranceMs,
+                valueText = if (toleranceMs > 0) {
+                    stringResource(R.string.autosync_tolerance_value, toleranceMs)
+                } else {
+                    stringResource(R.string.autosync_tolerance_off)
+                },
+                onValueChange = { AutoSyncPreferences.setSyncToleranceMs(context, it) },
+                enabled = enabled,
+            )
+        }
 
-    item(key = "subtitle_auto_sync_aggressive_mode") {
-        val context = LocalContext.current
-        AutoSyncPreferences.ensureLoaded(context)
-        val checked by AutoSyncPreferences.aggressiveMode.collectAsStateWithLifecycle()
+        item(key = "subtitle_auto_sync_aggressive_mode") {
+            val context = LocalContext.current
+            AutoSyncPreferences.ensureLoaded(context)
+            val checked by AutoSyncPreferences.aggressiveMode.collectAsStateWithLifecycle()
 
-        ToggleSettingsItem(
-            icon = Icons.Default.Sync,
-            title = stringResource(R.string.autosync_thorough_title),
-            subtitle = stringResource(R.string.autosync_thorough_description),
-            isChecked = checked,
-            onCheckedChange = { AutoSyncPreferences.setAggressiveMode(context, it) },
-            enabled = enabled,
-        )
+            ToggleSettingsItem(
+                icon = Icons.Default.Sync,
+                title = stringResource(R.string.autosync_thorough_title),
+                subtitle = stringResource(R.string.autosync_thorough_description),
+                isChecked = checked,
+                onCheckedChange = { AutoSyncPreferences.setAggressiveMode(context, it) },
+                enabled = enabled,
+            )
+        }
     }
 }
