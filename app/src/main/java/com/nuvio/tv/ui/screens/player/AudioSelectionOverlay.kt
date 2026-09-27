@@ -5,6 +5,8 @@ package com.nuvio.tv.ui.screens.player
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,6 +57,7 @@ import com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames
 import com.nuvio.tv.ui.util.languageCodeToName
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 internal fun AudioSelectionOverlay(
@@ -499,6 +503,20 @@ private fun AudioControlsContent(
                 if (nextDelayMs >= AUDIO_DELAY_MAX_MS && canDecreaseDelay) {
                     runCatching { delayMinusFocusRequester.requestFocus() }
                 }
+            },
+            onDecreaseHold = {
+                val nextDelayMs = currentDelayMs - AUDIO_DELAY_HOLD_STEP_MS
+                onAudioDelayChange(nextDelayMs)
+                if (nextDelayMs <= AUDIO_DELAY_MIN_MS && canIncreaseDelay) {
+                    runCatching { delayPlusFocusRequester.requestFocus() }
+                }
+            },
+            onIncreaseHold = {
+                val nextDelayMs = currentDelayMs + AUDIO_DELAY_HOLD_STEP_MS
+                onAudioDelayChange(nextDelayMs)
+                if (nextDelayMs >= AUDIO_DELAY_MAX_MS && canDecreaseDelay) {
+                    runCatching { delayMinusFocusRequester.requestFocus() }
+                }
             }
         )
 
@@ -627,7 +645,9 @@ private fun AdjustmentSection(
     upFocusRequester: FocusRequester?,
     downFocusRequester: FocusRequester?,
     onDecrease: () -> Unit,
-    onIncrease: () -> Unit
+    onIncrease: () -> Unit,
+    onDecreaseHold: (() -> Unit)? = null,
+    onIncreaseHold: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -658,7 +678,8 @@ private fun AdjustmentSection(
                 rightFocusRequester = if (canIncrease) plusFocusRequester else FocusRequester.Default,
                 upFocusRequester = upFocusRequester,
                 downFocusRequester = downFocusRequester,
-                onClick = onDecrease
+                onClick = onDecrease,
+                onHoldTick = onDecreaseHold
             )
             StepCard(
                 icon = Icons.Default.Add,
@@ -667,7 +688,8 @@ private fun AdjustmentSection(
                 leftFocusRequester = plusLeftFocusRequester,
                 upFocusRequester = upFocusRequester,
                 downFocusRequester = downFocusRequester,
-                onClick = onIncrease
+                onClick = onIncrease,
+                onHoldTick = onIncreaseHold
             )
         }
 
@@ -688,14 +710,34 @@ private fun StepCard(
     rightFocusRequester: FocusRequester = FocusRequester.Default,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onHoldTick: (() -> Unit)? = null
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+
+    if (onHoldTick != null) {
+        val isPressed by interactionSource.collectIsPressedAsState()
+        val latestOnHoldTick by rememberUpdatedState(onHoldTick)
+        LaunchedEffect(isPressed, enabled) {
+            if (!isPressed || !enabled) return@LaunchedEffect
+            // Let the initial click apply its normal step; only start auto-repeating
+            // with the larger accelerated step once the button has been held down
+            // continuously for AUDIO_DELAY_HOLD_THRESHOLD_MS.
+            delay(AUDIO_DELAY_HOLD_THRESHOLD_MS)
+            while (isActive) {
+                latestOnHoldTick()
+                delay(AUDIO_DELAY_HOLD_REPEAT_INTERVAL_MS)
+            }
+        }
+    }
+
     Card(
         onClick = {
             if (enabled) {
                 onClick()
             }
         },
+        interactionSource = interactionSource,
         modifier = Modifier
             .width(NuvioTheme.spacing.huge)
             .focusRequester(focusRequester)
