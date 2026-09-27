@@ -440,7 +440,6 @@ dependencies {
     implementation(libs.coil.svg)
     implementation(libs.coil.network.okhttp)
     implementation(libs.coil.network.cache.control)
-    implementation(libs.lottie.compose)
 
     // Navigation
     implementation(libs.navigation.compose)
