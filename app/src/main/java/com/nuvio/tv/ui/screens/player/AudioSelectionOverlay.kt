@@ -504,15 +504,15 @@ private fun AudioControlsContent(
                     runCatching { delayMinusFocusRequester.requestFocus() }
                 }
             },
-            onDecreaseHold = {
-                val nextDelayMs = currentDelayMs - AUDIO_DELAY_HOLD_STEP_MS
+            onDecreaseHold = { stepMs ->
+                val nextDelayMs = currentDelayMs - stepMs
                 onAudioDelayChange(nextDelayMs)
                 if (nextDelayMs <= AUDIO_DELAY_MIN_MS && canIncreaseDelay) {
                     runCatching { delayPlusFocusRequester.requestFocus() }
                 }
             },
-            onIncreaseHold = {
-                val nextDelayMs = currentDelayMs + AUDIO_DELAY_HOLD_STEP_MS
+            onIncreaseHold = { stepMs ->
+                val nextDelayMs = currentDelayMs + stepMs
                 onAudioDelayChange(nextDelayMs)
                 if (nextDelayMs >= AUDIO_DELAY_MAX_MS && canDecreaseDelay) {
                     runCatching { delayMinusFocusRequester.requestFocus() }
@@ -646,8 +646,8 @@ private fun AdjustmentSection(
     downFocusRequester: FocusRequester?,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
-    onDecreaseHold: (() -> Unit)? = null,
-    onIncreaseHold: (() -> Unit)? = null
+    onDecreaseHold: ((Int) -> Unit)? = null,
+    onIncreaseHold: ((Int) -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -711,7 +711,7 @@ private fun StepCard(
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     onClick: () -> Unit,
-    onHoldTick: (() -> Unit)? = null
+    onHoldTick: ((Int) -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -720,13 +720,22 @@ private fun StepCard(
         val latestOnHoldTick by rememberUpdatedState(onHoldTick)
         LaunchedEffect(isPressed, enabled) {
             if (!isPressed || !enabled) return@LaunchedEffect
-            // Let the initial click apply its normal step; only start auto-repeating
-            // with the larger accelerated step once the button has been held down
-            // continuously for AUDIO_DELAY_HOLD_THRESHOLD_MS.
+            // Let the initial click apply its normal (small) step; only start
+            // auto-repeating once the button has been held down continuously.
+            // The repeat step itself ramps up the longer the hold continues:
+            // AUDIO_DELAY_HOLD_STEP_MS after AUDIO_DELAY_HOLD_THRESHOLD_MS,
+            // then AUDIO_DELAY_HOLD_FAST_STEP_MS after AUDIO_DELAY_HOLD_FAST_THRESHOLD_MS.
             delay(AUDIO_DELAY_HOLD_THRESHOLD_MS)
+            var heldMs = AUDIO_DELAY_HOLD_THRESHOLD_MS
             while (isActive) {
-                latestOnHoldTick()
+                val step = if (heldMs >= AUDIO_DELAY_HOLD_FAST_THRESHOLD_MS) {
+                    AUDIO_DELAY_HOLD_FAST_STEP_MS
+                } else {
+                    AUDIO_DELAY_HOLD_STEP_MS
+                }
+                latestOnHoldTick(step)
                 delay(AUDIO_DELAY_HOLD_REPEAT_INTERVAL_MS)
+                heldMs += AUDIO_DELAY_HOLD_REPEAT_INTERVAL_MS
             }
         }
     }
