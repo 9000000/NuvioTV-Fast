@@ -86,6 +86,7 @@ data class LayoutSettingsUiState(
     val customPosterUrlPattern: String = "",
     val customPosterEnabledScreens: Set<com.nuvio.tv.core.poster.CustomPosterScreen> =
         com.nuvio.tv.core.poster.CustomPosterScreen.ALL,
+    val alwaysShowLandscapeClearlogo: Boolean = false,
 )
 
 data class CatalogInfo(
@@ -142,6 +143,7 @@ sealed class LayoutSettingsEvent {
     data class SetContinueWatchingEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetContinueWatchingSortMode(val mode: ContinueWatchingSortMode) : LayoutSettingsEvent()
     data class SetContinueWatchingCardStyle(val style: ContinueWatchingCardStyle) : LayoutSettingsEvent()
+    data class SetAlwaysShowLandscapeClearlogo(val enabled: Boolean) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
     data object ResetCardDepthStyle : LayoutSettingsEvent()
     data class SetCustomPosterUrlPattern(val pattern: String) : LayoutSettingsEvent()
@@ -412,6 +414,13 @@ class LayoutSettingsViewModel @Inject constructor(
                     updateUiStateIfChanged { it.copy(customPosterEnabledScreens = screens) }
                 }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.alwaysShowLandscapeClearlogo
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    updateUiStateIfChanged { it.copy(alwaysShowLandscapeClearlogo = enabled) }
+                }
+        }
         loadAvailableCatalogs()
     }
 
@@ -461,6 +470,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetContinueWatchingEnabled -> setContinueWatchingEnabled(event.enabled)
             is LayoutSettingsEvent.SetContinueWatchingSortMode -> setContinueWatchingSortMode(event.mode)
             is LayoutSettingsEvent.SetContinueWatchingCardStyle -> setContinueWatchingCardStyle(event.style)
+            is LayoutSettingsEvent.SetAlwaysShowLandscapeClearlogo -> setAlwaysShowLandscapeClearlogo(event.enabled)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
             LayoutSettingsEvent.ResetCardDepthStyle -> resetCardDepthStyle()
             is LayoutSettingsEvent.SetCustomPosterUrlPattern -> setCustomPosterUrlPattern(event.pattern)
@@ -828,6 +838,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.continueWatchingCardStyle == style) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setContinueWatchingCardStyle(style)
+        }
+    }
+
+    private fun setAlwaysShowLandscapeClearlogo(enabled: Boolean) {
+        if (_uiState.value.alwaysShowLandscapeClearlogo == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setAlwaysShowLandscapeClearlogo(enabled)
         }
     }
 

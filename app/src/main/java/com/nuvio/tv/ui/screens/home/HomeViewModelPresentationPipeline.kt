@@ -66,6 +66,7 @@ private data class LayoutUiPrefs(
     val hideUnreleasedContent: Boolean,
     val showFullReleaseDate: Boolean,
     val modernLandscapePostersEnabled: Boolean,
+    val alwaysShowLandscapeClearlogo: Boolean = false,
     val modernHeroFullScreenBackdropEnabled: Boolean,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility,
     val focusedBackdropExpandEnabled: Boolean,
@@ -81,7 +82,8 @@ private data class LayoutUiPrefs(
 private data class ModernLayoutPrefs(
     val landscapePosters: Boolean,
     val fullScreenBackdrop: Boolean,
-    val homeImdbRatingsVisibility: HomeImdbRatingsVisibility
+    val homeImdbRatingsVisibility: HomeImdbRatingsVisibility,
+    val alwaysShowLandscapeClearlogo: Boolean,
 )
 
 @OptIn(FlowPreview::class)
@@ -138,12 +140,14 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
     val modernLayoutPrefsFlow = combine(
         layoutPreferenceDataStore.modernLandscapePostersEnabled,
         layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled,
-        layoutPreferenceDataStore.homeImdbRatingsVisibility
-    ) { landscapePosters, fullScreenBackdrop, homeImdbRatingsVisibility ->
+        layoutPreferenceDataStore.homeImdbRatingsVisibility,
+        layoutPreferenceDataStore.alwaysShowLandscapeClearlogo
+    ) { landscapePosters, fullScreenBackdrop, homeImdbRatingsVisibility, alwaysShowLandscapeClearlogo ->
         ModernLayoutPrefs(
             landscapePosters = landscapePosters,
             fullScreenBackdrop = fullScreenBackdrop,
-            homeImdbRatingsVisibility = homeImdbRatingsVisibility
+            homeImdbRatingsVisibility = homeImdbRatingsVisibility,
+            alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
         )
     }
 
@@ -187,7 +191,8 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             basePrefs.copy(
                 modernLandscapePostersEnabled = modernPrefs.landscapePosters,
                 modernHeroFullScreenBackdropEnabled = modernPrefs.fullScreenBackdrop,
-                homeImdbRatingsVisibility = modernPrefs.homeImdbRatingsVisibility
+                homeImdbRatingsVisibility = modernPrefs.homeImdbRatingsVisibility,
+                alwaysShowLandscapeClearlogo = modernPrefs.alwaysShowLandscapeClearlogo,
             )
         }
             .distinctUntilChanged()
@@ -231,6 +236,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         hideUnreleasedContent = prefs.hideUnreleasedContent,
                         showFullReleaseDate = prefs.showFullReleaseDate,
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
+                        alwaysShowLandscapeClearlogo = prefs.alwaysShowLandscapeClearlogo,
                         modernHeroFullScreenBackdropEnabled = prefs.modernHeroFullScreenBackdropEnabled,
                         homeImdbRatingsVisibility = prefs.homeImdbRatingsVisibility,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
