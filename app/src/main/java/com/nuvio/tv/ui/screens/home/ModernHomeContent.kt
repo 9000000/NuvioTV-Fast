@@ -149,6 +149,7 @@ fun ModernHomeContent(
     val isSidebarExpanded = remember(sidebarExpanded) { derivedStateOf { sidebarExpanded } }
     val lifecycleOwner = LocalLifecycleOwner.current
     val useLandscapePosters = uiState.modernLandscapePostersEnabled
+    val alwaysShowLandscapeClearlogo = uiState.alwaysShowLandscapeClearlogo
     val fullScreenBackdrop = uiState.modernHeroFullScreenBackdropEnabled
     val trailerPlaybackTarget = uiState.focusedPosterBackdropTrailerPlaybackTarget
     val effectiveAutoplayEnabled =
@@ -1173,6 +1174,7 @@ fun ModernHomeContent(
                 trailerPreviewUrls = stableTrailerPreviewUrls,
                 trailerPreviewAudioUrls = stableTrailerPreviewAudioUrls,
                 useLandscapePosters = useLandscapePosters,
+                alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
                 showLabels = uiState.posterLabelsEnabled,
                 posterCardCornerRadius = posterCardCornerRadius,
                 focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,

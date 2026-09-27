@@ -956,6 +956,18 @@ fun LayoutSettingsContent(
                         onFocused = { focusedSection = LayoutSettingsSection.POSTER_CARD_STYLE }
                     )
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+                    CompactToggleRow(
+                        title = stringResource(R.string.layout_always_show_landscape_clearlogo),
+                        subtitle = stringResource(R.string.layout_always_show_landscape_clearlogo_sub),
+                        checked = uiState.alwaysShowLandscapeClearlogo,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetAlwaysShowLandscapeClearlogo(!uiState.alwaysShowLandscapeClearlogo)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.POSTER_CARD_STYLE }
+                    )
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
                     CustomPosterUrlControls(
                         currentPattern = uiState.customPosterUrlPattern,
                         enabledScreens = uiState.customPosterEnabledScreens,

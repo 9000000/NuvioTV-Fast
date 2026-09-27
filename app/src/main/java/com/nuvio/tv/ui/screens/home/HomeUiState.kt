@@ -26,6 +26,7 @@ data class HomeUiState(
     val installedAddonsCount: Int = 0,
     val homeLayout: HomeLayout = HomeLayout.MODERN,
     val modernLandscapePostersEnabled: Boolean = false,
+    val alwaysShowLandscapeClearlogo: Boolean = false,
     val modernHeroFullScreenBackdropEnabled: Boolean = false,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility = HomeImdbRatingsVisibility.SHOW_ALL,
     val heroItems: List<MetaPreview> = emptyList(),
