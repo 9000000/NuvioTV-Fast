@@ -1007,3 +1007,13 @@ internal fun PlayerRuntimeController.observeDeviceLocalAspectMode() {
             }
     }
 }
+
+internal fun PlayerRuntimeController.observeDeviceLocalTransparentLetterbox() {
+    scope.launch {
+        deviceLocalPlayerPreferences.transparentLetterbox
+            .distinctUntilChanged()
+            .collect { enabled ->
+                _uiState.update { it.copy(transparentLetterbox = enabled) }
+            }
+    }
+}

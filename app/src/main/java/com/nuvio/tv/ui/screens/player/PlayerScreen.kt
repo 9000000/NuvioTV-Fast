@@ -124,7 +124,6 @@ import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
-import com.nuvio.tv.core.player.LetterboxRenderPolicy
 import com.nuvio.tv.core.player.PlayerWindowBackdrop
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.data.local.InternalPlayerEngine
@@ -549,7 +548,7 @@ fun PlayerScreen(
         focusPlayAfterMoreBack = false
     }
 
-    val transparentLetterbox = LetterboxRenderPolicy.defaultTransparentLetterbox() &&
+    val transparentLetterbox = uiState.transparentLetterbox &&
         uiState.internalPlayerEngine != InternalPlayerEngine.MVP_PLAYER
     DisposableEffect(transparentLetterbox) {
         if (!transparentLetterbox) {
