@@ -38,6 +38,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
@@ -272,7 +274,8 @@ private fun MDBListApiKeyDialog(
                     keyboardActions = KeyboardActions(
                         onDone = { keyboardController?.hide() }
                     ),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content),
                     cursorBrush = SolidColor(
                         if (isInputFocused) NuvioTheme.colors.Primary
                         else androidx.compose.ui.graphics.Color.Transparent
