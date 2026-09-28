@@ -598,6 +598,8 @@
     <string name="sentry_turn_off">Turn off</string>
     <string name="sentry_turn_on">Turn on</string>
     <string name="advanced_section_cache">Cache</string>
+    <string name="advanced_section_startup">Startup &amp; exit</string>
+    <string name="advanced_section_network_tests">Network tests</string>
     <string name="advanced_section_dv_diagnostics" translatable="false">DV Diagnostics</string>
     <string name="advanced_fast_horizontal_navigation">Fast Horizontal Navigation</string>
     <string name="advanced_fast_horizontal_navigation_subtitle">Increase D-pad repeat speed in rows while keeping repeat throttling enabled.</string>
