@@ -408,8 +408,8 @@ internal fun PlaybackP2pSection(
     onOpenDialog: (PlaybackDialog) -> Unit
 ) {
     SettingsToggleRow(
-        title = stringResource(R.string.settings_p2p_title),
-        subtitle = stringResource(R.string.settings_p2p_subtitle),
+        title = stringResource(R.string.p2p_consent_enable),
+        subtitle = null,
         checked = torrentSettings.p2pEnabled,
         onToggle = {
             if (torrentSettings.p2pEnabled) {
