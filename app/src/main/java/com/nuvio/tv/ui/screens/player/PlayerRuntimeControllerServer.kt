@@ -1,8 +1,10 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.widget.Toast
+import androidx.annotation.StringRes
 import com.nuvio.tv.R
 import com.nuvio.tv.data.mediaserver.ServerPlaybackSession
+import com.nuvio.tv.data.mediaserver.ServerTrack
 import com.nuvio.tv.data.mediaserver.serverPlaybackMessageRes
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.ProxyHeaders
@@ -19,7 +21,7 @@ internal fun PlayerRuntimeController.reportServerPlayback() {
     if (url != reportedServerUrl) {
         serverPlayback.stop(reportedServerUrl)
         reportedServerUrl = url.takeIf(serverPlayback::isServerSource)
-        refreshServerAudioTracks()
+        refreshServerTracks()
     }
     val state = _uiState.value
     serverPlayback.onPlaybackSnapshot(
@@ -38,6 +40,9 @@ internal fun PlayerRuntimeController.stopServerPlayback() {
 
 internal val PlayerRuntimeController.isServerStream: Boolean
     get() = serverPlayback.isServerSource(currentStreamUrl)
+
+internal val PlayerRuntimeController.hasBurnedInServerSubtitle: Boolean
+    get() = serverPlayback.burnInSubtitles(currentStreamUrl).any { it.selected }
 
 internal fun PlayerRuntimeController.serverImdbId(contentId: String): String? =
     metaRepository.getCachedMeta(contentType ?: "movie", contentId)?.imdbId?.takeIf { it.startsWith("tt") }
@@ -95,14 +100,35 @@ internal fun PlayerRuntimeController.selectServerAudio(index: Int) {
     switchServerAudio(index)
 }
 
+internal fun PlayerRuntimeController.selectServerSubtitle(index: Int) {
+    if (_uiState.value.serverSubtitleTracks.any { it.isSelected && it.index == index }) return
+    disableSubtitles()
+    isUserExplicitSubtitleSelection = true
+    persistedTrackPreference = persistedTrackPreference?.copy(subtitle = null)
+    pendingRestoredAddonSubtitle = null
+    restartServerStream(R.string.servers_subtitle_switch_failed) { url -> serverPlayback.switchSubtitle(url, index) }
+}
+
+internal fun PlayerRuntimeController.clearServerSubtitle() {
+    persistedTrackPreference = rememberedTrackPreference ?: persistedTrackPreference
+    restartServerStream(R.string.servers_subtitle_switch_failed) { url -> serverPlayback.switchSubtitle(url, null) }
+}
+
 private fun PlayerRuntimeController.switchServerAudio(index: Int) {
     if (_uiState.value.serverAudioTracks.any { it.isSelected && it.index == index }) return
+    restartServerStream(R.string.servers_audio_switch_failed) { url -> serverPlayback.switchAudio(url, index) }
+}
+
+private fun PlayerRuntimeController.restartServerStream(
+    @StringRes failureMessage: Int,
+    restart: suspend (String) -> ServerPlaybackSession?
+) {
     val url = currentStreamUrl
     val positionMs = _playbackTimeline.value.currentPosition
     scope.launch {
-        val session = serverPlayback.switchAudio(url, index)
+        val session = restart(url)
         if (session == null) {
-            Toast.makeText(context, context.getString(R.string.servers_audio_switch_failed), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(failureMessage), Toast.LENGTH_SHORT).show()
             return@launch
         }
         if (currentStreamUrl != url) {
@@ -127,13 +153,20 @@ private fun PlayerRuntimeController.restartServerSession(session: ServerPlayback
     scheduleDeferredPlayerReinitialize(fromPositionMs = positionMs)
 }
 
-private fun PlayerRuntimeController.refreshServerAudioTracks() {
-    val tracks = serverPlayback.audioTracks(reportedServerUrl).map { track ->
-        TrackInfo(index = track.index, name = track.label, language = track.language, isSelected = track.selected)
+private fun PlayerRuntimeController.refreshServerTracks() {
+    val audioTracks = serverPlayback.audioTracks(reportedServerUrl).map { it.toTrackInfo() }
+    val subtitleTracks = serverPlayback.burnInSubtitles(reportedServerUrl).map { it.toTrackInfo() }
+    _uiState.update {
+        it.copy(
+            serverAudioTracks = audioTracks,
+            serverSubtitleTracks = subtitleTracks,
+            isServerStream = reportedServerUrl != null
+        )
     }
-    _uiState.update { it.copy(serverAudioTracks = tracks, isServerStream = reportedServerUrl != null) }
-    if (!serverAudioChosenByUser) applyPreferredServerAudio(tracks)
+    if (!serverAudioChosenByUser) applyPreferredServerAudio(audioTracks)
 }
+
+private fun ServerTrack.toTrackInfo() = TrackInfo(index = index, name = label, language = language, isSelected = selected)
 
 private fun PlayerRuntimeController.applyPreferredServerAudio(tracks: List<TrackInfo>) {
     val preferred = mpvPreferredAudioLanguages.firstNotNullOfOrNull { target ->

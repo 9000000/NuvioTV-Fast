@@ -1338,8 +1338,12 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
             resetSubtitleAutoSyncState()
-            rememberInternalSubtitleSelection(event.index)
-            selectSubtitleTrack(event.index)
+            if (_uiState.value.serverSubtitleTracks.isNotEmpty()) {
+                selectServerSubtitle(event.index)
+            } else {
+                rememberInternalSubtitleSelection(event.index)
+                selectSubtitleTrack(event.index)
+            }
             _uiState.update {
                 it.copy(
                     showSubtitleOverlay = true,
@@ -1363,6 +1367,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             resetSubtitleAutoSyncState()
             rememberSubtitleDisabled()
             disableSubtitles()
+            if (hasBurnedInServerSubtitle) clearServerSubtitle()
             _uiState.update {
                 it.copy(
                     showSubtitleOverlay = true,
@@ -1383,6 +1388,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             autoSubtitleSelected = true
             rememberAddonSubtitleSelection(event.subtitle)
             selectAddonSubtitle(event.subtitle)
+            if (hasBurnedInServerSubtitle) clearServerSubtitle()
             _uiState.update {
                 it.copy(
                     showSubtitleOverlay = true,

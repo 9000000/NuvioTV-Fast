@@ -1638,8 +1638,12 @@ fun PlayerScreen(
 
         SubtitleSelectionOverlay(
             visible = uiState.showSubtitleOverlay,
-            internalTracks = uiState.subtitleTracks,
-            selectedInternalIndex = uiState.selectedSubtitleTrackIndex,
+            internalTracks = uiState.serverSubtitleTracks.ifEmpty { uiState.subtitleTracks },
+            selectedInternalIndex = if (uiState.serverSubtitleTracks.isEmpty()) {
+                uiState.selectedSubtitleTrackIndex
+            } else {
+                uiState.serverSubtitleTracks.firstOrNull { it.isSelected }?.index ?: -1
+            },
             addonSubtitles = uiState.addonSubtitles,
             selectedAddonSubtitle = uiState.selectedAddonSubtitle,
             subtitleStyle = uiState.subtitleStyle,

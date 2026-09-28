@@ -1,6 +1,5 @@
 package com.nuvio.tv.data.mediaserver.mediabrowser
 
-import com.nuvio.tv.data.mediaserver.ServerAudioTrack
 import com.nuvio.tv.data.mediaserver.ServerCandidate
 import com.nuvio.tv.data.mediaserver.ServerCapability
 import com.nuvio.tv.data.mediaserver.ServerEpisode
@@ -21,6 +20,7 @@ import com.nuvio.tv.data.mediaserver.ServerProvider
 import com.nuvio.tv.data.mediaserver.ServerSession
 import com.nuvio.tv.data.mediaserver.ServerSignIn
 import com.nuvio.tv.data.mediaserver.ServerTitle
+import com.nuvio.tv.data.mediaserver.ServerTrack
 import com.nuvio.tv.domain.model.Subtitle
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -289,6 +289,7 @@ internal abstract class MediaBrowserProvider(
             userId = session.userId,
             mediaSourceId = request.target.mediaSourceId,
             audioStreamIndex = request.audioStreamIndex,
+            subtitleStreamIndex = request.subtitleStreamIndex,
             maxStreamingBitrate = MAX_STREAMING_BITRATE,
             enableDirectPlay = request.capabilities.allowDirectPlay,
             deviceProfile = deviceProfile(request.capabilities)
@@ -302,6 +303,7 @@ internal abstract class MediaBrowserProvider(
                 "userId" to session.userId,
                 "mediaSourceId" to body.mediaSourceId,
                 "audioStreamIndex" to body.audioStreamIndex?.toString(),
+                "subtitleStreamIndex" to body.subtitleStreamIndex?.toString(),
                 "maxStreamingBitrate" to body.maxStreamingBitrate.toString(),
                 "enableDirectPlay" to body.enableDirectPlay.toString()
             ),
@@ -366,23 +368,33 @@ internal abstract class MediaBrowserProvider(
             subtitles = subtitles,
             playSessionId = info.playSessionId,
             playMethod = method,
-            audioTracks = audioTracks(source, url, request.audioStreamIndex)
+            audioTracks = audioTracks(source, url, request.audioStreamIndex),
+            burnInSubtitles = burnInSubtitles(source, url)
         )
     }
 
-    private fun audioTracks(source: MediaSource, url: String, requestedIndex: Int?): List<ServerAudioTrack> {
+    private fun audioTracks(source: MediaSource, url: String, requestedIndex: Int?): List<ServerTrack> {
         val selected = queryValue(url, "AudioStreamIndex")?.toIntOrNull() ?: requestedIndex ?: source.defaultAudioStreamIndex
         return source.mediaStreams
             .filter { it.type.equals("Audio", ignoreCase = true) }
-            .mapNotNull { stream ->
-                val index = stream.index ?: return@mapNotNull null
-                ServerAudioTrack(
-                    index = index,
-                    label = stream.displayTitle ?: stream.language ?: index.toString(),
-                    language = stream.language,
-                    selected = index == selected
-                )
-            }
+            .mapNotNull { it.track(selected) }
+    }
+
+    private fun burnInSubtitles(source: MediaSource, url: String): List<ServerTrack> {
+        val selected = queryValue(url, "SubtitleStreamIndex")?.toIntOrNull()
+        return source.mediaStreams
+            .filter { it.type.equals("Subtitle", ignoreCase = true) && it.deliveryMethod.equals("Encode", ignoreCase = true) }
+            .mapNotNull { it.track(selected) }
+    }
+
+    private fun MediaStream.track(selected: Int?): ServerTrack? {
+        val index = index ?: return null
+        return ServerTrack(
+            index = index,
+            label = displayTitle ?: language ?: index.toString(),
+            language = language,
+            selected = index == selected
+        )
     }
 
     override suspend fun report(
@@ -491,7 +503,8 @@ internal abstract class MediaBrowserProvider(
             )
         ),
         subtitleProfiles = EMBEDDED_SUBTITLES.map { SubtitleProfile(format = it, method = "Embed") } +
-            TEXT_SUBTITLES.map { SubtitleProfile(format = it, method = "External") }
+            TEXT_SUBTITLES.map { SubtitleProfile(format = it, method = "External") } +
+            IMAGE_SUBTITLES.map { SubtitleProfile(format = it, method = "Encode") }
     )
 
     private fun withApiKey(url: String, token: String): String {
@@ -511,6 +524,7 @@ internal abstract class MediaBrowserProvider(
         const val LIST_FIELDS = "Overview,Genres,ProviderIds,PremiereDate"
         const val DETAIL_FIELDS = "Overview,Genres,ProviderIds,People,Studios,PremiereDate,EndDate"
         val TEXT_SUBTITLES = listOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt")
-        val EMBEDDED_SUBTITLES = TEXT_SUBTITLES + listOf("mov_text", "pgssub", "dvdsub", "dvbsub")
+        val IMAGE_SUBTITLES = listOf("pgssub", "dvdsub", "dvbsub")
+        val EMBEDDED_SUBTITLES = TEXT_SUBTITLES + "mov_text" + IMAGE_SUBTITLES
     }
 }

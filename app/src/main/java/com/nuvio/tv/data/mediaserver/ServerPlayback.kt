@@ -48,20 +48,34 @@ class ServerPlayback internal constructor(
     suspend fun fallback(url: String?): ServerPlaybackSession? {
         val failed = url?.let { synchronized(lock) { active[it] } } ?: return null
         if (failed.playback.playMethod != ServerPlayMethod.DIRECT_PLAY) return null
-        return restart(url, failed, audioStreamIndex = null)
+        return restart(url, failed, audioStreamIndex = null, subtitleStreamIndex = null)
     }
 
     suspend fun switchAudio(url: String?, audioStreamIndex: Int): ServerPlaybackSession? {
         val current = url?.let { synchronized(lock) { active[it] } } ?: return null
         if (current.playback.playMethod == ServerPlayMethod.DIRECT_PLAY) return null
-        return restart(url, current, audioStreamIndex)
+        return restart(url, current, audioStreamIndex, current.playback.burnInSubtitles.selectedIndex())
     }
 
-    fun audioTracks(url: String?): List<ServerAudioTrack> {
-        val playback = url?.let { synchronized(lock) { active[it] } }?.playback ?: return emptyList()
+    suspend fun switchSubtitle(url: String?, subtitleStreamIndex: Int?): ServerPlaybackSession? {
+        val current = url?.let { synchronized(lock) { active[it] } } ?: return null
+        if (current.playback.playMethod == ServerPlayMethod.DIRECT_PLAY) return null
+        return restart(url, current, current.playback.audioTracks.selectedIndex(), subtitleStreamIndex)
+    }
+
+    fun audioTracks(url: String?): List<ServerTrack> {
+        val playback = session(url) ?: return emptyList()
         if (playback.playMethod == ServerPlayMethod.DIRECT_PLAY || playback.audioTracks.size < 2) return emptyList()
         return playback.audioTracks
     }
+
+    fun burnInSubtitles(url: String?): List<ServerTrack> {
+        val playback = session(url) ?: return emptyList()
+        if (playback.playMethod == ServerPlayMethod.DIRECT_PLAY) return emptyList()
+        return playback.burnInSubtitles
+    }
+
+    fun session(url: String?): ServerPlaybackSession? = url?.let { synchronized(lock) { active[it] } }?.playback
 
     fun isServerSource(url: String?): Boolean = url != null && synchronized(lock) { url in active }
 
@@ -80,11 +94,17 @@ class ServerPlayback internal constructor(
         playback.stop()
     }
 
-    private suspend fun restart(url: String, current: ActivePlayback, audioStreamIndex: Int?): ServerPlaybackSession? {
+    private suspend fun restart(
+        url: String,
+        current: ActivePlayback,
+        audioStreamIndex: Int?,
+        subtitleStreamIndex: Int?
+    ): ServerPlaybackSession? {
         val request = ServerPlaybackRequest(
             target = current.playback.target,
             capabilities = ServerPlayerCapabilities(allowDirectPlay = false),
-            audioStreamIndex = audioStreamIndex
+            audioStreamIndex = audioStreamIndex,
+            subtitleStreamIndex = subtitleStreamIndex
         )
         val playback = try {
             current.provider.preparePlayback(current.session, request)
@@ -98,6 +118,8 @@ class ServerPlayback internal constructor(
         synchronized(lock) { active[playback.url] = ActivePlayback(current.provider, current.session, playback) }
         return playback
     }
+
+    private fun List<ServerTrack>.selectedIndex(): Int? = firstOrNull { it.selected }?.index
 
     private inner class ActivePlayback(
         val provider: ServerProvider,

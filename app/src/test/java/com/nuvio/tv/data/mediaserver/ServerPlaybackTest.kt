@@ -194,12 +194,38 @@ class ServerPlaybackTest {
     }
 
     @Test
-    fun directPlayLeavesAudioToThePlayer() = runBlocking {
+    fun burnsInSubtitlesByRestartingTheTranscode() = runBlocking {
+        val provider = FakeServerProvider(transcodes = true)
+        val harness = harness(provider)
+        val playback = harness.playback
+        val session = playback.prepare(ServerPlaybackTarget(ServerItemRef(harness.connection.id, "42"), "src-42"))
+        val japanese = playback.switchAudio(session.url, 2)!!
+
+        val burnedIn = playback.switchSubtitle(japanese.url, 3)!!
+
+        val request = provider.playbackRequests.last()
+        assertEquals(3, request.subtitleStreamIndex)
+        assertEquals(2, request.audioStreamIndex)
+        assertFalse(request.capabilities.allowDirectPlay)
+        assertEquals(listOf(3), playback.burnInSubtitles(burnedIn.url).filter { it.selected }.map { it.index })
+
+        val english = playback.switchAudio(burnedIn.url, 1)!!
+        assertEquals(3, provider.playbackRequests.last().subtitleStreamIndex)
+
+        val cleared = playback.switchSubtitle(english.url, null)!!
+        assertNull(provider.playbackRequests.last().subtitleStreamIndex)
+        assertTrue(playback.burnInSubtitles(cleared.url).none { it.selected })
+    }
+
+    @Test
+    fun directPlayLeavesTracksToThePlayer() = runBlocking {
         val harness = harness()
         val url = harness.playback.prepare(ServerPlaybackTarget(ServerItemRef(harness.connection.id, "7"), "src-7")).url
 
         assertTrue(harness.playback.audioTracks(url).isEmpty())
+        assertTrue(harness.playback.burnInSubtitles(url).isEmpty())
         assertNull(harness.playback.switchAudio(url, 2))
+        assertNull(harness.playback.switchSubtitle(url, 3))
         assertTrue(harness.playback.isServerSource(url))
     }
 }
