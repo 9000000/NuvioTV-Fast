@@ -714,6 +714,27 @@
 
     <string name="playback_section_general">General</string>
     <string name="playback_section_general_desc">Core playback behavior.</string>
+    <string name="playback_section_player_title">Player</string>
+    <string name="playback_section_player_title_desc">Default player, internal engine and error fallback.</string>
+    <string name="playback_section_stream_selection">Stream Selection</string>
+    <string name="playback_section_stream_selection_desc">How a stream is picked when you press play.</string>
+    <string name="playback_section_up_next">Up Next</string>
+    <string name="playback_section_up_next_desc">Next episode autoplay and post-play suggestions.</string>
+    <string name="playback_section_skip">Skip Segments</string>
+    <string name="playback_section_skip_desc">Skip intros, recaps and credits.</string>
+    <string name="playback_section_interface">Player Interface</string>
+    <string name="playback_section_interface_desc">Overlays, clock and details shown during playback.</string>
+    <string name="playback_section_audio_only_desc">Languages, decoding and audio output.</string>
+    <string name="playback_section_video_desc">Frame rate matching, Dolby Vision and HDR.</string>
+    <string name="playback_default_player">Default Player</string>
+    <string name="playback_external_player_label">External Player</string>
+    <string name="playback_afr_mode">Frame Rate Matching</string>
+    <string name="playback_dv_hdr_label">Dolby Vision &amp; HDR</string>
+    <string name="playback_mpv_decoding_label">MPV Decoding</string>
+    <string name="playback_network_label">Network</string>
+    <string name="sub_languages_label">Languages</string>
+    <string name="sub_style_label">Style</string>
+    <string name="autoplay_selected_count">%1$d selected</string>
     <string name="playback_loading_overlay">Loading Overlay</string>
     <string name="playback_loading_overlay_sub">Show loading screen until first video frame appears.</string>
     <string name="playback_pause_overlay">Pause Overlay</string>
