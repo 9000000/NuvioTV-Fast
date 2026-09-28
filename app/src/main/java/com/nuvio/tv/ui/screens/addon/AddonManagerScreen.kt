@@ -108,6 +108,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import com.nuvio.tv.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -293,7 +295,8 @@ fun AddonManagerScreen(
                             Text(
                                 text = stringResource(R.string.addon_install_title),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = NuvioTheme.colors.TextPrimary
+                                color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                             )
                             Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
                             Row(
@@ -352,7 +355,8 @@ fun AddonManagerScreen(
                                                 }
                                             ),
                                             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                color = NuvioTheme.colors.TextPrimary
+                                                color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                                             ),
                                             cursorBrush = SolidColor(if (isEditing) NuvioTheme.colors.Primary else Color.Transparent),
                                             decorationBox = { innerTextField ->
@@ -445,7 +449,8 @@ fun AddonManagerScreen(
                     Text(
                         text = stringResource(R.string.addon_installed_section),
                         style = MaterialTheme.typography.titleLarge,
-                        color = NuvioTheme.colors.TextPrimary
+                        color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                     )
                     Spacer(modifier = Modifier.width(NuvioTheme.spacing.md))
                     if (uiState.isLoading && uiState.installedAddons.isEmpty()) {
@@ -654,7 +659,8 @@ private fun ManageFromPhoneCard(
                     Text(
                         text = stringResource(R.string.addon_manage_from_phone_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioTheme.colors.TextPrimary
+                        color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                     )
                     Text(
                         text = subtitle,
@@ -715,7 +721,8 @@ private fun CatalogOrderEntryCard(onClick: () -> Unit) {
                     Text(
                         text = stringResource(R.string.addon_reorder_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioTheme.colors.TextPrimary
+                        color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                     )
                     Text(
                         text = stringResource(R.string.addon_reorder_subtitle),
@@ -776,7 +783,8 @@ private fun CollectionsEntryCard(onClick: () -> Unit) {
                     Text(
                         text = stringResource(R.string.collections_card_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioTheme.colors.TextPrimary
+                        color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                     )
                     Text(
                         text = stringResource(R.string.collections_card_subtitle),
@@ -841,7 +849,8 @@ private fun RefreshAddonsEntryCard(
                     Text(
                         text = stringResource(R.string.addon_refresh_action),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioTheme.colors.TextPrimary
+                        color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                     )
                     Text(
                         text = subtitle,
@@ -949,7 +958,8 @@ internal fun QrCodeOverlay(
                     Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
                     Text(
                         text = stringResource(R.string.addon_qr_close),
-                        color = NuvioTheme.colors.TextPrimary
+                        color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                     )
                 }
             }
@@ -996,7 +1006,8 @@ internal fun ConfirmAddonChangesDialog(
                 Text(
                     text = stringResource(R.string.addon_confirm_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioTheme.colors.TextPrimary
+                    color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                 )
 
                 Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
@@ -1210,7 +1221,8 @@ internal fun ConfirmAddonChangesDialog(
                                 Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
                                 Text(
                                     text = stringResource(R.string.addon_confirm_reject),
-                                    color = NuvioTheme.colors.TextPrimary
+                                    color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                                 )
                             }
                         }
@@ -1333,7 +1345,8 @@ private fun AddonCardContent(
                 Text(
                     text = addon.displayName,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = NuvioTheme.colors.TextPrimary
+                    color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                 )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
