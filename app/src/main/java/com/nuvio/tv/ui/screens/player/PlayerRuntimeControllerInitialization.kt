@@ -1628,10 +1628,10 @@ internal fun PlayerRuntimeController.initializePlayer(
                         if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                             return
                         }
-                        if (tryServerFallback()) {
+                        if (attemptAutoRetry(error, detailedError)) {
                             return
                         }
-                        if (attemptAutoRetry(error, detailedError)) {
+                        if (tryServerFallback()) {
                             return
                         }
 

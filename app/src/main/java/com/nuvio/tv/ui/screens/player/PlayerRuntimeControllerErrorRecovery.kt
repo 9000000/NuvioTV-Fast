@@ -509,10 +509,10 @@ internal fun PlayerRuntimeController.tryParsingErrorProbeFallback(
             if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                 return@launch
             }
-            if (tryServerFallback()) {
+            if (attemptAutoRetry(error, detailedError)) {
                 return@launch
             }
-            if (attemptAutoRetry(error, detailedError)) {
+            if (tryServerFallback()) {
                 return@launch
             }
             val userFacingError = error.toDisplayMessage(context)
