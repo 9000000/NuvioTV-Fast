@@ -151,6 +151,22 @@ class MediaBrowserRequestTest {
     }
 
     @Test
+    fun transcodesToHevcWithDolbyAudio() = runTest {
+        val http = TestHttp { """{"PlaySessionId": "ps1", "MediaSources": [{"Id": "ms1", "TranscodingUrl": "/videos/i1/master.m3u8"}]}""" }
+        val jellyfin = JellyfinProvider(http.client, testIdentity)
+        val target = ServerPlaybackTarget(ServerItemRef("cabc", "i1"), mediaSourceId = "ms1")
+
+        jellyfin.preparePlayback(
+            session("jellyfin", "https://media.example.com/jellyfin"),
+            ServerPlaybackRequest(target, ServerPlayerCapabilities(allowDirectPlay = false))
+        )
+
+        val request = http.requests.single()
+        assertTrue(request.text.contains("\"VideoCodec\":\"hevc,h264\",\"AudioCodec\":\"ac3,eac3,aac,mp3\""))
+        assertTrue(request.text.contains("\"MaxAudioChannels\":\"8\""))
+    }
+
+    @Test
     fun embyPreparesAndReportsPlaybackThroughApiRoot() = runTest {
         val http = TestHttp { request ->
             if (request.url.encodedPath.endsWith("/PlaybackInfo")) {

@@ -485,8 +485,8 @@ internal abstract class MediaBrowserProvider(
         transcodingProfiles = listOf(
             TranscodingProfile(
                 container = "ts",
-                videoCodec = "h264",
-                audioCodec = "aac,mp3,ac3",
+                videoCodec = "hevc,h264",
+                audioCodec = "ac3,eac3,aac,mp3",
                 protocol = "hls"
             )
         ),
