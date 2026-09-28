@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.nuvio.tv.R
-import com.nuvio.tv.core.torrent.TorrentSettingsData
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
@@ -131,10 +130,12 @@ class PlaybackSettingsOrganizationTest {
                 Box(modifier = Modifier.requiredHeight(6000.dp)) {
                     PlaybackSettingsSections(
                         playerSettings = settings,
-                        torrentSettings = TorrentSettingsData(),
+                        p2p = P2pSettingsUi(),
+                        transparentLetterbox = false,
                         onUpdate = {},
                         onOpenDialog = {},
-                        onMemorySettingChanged = {}
+                        onMemorySettingChanged = {},
+                        onClearTorrentCache = {}
                     )
                 }
             }

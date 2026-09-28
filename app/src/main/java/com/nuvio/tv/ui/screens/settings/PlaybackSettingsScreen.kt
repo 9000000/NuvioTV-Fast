@@ -23,7 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.R
+import com.nuvio.tv.core.torrent.TorrentCacheClearResult
 import com.nuvio.tv.core.torrent.TorrentSettingsData
+import com.nuvio.tv.core.torrent.TorrentState
 import com.nuvio.tv.data.local.PlayerSettings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -49,7 +51,28 @@ fun PlaybackSettingsContent(
     initialFocusRequester: FocusRequester? = null
 ) {
     val playerSettings by viewModel.playerSettings.collectAsStateWithLifecycle(initialValue = PlayerSettings())
+    val transparentLetterbox by viewModel.transparentLetterbox.collectAsStateWithLifecycle(initialValue = false)
     val torrentSettings by viewModel.torrentSettingsFlow.collectAsStateWithLifecycle(initialValue = TorrentSettingsData())
+    val torrentCacheState by viewModel.torrentCacheState.collectAsStateWithLifecycle()
+    val torrentState by viewModel.torrentState.collectAsStateWithLifecycle()
+    var torrentCacheClearResult by remember { mutableStateOf<TorrentCacheClearResult?>(null) }
+    var torrentCacheClearFailed by remember { mutableStateOf(false) }
+    val torrentCacheClearAvailable = torrentState !is TorrentState.Connecting &&
+        torrentState !is TorrentState.Streaming &&
+        !torrentCacheState.isClearing
+    val p2p = P2pSettingsUi(
+        enabled = torrentSettings.p2pEnabled,
+        hideStats = torrentSettings.hideTorrentStats,
+        profile = torrentSettings.torrentProfile,
+        cacheSize = torrentSettings.cacheSize,
+        cacheSummary = torrentCacheSummary(
+            cacheState = torrentCacheState,
+            clearAvailable = torrentCacheClearAvailable,
+            clearResult = torrentCacheClearResult,
+            clearFailed = torrentCacheClearFailed
+        ),
+        cacheClearEnabled = torrentCacheClearAvailable
+    )
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val enabledPluginNames by viewModel.enabledPluginNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val coroutineScope = rememberCoroutineScope()
@@ -83,10 +106,20 @@ fun PlaybackSettingsContent(
         ) {
             PlaybackSettingsSections(
                 playerSettings = playerSettings,
-                torrentSettings = torrentSettings,
+                p2p = p2p,
+                transparentLetterbox = transparentLetterbox,
                 onUpdate = onUpdate,
                 onOpenDialog = { openDialog = it },
                 onMemorySettingChanged = { memoryUsageTrigger++ },
+                onClearTorrentCache = {
+                    torrentCacheClearResult = null
+                    torrentCacheClearFailed = false
+                    coroutineScope.launch {
+                        runCatching { viewModel.clearTorrentCache() }
+                            .onSuccess { torrentCacheClearResult = it }
+                            .onFailure { torrentCacheClearFailed = true }
+                    }
+                },
                 initialFocusRequester = initialFocusRequester
             )
         }
@@ -107,6 +140,7 @@ fun PlaybackSettingsContent(
     PlaybackSettingsDialogs(
         dialog = openDialog,
         settings = playerSettings,
+        p2p = p2p,
         installedAddonNames = installedAddonNames,
         enabledPluginNames = enabledPluginNames,
         onUpdate = onUpdate,

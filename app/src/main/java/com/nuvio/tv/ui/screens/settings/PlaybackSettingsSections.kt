@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import com.nuvio.tv.core.torrent.TorrentSettingsData
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.ui.components.P2pConsentDialog
 
@@ -29,10 +28,12 @@ internal object PlaybackSettingsTestTags {
 @Composable
 internal fun PlaybackSettingsSections(
     playerSettings: PlayerSettings,
-    torrentSettings: TorrentSettingsData,
+    p2p: P2pSettingsUi,
+    transparentLetterbox: Boolean,
     onUpdate: PlaybackSettingsUpdate,
     onOpenDialog: (PlaybackDialog) -> Unit,
     onMemorySettingChanged: () -> Unit,
+    onClearTorrentCache: () -> Unit,
     initialFocusRequester: FocusRequester? = null
 ) {
     val sections = visiblePlaybackSections(playerSettings)
@@ -66,10 +67,12 @@ internal fun PlaybackSettingsSections(
                     PlaybackSectionContent(
                         section = section,
                         playerSettings = playerSettings,
-                        torrentSettings = torrentSettings,
+                        p2p = p2p,
+                        transparentLetterbox = transparentLetterbox,
                         onUpdate = onUpdate,
                         onOpenDialog = onOpenDialog,
-                        onMemorySettingChanged = onMemorySettingChanged
+                        onMemorySettingChanged = onMemorySettingChanged,
+                        onClearTorrentCache = onClearTorrentCache
                     )
                 }
             }
@@ -82,10 +85,12 @@ internal fun PlaybackSettingsSections(
 private fun PlaybackSectionContent(
     section: PlaybackSection,
     playerSettings: PlayerSettings,
-    torrentSettings: TorrentSettingsData,
+    p2p: P2pSettingsUi,
+    transparentLetterbox: Boolean,
     onUpdate: PlaybackSettingsUpdate,
     onOpenDialog: (PlaybackDialog) -> Unit,
-    onMemorySettingChanged: () -> Unit
+    onMemorySettingChanged: () -> Unit,
+    onClearTorrentCache: () -> Unit
 ) {
     when (section) {
         PlaybackSection.PLAYER -> PlaybackPlayerSection(playerSettings, onUpdate, onOpenDialog)
@@ -95,9 +100,9 @@ private fun PlaybackSectionContent(
         PlaybackSection.PLAYER_INTERFACE -> PlaybackPlayerInterfaceSection(playerSettings, onUpdate)
         PlaybackSection.AUDIO -> PlaybackAudioSection(playerSettings, onUpdate, onOpenDialog)
         PlaybackSection.SUBTITLES -> PlaybackSubtitlesSection(playerSettings, onUpdate, onOpenDialog)
-        PlaybackSection.VIDEO -> PlaybackVideoSection(playerSettings, onUpdate, onOpenDialog)
+        PlaybackSection.VIDEO -> PlaybackVideoSection(playerSettings, transparentLetterbox, onUpdate, onOpenDialog)
         PlaybackSection.BUFFER_NETWORK -> PlaybackBufferNetworkSection(playerSettings, onUpdate, onMemorySettingChanged)
-        PlaybackSection.P2P -> PlaybackP2pSection(torrentSettings, onUpdate, onOpenDialog)
+        PlaybackSection.P2P -> PlaybackP2pSection(p2p, onUpdate, onOpenDialog, onClearTorrentCache)
     }
 }
 
@@ -105,6 +110,7 @@ private fun PlaybackSectionContent(
 internal fun PlaybackSettingsDialogs(
     dialog: PlaybackDialog?,
     settings: PlayerSettings,
+    p2p: P2pSettingsUi,
     installedAddonNames: List<String>,
     enabledPluginNames: List<String>,
     onUpdate: PlaybackSettingsUpdate,
@@ -140,6 +146,7 @@ internal fun PlaybackSettingsDialogs(
             AudioSettingsDialogs(dialog, settings, onUpdate, onDismiss)
             SubtitleSettingsDialogs(dialog, settings, onUpdate, onDismiss)
             VideoSettingsDialogs(dialog, settings, onUpdate, onDismiss)
+            P2pSettingsDialogs(dialog, p2p, onUpdate, onDismiss)
         }
     }
 }

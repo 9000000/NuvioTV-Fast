@@ -49,6 +49,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 @Composable
 internal fun PlaybackVideoSection(
     settings: PlayerSettings,
+    transparentLetterbox: Boolean,
     onUpdate: PlaybackSettingsUpdate,
     onOpenDialog: (PlaybackDialog) -> Unit
 ) {
@@ -126,6 +127,13 @@ internal fun PlaybackVideoSection(
             subtitle = stringResource(R.string.audio_strip_hdr10plus_sub),
             checked = settings.stripHdr10PlusSei,
             onToggle = { onUpdate { setStripHdr10PlusSei(!settings.stripHdr10PlusSei) } },
+            enabled = enabled
+        )
+        SettingsToggleRow(
+            title = stringResource(R.string.playback_true_black_letterbox),
+            subtitle = stringResource(R.string.playback_true_black_letterbox_sub),
+            checked = transparentLetterbox,
+            onToggle = { onUpdate { setTransparentLetterbox(!transparentLetterbox) } },
             enabled = enabled
         )
     }

@@ -22,7 +22,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
-import com.nuvio.tv.core.torrent.TorrentSettingsData
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.VodCacheSizeMode
 import com.nuvio.tv.ui.screens.player.NuvioExoPlayerPerformanceHelper
@@ -398,32 +397,6 @@ private fun ParallelNetworkControls(
     SettingsResetButton(
         text = stringResource(R.string.playback_reset_to_default),
         onClick = { updateMemory { resetNetworkSettingsToDefaults() } }
-    )
-}
-
-@Composable
-internal fun PlaybackP2pSection(
-    torrentSettings: TorrentSettingsData,
-    onUpdate: PlaybackSettingsUpdate,
-    onOpenDialog: (PlaybackDialog) -> Unit
-) {
-    SettingsToggleRow(
-        title = stringResource(R.string.p2p_consent_enable),
-        subtitle = null,
-        checked = torrentSettings.p2pEnabled,
-        onToggle = {
-            if (torrentSettings.p2pEnabled) {
-                onUpdate { setP2pEnabled(false) }
-            } else {
-                onOpenDialog(PlaybackDialog.P2P_CONSENT)
-            }
-        }
-    )
-    SettingsToggleRow(
-        title = stringResource(R.string.settings_p2p_hide_stats_title),
-        subtitle = stringResource(R.string.settings_p2p_hide_stats_subtitle),
-        checked = torrentSettings.hideTorrentStats,
-        onToggle = { onUpdate { setHideTorrentStats(!torrentSettings.hideTorrentStats) } }
     )
 }
 
