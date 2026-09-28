@@ -38,12 +38,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
@@ -975,7 +979,7 @@ private fun ContentDiscoverySettingsContent(
                 title = stringResource(R.string.addon_title),
                 subtitle = stringResource(R.string.settings_content_discovery_addons_subtitle),
                 onClick = onNavigateToAddons,
-                leadingIcon = Icons.Default.GridView,
+                leadingIcon = Icons.Default.Extension,
                 modifier = if (initialFocusRequester != null) {
                     Modifier.focusRequester(initialFocusRequester)
                 } else {
@@ -987,7 +991,7 @@ private fun ContentDiscoverySettingsContent(
                     title = stringResource(R.string.plugin_title),
                     subtitle = stringResource(R.string.settings_content_discovery_plugins_subtitle),
                     onClick = onNavigateToPlugins,
-                    leadingIcon = Icons.Default.Build
+                    leadingIcon = Icons.Default.Power
                 )
             }
         }
@@ -1119,6 +1123,7 @@ private fun IntegrationSettingsContent(
                                 SettingsActionRow(
                                     title = stringResource(R.string.debrid_title),
                                     subtitle = stringResource(R.string.settings_debrid_subtitle),
+                                    leadingIcon = Icons.Default.CloudDownload,
                                     onClick = { onSelectSection(IntegrationSettingsSection.Debrid) },
                                     modifier = Modifier.focusRequester(hubEntryFocusRequester)
                                 )
@@ -1127,6 +1132,7 @@ private fun IntegrationSettingsContent(
                                 SettingsActionRow(
                                     title = "TMDB",
                                     subtitle = stringResource(R.string.settings_tmdb_subtitle),
+                                    leadingRawIconRes = R.raw.mdblist_tmdb,
                                     onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) }
                                 )
                             }
@@ -1134,6 +1140,7 @@ private fun IntegrationSettingsContent(
                                 SettingsActionRow(
                                     title = stringResource(R.string.mdblist_title),
                                     subtitle = stringResource(R.string.settings_mdblist_subtitle),
+                                    leadingRawIconRes = R.raw.mdblist_logo,
                                     onClick = { onSelectSection(IntegrationSettingsSection.MdbList) }
                                 )
                             }
@@ -1141,6 +1148,7 @@ private fun IntegrationSettingsContent(
                                 SettingsActionRow(
                                     title = "Anime-Skip",
                                     subtitle = stringResource(R.string.settings_animeskip_subtitle),
+                                    leadingIcon = Icons.Default.FastForward,
                                     onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
                                 )
                             }
