@@ -45,6 +45,8 @@ import com.nuvio.tv.domain.model.localizedTitle
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import com.nuvio.tv.R
 import com.nuvio.tv.core.tracking.TrackingListManagementCapabilities
 
@@ -274,7 +276,10 @@ internal fun ListEditorDialog(
                 unfocusedBorderColor = NuvioTheme.colors.Border,
                 focusedLabelColor = NuvioTheme.colors.TextSecondary,
                 unfocusedLabelColor = NuvioTheme.colors.TextTertiary,
-                cursorColor = NuvioTheme.colors.FocusRing
+                cursorColor = NuvioTheme.colors.FocusRing,
+                textStyle = TextStyle(
+                    textDirection = TextDirection.Content
+                ),
             )
         )
 
@@ -313,7 +318,10 @@ internal fun ListEditorDialog(
                     unfocusedBorderColor = NuvioTheme.colors.Border,
                     focusedLabelColor = NuvioTheme.colors.TextSecondary,
                     unfocusedLabelColor = NuvioTheme.colors.TextTertiary,
-                    cursorColor = NuvioTheme.colors.FocusRing
+                    cursorColor = NuvioTheme.colors.FocusRing,
+                    textStyle = TextStyle(
+                    textDirection = TextDirection.Content
+                ),
                 )
             )
         }
