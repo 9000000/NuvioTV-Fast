@@ -125,10 +125,7 @@ internal fun isFlatSettingsStyle(): Boolean = NuvioTheme.settingsUiStyle != Sett
 
 @Composable
 @androidx.compose.runtime.ReadOnlyComposable
-internal fun settingsFocusFillColor(): Color = when (NuvioTheme.settingsUiStyle) {
-    SettingsUiStyle.HORIZON -> NuvioTheme.colors.TextPrimary.copy(alpha = 0.1f)
-    else -> NuvioTheme.colors.FocusBackground
-}
+internal fun settingsFocusFillColor(): Color = NuvioTheme.colors.TextPrimary.copy(alpha = 0.1f)
 
 @Composable
 @androidx.compose.runtime.ReadOnlyComposable
@@ -604,13 +601,6 @@ internal fun SettingsDetailHeader(
                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = NuvioTheme.colors.TextPrimary
             )
-            Box(
-                modifier = Modifier
-                    .width(28.dp)
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(SettingsPillRadius))
-                    .background(NuvioTheme.colors.Secondary)
-            )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
@@ -660,32 +650,7 @@ internal fun SettingsGroupCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     when (NuvioTheme.settingsUiStyle) {
-        SettingsUiStyle.ZEN -> Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(top = NuvioTheme.spacing.xs),
-            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)
-        ) {
-            if (!title.isNullOrBlank()) {
-                Text(
-                    text = title.uppercase(),
-                    style = MaterialTheme.typography.labelMedium,
-                    letterSpacing = 1.4.sp,
-                    color = NuvioTheme.colors.TextTertiary,
-                    modifier = Modifier.padding(start = 14.dp)
-                )
-            }
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NuvioTheme.colors.TextTertiary.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(start = 14.dp)
-                )
-            }
-            content()
-        }
-        SettingsUiStyle.HORIZON -> Column(
+        SettingsUiStyle.ZEN, SettingsUiStyle.HORIZON -> Column(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(top = NuvioTheme.spacing.xs),
