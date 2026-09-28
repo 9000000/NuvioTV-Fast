@@ -17,3 +17,15 @@ fun ServerFailure.messageRes(): Int = when (this) {
 @StringRes
 fun Throwable.serverPlaybackMessageRes(): Int =
     serverFailure().takeUnless { it == ServerFailure.FAILED }?.messageRes() ?: R.string.servers_playback_failed
+
+@StringRes
+fun ServerPlayMethod.labelRes(): Int = when (this) {
+    ServerPlayMethod.DIRECT_PLAY -> R.string.servers_play_method_direct_play
+    ServerPlayMethod.DIRECT_STREAM -> R.string.servers_play_method_direct_stream
+    ServerPlayMethod.TRANSCODE -> R.string.servers_play_method_transcode
+}
+
+fun readableTranscodeReason(reason: String): String =
+    reason.replace(WORD_BOUNDARY, " ").lowercase().replaceFirstChar(Char::uppercase)
+
+private val WORD_BOUNDARY = Regex("(?<=[a-z])(?=[A-Z])")

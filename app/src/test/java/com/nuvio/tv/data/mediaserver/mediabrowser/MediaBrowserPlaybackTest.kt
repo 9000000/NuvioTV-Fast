@@ -11,6 +11,7 @@ import com.nuvio.tv.data.mediaserver.ServerPlaybackRequest
 import com.nuvio.tv.data.mediaserver.ServerPlaybackTarget
 import com.nuvio.tv.data.mediaserver.ServerPlayerCapabilities
 import com.nuvio.tv.data.mediaserver.ServerSession
+import com.nuvio.tv.data.mediaserver.readableTranscodeReason
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import org.junit.Assert.assertEquals
@@ -168,7 +169,7 @@ class MediaBrowserPlaybackTest {
     }
 
     @Test
-    fun listsBurnInSubtitles() {
+    fun listsBurnInSubtitlesAndTranscodeReasons() {
         val playback = jellyfin.playbackSession(
             session,
             request.copy(capabilities = ServerPlayerCapabilities(allowDirectPlay = false)),
@@ -184,6 +185,8 @@ class MediaBrowserPlaybackTest {
         )
         assertEquals(listOf(Triple(3, "English - PGSSUB", true)), playback.burnInSubtitles.map { Triple(it.index, it.label, it.selected) })
         assertEquals(listOf("spa"), playback.subtitles.map { it.lang })
+        assertEquals(listOf("AudioCodecNotSupported", "SubtitleCodecNotSupported"), playback.transcodeReasons)
+        assertEquals("Audio codec not supported", readableTranscodeReason(playback.transcodeReasons.first()))
     }
 
     @Test

@@ -22,6 +22,7 @@ import com.nuvio.tv.data.mediaserver.ServerSignIn
 import com.nuvio.tv.data.mediaserver.ServerTitle
 import com.nuvio.tv.data.mediaserver.ServerTrack
 import com.nuvio.tv.domain.model.Subtitle
+import java.net.URLDecoder
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import kotlinx.serialization.DeserializationStrategy
@@ -369,7 +370,8 @@ internal abstract class MediaBrowserProvider(
             playSessionId = info.playSessionId,
             playMethod = method,
             audioTracks = audioTracks(source, url, request.audioStreamIndex),
-            burnInSubtitles = burnInSubtitles(source, url)
+            burnInSubtitles = burnInSubtitles(source, url),
+            transcodeReasons = transcodeReasons(url)
         )
     }
 
@@ -396,6 +398,14 @@ internal abstract class MediaBrowserProvider(
             selected = index == selected
         )
     }
+
+    private fun transcodeReasons(url: String): List<String> =
+        queryValue(url, "TranscodeReasons")
+            ?.let { URLDecoder.decode(it, "UTF-8") }
+            ?.split(',')
+            ?.map(String::trim)
+            ?.filter(String::isNotEmpty)
+            .orEmpty()
 
     override suspend fun report(
         session: ServerSession,

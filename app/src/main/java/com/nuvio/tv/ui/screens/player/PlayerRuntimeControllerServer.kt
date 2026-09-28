@@ -5,6 +5,8 @@ import androidx.annotation.StringRes
 import com.nuvio.tv.R
 import com.nuvio.tv.data.mediaserver.ServerPlaybackSession
 import com.nuvio.tv.data.mediaserver.ServerTrack
+import com.nuvio.tv.data.mediaserver.labelRes
+import com.nuvio.tv.data.mediaserver.readableTranscodeReason
 import com.nuvio.tv.data.mediaserver.serverPlaybackMessageRes
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.ProxyHeaders
@@ -43,6 +45,13 @@ internal val PlayerRuntimeController.isServerStream: Boolean
 
 internal val PlayerRuntimeController.hasBurnedInServerSubtitle: Boolean
     get() = serverPlayback.burnInSubtitles(currentStreamUrl).any { it.selected }
+
+internal fun PlayerRuntimeController.serverPlaybackSummary(): String? {
+    val session = serverPlayback.session(currentStreamUrl) ?: return null
+    val method = context.getString(session.playMethod.labelRes())
+    val reasons = session.transcodeReasons.joinToString(", ", transform = ::readableTranscodeReason)
+    return if (reasons.isEmpty()) method else "$method · $reasons"
+}
 
 internal fun PlayerRuntimeController.serverImdbId(contentId: String): String? =
     metaRepository.getCachedMeta(contentType ?: "movie", contentId)?.imdbId?.takeIf { it.startsWith("tt") }
