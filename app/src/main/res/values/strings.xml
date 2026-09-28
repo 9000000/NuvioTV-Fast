@@ -979,6 +979,10 @@
     <string name="layout_hero_catalogs_sub">Select one or more catalogs for hero content.</string>
     <string name="layout_section_content">Home Content</string>
     <string name="layout_section_content_desc">Control what appears on home and search.</string>
+    <string name="layout_section_sidebar">Sidebar &amp; Navigation</string>
+    <string name="layout_section_sidebar_desc">Sidebar style and where Discover appears.</string>
+    <string name="layout_section_card_depth_desc">Edge light and sheen on image cards.</string>
+    <string name="layout_section_custom_poster_desc">Use artwork from an external poster service.</string>
     <string name="layout_collapse_sidebar">Collapse Sidebar</string>
     <string name="layout_collapse_sidebar_sub">Hide sidebar by default; show when focused.</string>
     <string name="layout_hide_floating_pill">Hide Floating Pill</string>
