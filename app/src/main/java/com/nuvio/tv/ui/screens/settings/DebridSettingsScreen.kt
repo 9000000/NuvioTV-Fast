@@ -51,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
@@ -950,7 +952,8 @@ private fun DebridTextListDialog(
                         },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { submit() }),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content),
                     cursorBrush = SolidColor(NuvioTheme.colors.Primary)
                 )
             }
@@ -1555,7 +1558,8 @@ private fun DebridApiKeyDialog(
                     keyboardActions = KeyboardActions(
                         onDone = { submit() }
                     ),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content),
                     cursorBrush = SolidColor(
                         if (isInputFocused) NuvioTheme.colors.Primary else Color.Transparent
                     ),
