@@ -89,6 +89,8 @@ import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.util.contentTextDirection
 import com.nuvio.tv.R
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -152,7 +154,8 @@ fun CollectionEditorScreen(
             Text(
                 text = if (uiState.isNew) stringResource(R.string.collections_new) else stringResource(R.string.collections_editor_edit_collection),
                 style = MaterialTheme.typography.headlineMedium,
-                color = NuvioTheme.colors.TextPrimary
+                color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
             )
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.xl))
         }
@@ -227,7 +230,8 @@ fun CollectionEditorScreen(
                         Text(
                             text = stringResource(R.string.collections_editor_pin_above),
                             style = MaterialTheme.typography.titleMedium,
-                            color = NuvioTheme.colors.TextPrimary
+                            color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                         )
                         Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                         Text(
@@ -280,7 +284,8 @@ fun CollectionEditorScreen(
                         Text(
                             text = stringResource(R.string.collections_editor_focus_glow),
                             style = MaterialTheme.typography.titleMedium,
-                            color = NuvioTheme.colors.TextPrimary
+                            color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                         )
                         Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                         Text(
@@ -379,7 +384,8 @@ fun CollectionEditorScreen(
                             Text(
                                 text = stringResource(R.string.collections_editor_show_all_tab),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = NuvioTheme.colors.TextPrimary
+                                color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                             )
                             Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                             Text(
@@ -414,7 +420,8 @@ fun CollectionEditorScreen(
                 Text(
                     text = stringResource(R.string.collections_editor_folders),
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioTheme.colors.TextPrimary
+                    color = NuvioTheme.colors.TextPrimary,
+                                            textDirection = TextDirection.Content
                 )
                 Text(
                     text = stringResource(
