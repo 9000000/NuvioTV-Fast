@@ -785,6 +785,8 @@
     <string name="playback_engine_mvplayer_desc">Nuvio ekran kontrolleriyle libmpv kullanır. Deneysel.</string>
 
     <string name="video_section">Video</string>
+    <string name="playback_true_black_letterbox">Gerçek siyah bantlar</string>
+    <string name="playback_true_black_letterbox_sub">Açıkken görüntünün etrafındaki bantlar boyanmaz ve HDR ekranda gerçek siyah kalır. Bantlarda parlak bir çizgi görürsen kapalı bırak.</string>
 
     <!-- PlaybackAudioSettings -->
     <string name="audio_trailer_section">Fragman</string>

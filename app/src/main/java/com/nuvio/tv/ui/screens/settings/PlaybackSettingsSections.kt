@@ -27,7 +27,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
@@ -147,6 +147,8 @@ internal fun PlaybackSettingsSections(
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetOsdClockEnabled: (Boolean) -> Unit,
+    onSetTransparentLetterbox: (Boolean) -> Unit,
+    transparentLetterbox: Boolean,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
     onSetParentalGuideEnabled: (Boolean) -> Unit,
     onSetAutoSkipSegmentTypeEnabled: (AutoSkipSegmentType, Boolean) -> Unit,
@@ -607,6 +609,19 @@ internal fun PlaybackSettingsSections(
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER },
                 enabled = !generalUi.isExternalPlayer,
                 videoExtraItems = {
+                    item(key = "video_true_black_letterbox") {
+                        ToggleSettingsItem(
+                            icon = Icons.Default.AspectRatio,
+                            title = stringResource(R.string.playback_true_black_letterbox),
+                            subtitle = stringResource(R.string.playback_true_black_letterbox_sub),
+                            isChecked = transparentLetterbox,
+                            onCheckedChange = onSetTransparentLetterbox,
+                            onFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER },
+                            enabled = !generalUi.isExternalPlayer &&
+                                playerSettings.internalPlayerEngine != InternalPlayerEngine.MVP_PLAYER
+                        )
+                    }
+
                     item(key = "general_afr_header") {
                         PlaybackSectionHeader(
                             title = stringResource(R.string.playback_auto_frame_rate),
