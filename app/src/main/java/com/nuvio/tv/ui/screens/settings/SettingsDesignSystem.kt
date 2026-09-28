@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -75,6 +76,8 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
+import androidx.tv.material3.CardBorder
+import androidx.tv.material3.CardColors
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -132,6 +135,55 @@ internal fun settingsRowShape(): RoundedCornerShape = when (NuvioTheme.settingsU
     SettingsUiStyle.CLASSIC -> RoundedCornerShape(SettingsPillRadius)
     SettingsUiStyle.ZEN -> SettingsZenRowShape
     SettingsUiStyle.HORIZON -> SettingsHorizonRowShape
+}
+
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
+internal fun settingsTallRowShape(): RoundedCornerShape =
+    if (isFlatSettingsStyle()) settingsRowShape() else RoundedCornerShape(SettingsSecondaryCardRadius)
+
+@Composable
+internal fun settingsRowColors(): CardColors = if (isFlatSettingsStyle()) {
+    CardDefaults.colors(
+        containerColor = Color.Transparent,
+        focusedContainerColor = settingsFocusFillColor()
+    )
+} else {
+    CardDefaults.colors(
+        containerColor = NuvioTheme.colors.Background,
+        focusedContainerColor = NuvioTheme.colors.Background
+    )
+}
+
+@Composable
+internal fun settingsRowBorder(
+    contentAlpha: Float = 1f,
+    shape: RoundedCornerShape = settingsRowShape()
+): CardBorder = if (isFlatSettingsStyle()) {
+    CardDefaults.border(border = Border.None, focusedBorder = Border.None)
+} else {
+    CardDefaults.border(
+        focusedBorder = Border(
+            border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs, alpha = contentAlpha),
+            shape = shape
+        )
+    )
+}
+
+@Composable
+internal fun SettingsRowLeadingIcon(
+    icon: ImageVector,
+    enabled: Boolean,
+    focused: Boolean
+) {
+    val contentAlpha = if (enabled) 1f else 0.4f
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = (if (focused && enabled) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextSecondary)
+            .copy(alpha = contentAlpha),
+        modifier = Modifier.size(NuvioTheme.spacing.xl)
+    )
 }
 
 internal data class SettingsPickerOption<T>(
@@ -700,11 +752,14 @@ internal fun SettingsToggleRow(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    leadingIcon: ImageVector? = null,
+    titleTrailingIcon: ImageVector? = null,
+    titleTrailingIconTint: Color = NuvioTheme.colors.TextPrimary,
+    expandSubtitleOnFocus: Boolean = false
 ) {
     val contentAlpha = if (enabled) 1f else 0.4f
     var isFocused by remember { mutableStateOf(false) }
-    val zen = isFlatSettingsStyle()
 
     Card(
         onClick = {
@@ -724,20 +779,8 @@ internal fun SettingsToggleRow(
                     if (nowFocused) onFocused()
                 }
             },
-        colors = CardDefaults.colors(
-            containerColor = if (zen) Color.Transparent else NuvioTheme.colors.Background,
-            focusedContainerColor = if (zen) settingsFocusFillColor() else NuvioTheme.colors.Background
-        ),
-        border = if (zen) {
-            CardDefaults.border(border = Border.None, focusedBorder = Border.None)
-        } else {
-            CardDefaults.border(
-                focusedBorder = Border(
-                    border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs, alpha = contentAlpha),
-                    shape = RoundedCornerShape(SettingsPillRadius)
-                )
-            )
-        },
+        colors = settingsRowColors(),
+        border = settingsRowBorder(contentAlpha),
         shape = CardDefaults.shape(settingsRowShape()),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
@@ -748,21 +791,37 @@ internal fun SettingsToggleRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            if (leadingIcon != null) {
+                SettingsRowLeadingIcon(icon = leadingIcon, enabled = enabled, focused = isFocused)
+                Spacer(modifier = Modifier.width(NuvioTheme.spacing.lg))
+            }
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = NuvioTheme.colors.TextPrimary.copy(alpha = contentAlpha),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = NuvioTheme.colors.TextPrimary.copy(alpha = contentAlpha),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (titleTrailingIcon != null) {
+                        Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
+                        Icon(
+                            imageVector = titleTrailingIcon,
+                            contentDescription = null,
+                            tint = titleTrailingIconTint.copy(alpha = contentAlpha),
+                            modifier = Modifier.size(NuvioTheme.spacing.lg)
+                        )
+                    }
+                }
                 if (!subtitle.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xxs))
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = NuvioTheme.colors.TextSecondary.copy(alpha = contentAlpha),
-                        maxLines = 3,
+                        maxLines = if (expandSubtitleOnFocus && isFocused) 8 else 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -795,7 +854,6 @@ internal fun SettingsActionRow(
 ) {
     val contentAlpha = if (enabled) 1f else 0.4f
     var isFocused by remember { mutableStateOf(false) }
-    val zen = isFlatSettingsStyle()
 
     Card(
         onClick = { if (enabled) onClick() },
@@ -813,20 +871,8 @@ internal fun SettingsActionRow(
                     if (nowFocused) onFocused()
                 }
             },
-        colors = CardDefaults.colors(
-            containerColor = if (zen) Color.Transparent else NuvioTheme.colors.Background,
-            focusedContainerColor = if (zen) settingsFocusFillColor() else NuvioTheme.colors.Background
-        ),
-        border = if (zen) {
-            CardDefaults.border(border = Border.None, focusedBorder = Border.None)
-        } else {
-            CardDefaults.border(
-                focusedBorder = Border(
-                    border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs, alpha = contentAlpha),
-                    shape = RoundedCornerShape(SettingsPillRadius)
-                )
-            )
-        },
+        colors = settingsRowColors(),
+        border = settingsRowBorder(contentAlpha),
         shape = CardDefaults.shape(settingsRowShape()),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
@@ -848,12 +894,7 @@ internal fun SettingsActionRow(
                 )
                 Spacer(modifier = Modifier.width(NuvioTheme.spacing.lg))
             } else if (leadingIcon != null) {
-                Icon(
-                    imageVector = leadingIcon,
-                    contentDescription = null,
-                    tint = NuvioTheme.colors.TextPrimary.copy(alpha = contentAlpha),
-                    modifier = Modifier.size(NuvioTheme.spacing.xl)
-                )
+                SettingsRowLeadingIcon(icon = leadingIcon, enabled = enabled, focused = isFocused)
                 Spacer(modifier = Modifier.width(NuvioTheme.spacing.lg))
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -895,7 +936,8 @@ internal fun SettingsActionRow(
                     style = MaterialTheme.typography.labelLarge,
                     color = valueColor.copy(alpha = contentAlpha),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 260.dp)
                 )
             }
 
