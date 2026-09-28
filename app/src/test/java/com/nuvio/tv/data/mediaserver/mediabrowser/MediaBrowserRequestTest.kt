@@ -131,6 +131,26 @@ class MediaBrowserRequestTest {
     }
 
     @Test
+    fun offersEveryFormatUntilDirectPlayFails() = runTest {
+        val http = TestHttp {
+            """{"PlaySessionId": "ps1", "MediaSources": [{"Id": "ms1", "SupportsDirectPlay": true, "TranscodingUrl": "/videos/i1/master.m3u8"}]}"""
+        }
+        val jellyfin = JellyfinProvider(http.client, testIdentity)
+        val session = session("jellyfin", "https://media.example.com/jellyfin")
+        val target = ServerPlaybackTarget(ServerItemRef("cabc", "i1"), mediaSourceId = "ms1")
+
+        jellyfin.preparePlayback(session, ServerPlaybackRequest(target, ServerPlayerCapabilities()))
+        jellyfin.preparePlayback(session, ServerPlaybackRequest(target, ServerPlayerCapabilities(allowDirectPlay = false)))
+
+        val (direct, fallback) = http.requests
+        assertEquals("1000000000", direct.url.queryParameter("maxStreamingBitrate"))
+        assertTrue(direct.text.contains("\"MaxStreamingBitrate\":1000000000"))
+        assertTrue(direct.text.contains("\"DirectPlayProfiles\":[{\"Type\":\"Video\"}]"))
+        assertFalse(fallback.text.contains("\"DirectPlayProfiles\":[{\"Type\":\"Video\"}]"))
+        assertTrue(fallback.text.contains("\"AudioCodec\":\"aac,mp3,ac3,eac3,flac,opus,vorbis\""))
+    }
+
+    @Test
     fun embyPreparesAndReportsPlaybackThroughApiRoot() = runTest {
         val http = TestHttp { request ->
             if (request.url.encodedPath.endsWith("/PlaybackInfo")) {
@@ -145,7 +165,7 @@ class MediaBrowserRequestTest {
             session,
             ServerPlaybackRequest(
                 target = ServerPlaybackTarget(ServerItemRef("cabc", "i1"), mediaSourceId = "ms1"),
-                capabilities = ServerPlayerCapabilities(directPlayAll = true),
+                capabilities = ServerPlayerCapabilities(),
                 audioStreamIndex = 2
             )
         )

@@ -31,7 +31,7 @@ class ServerPlaybackTest {
         val playback: ServerPlayback
     )
 
-    private fun harness(provider: FakeServerProvider = FakeServerProvider(), directPlayAll: Boolean = false): Harness {
+    private fun harness(provider: FakeServerProvider = FakeServerProvider()): Harness {
         val (repository, connection) = fakeServerRepository(provider)
         val matcher = ServerMatcher(repository, mockk<TmdbService>(relaxed = true), metaRepository)
         return Harness(
@@ -39,7 +39,7 @@ class ServerPlaybackTest {
             repository = repository,
             connection = connection,
             streams = ServerStreams(repository, matcher),
-            playback = ServerPlayback(repository, { directPlayAll }, CoroutineScope(Dispatchers.Unconfined)) { now }
+            playback = ServerPlayback(repository, CoroutineScope(Dispatchers.Unconfined)) { now }
         )
     }
 
@@ -164,13 +164,13 @@ class ServerPlaybackTest {
     }
 
     @Test
-    fun requestsDirectPlayForEverythingOnMpv() = runBlocking {
+    fun firstRequestAllowsDirectPlay() = runBlocking {
         val provider = FakeServerProvider()
-        val harness = harness(provider, directPlayAll = true)
+        val harness = harness(provider)
 
         harness.playback.prepare(ServerPlaybackTarget(ServerItemRef(harness.connection.id, "7"), "src-7"))
 
-        assertTrue(provider.playbackRequests.single().capabilities.directPlayAll)
+        assertTrue(provider.playbackRequests.single().capabilities.allowDirectPlay)
     }
 
     @Test

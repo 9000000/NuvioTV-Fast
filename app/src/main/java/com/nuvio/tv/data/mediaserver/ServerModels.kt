@@ -153,7 +153,6 @@ data class ServerPlaybackRequest(
 )
 
 data class ServerPlayerCapabilities(
-    val directPlayAll: Boolean,
     val allowDirectPlay: Boolean = true
 )
 

@@ -2,8 +2,6 @@ package com.nuvio.tv.data.mediaserver
 
 import android.os.SystemClock
 import android.util.Log
-import com.nuvio.tv.data.local.InternalPlayerEngine
-import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -12,21 +10,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 @Singleton
 class ServerPlayback internal constructor(
     private val repository: ServerRepository,
-    private val directPlayAll: suspend () -> Boolean,
     private val scope: CoroutineScope,
     private val clock: () -> Long
 ) {
     @Inject
-    constructor(repository: ServerRepository, playerSettings: PlayerSettingsDataStore) : this(
+    constructor(repository: ServerRepository) : this(
         repository = repository,
-        directPlayAll = { playerSettings.playerSettings.first().internalPlayerEngine == InternalPlayerEngine.MVP_PLAYER },
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         clock = SystemClock::elapsedRealtime
     )
@@ -35,9 +30,8 @@ class ServerPlayback internal constructor(
     private val active = mutableMapOf<String, ActivePlayback>()
 
     suspend fun prepare(target: ServerPlaybackTarget): ServerPlaybackSession {
-        val capabilities = capabilities()
         val (provider, session, playback) = repository.call(target.item.connectionId) { provider, session ->
-            Triple(provider, session, provider.preparePlayback(session, ServerPlaybackRequest(target, capabilities)))
+            Triple(provider, session, provider.preparePlayback(session, ServerPlaybackRequest(target, ServerPlayerCapabilities())))
         }
         val orphans = synchronized(lock) {
             val unstarted = active.filterValues { !it.started }.keys.toList()
@@ -89,7 +83,7 @@ class ServerPlayback internal constructor(
     private suspend fun restart(url: String, current: ActivePlayback, audioStreamIndex: Int?): ServerPlaybackSession? {
         val request = ServerPlaybackRequest(
             target = current.playback.target,
-            capabilities = capabilities().copy(allowDirectPlay = false),
+            capabilities = ServerPlayerCapabilities(allowDirectPlay = false),
             audioStreamIndex = audioStreamIndex
         )
         val playback = try {
@@ -104,8 +98,6 @@ class ServerPlayback internal constructor(
         synchronized(lock) { active[playback.url] = ActivePlayback(current.provider, current.session, playback) }
         return playback
     }
-
-    private suspend fun capabilities() = ServerPlayerCapabilities(directPlayAll = directPlayAll())
 
     private inner class ActivePlayback(
         val provider: ServerProvider,

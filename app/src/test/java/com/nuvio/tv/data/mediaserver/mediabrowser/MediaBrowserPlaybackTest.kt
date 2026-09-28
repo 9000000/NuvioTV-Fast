@@ -36,7 +36,7 @@ class MediaBrowserPlaybackTest {
     )
     private val request = ServerPlaybackRequest(
         target = ServerPlaybackTarget(ServerItemRef("cabc", "item1"), mediaSourceId = "ms1"),
-        capabilities = ServerPlayerCapabilities(directPlayAll = true)
+        capabilities = ServerPlayerCapabilities()
     )
 
     private fun info(source: String) = json.decodeFromString(
@@ -67,7 +67,7 @@ class MediaBrowserPlaybackTest {
     fun fallsBackToServerTranscodeWithoutDuplicatingKey() {
         val playback = jellyfin.playbackSession(
             session,
-            request.copy(capabilities = ServerPlayerCapabilities(directPlayAll = false, allowDirectPlay = false)),
+            request.copy(capabilities = ServerPlayerCapabilities(allowDirectPlay = false)),
             info("""{"Id": "ms1", "SupportsDirectPlay": true, "TranscodingUrl": "/videos/item1/master.m3u8?MediaSourceId=ms1&ApiKey=secret"}"""),
             deviceId = "d1"
         )
@@ -123,7 +123,7 @@ class MediaBrowserPlaybackTest {
 
     @Test
     fun embyResolvesRelativeTranscodeUrlsOnce() {
-        val transcode = request.copy(capabilities = ServerPlayerCapabilities(directPlayAll = false, allowDirectPlay = false))
+        val transcode = request.copy(capabilities = ServerPlayerCapabilities(allowDirectPlay = false))
         val relative = emby.playbackSession(
             embySession,
             transcode,
@@ -145,7 +145,7 @@ class MediaBrowserPlaybackTest {
         val streams = """[{"Type": "Video", "Index": 0},
             {"Type": "Audio", "Index": 1, "Language": "eng", "DisplayTitle": "English - AC3 - 5.1 - Default"},
             {"Type": "Audio", "Index": 2, "Language": "jpn", "DisplayTitle": "Japanese - AAC - Stereo"}]"""
-        val transcode = request.copy(capabilities = ServerPlayerCapabilities(directPlayAll = false, allowDirectPlay = false))
+        val transcode = request.copy(capabilities = ServerPlayerCapabilities(allowDirectPlay = false))
         val chosen = jellyfin.playbackSession(
             session,
             transcode,
