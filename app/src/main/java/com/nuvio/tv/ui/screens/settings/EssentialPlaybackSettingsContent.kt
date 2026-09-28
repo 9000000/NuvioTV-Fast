@@ -8,10 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VideoSettings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,7 +67,7 @@ fun EssentialPlaybackSettingsContent(
                             StreamAutoPlayMode.REGEX_MATCH -> stringResource(R.string.stream_auto_play_smart_match)
                             null -> ""
                         },
-                        trailingIcon = Icons.Default.PlayArrow,
+                        leadingIcon = PlaybackIcons.StreamSelection.mode,
                         onClick = {
                             val current = settings?.streamAutoPlayMode ?: StreamAutoPlayMode.MANUAL
                             val next = if (current == StreamAutoPlayMode.MANUAL) {
@@ -91,6 +87,7 @@ fun EssentialPlaybackSettingsContent(
                     SettingsToggleRow(
                         title = stringResource(R.string.essential_autoplay_next_episode),
                         subtitle = stringResource(R.string.essential_autoplay_next_episode_subtitle),
+                        leadingIcon = PlaybackIcons.UpNext.autoplayNextEpisode,
                         checked = settings?.streamAutoPlayNextEpisodeEnabled == true,
                         onToggle = {
                             val current = settings ?: return@SettingsToggleRow
@@ -103,6 +100,7 @@ fun EssentialPlaybackSettingsContent(
                     SettingsToggleRow(
                         title = stringResource(R.string.autoplay_post_play_recommendations),
                         subtitle = stringResource(R.string.autoplay_post_play_recommendations_sub),
+                        leadingIcon = PlaybackIcons.UpNext.postPlayRecommendations,
                         checked = settings?.postPlayRecommendationsEnabled == true,
                         onToggle = {
                             val current = settings ?: return@SettingsToggleRow
@@ -115,6 +113,7 @@ fun EssentialPlaybackSettingsContent(
                     SettingsToggleRow(
                         title = stringResource(R.string.essential_p2p_streams),
                         subtitle = stringResource(R.string.essential_p2p_streams_subtitle),
+                        leadingIcon = PlaybackIcons.P2p.enabled,
                         checked = torrentSettings?.p2pEnabled == true,
                         onToggle = {
                             val current = torrentSettings ?: return@SettingsToggleRow
@@ -133,18 +132,15 @@ fun EssentialPlaybackSettingsContent(
                     SettingsActionRow(
                         title = stringResource(R.string.essential_subtitle_language),
                         subtitle = stringResource(R.string.essential_subtitle_language_subtitle),
-                        value = when {
-                            settings?.subtitleStyle?.preferredLanguage == "none" -> stringResource(R.string.action_none)
-                            settings?.subtitleStyle?.isPreferredLanguageSystemDefault == true -> stringResource(R.string.appearance_language_system)
-                            else -> settings?.subtitleStyle?.preferredLanguage.orEmpty()
-                        },
-                        trailingIcon = Icons.Default.VideoSettings,
+                        value = settings?.let { subtitleLanguageLabel(it.subtitleStyle) },
+                        leadingIcon = PlaybackIcons.Subtitles.preferredLanguage,
                         onClick = { showSubtitleLanguageDialog = true },
                         enabled = settings != null
                     )
                     SettingsToggleRow(
                         title = stringResource(R.string.sub_use_forced_subtitles),
                         subtitle = stringResource(R.string.sub_use_forced_subtitles_desc),
+                        leadingIcon = PlaybackIcons.Subtitles.forced,
                         checked = settings?.subtitleStyle?.useForcedSubtitles == true,
                         onToggle = {
                             val current = settings ?: return@SettingsToggleRow
@@ -155,21 +151,16 @@ fun EssentialPlaybackSettingsContent(
                     SettingsActionRow(
                         title = stringResource(R.string.essential_audio_language),
                         subtitle = stringResource(R.string.essential_audio_language_subtitle),
-                        value = settings?.preferredAudioLanguage.orEmpty(),
-                        trailingIcon = Icons.Default.VideoSettings,
+                        value = settings?.let { audioLanguageLabel(it.preferredAudioLanguage) },
+                        leadingIcon = PlaybackIcons.Audio.preferredLanguage,
                         onClick = { showAudioLanguageDialog = true },
                         enabled = settings != null
                     )
                     SettingsActionRow(
                         title = stringResource(R.string.audio_decoder_priority),
                         subtitle = stringResource(R.string.audio_decoder_controls),
-                        value = when (settings?.decoderPriority) {
-                            0 -> stringResource(R.string.audio_decoder_device_only)
-                            1 -> stringResource(R.string.audio_decoder_prefer_device)
-                            2 -> stringResource(R.string.audio_decoder_prefer_app)
-                            else -> ""
-                        },
-                        trailingIcon = Icons.Default.Tune,
+                        value = settings?.let { decoderPriorityLabel(it.decoderPriority) },
+                        leadingIcon = PlaybackIcons.Audio.decoderPriority,
                         onClick = { showDecoderPriorityDialog = true },
                         enabled = settings != null
                     )
