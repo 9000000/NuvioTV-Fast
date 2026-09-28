@@ -448,13 +448,9 @@
 
     <!-- SettingsScreen categories -->
     <string name="settings_experience">Trải nghiệm</string>
-    <string name="settings_experience_subtitle">Cơ bản hoặc Nâng cao</string>
     <string name="settings_account">Tài khoản</string>
-    <string name="settings_account_subtitle">Tài khoản và trạng thái đồng bộ</string>
     <string name="settings_profiles">Hồ sơ</string>
-    <string name="settings_profiles_subtitle">Quản lý hồ sơ người dùng</string>
     <string name="settings_layout">Bố cục</string>
-    <string name="settings_layout_subtitle">Bố cục Trang chủ và kiểu poster</string>
     <string name="settings_content_discovery">Nội dung &amp; Khám phá</string>
     <string name="settings_content_discovery_subtitle">Tiện ích, trình mở rộng, danh mục và nguồn khám phá</string>
     <string name="settings_content_discovery_addons_subtitle">Quản lý tiện ích, thứ tự danh mục và bộ sưu tập</string>
@@ -463,10 +459,8 @@
     <string name="settings_plugins_subtitle">Kho lưu trữ và nhà cung cấp</string>
     <string name="settings_integration">Tích hợp</string>
     <string name="settings_playback">Phát lại</string>
-    <string name="settings_playback_subtitle">Trình phát, phụ đề và tự động phát</string>
     <string name="settings_trakt_subtitle">Mở màn hình kết nối Trakt</string>
     <string name="settings_tracking_title">Theo dõi</string>
-    <string name="settings_tracking_subtitle">Quản lý kết nối Trakt và Simkl</string>
     <string name="settings_tracking_description">Kết nối các dịch vụ theo dõi và chọn dịch vụ cung cấp dữ liệu cho Thư viện và Tiếp tục xem.</string>
     <string name="tracking_accounts_title">Tài khoản</string>
     <string name="tracking_accounts_subtitle">Kết nối và quản lý các dịch vụ theo dõi</string>
@@ -493,7 +487,6 @@
     <string name="tracking_trakt_progress_required">Khả dụng khi Trakt là nguồn Tiến độ xem</string>
     <string name="trakt_name">Trakt</string>
     <string name="simkl_name">Simkl</string>
-    <string name="settings_about_subtitle">Phiên bản và điều khoản</string>
     <string name="settings_network">Tốc độ mạng</string>
     <string name="settings_network_subtitle">Chẩn đoán độ trễ và tốc độ tải xuống</string>
     <string name="settings_advanced">Nâng cao</string>
@@ -625,7 +618,6 @@
     <string name="advanced_confirm_exit_subtitle">Đóng ứng dụng hoàn toàn và giải phóng bộ nhớ khi thoát. Cần nhấn quay lại hai lần để xác nhận.</string>
     <string name="confirm_exit_toast">Nhấn quay lại lần nữa để thoát</string>
     <string name="settings_debug">Gỡ lỗi</string>
-    <string name="settings_debug_subtitle">Công cụ nhà phát triển và cờ tính năng</string>
     <string name="settings_plugins_section_subtitle">Quản lý kho lưu trữ, nhà cung cấp và trạng thái trình mở rộng</string>
     <string name="settings_account_section_subtitle">Tài khoản và trạng thái đồng bộ</string>
     <string name="account_stat_addons">tiện ích</string>
@@ -712,8 +704,6 @@
     <string name="contributors_hide_kofi_qr">Ẩn mã QR Ko-fi</string>
     <string name="contributors_profile_unavailable">Liên kết hồ sơ GitHub không có sẵn.</string>
 
-    <string name="playback_section_general">Chung</string>
-    <string name="playback_section_general_desc">Cơ chế phát lại cơ bản.</string>
     <string name="playback_loading_overlay">Lớp phủ Đang tải</string>
     <string name="playback_loading_overlay_sub">Hiển thị màn hình tải đến khi khung hình video đầu tiên xuất hiện.</string>
     <string name="playback_pause_overlay">Lớp phủ Tạm dừng</string>
@@ -737,9 +727,6 @@
     <string name="skip_movie_credits">Bỏ qua Danh đề</string>
     <string name="skip_to_post_credits">Đến cảnh hậu danh đề</string>
     <string name="playback_auto_frame_rate">Tốc độ Khung hình Tự động &amp; Độ phân giải</string>
-    <string name="playback_section_player">Trình phát &amp; Lựa chọn luồng</string>
-    <string name="playback_section_player_desc">Tùy chọn trình phát, tự động phát và bộ lọc nguồn.</string>
-    <string name="playback_player">Trình phát</string>
     <string name="playback_player_internal">Bên trong</string>
     <string name="playback_player_external">Bên ngoài</string>
     <string name="playback_player_ask">Luôn hỏi</string>
@@ -752,12 +739,8 @@
     <string name="playback_external_forward_subtitles_sub">Tải phụ đề bằng ngôn ngữ ưu tiên từ các tiện ích rồi chuyển sang trình phát bên ngoài.</string>
     <string name="playback_external_send_skip_segments">Gửi mốc thời gian phần giới thiệu và đoạn kết</string>
     <string name="playback_external_send_skip_segments_sub">Gửi mốc thời gian phần giới thiệu và đoạn kết sang trình phát bên ngoài để tự động bỏ qua. Chỉ hỗ trợ trên các trình phát tương thích; trình phát khác sẽ không sử dụng thông tin này.</string>
-    <string name="playback_section_audio">Âm thanh &amp; Video</string>
-    <string name="playback_section_audio_desc">Điều khiển âm thanh và tương thích video.</string>
     <string name="playback_section_subtitles">Phụ đề</string>
     <string name="playback_section_subtitles_desc">Ngôn ngữ, kiểu và chế độ kết xuất.</string>
-    <string name="playback_afr_open">Mở</string>
-    <string name="playback_afr_closed">Đã đóng</string>
     <string name="playback_afr_off">Tắt</string>
     <string name="playback_afr_off_sub">Không thay đổi tần số quét màn hình.</string>
     <string name="playback_afr_on_start">Khi bắt đầu</string>
@@ -1136,7 +1119,6 @@
     <string name="custom_poster_qr_instruction">Quét mã QR bằng điện thoại để dán mẫu URL poster</string>
 
     <!-- Custom Poster URL - Screen Toggles -->
-    <string name="layout_custom_poster_apply_to">Áp dụng poster tùy chỉnh cho:</string>
     <string name="layout_custom_poster_screen_home">Trang chủ</string>
     <string name="layout_custom_poster_screen_continue_watching">Tiếp tục xem</string>
     <string name="layout_custom_poster_screen_collections">Bộ sưu tập</string>
