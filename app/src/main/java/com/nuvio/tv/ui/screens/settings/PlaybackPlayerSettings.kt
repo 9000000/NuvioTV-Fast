@@ -1,7 +1,6 @@
 package com.nuvio.tv.ui.screens.settings
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.R
@@ -22,14 +21,12 @@ internal fun PlaybackPlayerSection(
         title = stringResource(R.string.playback_default_player),
         subtitle = null,
         value = playerPreferenceLabel(settings.playerPreference),
-        leadingIcon = PlaybackIcons.Player.defaultPlayer,
         onClick = { onOpenDialog(PlaybackDialog.PLAYER_PREFERENCE) }
     )
     SettingsActionRow(
         title = stringResource(R.string.playback_internal_player_engine),
         subtitle = null,
         value = internalEngineLabel(settings.internalPlayerEngine),
-        leadingIcon = PlaybackIcons.Player.internalEngine,
         enabled = !usesExternalPlayer,
         onClick = { onOpenDialog(PlaybackDialog.INTERNAL_ENGINE) }
     )
@@ -38,7 +35,6 @@ internal fun PlaybackPlayerSection(
         subtitle = stringResource(R.string.playback_auto_switch_internal_player_on_error_sub),
         checked = settings.autoSwitchInternalPlayerOnError,
         onToggle = { onUpdate { setAutoSwitchInternalPlayerOnError(!settings.autoSwitchInternalPlayerOnError) } },
-        leadingIcon = PlaybackIcons.Player.autoSwitchEngine,
         enabled = !usesExternalPlayer
     )
 
@@ -48,15 +44,13 @@ internal fun PlaybackPlayerSection(
             title = stringResource(R.string.playback_external_forward_subtitles),
             subtitle = stringResource(R.string.playback_external_forward_subtitles_sub),
             checked = settings.externalPlayerForwardSubtitles,
-            onToggle = { onUpdate { setExternalPlayerForwardSubtitles(!settings.externalPlayerForwardSubtitles) } },
-            leadingIcon = PlaybackIcons.Player.forwardSubtitles
+            onToggle = { onUpdate { setExternalPlayerForwardSubtitles(!settings.externalPlayerForwardSubtitles) } }
         )
         SettingsToggleRow(
             title = stringResource(R.string.playback_external_send_skip_segments),
             subtitle = stringResource(R.string.playback_external_send_skip_segments_sub),
             checked = settings.externalPlayerSendSkipSegments,
-            onToggle = { onUpdate { setExternalPlayerSendSkipSegments(!settings.externalPlayerSendSkipSegments) } },
-            leadingIcon = PlaybackIcons.Player.sendSkipSegments
+            onToggle = { onUpdate { setExternalPlayerSendSkipSegments(!settings.externalPlayerSendSkipSegments) } }
         )
     }
 }
@@ -74,7 +68,6 @@ internal fun PlaybackSkipSegmentsSection(
         subtitle = stringResource(R.string.playback_skip_intro_sub),
         checked = settings.skipIntroEnabled,
         onToggle = { onUpdate { setSkipIntroEnabled(!settings.skipIntroEnabled) } },
-        leadingIcon = PlaybackIcons.SkipSegments.skipIntro,
         enabled = internalPlayer
     )
 
@@ -86,7 +79,6 @@ internal fun PlaybackSkipSegmentsSection(
         segment = AutoSkipSegmentType.INTRO,
         title = stringResource(R.string.auto_skip_intro),
         subtitle = stringResource(R.string.auto_skip_intro_sub),
-        icon = PlaybackIcons.SkipSegments.autoSkipIntro,
         settings = settings,
         enabled = autoSkipEnabled,
         onUpdate = onUpdate
@@ -95,7 +87,6 @@ internal fun PlaybackSkipSegmentsSection(
         segment = AutoSkipSegmentType.RECAP,
         title = stringResource(R.string.auto_skip_recap),
         subtitle = stringResource(R.string.auto_skip_recap_sub),
-        icon = PlaybackIcons.SkipSegments.autoSkipRecap,
         settings = settings,
         enabled = autoSkipEnabled,
         onUpdate = onUpdate
@@ -104,7 +95,6 @@ internal fun PlaybackSkipSegmentsSection(
         segment = AutoSkipSegmentType.OUTRO,
         title = stringResource(R.string.auto_skip_outro),
         subtitle = stringResource(R.string.auto_skip_outro_sub),
-        icon = PlaybackIcons.SkipSegments.autoSkipOutro,
         settings = settings,
         enabled = autoSkipEnabled,
         onUpdate = onUpdate
@@ -113,7 +103,6 @@ internal fun PlaybackSkipSegmentsSection(
         segment = AutoSkipSegmentType.MOVIE_CREDITS,
         title = stringResource(R.string.auto_skip_movie_credits),
         subtitle = stringResource(R.string.auto_skip_movie_credits_sub),
-        icon = PlaybackIcons.SkipSegments.autoSkipMovieCredits,
         settings = settings,
         enabled = autoSkipEnabled,
         onUpdate = onUpdate
@@ -125,7 +114,6 @@ private fun AutoSkipToggle(
     segment: AutoSkipSegmentType,
     title: String,
     subtitle: String,
-    icon: ImageVector,
     settings: PlayerSettings,
     enabled: Boolean,
     onUpdate: PlaybackSettingsUpdate
@@ -136,7 +124,6 @@ private fun AutoSkipToggle(
         subtitle = subtitle,
         checked = checked,
         onToggle = { onUpdate { setAutoSkipSegmentTypeEnabled(segment, !checked) } },
-        leadingIcon = icon,
         enabled = enabled
     )
 }
@@ -153,22 +140,19 @@ internal fun PlaybackPlayerInterfaceSection(
         subtitle = stringResource(R.string.playback_loading_overlay_sub),
         checked = settings.loadingOverlayEnabled,
         onToggle = { onUpdate { setLoadingOverlayEnabled(!settings.loadingOverlayEnabled) } },
-        leadingIcon = PlaybackIcons.PlayerInterface.loadingOverlay,
         enabled = internalPlayer
     )
     SettingsToggleRow(
         title = stringResource(R.string.playback_show_loading_status),
         subtitle = stringResource(R.string.playback_show_loading_status_sub),
         checked = settings.showPlayerLoadingStatus,
-        onToggle = { onUpdate { setShowPlayerLoadingStatus(!settings.showPlayerLoadingStatus) } },
-        leadingIcon = PlaybackIcons.PlayerInterface.loadingStatus
+        onToggle = { onUpdate { setShowPlayerLoadingStatus(!settings.showPlayerLoadingStatus) } }
     )
     SettingsToggleRow(
         title = stringResource(R.string.playback_pause_overlay),
         subtitle = stringResource(R.string.playback_pause_overlay_sub),
         checked = settings.pauseOverlayEnabled,
         onToggle = { onUpdate { setPauseOverlayEnabled(!settings.pauseOverlayEnabled) } },
-        leadingIcon = PlaybackIcons.PlayerInterface.pauseOverlay,
         enabled = internalPlayer
     )
     SettingsToggleRow(
@@ -176,7 +160,6 @@ internal fun PlaybackPlayerInterfaceSection(
         subtitle = stringResource(R.string.playback_show_clock_sub),
         checked = settings.osdClockEnabled,
         onToggle = { onUpdate { setOsdClockEnabled(!settings.osdClockEnabled) } },
-        leadingIcon = PlaybackIcons.PlayerInterface.clock,
         enabled = internalPlayer
     )
     SettingsToggleRow(
@@ -184,7 +167,6 @@ internal fun PlaybackPlayerInterfaceSection(
         subtitle = stringResource(R.string.playback_parental_guide_sub),
         checked = settings.parentalGuideEnabled,
         onToggle = { onUpdate { setParentalGuideEnabled(!settings.parentalGuideEnabled) } },
-        leadingIcon = PlaybackIcons.PlayerInterface.parentalGuide,
         enabled = internalPlayer
     )
 }

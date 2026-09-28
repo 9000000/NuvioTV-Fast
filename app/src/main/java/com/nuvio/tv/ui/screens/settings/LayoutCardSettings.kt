@@ -188,7 +188,6 @@ internal fun LayoutFocusedPosterSection(
         )
         if (uiState.focusedPosterBackdropExpandEnabled) {
             SliderSettingsItem(
-                icon = null,
                 title = stringResource(R.string.layout_expand_delay),
                 subtitle = stringResource(R.string.layout_expand_delay_sub),
                 value = uiState.focusedPosterBackdropExpandDelaySeconds,
@@ -663,7 +662,6 @@ private fun CardDepthFineTuneDialog(
                 verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
             ) {
                 SliderSettingsItem(
-                    icon = null,
                     title = stringResource(R.string.settings_card_depth_edge_value),
                     value = style.edgeStrength.coerceAtMost(70),
                     valueText = "${style.edgeStrength}%",
@@ -674,7 +672,6 @@ private fun CardDepthFineTuneDialog(
                     modifier = Modifier.focusRequester(initialFocusRequester)
                 )
                 SliderSettingsItem(
-                    icon = null,
                     title = stringResource(R.string.settings_card_depth_sheen_value),
                     value = style.sheenStrength.coerceAtMost(25),
                     valueText = "${style.sheenStrength}%",
@@ -684,7 +681,6 @@ private fun CardDepthFineTuneDialog(
                     onValueChange = onSheenStrengthChange
                 )
                 SliderSettingsItem(
-                    icon = null,
                     title = stringResource(R.string.settings_card_depth_coverage_value),
                     value = style.edgeCoverage,
                     valueText = "${style.edgeCoverage}%",

@@ -53,14 +53,12 @@ internal fun PlaybackBufferNetworkSection(
             } else {
                 showPerformanceModeWarning = true
             }
-        },
-        leadingIcon = PlaybackIcons.BufferNetwork.performanceMode
+        }
     )
     if (!isSupported && showPerformanceModeWarning) {
         SettingsNote(
             text = stringResource(R.string.playback_net_nuvio_performance_mode_not_supported),
-            tone = SettingsNoteTone.Danger,
-            inset = SettingsRowTextInset
+            tone = SettingsNoteTone.Danger
         )
     } else if (isSupported && settings.nuvioPerformanceModeEnabled) {
         SettingsNote(
@@ -68,8 +66,7 @@ internal fun PlaybackBufferNetworkSection(
                 R.string.playback_net_device_memory_info,
                 NuvioExoPlayerPerformanceHelper.getFriendlyRamLabel(context),
                 NuvioExoPlayerPerformanceHelper.getSafeNativeMemoryLimitMb(context)
-            ),
-            inset = SettingsRowTextInset
+            )
         )
     }
 
@@ -84,8 +81,7 @@ internal fun PlaybackBufferNetworkSection(
             } else {
                 onUpdate { setBufferEngineEnabled(false) }
             }
-        },
-        leadingIcon = PlaybackIcons.BufferNetwork.customBuffers
+        }
     )
 
     if (settings.bufferEngineEnabled) {
@@ -100,8 +96,7 @@ internal fun PlaybackBufferNetworkSection(
         title = stringResource(R.string.playback_net_custom),
         subtitle = stringResource(R.string.playback_net_custom_sub),
         checked = settings.parallelNetworkEnabled,
-        onToggle = { onUpdate { setParallelNetworkEnabled(!settings.parallelNetworkEnabled) } },
-        leadingIcon = PlaybackIcons.BufferNetwork.parallelNetwork
+        onToggle = { onUpdate { setParallelNetworkEnabled(!settings.parallelNetworkEnabled) } }
     )
     if (settings.parallelNetworkEnabled) {
         ParallelNetworkControls(settings = settings, updateMemory = updateMemory)
@@ -125,7 +120,6 @@ private fun CustomBufferControls(
     SettingsNote(text = stringResource(R.string.playback_buffer_warning), tone = SettingsNoteTone.Warning)
 
     SliderSettingsItem(
-        icon = PlaybackIcons.BufferNetwork.minBuffer,
         title = stringResource(R.string.playback_buffer_min),
         subtitle = stringResource(R.string.playback_buffer_min_sub),
         value = buffer.minBufferMs / 1000,
@@ -139,7 +133,6 @@ private fun CustomBufferControls(
     val minBufferSeconds = buffer.minBufferMs / 1000
     val maxBufferSeconds = buffer.maxBufferMs / 1000
     SliderSettingsItem(
-        icon = PlaybackIcons.BufferNetwork.maxBuffer,
         title = stringResource(R.string.playback_buffer_max),
         subtitle = stringResource(R.string.playback_buffer_max_sub),
         value = maxBufferSeconds,
@@ -155,7 +148,6 @@ private fun CustomBufferControls(
     )
 
     SliderSettingsItem(
-        icon = PlaybackIcons.BufferNetwork.initialBuffer,
         title = stringResource(R.string.playback_buffer_initial),
         subtitle = stringResource(R.string.playback_buffer_initial_sub),
         value = buffer.bufferForPlaybackMs / 1000,
@@ -167,7 +159,6 @@ private fun CustomBufferControls(
     )
 
     SliderSettingsItem(
-        icon = PlaybackIcons.BufferNetwork.rebuffer,
         title = stringResource(R.string.playback_buffer_after_rebuffer),
         subtitle = stringResource(R.string.playback_buffer_after_rebuffer_sub),
         value = buffer.bufferForPlaybackAfterRebufferMs / 1000,
@@ -179,7 +170,6 @@ private fun CustomBufferControls(
     )
 
     SliderSettingsItem(
-        icon = PlaybackIcons.BufferNetwork.backBuffer,
         title = stringResource(R.string.playback_buffer_back),
         subtitle = stringResource(R.string.playback_buffer_back_sub),
         value = buffer.backBufferDurationMs / 1000,
@@ -193,8 +183,7 @@ private fun CustomBufferControls(
         val targetMb = MemoryBudget.effectiveBufferMb(buffer.targetBufferSizeMb)
         val reserveMb = (targetMb.toLong() * buffer.backBufferDurationMs / buffer.maxBufferMs).toInt()
         SettingsNote(
-            text = stringResource(R.string.playback_buffer_back_reserve, reserveMb),
-            inset = SettingsRowTextInset
+            text = stringResource(R.string.playback_buffer_back_reserve, reserveMb)
         )
     }
 
@@ -202,8 +191,7 @@ private fun CustomBufferControls(
         title = stringResource(R.string.playback_buffer_managed),
         subtitle = stringResource(R.string.playback_buffer_managed_sub),
         checked = settings.bufferBudgetManaged,
-        onToggle = { updateMemory { setBufferBudgetManaged(!settings.bufferBudgetManaged) } },
-        leadingIcon = PlaybackIcons.BufferNetwork.managedBudget
+        onToggle = { updateMemory { setBufferBudgetManaged(!settings.bufferBudgetManaged) } }
     )
 
     val budgetManaged = settings.bufferBudgetManaged
@@ -240,7 +228,6 @@ private fun CustomBufferControls(
     }
     val effectiveExoMb = (bufferSizeMb - parallelOverheadMb).coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
     SliderSettingsItem(
-        icon = PlaybackIcons.BufferNetwork.targetSize,
         title = stringResource(R.string.playback_buffer_target),
         subtitle = stringResource(R.string.playback_buffer_target_sub),
         value = bufferSizeMb,
@@ -257,8 +244,7 @@ private fun CustomBufferControls(
     )
     if (budgetManaged) {
         SettingsNote(
-            text = stringResource(R.string.playback_buffer_target_managed_hint),
-            inset = SettingsRowTextInset
+            text = stringResource(R.string.playback_buffer_target_managed_hint)
         )
     }
     if (!budgetManaged && bufferSizeMb > safeMaxMb) {
@@ -269,8 +255,7 @@ private fun CustomBufferControls(
             } else {
                 stringResource(R.string.playback_buffer_target_warning, safeMaxMb)
             },
-            tone = if (isDanger) SettingsNoteTone.Danger else SettingsNoteTone.Warning,
-            inset = SettingsRowTextInset
+            tone = if (isDanger) SettingsNoteTone.Danger else SettingsNoteTone.Warning
         )
     }
 
@@ -279,7 +264,6 @@ private fun CustomBufferControls(
         subtitle = stringResource(R.string.playback_buffer_allow_large_sub),
         checked = settings.allowLargeTargetBuffer,
         onToggle = { updateMemory { setAllowLargeTargetBuffer(!settings.allowLargeTargetBuffer) } },
-        leadingIcon = PlaybackIcons.BufferNetwork.allowLargeTarget,
         enabled = !settings.bufferBudgetManaged
     )
 
@@ -301,7 +285,6 @@ private fun DiskCacheControls(
         subtitle = stringResource(R.string.playback_cache_vod_sub),
         checked = settings.vodCacheEnabled,
         onToggle = { onUpdate { setVodCacheEnabled(!settings.vodCacheEnabled) } },
-        leadingIcon = PlaybackIcons.BufferNetwork.diskCache,
         expandSubtitleOnFocus = true
     )
 
@@ -315,7 +298,6 @@ private fun DiskCacheControls(
         onToggle = {
             onUpdate { setVodCacheSizeMode(if (autoMode) VodCacheSizeMode.MANUAL else VodCacheSizeMode.AUTO) }
         },
-        leadingIcon = PlaybackIcons.BufferNetwork.autoCacheSize,
         modifier = Modifier.padding(start = NuvioTheme.spacing.xxl)
     )
 
@@ -324,7 +306,6 @@ private fun DiskCacheControls(
     if (!autoMode) {
         val manualCacheMb = settings.vodCacheSizeMb.coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, maxManualCacheMb)
         SliderSettingsItem(
-            icon = PlaybackIcons.BufferNetwork.manualCacheSize,
             title = stringResource(R.string.playback_cache_vod_size),
             subtitle = stringResource(R.string.playback_cache_vod_size_sub),
             value = manualCacheMb,
@@ -368,20 +349,17 @@ private fun ParallelNetworkControls(
         title = stringResource(R.string.playback_net_http2),
         subtitle = stringResource(R.string.playback_net_http2_sub),
         checked = settings.enableHttp2,
-        onToggle = { updateMemory { setEnableHttp2(!settings.enableHttp2) } },
-        leadingIcon = PlaybackIcons.BufferNetwork.http2
+        onToggle = { updateMemory { setEnableHttp2(!settings.enableHttp2) } }
     )
     SettingsToggleRow(
         title = stringResource(R.string.playback_net_parallel),
         subtitle = stringResource(R.string.playback_net_parallel_sub),
         checked = settings.useParallelConnections,
-        onToggle = { updateMemory { setUseParallelConnections(!settings.useParallelConnections) } },
-        leadingIcon = PlaybackIcons.BufferNetwork.parallelConnections
+        onToggle = { updateMemory { setUseParallelConnections(!settings.useParallelConnections) } }
     )
 
     if (settings.useParallelConnections) {
         SliderSettingsItem(
-            icon = PlaybackIcons.BufferNetwork.connectionCount,
             title = stringResource(R.string.playback_net_connection_count),
             subtitle = stringResource(R.string.playback_net_connection_count_sub),
             value = settings.parallelConnectionCount,
@@ -404,7 +382,6 @@ private fun ParallelNetworkControls(
         val currentKb = settings.parallelChunkSizeKb
         val currentIndex = chunkSizes.indexOfFirst { it.first == currentKb }.coerceAtLeast(0)
         SliderSettingsItem(
-            icon = PlaybackIcons.BufferNetwork.chunkSize,
             title = stringResource(R.string.playback_net_chunk_size),
             subtitle = stringResource(R.string.playback_net_chunk_size_sub),
             value = currentIndex,
@@ -440,15 +417,13 @@ internal fun PlaybackP2pSection(
             } else {
                 onOpenDialog(PlaybackDialog.P2P_CONSENT)
             }
-        },
-        leadingIcon = PlaybackIcons.P2p.enabled
+        }
     )
     SettingsToggleRow(
         title = stringResource(R.string.settings_p2p_hide_stats_title),
         subtitle = stringResource(R.string.settings_p2p_hide_stats_subtitle),
         checked = torrentSettings.hideTorrentStats,
-        onToggle = { onUpdate { setHideTorrentStats(!torrentSettings.hideTorrentStats) } },
-        leadingIcon = PlaybackIcons.P2p.hideStats
+        onToggle = { onUpdate { setHideTorrentStats(!torrentSettings.hideTorrentStats) } }
     )
 }
 

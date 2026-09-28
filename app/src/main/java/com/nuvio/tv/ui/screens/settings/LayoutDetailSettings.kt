@@ -51,7 +51,6 @@ internal fun LayoutDetailPageSection(
         )
         if (uiState.detailPageTrailerAutoplayEnabled) {
             SliderSettingsItem(
-                icon = null,
                 title = stringResource(R.string.audio_trailer_delay),
                 value = uiState.detailPageTrailerAutoplayDelaySeconds,
                 valueText = "${uiState.detailPageTrailerAutoplayDelaySeconds}s",

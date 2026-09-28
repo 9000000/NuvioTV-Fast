@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.R
@@ -67,7 +66,6 @@ fun EssentialPlaybackSettingsContent(
                             StreamAutoPlayMode.REGEX_MATCH -> stringResource(R.string.stream_auto_play_smart_match)
                             null -> ""
                         },
-                        leadingIcon = PlaybackIcons.StreamSelection.mode,
                         onClick = {
                             val current = settings?.streamAutoPlayMode ?: StreamAutoPlayMode.MANUAL
                             val next = if (current == StreamAutoPlayMode.MANUAL) {
@@ -87,7 +85,6 @@ fun EssentialPlaybackSettingsContent(
                     SettingsToggleRow(
                         title = stringResource(R.string.essential_autoplay_next_episode),
                         subtitle = stringResource(R.string.essential_autoplay_next_episode_subtitle),
-                        leadingIcon = PlaybackIcons.UpNext.autoplayNextEpisode,
                         checked = settings?.streamAutoPlayNextEpisodeEnabled == true,
                         onToggle = {
                             val current = settings ?: return@SettingsToggleRow
@@ -100,7 +97,6 @@ fun EssentialPlaybackSettingsContent(
                     SettingsToggleRow(
                         title = stringResource(R.string.autoplay_post_play_recommendations),
                         subtitle = stringResource(R.string.autoplay_post_play_recommendations_sub),
-                        leadingIcon = PlaybackIcons.UpNext.postPlayRecommendations,
                         checked = settings?.postPlayRecommendationsEnabled == true,
                         onToggle = {
                             val current = settings ?: return@SettingsToggleRow
@@ -113,7 +109,6 @@ fun EssentialPlaybackSettingsContent(
                     SettingsToggleRow(
                         title = stringResource(R.string.essential_p2p_streams),
                         subtitle = stringResource(R.string.essential_p2p_streams_subtitle),
-                        leadingIcon = PlaybackIcons.P2p.enabled,
                         checked = torrentSettings?.p2pEnabled == true,
                         onToggle = {
                             val current = torrentSettings ?: return@SettingsToggleRow
@@ -133,14 +128,12 @@ fun EssentialPlaybackSettingsContent(
                         title = stringResource(R.string.essential_subtitle_language),
                         subtitle = stringResource(R.string.essential_subtitle_language_subtitle),
                         value = settings?.let { subtitleLanguageLabel(it.subtitleStyle) },
-                        leadingIcon = PlaybackIcons.Subtitles.preferredLanguage,
                         onClick = { showSubtitleLanguageDialog = true },
                         enabled = settings != null
                     )
                     SettingsToggleRow(
                         title = stringResource(R.string.sub_use_forced_subtitles),
                         subtitle = stringResource(R.string.sub_use_forced_subtitles_desc),
-                        leadingIcon = PlaybackIcons.Subtitles.forced,
                         checked = settings?.subtitleStyle?.useForcedSubtitles == true,
                         onToggle = {
                             val current = settings ?: return@SettingsToggleRow
@@ -152,7 +145,6 @@ fun EssentialPlaybackSettingsContent(
                         title = stringResource(R.string.essential_audio_language),
                         subtitle = stringResource(R.string.essential_audio_language_subtitle),
                         value = settings?.let { audioLanguageLabel(it.preferredAudioLanguage) },
-                        leadingIcon = PlaybackIcons.Audio.preferredLanguage,
                         onClick = { showAudioLanguageDialog = true },
                         enabled = settings != null
                     )
@@ -160,7 +152,6 @@ fun EssentialPlaybackSettingsContent(
                         title = stringResource(R.string.audio_decoder_priority),
                         subtitle = stringResource(R.string.audio_decoder_controls),
                         value = settings?.let { decoderPriorityLabel(it.decoderPriority) },
-                        leadingIcon = PlaybackIcons.Audio.decoderPriority,
                         onClick = { showDecoderPriorityDialog = true },
                         enabled = settings != null
                     )

@@ -56,7 +56,6 @@ internal fun PlaybackSubtitlesSection(
         title = stringResource(R.string.sub_preferred_lang),
         subtitle = null,
         value = subtitleLanguageLabel(style),
-        leadingIcon = PlaybackIcons.Subtitles.preferredLanguage,
         enabled = languageSelectionEnabled,
         onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_LANGUAGE) }
     )
@@ -66,7 +65,6 @@ internal fun PlaybackSubtitlesSection(
         value = style.secondaryPreferredLanguage
             ?.let { code -> AVAILABLE_SUBTITLE_LANGUAGES.find { it.code == code }?.displayName }
             ?: stringResource(R.string.sub_not_set),
-        leadingIcon = PlaybackIcons.Subtitles.secondaryLanguage,
         enabled = languageSelectionEnabled,
         onClick = { onOpenDialog(PlaybackDialog.SECONDARY_SUBTITLE_LANGUAGE) }
     )
@@ -75,7 +73,6 @@ internal fun PlaybackSubtitlesSection(
         subtitle = stringResource(R.string.sub_use_forced_subtitles_desc),
         checked = style.useForcedSubtitles,
         onToggle = { onUpdate { setUseForcedSubtitles(!style.useForcedSubtitles) } },
-        leadingIcon = PlaybackIcons.Subtitles.forced,
         enabled = enabled
     )
     SettingsToggleRow(
@@ -83,7 +80,6 @@ internal fun PlaybackSubtitlesSection(
         subtitle = stringResource(R.string.sub_show_only_preferred_languages_desc),
         checked = style.showOnlyPreferredLanguages,
         onToggle = { onUpdate { setSubtitleShowOnlyPreferredLanguages(!style.showOnlyPreferredLanguages) } },
-        leadingIcon = PlaybackIcons.Subtitles.onlyPreferredLanguages,
         enabled = enabled
     )
     SettingsToggleRow(
@@ -91,13 +87,11 @@ internal fun PlaybackSubtitlesSection(
         subtitle = stringResource(R.string.sub_strip_sdh_desc),
         checked = style.stripSdh,
         onToggle = { onUpdate { setSubtitleStripSdh(!style.stripSdh) } },
-        leadingIcon = PlaybackIcons.Subtitles.stripSdh,
         enabled = enabled
     )
 
     SettingsSectionLabel(text = stringResource(R.string.sub_style_label))
     SliderSettingsItem(
-        icon = PlaybackIcons.Subtitles.size,
         title = stringResource(R.string.sub_size),
         value = style.size,
         valueText = "${style.size}%",
@@ -108,7 +102,6 @@ internal fun PlaybackSubtitlesSection(
         enabled = enabled
     )
     SliderSettingsItem(
-        icon = PlaybackIcons.Subtitles.verticalOffset,
         title = stringResource(R.string.sub_vertical_offset),
         value = style.verticalOffset,
         valueText = "${style.verticalOffset}%",
@@ -123,18 +116,15 @@ internal fun PlaybackSubtitlesSection(
         subtitle = stringResource(R.string.sub_bold_sub),
         checked = style.bold,
         onToggle = { onUpdate { setSubtitleBold(!style.bold) } },
-        leadingIcon = PlaybackIcons.Subtitles.bold,
         enabled = enabled
     )
     ColorSettingsItem(
-        icon = PlaybackIcons.Subtitles.textColor,
         title = stringResource(R.string.sub_text_color),
         currentColor = Color(style.textColor),
         onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_TEXT_COLOR) },
         enabled = enabled
     )
     ColorSettingsItem(
-        icon = PlaybackIcons.Subtitles.backgroundColor,
         title = stringResource(R.string.sub_bg_color),
         currentColor = Color(style.backgroundColor),
         showTransparent = style.backgroundColor == Color.Transparent.toArgb(),
@@ -146,12 +136,10 @@ internal fun PlaybackSubtitlesSection(
         subtitle = stringResource(R.string.sub_outline_sub),
         checked = style.outlineEnabled,
         onToggle = { onUpdate { setSubtitleOutlineEnabled(!style.outlineEnabled) } },
-        leadingIcon = PlaybackIcons.Subtitles.outline,
         enabled = enabled
     )
     if (style.outlineEnabled) {
         ColorSettingsItem(
-            icon = PlaybackIcons.Subtitles.outlineColor,
             title = stringResource(R.string.sub_outline_color),
             currentColor = Color(style.outlineColor),
             onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_OUTLINE_COLOR) },
@@ -165,7 +153,6 @@ internal fun PlaybackSubtitlesSection(
         subtitle = stringResource(R.string.sub_libass_sub),
         checked = settings.useLibass,
         onToggle = { onUpdate { setUseLibass(!settings.useLibass) } },
-        leadingIcon = PlaybackIcons.Subtitles.libass,
         enabled = enabled
     )
     if (settings.useLibass) {
@@ -173,7 +160,6 @@ internal fun PlaybackSubtitlesSection(
             title = stringResource(R.string.sub_libass_mode),
             subtitle = null,
             value = libassRenderTypeOptions().firstOrNull { it.value == settings.libassRenderType }?.title,
-            leadingIcon = PlaybackIcons.Subtitles.libassRenderMode,
             onClick = { onOpenDialog(PlaybackDialog.LIBASS_RENDER_TYPE) }
         )
     }

@@ -53,7 +53,6 @@ import com.nuvio.tv.R
 
 @Composable
 internal fun SliderSettingsItem(
-    icon: ImageVector?,
     title: String,
     value: Int,
     valueText: String,
@@ -70,7 +69,6 @@ internal fun SliderSettingsItem(
     val progress = if (span > 0f) (value - minValue).toFloat() / span else 0f
 
     SliderSettingsItemLayout(
-        icon = icon,
         title = title,
         valueText = valueText,
         subtitle = subtitle,
@@ -91,7 +89,6 @@ internal fun SliderSettingsItem(
 
 @Composable
 internal fun SliderSettingsItem(
-    icon: ImageVector?,
     title: String,
     values: List<Int>,
     selected: Int,
@@ -109,7 +106,6 @@ internal fun SliderSettingsItem(
     val progress = if (lastIndex > 0) index.toFloat() / lastIndex.toFloat() else 0f
 
     SliderSettingsItemLayout(
-        icon = icon,
         title = title,
         valueText = valueText,
         subtitle = subtitle,
@@ -130,7 +126,6 @@ internal fun SliderSettingsItem(
 
 @Composable
 private fun SliderSettingsItemLayout(
-    icon: ImageVector?,
     title: String,
     valueText: String,
     subtitle: String?,
@@ -186,11 +181,6 @@ private fun SliderSettingsItemLayout(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (icon != null) {
-                    SettingsRowLeadingIcon(icon = icon, enabled = enabled, focused = isFocused)
-                    Spacer(modifier = Modifier.width(NuvioTheme.spacing.lg))
-                }
-
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
@@ -318,7 +308,6 @@ private fun SliderStepButton(
 
 @Composable
 internal fun ColorSettingsItem(
-    icon: ImageVector,
     title: String,
     currentColor: Color,
     showTransparent: Boolean = false,
@@ -352,10 +341,6 @@ internal fun ColorSettingsItem(
                 .padding(horizontal = SettingsRowContentInset, vertical = NuvioTheme.spacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SettingsRowLeadingIcon(icon = icon, enabled = enabled, focused = isFocused)
-
-            Spacer(modifier = Modifier.width(NuvioTheme.spacing.lg))
-
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -364,6 +349,8 @@ internal fun ColorSettingsItem(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+
+            Spacer(modifier = Modifier.width(NuvioTheme.spacing.md))
 
             if (showTransparent || currentColor.alpha == 0f) {
                 Box(

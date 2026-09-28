@@ -26,7 +26,6 @@ internal fun PlaybackAudioSection(
         title = stringResource(R.string.audio_preferred_lang),
         subtitle = null,
         value = audioLanguageLabel(settings.preferredAudioLanguage),
-        leadingIcon = PlaybackIcons.Audio.preferredLanguage,
         enabled = enabled,
         onClick = { onOpenDialog(PlaybackDialog.AUDIO_LANGUAGE) }
     )
@@ -34,7 +33,6 @@ internal fun PlaybackAudioSection(
         title = stringResource(R.string.sub_secondary_lang),
         subtitle = null,
         value = secondaryAudioLanguageLabel(settings.secondaryPreferredAudioLanguage),
-        leadingIcon = PlaybackIcons.Audio.secondaryLanguage,
         enabled = enabled,
         onClick = { onOpenDialog(PlaybackDialog.SECONDARY_AUDIO_LANGUAGE) }
     )
@@ -45,7 +43,6 @@ internal fun PlaybackAudioSection(
             subtitle = stringResource(R.string.audio_skip_silence_sub),
             checked = settings.skipSilence,
             onToggle = { onUpdate { setSkipSilence(!settings.skipSilence) } },
-            leadingIcon = PlaybackIcons.Audio.skipSilence,
             enabled = enabled
         )
     }
@@ -55,7 +52,6 @@ internal fun PlaybackAudioSection(
         subtitle = stringResource(R.string.audio_remember_delay_per_device_sub),
         checked = settings.rememberAudioDelayPerDevice,
         onToggle = { onUpdate { setRememberAudioDelayPerDevice(!settings.rememberAudioDelayPerDevice) } },
-        leadingIcon = PlaybackIcons.Audio.rememberDelay,
         enabled = enabled
     )
 
@@ -68,7 +64,6 @@ internal fun PlaybackAudioSection(
         title = stringResource(R.string.audio_decoder_priority),
         subtitle = null,
         value = decoderPriorityLabel(settings.decoderPriority),
-        leadingIcon = PlaybackIcons.Audio.decoderPriority,
         enabled = enabled,
         onClick = { onOpenDialog(PlaybackDialog.DECODER_PRIORITY) }
     )
@@ -77,7 +72,6 @@ internal fun PlaybackAudioSection(
         subtitle = stringResource(R.string.audio_enable_downmix_subtitle),
         checked = settings.effectiveDownmixEnabled,
         onToggle = { onUpdate { setDownmixEnabled(!settings.effectiveDownmixEnabled) } },
-        leadingIcon = PlaybackIcons.Audio.downmix,
         enabled = enabled && settings.isPreferAppDecoder
     )
     if (settings.effectiveDownmixEnabled) {
@@ -85,7 +79,6 @@ internal fun PlaybackAudioSection(
             title = stringResource(R.string.audio_number_of_channels),
             subtitle = null,
             value = settings.audioOutputChannels.displayLabel,
-            leadingIcon = PlaybackIcons.Audio.outputChannels,
             enabled = enabled,
             onClick = { onOpenDialog(PlaybackDialog.AUDIO_OUTPUT_CHANNELS) }
         )
@@ -94,7 +87,6 @@ internal fun PlaybackAudioSection(
             subtitle = stringResource(R.string.audio_maintain_original_audio_on_downmix_subtitle),
             checked = settings.maintainOriginalAudioOnDownmix,
             onToggle = { onUpdate { setMaintainOriginalAudioOnDownmix(!settings.maintainOriginalAudioOnDownmix) } },
-            leadingIcon = PlaybackIcons.Audio.keepOriginalLoudness,
             enabled = enabled
         )
     }
@@ -103,7 +95,6 @@ internal fun PlaybackAudioSection(
         subtitle = stringResource(R.string.audio_tunneled_sub),
         checked = settings.effectiveTunnelingEnabled,
         onToggle = { onUpdate { setTunnelingEnabled(!settings.effectiveTunnelingEnabled) } },
-        leadingIcon = PlaybackIcons.Audio.tunneling,
         enabled = enabled && settings.isTunnelingCompatible
     )
     SettingsToggleRow(
@@ -111,7 +102,6 @@ internal fun PlaybackAudioSection(
         subtitle = stringResource(R.string.audio_force_optical_passthrough_sub),
         checked = settings.forceOpticalPassthrough && settings.decoderPriority != 0,
         onToggle = { onUpdate { setForceOpticalPassthrough(!settings.forceOpticalPassthrough) } },
-        leadingIcon = PlaybackIcons.Audio.opticalPassthrough,
         enabled = enabled && settings.decoderPriority != 0
     )
 }

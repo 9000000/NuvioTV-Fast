@@ -65,7 +65,6 @@ internal fun PlaybackVideoSection(
         title = stringResource(R.string.playback_afr_mode),
         subtitle = null,
         value = frameRateMatchingLabel(settings.frameRateMatchingMode),
-        leadingIcon = PlaybackIcons.Video.frameRateMatching,
         titleTrailingIcon = if (showAfrWarning) Icons.Default.Warning else null,
         titleTrailingIconTint = NuvioTheme.colors.Warning,
         enabled = enabled,
@@ -80,7 +79,6 @@ internal fun PlaybackVideoSection(
         ),
         checked = settings.resolutionMatchingEnabled,
         onToggle = { onUpdate { setResolutionMatchingEnabled(!settings.resolutionMatchingEnabled) } },
-        leadingIcon = PlaybackIcons.Video.resolutionMatching,
         titleTrailingIcon = if (settings.resolutionMatchingEnabled && !resolutionSwitchingSupported) {
             Icons.Default.Warning
         } else {
@@ -106,7 +104,6 @@ internal fun PlaybackVideoSection(
             title = stringResource(R.string.dv7_handling_title),
             subtitle = null,
             value = dv7HandlingModeLabel(settings.dv7HandlingMode),
-            leadingIcon = PlaybackIcons.Video.dv7Handling,
             enabled = enabled,
             onClick = { onOpenDialog(PlaybackDialog.DV7_HANDLING_MODE) }
         )
@@ -115,7 +112,6 @@ internal fun PlaybackVideoSection(
             subtitle = stringResource(R.string.audio_dv7_preserve_mapping_sub),
             checked = settings.dv7ToDv81PreserveMappingEnabled && dv81Conversion,
             onToggle = { onUpdate { setDv7ToDv81PreserveMappingEnabled(!settings.dv7ToDv81PreserveMappingEnabled) } },
-            leadingIcon = PlaybackIcons.Video.dv7PreserveMapping,
             enabled = enabled && dv81Conversion
         )
         SettingsToggleRow(
@@ -123,7 +119,6 @@ internal fun PlaybackVideoSection(
             subtitle = stringResource(R.string.audio_dv5_to_dv81_sub),
             checked = settings.dv5ToDv81Enabled && dv81Conversion,
             onToggle = { onUpdate { setDv5ToDv81Enabled(!settings.dv5ToDv81Enabled) } },
-            leadingIcon = PlaybackIcons.Video.dv5ToDv81,
             enabled = enabled && dv81Conversion
         )
         SettingsToggleRow(
@@ -131,7 +126,6 @@ internal fun PlaybackVideoSection(
             subtitle = stringResource(R.string.audio_strip_hdr10plus_sub),
             checked = settings.stripHdr10PlusSei,
             onToggle = { onUpdate { setStripHdr10PlusSei(!settings.stripHdr10PlusSei) } },
-            leadingIcon = PlaybackIcons.Video.stripHdr10Plus,
             enabled = enabled
         )
     }
@@ -142,7 +136,6 @@ internal fun PlaybackVideoSection(
             title = stringResource(R.string.audio_mpv_hwdec_title),
             subtitle = null,
             value = mpvHardwareDecodeModeLabel(settings.mpvHardwareDecodeMode),
-            leadingIcon = PlaybackIcons.Video.mpvHardwareDecode,
             enabled = enabled,
             onClick = { onOpenDialog(PlaybackDialog.MPV_HARDWARE_DECODE_MODE) }
         )
@@ -153,7 +146,6 @@ internal fun PlaybackVideoSection(
             onToggle = {
                 onUpdate { setMpvHi10pGnextSoftwareFallbackEnabled(!settings.mpvHi10pGnextSoftwareFallbackEnabled) }
             },
-            leadingIcon = PlaybackIcons.Video.mpvHi10pFallback,
             enabled = enabled
         )
     }

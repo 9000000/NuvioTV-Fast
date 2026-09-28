@@ -27,7 +27,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
@@ -41,7 +40,6 @@ import com.nuvio.tv.R
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 internal val SettingsRowContentInset = 18.dp
-internal val SettingsRowTextInset = 58.dp
 
 internal enum class SettingsNoteTone { Info, Warning, Danger }
 
@@ -117,8 +115,7 @@ internal fun SettingsSectionLabel(
 internal fun SettingsNote(
     text: String,
     modifier: Modifier = Modifier,
-    tone: SettingsNoteTone = SettingsNoteTone.Info,
-    inset: Dp = SettingsRowContentInset
+    tone: SettingsNoteTone = SettingsNoteTone.Info
 ) {
     Text(
         text = text,
@@ -131,7 +128,7 @@ internal fun SettingsNote(
         modifier = modifier
             .fillMaxWidth()
             .padding(
-                start = inset,
+                start = SettingsRowContentInset,
                 end = SettingsRowContentInset,
                 top = NuvioTheme.spacing.xxs,
                 bottom = NuvioTheme.spacing.xs

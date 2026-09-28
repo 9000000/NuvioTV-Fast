@@ -63,6 +63,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -170,8 +171,12 @@ internal fun settingsRowBorder(
     )
 }
 
+internal object SettingsTestTags {
+    const val ROW_ICON = "settings_row_icon"
+}
+
 @Composable
-internal fun SettingsRowLeadingIcon(
+private fun SettingsRowLeadingIcon(
     icon: ImageVector,
     enabled: Boolean,
     focused: Boolean
@@ -182,7 +187,9 @@ internal fun SettingsRowLeadingIcon(
         contentDescription = null,
         tint = (if (focused && enabled) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextSecondary)
             .copy(alpha = contentAlpha),
-        modifier = Modifier.size(NuvioTheme.spacing.xl)
+        modifier = Modifier
+            .size(NuvioTheme.spacing.xl)
+            .testTag(SettingsTestTags.ROW_ICON)
     )
 }
 
@@ -753,7 +760,6 @@ internal fun SettingsToggleRow(
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
     enabled: Boolean = true,
-    leadingIcon: ImageVector? = null,
     titleTrailingIcon: ImageVector? = null,
     titleTrailingIconTint: Color = NuvioTheme.colors.TextPrimary,
     expandSubtitleOnFocus: Boolean = false
@@ -791,10 +797,6 @@ internal fun SettingsToggleRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            if (leadingIcon != null) {
-                SettingsRowLeadingIcon(icon = leadingIcon, enabled = enabled, focused = isFocused)
-                Spacer(modifier = Modifier.width(NuvioTheme.spacing.lg))
-            }
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(

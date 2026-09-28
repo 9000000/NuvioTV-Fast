@@ -95,6 +95,25 @@ class PlaybackSettingsOrganizationTest {
     }
 
     @Test
+    fun onlySectionHeadersShowIcons() {
+        val settings = PlayerSettings(
+            playerPreference = PlayerPreference.ASK_EVERY_TIME,
+            streamAutoPlayNextEpisodeEnabled = true
+        )
+        setSections(settings)
+
+        visiblePlaybackSections(settings).forEach { section ->
+            expand(section)
+            composeRule.onAllNodes(
+                hasTestTag(SettingsTestTags.ROW_ICON) and
+                    hasAnyAncestor(hasTestTag(PlaybackSettingsTestTags.section(section))),
+                useUnmergedTree = true
+            ).assertCountEquals(1)
+            collapse(section)
+        }
+    }
+
+    @Test
     fun bufferSectionIsHiddenForLibmpvOnly() {
         setSections(PlayerSettings(internalPlayerEngine = InternalPlayerEngine.MVP_PLAYER))
 
@@ -122,10 +141,15 @@ class PlaybackSettingsOrganizationTest {
         }
     }
 
-    private fun expand(section: PlaybackSection) {
+    private fun expand(section: PlaybackSection) = toggle(section, R.string.layout_closed)
+
+    private fun collapse(section: PlaybackSection) = toggle(section, R.string.layout_open)
+
+    private fun toggle(section: PlaybackSection, currentState: Int) {
         composeRule.onNode(
             hasClickAction() and
                 hasText(context.getString(section.title)) and
+                hasText(context.getString(currentState)) and
                 hasAnyAncestor(hasTestTag(PlaybackSettingsTestTags.section(section)))
         ).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()

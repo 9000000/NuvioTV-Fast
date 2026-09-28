@@ -86,7 +86,6 @@ internal fun PlaybackStreamSelectionSection(
             StreamAutoPlayMode.FIRST_STREAM -> stringResource(R.string.autoplay_mode_first)
             StreamAutoPlayMode.REGEX_MATCH -> stringResource(R.string.autoplay_mode_regex)
         },
-        leadingIcon = PlaybackIcons.StreamSelection.mode,
         onClick = { onOpenDialog(PlaybackDialog.STREAM_AUTO_PLAY_MODE) }
     )
 
@@ -94,7 +93,6 @@ internal fun PlaybackStreamSelectionSection(
         SettingsActionRow(
             title = stringResource(R.string.autoplay_regex_title),
             subtitle = settings.streamAutoPlayRegex.ifBlank { stringResource(R.string.autoplay_regex_placeholder) },
-            leadingIcon = PlaybackIcons.StreamSelection.regex,
             onClick = { onOpenDialog(PlaybackDialog.STREAM_REGEX) }
         )
     }
@@ -108,7 +106,6 @@ internal fun PlaybackStreamSelectionSection(
                 StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> stringResource(R.string.autoplay_scope_addons)
                 StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> stringResource(R.string.autoplay_scope_plugins)
             },
-            leadingIcon = PlaybackIcons.StreamSelection.sourceScope,
             onClick = { onOpenDialog(PlaybackDialog.STREAM_AUTO_PLAY_SOURCE) }
         )
 
@@ -120,7 +117,6 @@ internal fun PlaybackStreamSelectionSection(
                     selectedCount = settings.streamAutoPlaySelectedAddons.size,
                     allLabel = stringResource(R.string.autoplay_all_addons)
                 ),
-                leadingIcon = PlaybackIcons.StreamSelection.allowedAddons,
                 onClick = { onOpenDialog(PlaybackDialog.STREAM_AUTO_PLAY_ADDONS) }
             )
         }
@@ -136,7 +132,6 @@ internal fun PlaybackStreamSelectionSection(
                     selectedCount = settings.streamAutoPlaySelectedPlugins.size,
                     allLabel = stringResource(R.string.autoplay_all_plugins)
                 ),
-                leadingIcon = PlaybackIcons.StreamSelection.allowedPlugins,
                 onClick = { onOpenDialog(PlaybackDialog.STREAM_AUTO_PLAY_PLUGINS) }
             )
         }
@@ -144,7 +139,6 @@ internal fun PlaybackStreamSelectionSection(
 
     val timeoutSeconds = settings.streamAutoPlayTimeoutSeconds
     SliderSettingsItem(
-        icon = PlaybackIcons.StreamSelection.timeout,
         title = stringResource(R.string.autoplay_timeout_title),
         subtitle = stringResource(R.string.autoplay_timeout_sub),
         values = PlayerSettings.STREAM_AUTOPLAY_TIMEOUT_VALUES,
@@ -161,8 +155,7 @@ internal fun PlaybackStreamSelectionSection(
         title = stringResource(R.string.autoplay_reuse_last_link),
         subtitle = stringResource(R.string.autoplay_reuse_last_link_sub),
         checked = settings.streamReuseLastLinkEnabled,
-        onToggle = { onUpdate { setStreamReuseLastLinkEnabled(!settings.streamReuseLastLinkEnabled) } },
-        leadingIcon = PlaybackIcons.StreamSelection.reuseLastLink
+        onToggle = { onUpdate { setStreamReuseLastLinkEnabled(!settings.streamReuseLastLinkEnabled) } }
     )
 
     if (settings.streamReuseLastLinkEnabled) {
@@ -170,7 +163,6 @@ internal fun PlaybackStreamSelectionSection(
             title = stringResource(R.string.autoplay_last_link_cache),
             subtitle = null,
             value = formatReuseCacheDuration(settings.streamReuseLastLinkCacheHours),
-            leadingIcon = PlaybackIcons.StreamSelection.lastLinkCacheDuration,
             onClick = { onOpenDialog(PlaybackDialog.REUSE_LAST_LINK_CACHE) }
         )
     }
@@ -186,8 +178,7 @@ internal fun PlaybackUpNextSection(
         title = stringResource(R.string.autoplay_next_episode),
         subtitle = stringResource(R.string.autoplay_next_episode_sub),
         checked = settings.streamAutoPlayNextEpisodeEnabled,
-        onToggle = { onUpdate { setStreamAutoPlayNextEpisodeEnabled(!settings.streamAutoPlayNextEpisodeEnabled) } },
-        leadingIcon = PlaybackIcons.UpNext.autoplayNextEpisode
+        onToggle = { onUpdate { setStreamAutoPlayNextEpisodeEnabled(!settings.streamAutoPlayNextEpisodeEnabled) } }
     )
 
     if (settings.streamAutoPlayNextEpisodeEnabled && settings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
@@ -197,8 +188,7 @@ internal fun PlaybackUpNextSection(
             checked = settings.streamAutoPlayNextEpisodeFallbackEnabled,
             onToggle = {
                 onUpdate { setStreamAutoPlayNextEpisodeFallbackEnabled(!settings.streamAutoPlayNextEpisodeFallbackEnabled) }
-            },
-            leadingIcon = PlaybackIcons.UpNext.manualFallback
+            }
         )
     }
 
@@ -209,13 +199,11 @@ internal fun PlaybackUpNextSection(
             NextEpisodeThresholdMode.PERCENTAGE -> stringResource(R.string.autoplay_threshold_pct)
             NextEpisodeThresholdMode.MINUTES_BEFORE_END -> stringResource(R.string.autoplay_threshold_min)
         },
-        leadingIcon = PlaybackIcons.UpNext.thresholdMode,
         onClick = { onOpenDialog(PlaybackDialog.NEXT_EPISODE_THRESHOLD_MODE) }
     )
 
     when (settings.nextEpisodeThresholdMode) {
         NextEpisodeThresholdMode.PERCENTAGE -> SliderSettingsItem(
-            icon = PlaybackIcons.UpNext.thresholdPercent,
             title = stringResource(R.string.autoplay_threshold_pct_title),
             subtitle = stringResource(R.string.autoplay_threshold_pct_sub),
             value = (settings.nextEpisodeThresholdPercent * 2f).roundToInt(),
@@ -226,7 +214,6 @@ internal fun PlaybackUpNextSection(
             onValueChange = { value -> onUpdate { setNextEpisodeThresholdPercent(value / 2f) } }
         )
         NextEpisodeThresholdMode.MINUTES_BEFORE_END -> SliderSettingsItem(
-            icon = PlaybackIcons.UpNext.thresholdMinutes,
             title = stringResource(R.string.autoplay_threshold_min_title),
             subtitle = stringResource(R.string.autoplay_threshold_pct_sub),
             value = (settings.nextEpisodeThresholdMinutesBeforeEnd * 2f).roundToInt(),
@@ -243,13 +230,11 @@ internal fun PlaybackUpNextSection(
             title = stringResource(R.string.still_watching_setting_title),
             subtitle = stringResource(R.string.still_watching_setting_sub),
             checked = settings.stillWatchingEnabled,
-            onToggle = { onUpdate { setStillWatchingEnabled(!settings.stillWatchingEnabled) } },
-            leadingIcon = PlaybackIcons.UpNext.stillWatching
+            onToggle = { onUpdate { setStillWatchingEnabled(!settings.stillWatchingEnabled) } }
         )
 
         if (settings.stillWatchingEnabled) {
             SliderSettingsItem(
-                icon = PlaybackIcons.UpNext.stillWatchingThreshold,
                 title = stringResource(R.string.still_watching_threshold_title),
                 subtitle = stringResource(R.string.still_watching_threshold_sub),
                 value = settings.stillWatchingEpisodeThreshold,
@@ -270,8 +255,7 @@ internal fun PlaybackUpNextSection(
             onUpdate {
                 setStreamAutoPlayPreferBingeGroupForNextEpisode(!settings.streamAutoPlayPreferBingeGroupForNextEpisode)
             }
-        },
-        leadingIcon = PlaybackIcons.UpNext.preferBingeGroup
+        }
     )
 
     if (settings.streamAutoPlayPreferBingeGroupForNextEpisode) {
@@ -279,8 +263,7 @@ internal fun PlaybackUpNextSection(
             title = stringResource(R.string.autoplay_reuse_binge_group),
             subtitle = stringResource(R.string.autoplay_reuse_binge_group_sub),
             checked = settings.streamAutoPlayReuseBingeGroup,
-            onToggle = { onUpdate { setStreamAutoPlayReuseBingeGroup(!settings.streamAutoPlayReuseBingeGroup) } },
-            leadingIcon = PlaybackIcons.UpNext.reuseBingeGroup
+            onToggle = { onUpdate { setStreamAutoPlayReuseBingeGroup(!settings.streamAutoPlayReuseBingeGroup) } }
         )
     }
 
@@ -288,13 +271,11 @@ internal fun PlaybackUpNextSection(
         title = stringResource(R.string.autoplay_post_play_recommendations),
         subtitle = stringResource(R.string.autoplay_post_play_recommendations_sub),
         checked = settings.postPlayRecommendationsEnabled,
-        onToggle = { onUpdate { setPostPlayRecommendationsEnabled(!settings.postPlayRecommendationsEnabled) } },
-        leadingIcon = PlaybackIcons.UpNext.postPlayRecommendations
+        onToggle = { onUpdate { setPostPlayRecommendationsEnabled(!settings.postPlayRecommendationsEnabled) } }
     )
 
     if (settings.postPlayRecommendationsEnabled) {
         SliderSettingsItem(
-            icon = PlaybackIcons.UpNext.postPlayMovieThreshold,
             title = stringResource(R.string.autoplay_post_play_movie_threshold),
             subtitle = stringResource(R.string.autoplay_post_play_movie_threshold_sub),
             value = settings.postPlayMovieThresholdPercent,
