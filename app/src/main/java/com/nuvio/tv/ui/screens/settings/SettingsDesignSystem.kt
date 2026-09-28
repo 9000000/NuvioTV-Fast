@@ -347,12 +347,9 @@ internal fun SettingsRailButton(
     focusRequester: FocusRequester? = null,
     onFocused: () -> Unit = {},
     icon: ImageVector? = null,
-    rawIconRes: Int? = null,
-    onFocusedItemPositioned: ((LayoutCoordinates) -> Unit)? = null
+    rawIconRes: Int? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    var itemCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val glideIndicator = onFocusedItemPositioned != null
     val zen = isFlatSettingsStyle()
     val railShape = if (zen) SettingsZenRowShape else RoundedCornerShape(SettingsPillRadius)
     val appliedModifier = if (focusRequester != null) {
@@ -367,18 +364,11 @@ internal fun SettingsRailButton(
             .padding(top = NuvioTheme.spacing.xxs, bottom = NuvioTheme.spacing.xxs)
             .fillMaxWidth()
             .heightIn(min = SettingsRailItemHeight)
-            .onGloballyPositioned { coordinates ->
-                itemCoordinates = coordinates
-                if (isFocused) onFocusedItemPositioned?.invoke(coordinates)
-            }
             .onFocusChanged { state ->
                 val nowFocused = state.isFocused
                 if (isFocused != nowFocused) {
                     isFocused = nowFocused
-                    if (nowFocused) {
-                        onFocused()
-                        itemCoordinates?.let { onFocusedItemPositioned?.invoke(it) }
-                    }
+                    if (nowFocused) onFocused()
                 }
             },
         colors = CardDefaults.colors(
@@ -387,11 +377,7 @@ internal fun SettingsRailButton(
                 isSelected -> NuvioTheme.colors.BackgroundCard
                 else -> NuvioTheme.colors.Background
             },
-            focusedContainerColor = when {
-                glideIndicator -> Color.Transparent
-                zen -> settingsFocusFillColor()
-                else -> NuvioTheme.colors.BackgroundCard
-            }
+            focusedContainerColor = if (zen) settingsFocusFillColor() else NuvioTheme.colors.BackgroundCard
         ),
         border = if (zen) {
             CardDefaults.border(border = Border.None, focusedBorder = Border.None)
