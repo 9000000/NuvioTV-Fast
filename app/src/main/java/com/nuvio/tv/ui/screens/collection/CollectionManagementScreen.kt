@@ -183,9 +183,8 @@ fun CollectionManagementScreen(
         ) {
             Text(
                 text = stringResource(R.string.collections_header),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.copy(textDirection = TextDirection.Content),
                 color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
             )
             val newButtonFocusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) {
@@ -351,9 +350,8 @@ private fun ImportContent(
         ) {
             Text(
                 text = stringResource(R.string.collections_import_header),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.copy(textDirection = TextDirection.Content),
                 color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
             )
             Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
                 NuvioButton(onClick = onBack) { Text(stringResource(R.string.collections_cancel)) }
@@ -613,7 +611,6 @@ private fun CollectionListItem(
                         textDirection = collection.title.contentTextDirection()
                     ),
                     color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
                 )
                 Text(
                     text = stringResource(R.string.collections_folder_count, collection.folders.size),
