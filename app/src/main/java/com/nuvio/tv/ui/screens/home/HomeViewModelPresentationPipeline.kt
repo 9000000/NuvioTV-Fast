@@ -896,7 +896,25 @@ internal fun HomeViewModel.updateCatalogItemMdbListRatings(
         )
 
     updateIndexedCatalogItem(itemId, ::mergeItem)
-    applyEnrichmentToDisplayedRows(itemId, ::mergeItem)
+    // Apply to _uiState.catalogRows for ALL layouts including MODERN.
+    // applyEnrichmentToDisplayedRows skips MODERN, but MDB ratings must
+    // reach catalogRows so the carousel presentation rebuild picks them up.
+    _uiState.update { state ->
+        var changed = false
+        val updatedRows = state.catalogRows.map { row ->
+            val idx = row.items.indexOfFirst { it.id == itemId }
+            if (idx < 0) row
+            else {
+                val merged = mergeItem(row.items[idx])
+                if (merged == row.items[idx]) row
+                else {
+                    changed = true
+                    row.copy(items = row.items.toMutableList().apply { set(idx, merged) })
+                }
+            }
+        }
+        if (changed) state.copy(catalogRows = updatedRows) else state
+    }
 
     val existing = _enrichedPreviews.value[itemId]
     if (existing != null) {

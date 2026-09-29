@@ -137,25 +137,6 @@ class MDBListRepository internal constructor(
             ?: extractPrefixedId(fallbackItemId, "tvdb")
         if (tvdbId != null) return MediaRef("tvdb", tvdbId, mediaType)
 
-        // 5. Bare numeric ID — could be TMDB.
-        val numericId = meta.id.trim().takeIf { it.all(Char::isDigit) }?.toIntOrNull()
-            ?: fallbackItemId.trim().takeIf { it.all(Char::isDigit) }?.toIntOrNull()
-
-        if (numericId != null) {
-            val imdb = runCatching { tmdbService.tmdbToImdb(numericId, fallbackItemType) }.getOrNull()
-            if (!imdb.isNullOrBlank() && imdb.startsWith("tt")) return MediaRef("imdb", imdb, mediaType)
-            return MediaRef("tmdb", numericId.toString(), mediaType)
-        }
-
-        // 6. Try resolving bare numeric IDs through TMDB.
-        val lookupType = if (fallbackItemType.isNotBlank()) fallbackItemType else mediaType
-        val resolvedTmdbId = runCatching { tmdbService.ensureTmdbId(meta.id, lookupType) }.getOrNull()?.toIntOrNull()
-        if (resolvedTmdbId != null) {
-            val imdb = runCatching { tmdbService.tmdbToImdb(resolvedTmdbId, lookupType) }.getOrNull()
-            if (!imdb.isNullOrBlank() && imdb.startsWith("tt")) return MediaRef("imdb", imdb, mediaType)
-            return MediaRef("tmdb", resolvedTmdbId.toString(), mediaType)
-        }
-
         return null
     }
 

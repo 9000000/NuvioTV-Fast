@@ -12,7 +12,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val ROW_FOCUS_DEBOUNCE_MS = 250L
-private const val ITEMS_CHANGED_DEBOUNCE_MS = 300L
 
 internal fun HomeViewModel.onFocusedRowChangedForMdbBatch(rowKey: String?) {
     if (rowKey == null) return
@@ -30,9 +29,7 @@ internal fun HomeViewModel.onFocusedRowChangedForMdbBatch(rowKey: String?) {
 internal fun HomeViewModel.onCatalogRowItemsChanged(rowKey: String) {
     if (!isMdbBatchPrefetchEnabled()) return
 
-    mdbBatchItemsChangedJob?.cancel()
-    mdbBatchItemsChangedJob = viewModelScope.launch(Dispatchers.IO) {
-        delay(ITEMS_CHANGED_DEBOUNCE_MS)
+    viewModelScope.launch(Dispatchers.IO) {
         val row = readCatalogRow(rowKey) ?: return@launch
         val newItems = row.items.filter { it.mdbListRatings == null && it.id !in mdbBatchNegativeIds }
         if (newItems.isEmpty()) return@launch

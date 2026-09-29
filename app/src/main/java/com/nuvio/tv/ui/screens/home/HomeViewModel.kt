@@ -259,7 +259,6 @@ class HomeViewModel @Inject constructor(
 
     internal val mdbBatchNegativeIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
     internal var mdbBatchRowFocusJob: Job? = null
-    internal var mdbBatchItemsChangedJob: Job? = null
     @Volatile internal var mdbBatchHasFired: Boolean = false
     internal val cwMetaCache: MutableMap<String, CwMetaSummary?> = createLruMap(MAX_CW_CACHE_SIZE)
     internal val cwMetaNegativeCacheTimestamps: MutableMap<String, Long> = createLruMap(MAX_CW_CACHE_SIZE)
