@@ -73,9 +73,8 @@ fun EssentialAddonSetupScreen(
         ) {
             Text(
                 text = stringResource(R.string.essential_addon_setup_title),
-                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold, textDirection = TextDirection.Content),
                 color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
@@ -102,9 +101,8 @@ fun EssentialAddonSetupScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.addon_install_title),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, textDirection = TextDirection.Content),
                             color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
                         )
                         BasicTextField(
                             value = uiState.installUrl,
@@ -191,9 +189,8 @@ fun EssentialAddonSetupScreen(
                         )
                         Text(
                             text = stringResource(R.string.addon_manage_from_phone_title),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, textDirection = TextDirection.Content),
                             color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
                         )
                         Text(
                             text = stringResource(R.string.addon_manage_addons_only_from_phone_subtitle),
