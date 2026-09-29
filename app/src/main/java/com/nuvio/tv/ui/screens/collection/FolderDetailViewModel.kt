@@ -169,6 +169,8 @@ class FolderDetailViewModel @Inject constructor(
     // MDBList batch prefetch for folder detail (follow-layout modern hero)
     private val mdbBatchNegativeIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     private var mdbBatchJob: Job? = null
+    @Volatile private var mdbBatchHasFired = false
+    @Volatile private var mdbLastFocusedRowKey: String? = null
     @Volatile private var currentMdbListSettings: com.nuvio.tv.domain.model.MDBListSettings? = null
 
     private val _rowsFocusState = MutableStateFlow(com.nuvio.tv.ui.screens.home.HomeScreenFocusState())
@@ -622,22 +624,45 @@ class FolderDetailViewModel @Inject constructor(
         scheduleMdbBatchPrefetch()
     }
 
-    private fun scheduleMdbBatchPrefetch() {
+    fun onFocusedRowChanged(rowKey: String?) {
+        if (rowKey == null) return
+        mdbLastFocusedRowKey = rowKey
         val state = _uiState.value
         if (state.viewMode != FolderViewMode.FOLLOW_LAYOUT || state.homeLayout != HomeLayout.MODERN) return
+        val settings = currentMdbListSettings
+        if (settings == null || !mdbListRepository.isAvailable(settings) || !settings.showOnHero) return
 
+        val isFirst = !mdbBatchHasFired
         mdbBatchJob?.cancel()
         mdbBatchJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            kotlinx.coroutines.delay(300)
-            val settings = mdbListSettingsDataStore.settings.first()
-            if (!mdbListRepository.isAvailable(settings) || !settings.showOnHero) return@launch
-            val items = _uiState.value.tabs
-                .flatMap { it.catalogRow?.items.orEmpty() }
-                .filter { it.mdbListRatings == null && it.id !in mdbBatchNegativeIds && !it.id.startsWith("__placeholder") }
-            if (items.isEmpty()) return@launch
+            if (!isFirst) kotlinx.coroutines.delay(250)
+            mdbBatchHasFired = true
+            val homeState = _uiState.value.followLayoutHomeState ?: return@launch
+            val allRows = homeState.modernHomePresentation.rows.list
+            val focusedIdx = allRows.indexOfFirst { it.key == rowKey }
+            if (focusedIdx < 0) return@launch
+
+            val targetRowKeys = mutableListOf(rowKey)
+            if (focusedIdx + 1 < allRows.size) {
+                targetRowKeys.add(allRows[focusedIdx + 1].key)
+            }
+
+            val itemsToFetch = mutableListOf<MetaPreview>()
+            for (rk in targetRowKeys) {
+                val carouselRow = allRows.firstOrNull { it.key == rk } ?: continue
+                for (carouselItem in carouselRow.items.list) {
+                    val meta = carouselItem.metaPreview ?: continue
+                    if (meta.mdbListRatings != null) continue
+                    if (meta.id in mdbBatchNegativeIds) continue
+                    if (meta.id.startsWith("__placeholder")) continue
+                    itemsToFetch.add(meta)
+                }
+            }
+
+            if (itemsToFetch.isEmpty()) return@launch
             val ratingOrder = settings.enabledRatingOrder()
             kotlinx.coroutines.coroutineScope {
-                items.map { item ->
+                itemsToFetch.map { item ->
                     async(kotlinx.coroutines.Dispatchers.IO) {
                         try {
                             val meta = com.nuvio.tv.domain.model.Meta(
@@ -680,6 +705,16 @@ class FolderDetailViewModel @Inject constructor(
             }
             rebuildFollowLayoutState()
         }
+    }
+
+    private fun scheduleMdbBatchPrefetch() {
+        val state = _uiState.value
+        if (state.viewMode != FolderViewMode.FOLLOW_LAYOUT || state.homeLayout != HomeLayout.MODERN) return
+        val homeState = state.followLayoutHomeState ?: return
+        val rowKey = mdbLastFocusedRowKey
+            ?: homeState.modernHomePresentation.rows.list.firstOrNull()?.key
+            ?: return
+        onFocusedRowChanged(rowKey)
     }
 
     private fun roundRobinMerge(lists: List<List<MetaPreview>>): List<MetaPreview> {

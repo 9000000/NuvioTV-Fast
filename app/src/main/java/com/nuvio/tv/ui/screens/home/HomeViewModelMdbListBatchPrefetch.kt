@@ -18,9 +18,11 @@ internal fun HomeViewModel.onFocusedRowChangedForMdbBatch(rowKey: String?) {
     if (rowKey == null) return
     if (!isMdbBatchPrefetchEnabled()) return
 
+    val isFirst = !mdbBatchHasFired
     mdbBatchRowFocusJob?.cancel()
     mdbBatchRowFocusJob = viewModelScope.launch(Dispatchers.IO) {
-        delay(ROW_FOCUS_DEBOUNCE_MS)
+        if (!isFirst) delay(ROW_FOCUS_DEBOUNCE_MS)
+        mdbBatchHasFired = true
         batchFetchRatingsForRowAndNext(rowKey)
     }
 }
