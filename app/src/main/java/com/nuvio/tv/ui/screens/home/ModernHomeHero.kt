@@ -541,7 +541,7 @@ private fun HeroTitleContent(
                             imdbText = preview.imdbText.orEmpty(),
                             textStyle = labelMedium,
                             textColor = NuvioTheme.colors.TextSecondary,
-                            logoSize = 30.dp * metaScale,
+                            logoSize = NuvioTheme.spacing.xl * metaScale,
                             spacing = imdbMetaSpacing,
                             visible = showImdbInPrimaryWithHighlight
                         )
@@ -608,7 +608,7 @@ private fun HeroTitleContent(
                         imdbText = preview.imdbText.orEmpty(),
                         textStyle = labelMedium,
                         textColor = NuvioTheme.colors.TextSecondary,
-                        logoSize = 30.dp * metaScale,
+                        logoSize = NuvioTheme.spacing.xl * metaScale,
                         spacing = imdbMetaSpacing,
                         visible = showImdbInSecondary
                     )
@@ -642,8 +642,7 @@ private fun HeroTitleContent(
                     com.nuvio.tv.ui.components.MDBListRatingsRow(
                         ratings = preview.mdbListRatings!!,
                         maxItems = 3,
-                        order = mdbListRatingOrder,
-                        iconSize = 30.dp * metaScale
+                        order = mdbListRatingOrder
                     )
                 }
             }

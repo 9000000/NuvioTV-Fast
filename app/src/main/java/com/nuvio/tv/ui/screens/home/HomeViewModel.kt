@@ -256,6 +256,10 @@ class HomeViewModel @Inject constructor(
 
     /** Items an enrichment merge was applied for. */
     internal val enrichmentMergedIds: MutableSet<String> = Collections.newSetFromMap(createLruMap(MAX_PREFETCH_CACHE_SIZE))
+
+    internal val mdbBatchNegativeIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    internal var mdbBatchRowFocusJob: Job? = null
+    internal var mdbBatchItemsChangedJob: Job? = null
     internal val cwMetaCache: MutableMap<String, CwMetaSummary?> = createLruMap(MAX_CW_CACHE_SIZE)
     internal val cwMetaNegativeCacheTimestamps: MutableMap<String, Long> = createLruMap(MAX_CW_CACHE_SIZE)
     /** Ultra-light cache for badge evaluation: contentId → set of aired (season, episode) pairs. */
@@ -807,6 +811,7 @@ class HomeViewModel @Inject constructor(
     /** Called by the Home content when the focused row changes. */
     fun setLiveFocusedRowKey(rowKey: String?) {
         liveFocusedRowKey = rowKey
+        onFocusedRowChangedForMdbBatch(rowKey)
     }
 
     /**

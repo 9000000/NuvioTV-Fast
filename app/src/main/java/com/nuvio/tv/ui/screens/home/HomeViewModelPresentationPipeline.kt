@@ -523,7 +523,19 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             // hero data immediately (e.g. when adjacent prefetch resolved it
             // before the user focused on it).
             if (item.id !in _enrichedPreviews.value) {
-                val enriched = findCatalogItemById(item.id) ?: item
+                var enriched = findCatalogItemById(item.id) ?: item
+                // Preserve MDBList ratings from batch prefetch if the catalog
+                // snapshot lost them (e.g. row rebuild between batch and focus).
+                if (enriched.mdbListRatings == null) {
+                    val existing = _enrichedPreviews.value[item.id]
+                    if (existing?.mdbListRatings != null) {
+                        enriched = enriched.copy(
+                            mdbListRatings = existing.mdbListRatings,
+                            mdbListRatingOrder = existing.mdbListRatingOrder,
+                            imdbRating = existing.mdbListRatings.imdb?.toFloat() ?: enriched.imdbRating
+                        )
+                    }
+                }
                 addEnrichedPreview(item.id, enriched)
             }
             if (_enrichingItemId.value == item.id) setEnrichingItemId(null)
@@ -559,7 +571,10 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             if (_enrichingItemId.value == item.id) setEnrichingItemId(null)
             return@launch
         }
-        if (willEnrich) setEnrichingItemId(item.id)
+        // Don't hide the hero if we already have enriched data for this item.
+        // The enrichment can proceed in the background without visual disruption.
+        val alreadyEnriched = item.id in _enrichedPreviews.value
+        if (willEnrich && !alreadyEnriched) setEnrichingItemId(item.id)
         if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) {
             if (!externalEnrichmentOutstanding(item.id)) {
                 if (_enrichingItemId.value == item.id) setEnrichingItemId(null)
@@ -595,40 +610,6 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 } else null
             } else null
 
-            // Fetch MDBList ratings for the focused item (single GET, uses cache).
-            val mdbSettings = currentMdbListSettings
-            val mdbEnabled = mdbListRepository.isAvailable(mdbSettings) && mdbSettings.showOnHero
-            val mdbDeferred = if (mdbEnabled && item.mdbListRatings == null) {
-                async {
-                    runCatching {
-                        mdbListRepository.getRatingsForMeta(
-                            meta = com.nuvio.tv.domain.model.Meta(
-                                id = item.id,
-                                type = item.type,
-                                name = item.name,
-                                poster = item.poster,
-                                posterShape = item.posterShape,
-                                background = item.background,
-                                logo = item.logo,
-                                description = item.description,
-                                releaseInfo = item.releaseInfo,
-                                imdbRating = item.imdbRating,
-                                genres = item.genres,
-                                runtime = item.runtime,
-                                director = item.director,
-                                cast = emptyList(),
-                                videos = emptyList(),
-                                country = item.country,
-                                awards = null,
-                                language = item.language,
-                                links = item.links
-                            ),
-                            fallbackItemId = item.id,
-                            fallbackItemType = item.apiType
-                        )
-                    }.getOrNull()
-                }
-            } else null
 
             val externalMetaDeferred = if (externalMetaPrefetchEnabled &&
                 item.id !in prefetchedExternalMetaIds &&
@@ -663,17 +644,22 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 updateCatalogItemWithTmdb(item.id, tmdbEnrichment)
             }
 
-            // Apply MDBList ratings to the catalog item.
-            val mdbResult = mdbDeferred?.await()
-            if (mdbResult != null) {
-                updateCatalogItemMdbListRatings(item.id, mdbResult.ratings)
-            }
-
             // If neither source produced anything, mark enrichment in previews
             // so UI doesn't keep showing spinner. Skip titles a merge already reached: a row
             // loaded after that merge carries raw data, and publishing it would downgrade them.
             if (tmdbEnrichment == null && externalMeta == null && item.id !in enrichmentMergedIds) {
-                val preview = findCatalogItemById(item.id) ?: item
+                var preview = findCatalogItemById(item.id) ?: item
+                // Preserve MDBList ratings from batch prefetch.
+                if (preview.mdbListRatings == null) {
+                    val existing = _enrichedPreviews.value[item.id]
+                    if (existing?.mdbListRatings != null) {
+                        preview = preview.copy(
+                            mdbListRatings = existing.mdbListRatings,
+                            mdbListRatingOrder = existing.mdbListRatingOrder,
+                            imdbRating = existing.mdbListRatings.imdb?.toFloat() ?: preview.imdbRating
+                        )
+                    }
+                }
                 if (_enrichedPreviews.value[item.id] != preview) addEnrichedPreview(item.id, preview)
             }
 
@@ -774,41 +760,8 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
                 updateCatalogItemWithTmdb(item.id, tmdbEnrichment)
             }
 
-            // Prefetch MDBList ratings for the adjacent item.
-            val mdbSettings = currentMdbListSettings
-            val mdbEnabled = mdbListRepository.isAvailable(mdbSettings) && mdbSettings.showOnHero
-            if (mdbEnabled && item.mdbListRatings == null) {
-                val mdbResult = runCatching {
-                    mdbListRepository.getRatingsForMeta(
-                        meta = com.nuvio.tv.domain.model.Meta(
-                            id = item.id,
-                            type = item.type,
-                            name = item.name,
-                            poster = item.poster,
-                            posterShape = item.posterShape,
-                            background = item.background,
-                            logo = item.logo,
-                            description = item.description,
-                            releaseInfo = item.releaseInfo,
-                            imdbRating = item.imdbRating,
-                            genres = item.genres,
-                            runtime = item.runtime,
-                            director = item.director,
-                            cast = emptyList(),
-                            videos = emptyList(),
-                            country = item.country,
-                            awards = null,
-                            language = item.language,
-                            links = item.links
-                        ),
-                        fallbackItemId = item.id,
-                        fallbackItemType = item.apiType
-                    )
-                }.getOrNull()
-                if (mdbResult != null) {
-                    updateCatalogItemMdbListRatings(item.id, mdbResult.ratings)
-                }
-            }
+            // MDBList ratings are handled by batch row prefetch
+            // (see HomeViewModelMdbListBatchPrefetch.kt).
 
             if (tmdbEnrichment == null && externalMeta == null) {
                 addEnrichedPreview(item.id, item)
@@ -930,7 +883,7 @@ private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: 
     }
 }
 
-private fun HomeViewModel.updateCatalogItemMdbListRatings(
+internal fun HomeViewModel.updateCatalogItemMdbListRatings(
     itemId: String,
     ratings: com.nuvio.tv.domain.model.MDBListRatings
 ) {
@@ -944,9 +897,14 @@ private fun HomeViewModel.updateCatalogItemMdbListRatings(
 
     updateIndexedCatalogItem(itemId, ::mergeItem)
     applyEnrichmentToDisplayedRows(itemId, ::mergeItem)
-    findCatalogItemById(itemId)?.let { enriched ->
-        _lastEnrichedPreview.value = enriched
-        addEnrichedPreview(itemId, enriched)
+
+    val existing = _enrichedPreviews.value[itemId]
+    if (existing != null) {
+        val enriched = findCatalogItemById(itemId)
+        if (enriched != null && enriched != existing) {
+            _lastEnrichedPreview.value = enriched
+            addEnrichedPreview(itemId, enriched)
+        }
     }
 }
 

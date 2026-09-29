@@ -46,6 +46,8 @@ import com.nuvio.tv.core.poster.withCustomPosterUrls
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -164,6 +166,11 @@ class FolderDetailViewModel @Inject constructor(
     private val prefetchedTmdbIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val prefetchedExternalMetaIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
+    // MDBList batch prefetch for folder detail (follow-layout modern hero)
+    private val mdbBatchNegativeIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    private var mdbBatchJob: Job? = null
+    @Volatile private var currentMdbListSettings: com.nuvio.tv.domain.model.MDBListSettings? = null
+
     private val _rowsFocusState = MutableStateFlow(com.nuvio.tv.ui.screens.home.HomeScreenFocusState())
     val rowsFocusState: StateFlow<com.nuvio.tv.ui.screens.home.HomeScreenFocusState> = _rowsFocusState.asStateFlow()
 
@@ -176,8 +183,10 @@ class FolderDetailViewModel @Inject constructor(
     init {
         posterOptions.bind(viewModelScope)
         loadFolder()
-        // Observe watched status immediately so badges are ready when catalogs load.
         observeWatchedStatusCombined()
+        viewModelScope.launch {
+            mdbListSettingsDataStore.settings.distinctUntilChanged().collect { currentMdbListSettings = it }
+        }
     }
 
     private fun observeWatchedStatusCombined() {
@@ -568,7 +577,9 @@ class FolderDetailViewModel @Inject constructor(
                         showFullReleaseDate = s.showFullReleaseDate,
                         movieWatchedStatus = s.movieWatchedStatus,
                         heroEnrichmentEnabled = computedHeroEnrichmentEnabled,
-                        classicFocusGradientEnabled = s.classicFocusGradientEnabled
+                        classicFocusGradientEnabled = s.classicFocusGradientEnabled,
+                        mdbListShowOnHero = currentMdbListSettings?.showOnHero ?: false,
+                        mdbListRatingOrder = currentMdbListSettings?.enabledRatingOrder() ?: com.nuvio.tv.domain.model.MDBListSettings.DEFAULT_RATING_ORDER
                     )
                     s.copy(followLayoutHomeState = homeState.copy(modernHomePresentation = modernPresentation))
                 }
@@ -601,10 +612,73 @@ class FolderDetailViewModel @Inject constructor(
                     showFullReleaseDate = s.showFullReleaseDate,
                     movieWatchedStatus = s.movieWatchedStatus,
                     heroEnrichmentEnabled = false,
-                    classicFocusGradientEnabled = s.classicFocusGradientEnabled
+                    classicFocusGradientEnabled = s.classicFocusGradientEnabled,
+                    mdbListShowOnHero = currentMdbListSettings?.showOnHero ?: false,
+                    mdbListRatingOrder = currentMdbListSettings?.enabledRatingOrder() ?: com.nuvio.tv.domain.model.MDBListSettings.DEFAULT_RATING_ORDER
                 )
                 s.copy(followLayoutHomeState = homeState)
             }
+        }
+        scheduleMdbBatchPrefetch()
+    }
+
+    private fun scheduleMdbBatchPrefetch() {
+        val state = _uiState.value
+        if (state.viewMode != FolderViewMode.FOLLOW_LAYOUT || state.homeLayout != HomeLayout.MODERN) return
+
+        mdbBatchJob?.cancel()
+        mdbBatchJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            kotlinx.coroutines.delay(300)
+            val settings = mdbListSettingsDataStore.settings.first()
+            if (!mdbListRepository.isAvailable(settings) || !settings.showOnHero) return@launch
+            val items = _uiState.value.tabs
+                .flatMap { it.catalogRow?.items.orEmpty() }
+                .filter { it.mdbListRatings == null && it.id !in mdbBatchNegativeIds && !it.id.startsWith("__placeholder") }
+            if (items.isEmpty()) return@launch
+            val ratingOrder = settings.enabledRatingOrder()
+            kotlinx.coroutines.coroutineScope {
+                items.map { item ->
+                    async(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            val meta = com.nuvio.tv.domain.model.Meta(
+                                id = item.id, type = item.type, name = item.name,
+                                poster = item.poster, posterShape = item.posterShape,
+                                background = item.background, logo = item.logo,
+                                description = item.description, releaseInfo = item.releaseInfo,
+                                imdbRating = item.imdbRating, genres = item.genres,
+                                runtime = item.runtime, director = item.director,
+                                cast = emptyList(), videos = emptyList(),
+                                country = item.country, awards = null,
+                                language = item.language, links = item.links
+                            )
+                            val result = mdbListRepository.getRatingsForMeta(
+                                meta = meta, fallbackItemId = item.id, fallbackItemType = item.apiType
+                            )
+                            if (result != null) {
+                                updateItemInTabs(item.id) { current ->
+                                    current.copy(
+                                        mdbListRatings = result.ratings,
+                                        mdbListRatingOrder = ratingOrder,
+                                        imdbRating = result.ratings.imdb?.toFloat() ?: current.imdbRating
+                                    )
+                                }
+                                val existing = _enrichedPreviews.value[item.id]
+                                if (existing != null) {
+                                    val enriched = _uiState.value.tabs
+                                        .firstNotNullOfOrNull { tab -> tab.catalogRow?.items?.firstOrNull { it.id == item.id } }
+                                    if (enriched != null) {
+                                        _enrichedPreviews.update { it + (item.id to enriched) }
+                                    }
+                                }
+                            } else {
+                                mdbBatchNegativeIds.add(item.id)
+                            }
+                        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                        catch (_: Exception) { }
+                    }
+                }.awaitAll()
+            }
+            rebuildFollowLayoutState()
         }
     }
 

@@ -55,6 +55,8 @@ private fun RatingBadge(
     ratings: MDBListRatings,
     iconSize: Dp = NuvioTheme.spacing.xl
 ) {
+    val squareIconSize = iconSize * 0.75f
+
     val context = LocalContext.current
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -71,17 +73,18 @@ private fun RatingBadge(
                         }
                     ),
                     contentDescription = null,
-                    modifier = Modifier.size(iconSize)
+                    modifier = Modifier.size(squareIconSize)
                 )
             }
             "metacritic" -> {
                 Image(
                     painter = painterResource(id = R.drawable.mdblist_metacritic),
                     contentDescription = null,
-                    modifier = Modifier.size(iconSize)
+                    modifier = Modifier.size(squareIconSize)
                 )
             }
             else -> {
+                val isImdb = provider == "imdb"
                 val rawRes = when (provider) {
                     "trakt" -> R.raw.mdblist_trakt
                     "imdb" -> R.raw.imdb_logo_2016
@@ -103,7 +106,7 @@ private fun RatingBadge(
                 AsyncImage(
                     model = model,
                     contentDescription = null,
-                    modifier = Modifier.size(iconSize),
+                    modifier = Modifier.size(if (isImdb) iconSize else squareIconSize),
                     contentScale = ContentScale.Fit
                 )
             }

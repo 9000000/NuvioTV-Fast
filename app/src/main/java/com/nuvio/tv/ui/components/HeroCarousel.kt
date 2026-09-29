@@ -354,8 +354,6 @@ private fun HeroCarouselSlide(
                             if (ratingText != null) {
                                 val mdbRatings = item.mdbListRatings
                                 if (mdbListShowOnHero && mdbRatings != null && !mdbRatings.isEmpty()) {
-                                    if (trailingMetadata.isNotEmpty()) HeroCarouselMetaDivider()
-                                    MDBListRatingsRow(ratings = mdbRatings, maxItems = 3, order = mdbListRatingOrder, iconSize = 30.dp)
                                 } else {
                                     if (trailingMetadata.isNotEmpty()) HeroCarouselMetaDivider()
                                     Row(
@@ -363,7 +361,7 @@ private fun HeroCarouselSlide(
                                         horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)
                                     ) {
                                         ImdbRatingSourceLabel(
-                                            logoModifier = Modifier.size(30.dp),
+                                            logoModifier = Modifier.size(NuvioTheme.spacing.xl),
                                             textStyle = MaterialTheme.typography.labelMedium,
                                             textColor = NuvioTheme.colors.TextSecondary
                                         )
@@ -375,13 +373,18 @@ private fun HeroCarouselSlide(
                                         )
                                     }
                                 }
-                            } else if (mdbListShowOnHero && item.mdbListRatings != null && !item.mdbListRatings.isEmpty()) {
-                                if (trailingMetadata.isNotEmpty()) HeroCarouselMetaDivider()
-                                MDBListRatingsRow(ratings = item.mdbListRatings, maxItems = 3, order = mdbListRatingOrder, iconSize = 30.dp)
                             }
                         }
                     }
                 }
+            }
+
+            if (mdbListShowOnHero && item.mdbListRatings != null && !item.mdbListRatings.isEmpty()) {
+                MDBListRatingsRow(
+                    ratings = item.mdbListRatings,
+                    order = mdbListRatingOrder,
+                    maxItems = 6
+                )
             }
 
             item.description?.takeIf { it.isNotBlank() }?.let { description ->

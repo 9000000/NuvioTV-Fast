@@ -554,6 +554,7 @@ internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addon
                     }
                     _loadingCatalogs.update { it - key }
                     scheduleUpdateCatalogRows()
+                    onCatalogRowItemsChanged(key)
                 }
                 is NetworkResult.Error -> {
                     updateCatalogRow(key) { it.copy(isLoading = false) }
@@ -1159,6 +1160,7 @@ internal fun HomeViewModel.mergeRefreshedCatalogRow(
             HomeViewModel.TAG,
             "Home catalog refresh: +${added.size} item(s) catalogId=${fresh.catalogId}"
         )
+        onCatalogRowItemsChanged(key)
         return true
     }
 
