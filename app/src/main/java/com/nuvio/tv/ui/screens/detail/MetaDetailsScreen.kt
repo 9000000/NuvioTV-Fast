@@ -1318,7 +1318,9 @@ private fun MetaDetailsContent(
         }
     }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
-    val heroPlayFocusRequester = remember { FocusRequester() }
+    val heroPlayButtonFocusRequester = remember { FocusRequester() }
+    var synopsisTruncated by remember(meta.id, meta.description) { mutableStateOf(false) }
+    val heroPlayFocusRequester = if (synopsisTruncated) null else heroPlayButtonFocusRequester
     val randomEpisodeFocusRequester = remember { FocusRequester() }
     val castTabFocusRequester = remember { FocusRequester() }
     val moreLikeTabFocusRequester = remember { FocusRequester() }
@@ -2110,7 +2112,7 @@ private fun MetaDetailsContent(
         ) {
             repeat(3) {
                 if (initialHeroFocusRequested) return@repeat
-                heroPlayFocusRequester.requestFocusAfterFrames()
+                heroPlayButtonFocusRequester.requestFocusAfterFrames()
                 delay(80)
             }
         }
@@ -2367,7 +2369,7 @@ private fun MetaDetailsContent(
                         fun requesterForKey(key: Any?): FocusRequester? {
                             val name = key as? String ?: return null
                             return when {
-                                name == "hero" -> heroPlayFocusRequester
+                                name == "hero" -> heroPlayButtonFocusRequester
                                 name == "season_tabs" -> selectedSeasonFocusRequester
                                 name.startsWith("episodes_") ->
                                     seasonDownFocusRequester ?: selectedSeasonFocusRequester
@@ -2464,7 +2466,7 @@ private fun MetaDetailsContent(
                         randomEpisodeFocusRequester = randomEpisodeFocusRequester,
                         hideLogoDuringTrailer = hideLogoDuringTrailer,
                         isTrailerPlaying = isTrailerPlaying,
-                        playButtonFocusRequester = heroPlayFocusRequester,
+                        playButtonFocusRequester = heroPlayButtonFocusRequester,
                         onHeroActionFocused = {
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
                                 coroutineScope.launch {
@@ -2483,7 +2485,8 @@ private fun MetaDetailsContent(
                             initialHeroFocusRequested = true
                             clearPendingRestore()
                         },
-                        onShowFullDescription = { showSynopsisOverlay = true }
+                        onShowFullDescription = { showSynopsisOverlay = true },
+                        onTruncationChanged = { synopsisTruncated = it }
                     )
                 }
             }
@@ -2544,7 +2547,7 @@ private fun MetaDetailsContent(
                             onOpenEpisodeComments = episodeCommentsClick,
                             showOpenEpisodeComments = shouldShowCommentsSection,
                             onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
-                            upFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else heroPlayFocusRequester,
+                            upFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (heroPlayFocusRequester ?: heroPlayButtonFocusRequester),
                             downFocusRequester = episodesDownFocusRequester,
                             episodeFocusRequesters = seasonEpisodeFocusRequesters,
                             restoreEpisodeId = visibleEpisodeRestoreId,

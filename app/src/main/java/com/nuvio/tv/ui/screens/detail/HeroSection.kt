@@ -117,7 +117,8 @@ fun HeroContentSection(
     restorePlayFocusToken: Int = 0,
     onHeroActionFocused: () -> Unit = {},
     onPlayFocusRestored: () -> Unit = {},
-    onShowFullDescription: () -> Unit = {}
+    onShowFullDescription: () -> Unit = {},
+    onTruncationChanged: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -340,6 +341,7 @@ fun HeroContentSection(
                             onShowFullDescription = onShowFullDescription,
                             upFocusRequester = playButtonFocusRequester,
                             onFocused = onHeroActionFocused,
+                            onTruncationChanged = onTruncationChanged,
                             modifier = Modifier
                                 .fillMaxWidth(0.6f)
                                 .padding(bottom = NuvioTheme.spacing.md)
