@@ -585,6 +585,7 @@ class FolderDetailViewModel @Inject constructor(
                     )
                     s.copy(followLayoutHomeState = homeState.copy(modernHomePresentation = modernPresentation))
                 }
+                scheduleMdbBatchPrefetch()
             }
         } else {
             _uiState.update { s ->
@@ -620,8 +621,8 @@ class FolderDetailViewModel @Inject constructor(
                 )
                 s.copy(followLayoutHomeState = homeState)
             }
+            scheduleMdbBatchPrefetch()
         }
-        scheduleMdbBatchPrefetch()
     }
 
     fun onFocusedRowChanged(rowKey: String?) {

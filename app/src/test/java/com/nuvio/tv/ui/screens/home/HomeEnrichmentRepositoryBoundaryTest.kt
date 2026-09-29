@@ -193,6 +193,7 @@ class HomeEnrichmentRepositoryBoundaryTest {
             tmdbService = mockk(relaxed = true),
             tmdbMetadataService = mockk(relaxed = true),
             mdbListRepository = mockk(relaxed = true),
+            imdbEpisodeRatingsRepository = mockk(relaxed = true),
             trailerService = mockk(relaxed = true),
             watchedSeriesStateHolder = mockk(relaxed = true),
             cwEnrichmentCache = cwEnrichmentCache,

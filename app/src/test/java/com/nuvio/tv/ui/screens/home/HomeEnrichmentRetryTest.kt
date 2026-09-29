@@ -458,6 +458,7 @@ class HomeEnrichmentRetryTest {
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
             mdbListRepository = mockk(relaxed = true),
+            imdbEpisodeRatingsRepository = mockk(relaxed = true),
             trailerService = mockk(relaxed = true),
             watchedSeriesStateHolder = mockk(relaxed = true),
             cwEnrichmentCache = cwEnrichmentCache,
