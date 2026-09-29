@@ -153,9 +153,8 @@ fun CollectionEditorScreen(
         item(key = "header") {
             Text(
                 text = if (uiState.isNew) stringResource(R.string.collections_new) else stringResource(R.string.collections_editor_edit_collection),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.copy(textDirection = TextDirection.Content),
                 color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
             )
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.xl))
         }
@@ -229,9 +228,8 @@ fun CollectionEditorScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = stringResource(R.string.collections_editor_pin_above),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content),
                             color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
                         )
                         Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                         Text(
@@ -283,9 +281,8 @@ fun CollectionEditorScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = stringResource(R.string.collections_editor_focus_glow),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content),
                             color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
                         )
                         Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                         Text(
@@ -383,9 +380,8 @@ fun CollectionEditorScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = stringResource(R.string.collections_editor_show_all_tab),
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content),
                                 color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
                             )
                             Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                             Text(
@@ -419,9 +415,8 @@ fun CollectionEditorScreen(
             ) {
                 Text(
                     text = stringResource(R.string.collections_editor_folders),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content),
                     color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
                 )
                 Text(
                     text = stringResource(
