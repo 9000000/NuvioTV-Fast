@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Power
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,7 +98,7 @@ private fun ContentDiscoveryHub(
                 title = stringResource(R.string.addon_title),
                 subtitle = stringResource(R.string.settings_content_discovery_addons_subtitle),
                 onClick = onNavigateToAddons,
-                leadingIcon = Icons.Default.GridView,
+                leadingIcon = Icons.Default.Extension,
                 modifier = if (initialFocusRequester != null) {
                     Modifier.focusRequester(initialFocusRequester)
                 } else {
@@ -117,7 +117,7 @@ private fun ContentDiscoveryHub(
                     title = stringResource(R.string.plugin_title),
                     subtitle = stringResource(R.string.settings_content_discovery_plugins_subtitle),
                     onClick = onNavigateToPlugins,
-                    leadingIcon = Icons.Default.Build
+                    leadingIcon = Icons.Default.Power
                 )
             }
         }
