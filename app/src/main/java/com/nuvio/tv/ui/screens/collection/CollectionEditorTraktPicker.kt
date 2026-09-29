@@ -62,9 +62,8 @@ fun TraktSourcePickerContent(
                 text = stringResource(
                     if (isEditing) R.string.collections_editor_edit_trakt_source else R.string.collections_editor_trakt_sources
                 ),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.copy(textDirection = TextDirection.Content),
                 color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
             )
             NuvioButton(onClick = onBack) { Text(stringResource(R.string.collections_editor_back)) }
         }
