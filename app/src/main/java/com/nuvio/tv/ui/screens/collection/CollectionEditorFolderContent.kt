@@ -214,9 +214,8 @@ fun FolderEditorContent(
         ) {
             Text(
                 text = stringResource(R.string.collections_editor_edit_folder),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.copy(textDirection = TextDirection.Content),
                 color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
             )
             Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
                 NuvioButton(onClick = { viewModel.cancelFolderEdit() }) {
@@ -574,9 +573,8 @@ fun FolderEditorContent(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = stringResource(R.string.collections_editor_hide_title),
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content),
                                 color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
                             )
                             Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                             Text(
