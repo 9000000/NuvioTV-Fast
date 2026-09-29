@@ -147,20 +147,14 @@
 
     <!-- SettingsScreen categories -->
     <string name="settings_account">Konto</string>
-    <string name="settings_account_subtitle">Status konta i synchronizacji</string>
     <string name="settings_profiles">Profile</string>
-    <string name="settings_profiles_subtitle">Zarządzaj profilami użytkowników</string>
     <string name="settings_layout">Układ</string>
-    <string name="settings_layout_subtitle">Struktura strony głównej i style kart</string>
     <string name="settings_plugins">Wtyczki</string>
     <string name="settings_plugins_subtitle">Repozytoria i dostawcy</string>
     <string name="settings_integration">Integracje</string>
     <string name="settings_playback">Odtwarzanie</string>
-    <string name="settings_playback_subtitle">Odtwarzacz, napisy i automatyczne odtwarzanie</string>
     <string name="settings_trakt_subtitle">Otwórz ekran połączenia z Trakt</string>
-    <string name="settings_about_subtitle">Wersja i polityki</string>
     <string name="settings_debug">Debug</string>
-    <string name="settings_debug_subtitle">Narzędzia deweloperskie i flagi funkcji</string>
     <string name="settings_plugins_section_subtitle">Zarządzaj repozytoriami, dostawcami i stanami wtyczek</string>
     <string name="settings_account_section_subtitle">Status konta i synchronizacji</string>
     <string name="account_stat_addons">dodatki</string>
@@ -184,8 +178,6 @@
     <string name="action_none">Brak</string>
 
     <!-- PlaybackSettingsSections -->
-    <string name="playback_section_general">Ogólne</string>
-    <string name="playback_section_general_desc">Podstawowe zachowanie odtwarzacza.</string>
     <string name="playback_loading_overlay">Ekan ładowania</string>
     <string name="playback_loading_overlay_sub">Pokaż ekran ładowania do pojawienia się pierwszej klatki.</string>
     <string name="playback_show_loading_status">Pokaż status ładowania</string>
@@ -199,18 +191,11 @@
     <string name="playback_parental_guide">Ostrzeżenie o charakterze treści</string>
     <string name="playback_parental_guide_sub">Pokaż ostrzeżenie o nagości, przemocy i wulgarności na początku odtwarzania.</string>
     <string name="playback_auto_frame_rate">Auto częstotliwość odświeżania</string>
-    <string name="playback_section_player">Odtwarzacz i wybór źródła</string>
-    <string name="playback_section_player_desc">Preferencje odtwarzacza, auto-play i filtrowanie źródeł.</string>
-    <string name="playback_player">Odtwarzacz</string>
     <string name="playback_player_internal">Wbudowany</string>
     <string name="playback_player_external">Zewnętrzny</string>
     <string name="playback_player_ask">Pytaj za każdym razem</string>
-    <string name="playback_section_audio">Audio i wideo</string>
-    <string name="playback_section_audio_desc">Kontrolki audio i kompatybilność wideo.</string>
     <string name="playback_section_subtitles">Napisy</string>
     <string name="playback_section_subtitles_desc">Język, styl i tryb renderowania.</string>
-    <string name="playback_afr_open">Otwarte</string>
-    <string name="playback_afr_closed">Zamknięte</string>
     <string name="playback_afr_off">Wyłączone</string>
     <string name="playback_afr_off_sub">Nie zmieniaj częstotliwości odświeżania ekranu.</string>
     <string name="playback_afr_on_start">Przy starcie</string>
@@ -490,7 +475,6 @@
     <string name="custom_poster_qr_instruction">Zeskanuj kod QR telefonem, aby wkleić wzorzec URL plakatów</string>
 
     <!-- Custom Poster URL - Screen Toggles -->
-    <string name="layout_custom_poster_apply_to">Stosuj niestandardowe plakaty w:</string>
     <string name="layout_custom_poster_screen_home">Strona główna</string>
     <string name="layout_custom_poster_screen_continue_watching">Kontynuuj oglądanie</string>
     <string name="layout_custom_poster_screen_collections">Kolekcje</string>
@@ -1987,7 +1971,6 @@
     <string name="qr_login_device_auth_failed">Nie udało się uwierzytelnić urządzenia</string>
     <string name="qr_login_preparing">Przygotowywanie logowania QR...</string>
     <string name="settings_experience">Doświadczenie</string>
-    <string name="settings_experience_subtitle">Podstawowy lub Zaawansowany</string>
     <string name="sponsors_channel_unavailable">Kanał sponsora niedostępny.</string>
     <string name="sponsors_detail_copy">Sponsorzy pomagają rozwijać Nuvio wspierając różne obszary rozwoju.</string>
     <string name="sponsors_empty">Nie znaleziono jeszcze sponsorów.</string>
@@ -2340,10 +2323,6 @@
     <string name="network_fast_error_script_path_missing">fast.com: nie znaleziono ścieżki skryptu</string>
     <string name="network_fast_error_token_missing">fast.com: nie znaleziono tokenu w pakiecie</string>
 
-    <string name="torrent_error_add_failed">Nie udało się dodać torrenta</string>
-    <string name="torrent_error_binary_missing">Nie znaleziono pliku TorrServer w %1$s</string>
-    <string name="torrent_error_process_died">Proces TorrServer zakończył się przy starcie (kod wyjścia %1$d)</string>
-    <string name="torrent_error_start_timeout">TorrServer nie uruchomił się w ciągu %1$ds</string>
 
     <string name="player_torrent_starting_engine">Uruchamianie silnika P2P…</string>
     <string name="player_torrent_rebuffer_status">%1$s zbuforowane</string>
@@ -3072,7 +3051,6 @@
     <string name="mdblist_mal_title">MyAnimeList</string>
     <string name="mdblist_mal_subtitle">Pokaż ocenę MyAnimeList</string>
     <string name="settings_tracking_title">Śledzenie</string>
-    <string name="settings_tracking_subtitle">Zarządzaj połączeniami Trakt i Simkl</string>
     <string name="settings_tracking_description">Połącz dostawców śledzenia i wybierz, który zasila Twoją Bibliotekę i Kontynuuj oglądanie.</string>
     <string name="simkl_account_title">Konto Simkl</string>
     <string name="simkl_awaiting_instruction">Otwórz stronę weryfikacji Simkl i wpisz ten kod.</string>
