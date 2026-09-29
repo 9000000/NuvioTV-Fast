@@ -85,11 +85,11 @@ internal class MdbListRatingsLoader(
                 val media = requireNotNull(client.getMedia(first.mediaProvider, first.mediaType, first.mediaId, first.credential))
                 mapOf(first.mediaId to media.toRatings())
             } else {
-                val idList = batch.map { it.first.mediaId }
-                requireNotNull(client.getMediaBatch(first.mediaProvider, first.mediaType, idList, first.credential))
-                    .mapIndexedNotNull { index, media ->
-                        val requestId = idList.getOrNull(index) ?: return@mapIndexedNotNull null
-                        requestId to media.toRatings()
+                val provider = first.mediaProvider
+                requireNotNull(client.getMediaBatch(provider, first.mediaType, batch.map { it.first.mediaId }, first.credential))
+                    .mapNotNull { media ->
+                        val responseId = resolveResponseId(media, provider) ?: return@mapNotNull null
+                        responseId to media.toRatings()
                     }.toMap()
             }
             client.checkCredential(first.credential)
@@ -111,6 +111,14 @@ internal class MdbListRatingsLoader(
                 }
             }
         }
+    }
+
+    private fun resolveResponseId(
+        media: com.nuvio.tv.data.remote.dto.mdblist.MDBListMediaResponseDto,
+        provider: String
+    ): String? {
+        if (provider == "imdb") return media.resolvedImdbId()
+        return media.ids?.get(provider)?.toString()?.takeIf { it.isNotBlank() }
     }
 
     private companion object {
