@@ -450,20 +450,17 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
 
                 val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
                 if (stats != null) {
-                    // Early buffer handoff: when preload is getting close to completion
-                    // (>= 85% preload progress, >= 12MB buffered data, or preload is ready),
+                    // Early buffer handoff: when preload reaches 90% progress (or is ready),
                     // notify caller so ExoPlayer starts preparing and downloading buffer ahead.
-                    val isNearReady = (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 85 / 100) ||
-                        stats.preloadedBytes >= 12_000_000L ||
-                        stats.loadedSize >= 12_000_000L ||
-                        stats.preloadProgress >= 0.85f ||
+                    val isNearReady = (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 90 / 100) ||
+                        stats.preloadProgress >= 0.90f ||
                         stats.isPreloadReady
 
                     if (isNearReady && !nearCompletionTriggered) {
                         nearCompletionTriggered = true
                         Log.d(
                             TAG,
-                            "Remote TorrServer preload near completion (${(stats.preloadProgress * 100).toInt()}%); " +
+                            "Remote TorrServer preload reached 90% (${(stats.preloadProgress * 100).toInt()}%); " +
                                 "requesting player to buffer ahead early!"
                         )
                         onNearCompletion?.invoke(playbackTargetUrl)
