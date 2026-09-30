@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import java.io.File
 
 object LiveTvStorage {
     private const val TAG = "LiveTvStorage"
@@ -19,7 +17,6 @@ object LiveTvStorage {
     private const val KEY_XTREAM_SETTINGS = "xtream_settings"
     private const val KEY_LAST_REFRESH_TIME = "last_channels_refresh_time"
     private const val KEY_CACHE_CONFIG_SIGNATURE = "cache_config_signature"
-    private const val CHANNELS_CACHE_FILE = "livetv_channels_cache.json"
 
     const val CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000L // 24 hours
 
@@ -27,9 +24,6 @@ object LiveTvStorage {
     private var appContext: Context? = null
     private val gson = Gson()
     private val isReady: Boolean get() = ::prefs.isInitialized
-
-    @Volatile
-    private var memoryCachedChannels: List<LiveTvChannel>? = null
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -107,57 +101,15 @@ object LiveTvStorage {
     }
 
     fun saveChannelsCache(channels: List<LiveTvChannel>, signature: String) {
-        memoryCachedChannels = channels
-        val dir = appContext?.filesDir ?: return
-        try {
-            val cacheFile = File(dir, CHANNELS_CACHE_FILE)
-            val tmpFile = File(dir, "$CHANNELS_CACHE_FILE.tmp")
-            tmpFile.bufferedWriter().use { writer ->
-                val listType = object : TypeToken<List<LiveTvChannel>>() {}.type
-                gson.toJson(channels, listType, writer)
-            }
-            if (tmpFile.exists()) {
-                if (cacheFile.exists()) cacheFile.delete()
-                tmpFile.renameTo(cacheFile)
-            }
-            saveLastRefreshTime(System.currentTimeMillis())
-            saveCacheConfigSignature(signature)
-            Log.d(TAG, "Saved ${channels.size} channels to cache successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save channels cache", e)
-        }
+        LiveTvCacheManager.saveChannels(appContext, channels, signature)
     }
 
     fun loadChannelsCache(): List<LiveTvChannel> {
-        val inMemory = memoryCachedChannels
-        if (inMemory != null && inMemory.isNotEmpty()) {
-            return inMemory
-        }
-        val dir = appContext?.filesDir ?: return emptyList()
-        val cacheFile = File(dir, CHANNELS_CACHE_FILE)
-        if (!cacheFile.exists() || cacheFile.length() == 0L) return emptyList()
-        return runCatching {
-            cacheFile.bufferedReader().use { reader ->
-                val listType = object : TypeToken<List<LiveTvChannel>>() {}.type
-                val channels: List<LiveTvChannel>? = gson.fromJson(reader, listType)
-                (channels ?: emptyList()).also {
-                    memoryCachedChannels = it
-                }
-            }
-        }.onFailure { e ->
-            Log.e(TAG, "Failed to load channels cache", e)
-        }.getOrDefault(emptyList())
+        return LiveTvCacheManager.loadChannels(appContext)
     }
 
     fun clearChannelsCache() {
-        memoryCachedChannels = null
-        val dir = appContext?.filesDir
-        if (dir != null) {
-            val cacheFile = File(dir, CHANNELS_CACHE_FILE)
-            if (cacheFile.exists()) cacheFile.delete()
-            val tmpFile = File(dir, "$CHANNELS_CACHE_FILE.tmp")
-            if (tmpFile.exists()) tmpFile.delete()
-        }
+        LiveTvCacheManager.clearCache(appContext)
         if (isReady) {
             prefs.edit()
                 .remove(KEY_LAST_REFRESH_TIME)

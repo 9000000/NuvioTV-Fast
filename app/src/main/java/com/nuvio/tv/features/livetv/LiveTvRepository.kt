@@ -8,51 +8,47 @@ import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.core.server.LiveTvConfigServer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import org.json.JSONObject
 import com.nuvio.tv.core.network.DynamicHostFallback
+import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.ui.screens.player.ClearKeyUtil
 import com.nuvio.tv.ui.screens.player.IptvHeaderProvider
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 /**
- * Utility to fetch text from a URL.
- * In a real app, this would use OkHttp or similar.
+ * Lightweight OkHttpClient for Live TV playlist fetching.
+ * Uses permissive SSL to support self-signed IPTV servers.
+ * Configured with IPv4FirstDns and reasonable timeouts for large M3U files.
+ */
+internal val liveTvHttpClient: OkHttpClient by lazy {
+    OkHttpClient.Builder()
+        .dns(IPv4FirstDns())
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
+}
+
+/**
+ * Backward-compatible text fetcher for portal providers (Xtream/Stalker).
+ * Uses OkHttp instead of raw HttpURLConnection.
  */
 suspend fun httpGetText(url: String): String = httpGetTextWithHeaders(url, emptyMap())
 
 suspend fun httpGetTextWithHeaders(url: String, headers: Map<String, String> = emptyMap()): String = withContext(Dispatchers.IO) {
-    // Follow up to 5 redirects, including cross-protocol HTTP → HTTPS
-    var currentUrl = url
-    var redirectCount = 0
-    while (true) {
-        val connection = URL(currentUrl).openConnection() as HttpURLConnection
-        connection.instanceFollowRedirects = false // handle manually for cross-protocol
-        headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
-        try {
-            val code = connection.responseCode
-            if (code in 300..399) {
-                val location = connection.getHeaderField("Location")
-                connection.disconnect()
-                if (location.isNullOrBlank() || redirectCount >= 5) {
-                    error("Too many redirects or missing Location for $url")
-                }
-                // Resolve relative redirects
-                currentUrl = if (location.startsWith("http")) location
-                             else URL(URL(currentUrl), location).toString()
-                redirectCount++
-                continue
-            }
-            return@withContext connection.inputStream.bufferedReader().use { it.readText() }
-        } finally {
-            connection.disconnect()
-        }
+    val requestBuilder = Request.Builder().url(url)
+    headers.forEach { (k, v) -> requestBuilder.header(k, v) }
+    val response = liveTvHttpClient.newCall(requestBuilder.build()).execute()
+    if (!response.isSuccessful) {
+        response.close()
+        error("HTTP ${response.code} ${response.message} for $url")
     }
-    @Suppress("UNREACHABLE_CODE")
-    error("unreachable")
+    response.body.string()
 }
 
 object LiveTvRepository {
@@ -619,53 +615,51 @@ object LiveTvRepository {
             val loadedChannels = mutableListOf<LiveTvChannel>()
             val failedPlaylistNames = mutableListOf<String>()
 
-            enabledPlaylists.forEach { playlist ->
-                val result = runCatching {
-                    val payload = when (playlist.type) {
-                        LiveTvPlaylistType.Url -> withContext(Dispatchers.Default) {
-                            // Register working host before fetching so fallback is available immediately
-                            DynamicHostFallback.registerWorkingHost(playlist.source)
-                            httpGetText(playlist.source)
-                        }
-                        LiveTvPlaylistType.LocalFile -> playlist.source
-                    }
-                    parseM3uPlaylist(payload, playlist)
+            // Phase 1+2: Load all sources (M3U playlists, Xtream, Stalker) concurrently in parallel
+            coroutineScope {
+                val tasks = mutableListOf<Deferred<*>>()
+
+                if (enabledPlaylists.isNotEmpty()) {
+                    tasks.add(async {
+                        val (m3uChannels, m3uFailed) = M3uPlaylistService.loadPlaylistsParallel(
+                            liveTvHttpClient, enabledPlaylists
+                        )
+                        synchronized(loadedChannels) { loadedChannels += m3uChannels }
+                        synchronized(failedPlaylistNames) { failedPlaylistNames += m3uFailed }
+                    })
                 }
 
-                result.fold(
-                    onSuccess = { channels -> loadedChannels += channels },
-                    onFailure = { error ->
-                        if (error is CancellationException) throw error
-                        failedPlaylistNames += playlist.name
-                        Log.w(TAG, "Failed to load live TV playlist ${playlist.name}", error)
-                    },
-                )
-            }
+                if (currentState.xtreamSettings.isConfigured && currentState.xtreamSettings.isEnabled) {
+                    tasks.add(async {
+                        runCatching {
+                            fetchXtreamChannels(currentState.xtreamSettings)
+                        }.fold(
+                            onSuccess = { channels -> synchronized(loadedChannels) { loadedChannels += channels } },
+                            onFailure = { error ->
+                                if (error is CancellationException) throw error
+                                synchronized(failedPlaylistNames) { failedPlaylistNames += "Xtream Codes" }
+                                Log.w(TAG, "Failed to load Xtream channels", error)
+                            }
+                        )
+                    })
+                }
 
-            if (currentState.xtreamSettings.isConfigured && currentState.xtreamSettings.isEnabled) {
-                runCatching {
-                    fetchXtreamChannels(currentState.xtreamSettings)
-                }.fold(
-                    onSuccess = { channels -> loadedChannels += channels },
-                    onFailure = { error ->
-                        if (error is CancellationException) throw error
-                        failedPlaylistNames += "Xtream Codes"
-                        Log.w(TAG, "Failed to load Xtream channels", error)
-                    }
-                )
-            }
+                if (currentState.stalkerSettings.isConfigured && currentState.stalkerSettings.isEnabled) {
+                    tasks.add(async {
+                        runCatching {
+                            fetchStalkerChannels(currentState.stalkerSettings)
+                        }.fold(
+                            onSuccess = { channels -> synchronized(loadedChannels) { loadedChannels += channels } },
+                            onFailure = { error ->
+                                if (error is CancellationException) throw error
+                                synchronized(failedPlaylistNames) { failedPlaylistNames += "Stalker Portal" }
+                                Log.w(TAG, "Failed to load Stalker channels", error)
+                            }
+                        )
+                    })
+                }
 
-            if (currentState.stalkerSettings.isConfigured && currentState.stalkerSettings.isEnabled) {
-                runCatching {
-                    fetchStalkerChannels(currentState.stalkerSettings)
-                }.fold(
-                    onSuccess = { channels -> loadedChannels += channels },
-                    onFailure = { error ->
-                        if (error is CancellationException) throw error
-                        failedPlaylistNames += "Stalker Portal"
-                        Log.w(TAG, "Failed to load Stalker channels", error)
-                    }
-                )
+                tasks.awaitAll()
             }
 
             val channels = loadedChannels.distinctBy { it.id.ifBlank { it.streamUrl } }
@@ -774,410 +768,6 @@ object LiveTvRepository {
     }
 }
 
-private data class PendingM3uEntry(
-    var info: M3uInfo? = null,
-    val headers: MutableMap<String, String> = mutableMapOf(),
-    var licenseType: String? = null,
-    var licenseKey: String? = null,
-    var manifestType: String? = null,
-    var group: String? = null,
-)
-
-internal fun parseM3uPlaylist(
-    payload: String,
-    playlist: LiveTvPlaylist? = null,
-): List<LiveTvChannel> {
-    val channels = mutableListOf<LiveTvChannel>()
-    val playlistDefaultHeaders = mutableMapOf<String, String>()
-    var firstChannelAdded = false
-    var pending = PendingM3uEntry()
-
-    payload.lineSequence()
-        .map(String::trim)
-        .filter(String::isNotBlank)
-        .forEach { line ->
-            when {
-                line.startsWith("#EXTM3U", ignoreCase = true) -> {
-                    val ua = readM3uAttribute(line, "http-user-agent") ?: readM3uAttribute(line, "user-agent")
-                    if (!ua.isNullOrBlank()) playlistDefaultHeaders["User-Agent"] = ua
-                    val ref = readM3uAttribute(line, "http-referrer") ?: readM3uAttribute(line, "referrer") ?: readM3uAttribute(line, "referer")
-                    if (!ref.isNullOrBlank()) playlistDefaultHeaders["Referer"] = ref
-                }
-                line.startsWith("#EXTINF", ignoreCase = true) -> {
-                    val info = parseExtInf(line)
-                    pending.info = info
-                    info.licenseType?.let { pending.licenseType = it }
-                    info.licenseKey?.let { pending.licenseKey = it }
-                    info.manifestType?.let { pending.manifestType = it }
-                    info.group?.let { pending.group = it }
-                    pending.headers.putAll(info.headers)
-                }
-                line.startsWith("#EXTGRP:", ignoreCase = true) -> {
-                    val grp = line.substringAfter("#EXTGRP:", "").trim()
-                    if (grp.isNotBlank()) {
-                        pending.group = grp
-                    }
-                }
-                line.startsWith("#KODIPROP:", ignoreCase = true) ||
-                line.startsWith("#EXT-X-KODI:", ignoreCase = true) ||
-                line.startsWith("#EXT-X-KODIPROP:", ignoreCase = true) ||
-                line.startsWith("#EXTKODI:", ignoreCase = true) -> {
-                    val kodiProp = extractKodiProp(line)
-                    if (kodiProp != null) {
-                        val (key, value) = kodiProp
-                        when {
-                            key.equals("inputstream.adaptive.license_type", ignoreCase = true) ||
-                            key.equals("license_type", ignoreCase = true) -> {
-                                pending.licenseType = value
-                            }
-                            key.equals("inputstream.adaptive.license_key", ignoreCase = true) ||
-                            key.equals("license_key", ignoreCase = true) -> {
-                                pending.licenseKey = value
-                            }
-                            key.equals("inputstream.adaptive.manifest_type", ignoreCase = true) ||
-                            key.equals("manifest_type", ignoreCase = true) -> {
-                                pending.manifestType = value
-                            }
-                            key.equals("inputstream.adaptive.stream_headers", ignoreCase = true) ||
-                            key.equals("stream_headers", ignoreCase = true) -> {
-                                value.split('&').forEach { param ->
-                                    val hKey = param.substringBefore('=').trim()
-                                    val hVal = param.substringAfter('=', "").trim()
-                                    if (hKey.isNotBlank() && hVal.isNotBlank()) {
-                                        val normalizedKey = when (hKey.lowercase()) {
-                                            "user-agent" -> "User-Agent"
-                                            "referer" -> "Referer"
-                                            "origin" -> "Origin"
-                                            "authorization" -> "Authorization"
-                                            else -> hKey
-                                        }
-                                        pending.headers[normalizedKey] = hVal
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                line.startsWith("#EXT-X-KEY:", ignoreCase = true) -> {
-                    val keyFormat = readM3uAttribute(line, "KEYFORMAT")?.lowercase().orEmpty()
-                    val uri = readM3uAttribute(line, "URI")
-                    if (!uri.isNullOrBlank()) {
-                        pending.licenseKey = uri
-                        when {
-                            keyFormat.contains("widevine") || keyFormat.contains("edef8ba9") -> {
-                                pending.licenseType = "widevine"
-                            }
-                            keyFormat.contains("clearkey") || keyFormat.contains("1077efec") || keyFormat == "identity" -> {
-                                pending.licenseType = "clearkey"
-                            }
-                            keyFormat.contains("playready") || keyFormat.contains("9a04f079") -> {
-                                pending.licenseType = "playready"
-                            }
-                        }
-                    }
-                }
-                line.startsWith("#EXTHTTP:", ignoreCase = true) -> {
-                    val jsonStr = line.substringAfter("#EXTHTTP:", "").trim()
-                    runCatching {
-                        val json = JSONObject(jsonStr)
-                        val keys = json.keys()
-                        while (keys.hasNext()) {
-                            val k = keys.next()
-                            val v = json.optString(k)
-                            if (v.isNotBlank()) {
-                                val normalizedKey = when (k.lowercase()) {
-                                    "user-agent" -> "User-Agent"
-                                    "referer" -> "Referer"
-                                    "origin" -> "Origin"
-                                    "authorization" -> "Authorization"
-                                    else -> k
-                                }
-                                pending.headers[normalizedKey] = v
-                            }
-                        }
-                    }
-                }
-                line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> {
-                    val opt = line.substringAfter("#EXTVLCOPT:", "").trim()
-                    val key = opt.substringBefore('=').trim()
-                    val value = opt.substringAfter('=', "").trim()
-                    when {
-                        key.equals("http-user-agent", ignoreCase = true) || key.equals("user-agent", ignoreCase = true) -> {
-                            pending.headers["User-Agent"] = value
-                            if (!firstChannelAdded) playlistDefaultHeaders["User-Agent"] = value
-                        }
-                        key.equals("http-referrer", ignoreCase = true) || key.equals("referrer", ignoreCase = true) || key.equals("referer", ignoreCase = true) -> {
-                            pending.headers["Referer"] = value
-                            if (!firstChannelAdded) playlistDefaultHeaders["Referer"] = value
-                        }
-                        key.equals("http-origin", ignoreCase = true) || key.equals("origin", ignoreCase = true) -> {
-                            pending.headers["Origin"] = value
-                            if (!firstChannelAdded) playlistDefaultHeaders["Origin"] = value
-                        }
-                    }
-                }
-                line.startsWith("#") -> Unit
-                else -> {
-                    if (isM3uNoiseOrDivider(line) || !isValidStreamUrl(line)) {
-                        return@forEach
-                    }
-
-                    val (rawUrl, pipeHeaders) = parseUrlAndPipeHeaders(line)
-                    val (cleanLicenseKey, licensePipeHeaders) = pending.licenseKey?.let { parseUrlAndPipeHeaders(it) }
-                        ?: (null to emptyMap())
-
-                    val info = pending.info
-                    val playlistHost = playlist?.source?.let { runCatching { URL(it).host }.getOrNull() }
-                    val streamUrl = DynamicHostFallback.normalizeUrlWithFallback(rawUrl, preferredFallbackHost = playlistHost)
-                    val name = info?.name?.takeIf(String::isNotBlank)
-                        ?: streamUrl.substringAfterLast('/').substringBefore('?').ifBlank { "Channel" }
-
-                    val effectiveManifestType = (pending.manifestType ?: info?.manifestType)?.trim()?.lowercase()
-                    val detectedStreamType = when {
-                        effectiveManifestType == "mpd" || streamUrl.contains(".mpd", ignoreCase = true) -> "mpd"
-                        effectiveManifestType == "hls" || effectiveManifestType == "m3u8" || streamUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
-                        effectiveManifestType == "ism" || effectiveManifestType == "isml" || streamUrl.contains(".ism", ignoreCase = true) -> "ism"
-                        effectiveManifestType == "flv" || streamUrl.contains(".flv", ignoreCase = true) -> "flv"
-                        effectiveManifestType == "ts" || streamUrl.contains(".ts", ignoreCase = true) -> "ts"
-                        effectiveManifestType == "mp4" || streamUrl.contains(".mp4", ignoreCase = true) -> "mp4"
-                        effectiveManifestType == "mkv" || streamUrl.contains(".mkv", ignoreCase = true) -> "mkv"
-                        DynamicHostFallback.isDynamicLiveStreamUrl(streamUrl) -> "m3u8"
-                        else -> null
-                    }
-
-                    val rawDrmType = (pending.licenseType ?: info?.licenseType)?.trim()?.lowercase()
-                    val effectiveKey = cleanLicenseKey ?: info?.licenseKey
-                    val detectedDrmType = when {
-                        rawDrmType != null -> when {
-                            rawDrmType.contains("clearkey") || rawDrmType == "org.w3.clearkey" -> "clearkey"
-                            rawDrmType.contains("widevine") || rawDrmType == "com.widevine.alpha" -> "widevine"
-                            rawDrmType.contains("playready") || rawDrmType == "com.microsoft.playready" -> "playready"
-                            else -> rawDrmType
-                        }
-                        !effectiveKey.isNullOrBlank() -> {
-                            if (effectiveKey.startsWith("http://", ignoreCase = true) ||
-                                effectiveKey.startsWith("https://", ignoreCase = true)) {
-                                "widevine"
-                            } else {
-                                "clearkey"
-                            }
-                        }
-                        else -> null
-                    }
-
-                    val combinedHeaders = buildMap {
-                        putAll(playlistDefaultHeaders)
-                        putAll(pending.headers)
-                        putAll(pipeHeaders)
-                        putAll(licensePipeHeaders)
-                        if (!containsKey("User-Agent")) {
-                            if (detectedDrmType != null || detectedStreamType == "mpd" || IptvHeaderProvider.isIptvStream(streamUrl)) {
-                                put("User-Agent", IptvHeaderProvider.DEFAULT_IPTV_USER_AGENT)
-                            }
-                        }
-                    }
-
-                    val group = pending.group ?: info?.group?.takeIf(String::isNotBlank)
-
-                    channels += LiveTvChannel(
-                        id = stableChannelId(playlist?.id, streamUrl),
-                        name = name,
-                        streamUrl = streamUrl,
-                        logoUrl = info?.logoUrl?.takeIf(String::isNotBlank),
-                        group = group,
-                        playlistId = playlist?.id,
-                        playlistName = playlist?.name,
-                        headers = combinedHeaders,
-                        streamType = detectedStreamType,
-                        drmType = detectedDrmType,
-                        drmKey = effectiveKey,
-                    )
-                    firstChannelAdded = true
-                    pending = PendingM3uEntry()
-                    pending.headers.putAll(playlistDefaultHeaders)
-                }
-            }
-        }
-
-    return channels.distinctBy { it.streamUrl }
-}
-
-private fun extractKodiProp(line: String): Pair<String, String>? {
-    val prefix = when {
-        line.startsWith("#KODIPROP:", ignoreCase = true) -> "#KODIPROP:"
-        line.startsWith("#EXT-X-KODI:", ignoreCase = true) -> "#EXT-X-KODI:"
-        line.startsWith("#EXT-X-KODIPROP:", ignoreCase = true) -> "#EXT-X-KODIPROP:"
-        line.startsWith("#EXTKODI:", ignoreCase = true) -> "#EXTKODI:"
-        else -> return null
-    }
-    val prop = line.substringAfter(prefix, "").trim()
-    val key = prop.substringBefore('=').trim()
-    val value = prop.substringAfter('=', "").trim()
-    return if (key.isNotEmpty()) key to value else null
-}
-
-private fun isM3uNoiseOrDivider(line: String): Boolean {
-    val trimmed = line.trim()
-    if (trimmed.isEmpty()) return true
-    if (trimmed.startsWith("//")) return true
-
-    val nonDividerChars = trimmed.count { char ->
-        char != '=' && char != '-' && char != '_' && char != '*' &&
-            char != '~' && char != '<' && char != '>' && char != '#' &&
-            char != '|' && char != '/' && char != '\\' && !char.isWhitespace()
-    }
-    if (nonDividerChars == 0) return true
-
-    if (!trimmed.contains("://") && (trimmed.contains("====") || trimmed.contains("----") || trimmed.contains("____"))) {
-        return true
-    }
-    return false
-}
-
-private fun isValidStreamUrl(line: String): Boolean {
-    val trimmed = line.trim()
-    if (trimmed.startsWith("http://", ignoreCase = true) ||
-        trimmed.startsWith("https://", ignoreCase = true) ||
-        trimmed.startsWith("rtmp://", ignoreCase = true) ||
-        trimmed.startsWith("rtsp://", ignoreCase = true) ||
-        trimmed.startsWith("udp://", ignoreCase = true) ||
-        trimmed.startsWith("rtp://", ignoreCase = true) ||
-        trimmed.startsWith("mms://", ignoreCase = true)
-    ) {
-        return true
-    }
-    if (trimmed.contains("://")) return true
-    val lower = trimmed.lowercase()
-    return lower.endsWith(".m3u8") || lower.endsWith(".mpd") || lower.endsWith(".ts") ||
-        lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".ism") || lower.endsWith(".flv")
-}
-
-private fun parseUrlAndPipeHeaders(line: String): Pair<String, Map<String, String>> {
-    if (!line.contains('|')) return line to emptyMap()
-    val url = line.substringBefore('|').trim()
-    val rawHeaders = line.substringAfter('|').trim()
-    val headers = mutableMapOf<String, String>()
-    rawHeaders.split('&').forEach { param ->
-        val key = param.substringBefore('=').trim()
-        val value = param.substringAfter('=', "").trim()
-        if (key.isNotBlank() && value.isNotBlank()) {
-            val normalizedKey = when (key.lowercase()) {
-                "user-agent" -> "User-Agent"
-                "referer" -> "Referer"
-                "origin" -> "Origin"
-                "authorization" -> "Authorization"
-                else -> key
-            }
-            headers[normalizedKey] = value
-        }
-    }
-    return url to headers
-}
-
-private data class M3uInfo(
-    val name: String,
-    val logoUrl: String?,
-    val group: String?,
-    val licenseType: String? = null,
-    val licenseKey: String? = null,
-    val manifestType: String? = null,
-    val headers: Map<String, String> = emptyMap(),
-)
-
-private fun parseExtInf(line: String): M3uInfo {
-    val name = line.substringAfter(',', missingDelimiterValue = "")
-        .trim()
-        .ifBlank {
-            readM3uAttribute(line, "tvg-name").orEmpty()
-        }
-    val logoUrl = readM3uAttribute(line, "tvg-logo") ?: readM3uAttribute(line, "logo")
-    val group = readM3uAttribute(line, "group-title") ?: readM3uAttribute(line, "group")
-
-    val inlineLicenseType = readM3uAttribute(line, "license_type")
-        ?: readM3uAttribute(line, "drm_type")
-        ?: readM3uAttribute(line, "kodi-license-type")
-        ?: readM3uAttribute(line, "inputstream.adaptive.license_type")
-
-    val inlineLicenseKey = readM3uAttribute(line, "license_key")
-        ?: readM3uAttribute(line, "drm_key")
-        ?: readM3uAttribute(line, "kodi-license-key")
-        ?: readM3uAttribute(line, "inputstream.adaptive.license_key")
-
-    val inlineManifestType = readM3uAttribute(line, "manifest_type")
-        ?: readM3uAttribute(line, "stream_type")
-        ?: readM3uAttribute(line, "inputstream.adaptive.manifest_type")
-
-    val inlineHeaders = mutableMapOf<String, String>()
-    (readM3uAttribute(line, "http-user-agent") ?: readM3uAttribute(line, "user-agent"))
-        ?.takeIf(String::isNotBlank)?.let { inlineHeaders["User-Agent"] = it }
-    (readM3uAttribute(line, "http-referrer") ?: readM3uAttribute(line, "referrer") ?: readM3uAttribute(line, "referer"))
-        ?.takeIf(String::isNotBlank)?.let { inlineHeaders["Referer"] = it }
-    (readM3uAttribute(line, "http-origin") ?: readM3uAttribute(line, "origin"))
-        ?.takeIf(String::isNotBlank)?.let { inlineHeaders["Origin"] = it }
-
-    return M3uInfo(
-        name = name,
-        logoUrl = logoUrl,
-        group = group,
-        licenseType = inlineLicenseType,
-        licenseKey = inlineLicenseKey,
-        manifestType = inlineManifestType,
-        headers = inlineHeaders,
-    )
-}
-
-private fun readM3uAttribute(line: String, key: String): String? {
-    var searchIndex = 0
-    val keyLen = key.length
-    while (searchIndex < line.length) {
-        val idx = line.indexOf(key, startIndex = searchIndex, ignoreCase = true)
-        if (idx < 0) return null
-
-        val isWordBoundaryBefore = idx == 0 ||
-            line[idx - 1].isWhitespace() ||
-            line[idx - 1] == '#' ||
-            line[idx - 1] == ',' ||
-            line[idx - 1] == ':'
-
-        if (!isWordBoundaryBefore) {
-            searchIndex = idx + keyLen
-            continue
-        }
-
-        var afterKey = idx + keyLen
-        while (afterKey < line.length && line[afterKey].isWhitespace()) {
-            afterKey++
-        }
-        if (afterKey >= line.length || line[afterKey] != '=') {
-            searchIndex = idx + keyLen
-            continue
-        }
-
-        var valueStart = afterKey + 1
-        while (valueStart < line.length && line[valueStart].isWhitespace()) {
-            valueStart++
-        }
-        if (valueStart >= line.length) return null
-
-        val quote = line[valueStart]
-        return if (quote == '"' || quote == '\'') {
-            val valueEnd = line.indexOf(quote, startIndex = valueStart + 1)
-            if (valueEnd >= 0) {
-                line.substring(valueStart + 1, valueEnd).trim()
-            } else {
-                null
-            }
-        } else {
-            var end = valueStart
-            while (end < line.length && !line[end].isWhitespace() && line[end] != ',') {
-                end++
-            }
-            line.substring(valueStart, end).trim().takeIf { it.isNotEmpty() }
-        }
-    }
-    return null
-}
-
 private fun createUrlPlaylist(url: String, customName: String? = null): LiveTvPlaylist =
     LiveTvPlaylist(
         id = stablePlaylistId(url, 0),
@@ -1257,8 +847,3 @@ private fun unescapePlaylistField(value: String): String =
 
 private fun stablePlaylistId(source: String, index: Int): String =
     "playlist_${source.hashCode()}_$index"
-
-private fun stableChannelId(playlistId: String?, url: String): String {
-    val prefix = playlistId?.takeIf(String::isNotBlank) ?: "m3u"
-    return "channel_${prefix}_${url.hashCode()}"
-}

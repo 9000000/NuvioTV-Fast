@@ -41,7 +41,9 @@ Tệp này kiểm soát hành vi của AI Agent.
 - 🐳 **Docker, Container, Dockerfile, Docker Compose**: Tự động áp dụng `docker-expert`.
 - 🤖 **AI Prompt, Chatbot, RAG, Hỏi đáp tài liệu, LLM**: Tự động áp dụng `prompt-engineering`, `llm-app-patterns`, `rag-implementation`.
 - 🌐 **Cào dữ liệu, Duyệt web, Scrape, Tìm kiếm mạng**: Tự động áp dụng `firecrawl-scraper`, `browser-automation`, `tavily-web`.
-- 🧪 **Kiểm thử, Viết test, TDD, E2E**: Tự động áp dụng `tdd-master-workflow`, `e2e-testing-patterns`.
+- 🧪 **Kiểm thử, Viết test, TDD, E2E**: Tự động áp dụng `tdd-master-workflow`, `test-driven-development`, `e2e-testing-patterns`.
+- 📋 **Thực thi plan, Kế hoạch, Chạy task, Bằng chứng, Nghiệm thu**: Tự động áp dụng `executing-plans`, `subagent-driven-development`, `verification-before-completion`.
+- 🧐 **Review code, Phản hồi review, Hoàn thành nhánh, Git Worktree**: Tự động áp dụng `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `using-git-worktrees`.
 - 📈 **Lên top Google, SEO, Tìm kiếm AI (ChatGPT, Perplexity)**: Tự động áp dụng `seo-expert-kit`, `geo-fundamentals`.
 
 ## Khả năng cốt lõi
