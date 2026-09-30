@@ -915,14 +915,22 @@ private fun SubtitleStyleRail(
                     title = stringResource(R.string.subtitle_style_font),
                     modifier = styleCardModifier
                 ) {
-                    val fontList = listOf(
-                        com.nuvio.tv.data.local.SubtitleFontOption.DEFAULT to stringResource(R.string.sub_font_default),
-                        com.nuvio.tv.data.local.SubtitleFontOption.PHIMMOI to stringResource(R.string.sub_font_phimmoi),
-                        com.nuvio.tv.data.local.SubtitleFontOption.INTER to stringResource(R.string.sub_font_inter),
-                        com.nuvio.tv.data.local.SubtitleFontOption.OPENSANS to stringResource(R.string.sub_font_opensans),
-                        com.nuvio.tv.data.local.SubtitleFontOption.DMSANS to stringResource(R.string.sub_font_dmsans),
-                        com.nuvio.tv.data.local.SubtitleFontOption.OSWALD to stringResource(R.string.sub_font_oswald)
-                    )
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val customFontName = remember {
+                        context.getSharedPreferences("nuvio_global_subtitle_prefs", android.content.Context.MODE_PRIVATE)
+                            .getString("custom_subtitle_font_name", null)
+                    }
+                    val fontList = buildList {
+                        add(com.nuvio.tv.data.local.SubtitleFontOption.DEFAULT to stringResource(R.string.sub_font_default))
+                        add(com.nuvio.tv.data.local.SubtitleFontOption.PHIMMOI to stringResource(R.string.sub_font_phimmoi))
+                        add(com.nuvio.tv.data.local.SubtitleFontOption.INTER to stringResource(R.string.sub_font_inter))
+                        add(com.nuvio.tv.data.local.SubtitleFontOption.OPENSANS to stringResource(R.string.sub_font_opensans))
+                        add(com.nuvio.tv.data.local.SubtitleFontOption.DMSANS to stringResource(R.string.sub_font_dmsans))
+                        add(com.nuvio.tv.data.local.SubtitleFontOption.OSWALD to stringResource(R.string.sub_font_oswald))
+                        if (!customFontName.isNullOrBlank()) {
+                            add(com.nuvio.tv.data.local.SubtitleFontOption.CUSTOM to customFontName)
+                        }
+                    }
                     val currentFontIndex = fontList.indexOfFirst { it.first == subtitleStyle.font }.coerceAtLeast(0)
                     val currentFontName = fontList[currentFontIndex].second
                     StepperRow(

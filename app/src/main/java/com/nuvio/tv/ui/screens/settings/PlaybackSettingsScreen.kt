@@ -27,8 +27,24 @@ import com.nuvio.tv.core.torrent.TorrentCacheClearResult
 import com.nuvio.tv.core.torrent.TorrentSettingsData
 import com.nuvio.tv.core.torrent.TorrentState
 import com.nuvio.tv.data.local.PlayerSettings
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+private val FONT_MIME_TYPES = arrayOf(
+    "font/*",
+    "font/ttf",
+    "font/otf",
+    "application/x-font-ttf",
+    "application/x-font-otf",
+    "application/font-sfnt",
+    "application/octet-stream",
+    "*/*"
+)
 
 @Composable
 fun PlaybackSettingsScreen(
@@ -75,10 +91,38 @@ fun PlaybackSettingsContent(
     )
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val enabledPluginNames by viewModel.enabledPluginNames.collectAsStateWithLifecycle(initialValue = emptyList())
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var openDialog by remember { mutableStateOf<PlaybackDialog?>(null) }
     var memoryUsageTrigger by remember { mutableIntStateOf(0) }
     var showMemoryUsage by remember { mutableStateOf(false) }
+    var customFontName by remember { mutableStateOf(viewModel.getCustomSubtitleFontName()) }
+
+    val fontFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val success = viewModel.importCustomSubtitleFont(uri)
+                if (success) {
+                    val updatedName = viewModel.getCustomSubtitleFontName()
+                    customFontName = updatedName
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.sub_font_import_success, updatedName ?: ""),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.sub_font_import_failed),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
     val onUpdate: PlaybackSettingsUpdate = remember(viewModel, coroutineScope) {
         { block -> coroutineScope.launch { viewModel.block() } }
     }
@@ -120,7 +164,8 @@ fun PlaybackSettingsContent(
                             .onFailure { torrentCacheClearFailed = true }
                     }
                 },
-                initialFocusRequester = initialFocusRequester
+                initialFocusRequester = initialFocusRequester,
+                customFontName = customFontName
             )
         }
 
@@ -144,6 +189,25 @@ fun PlaybackSettingsContent(
         installedAddonNames = installedAddonNames,
         enabledPluginNames = enabledPluginNames,
         onUpdate = onUpdate,
-        onDismiss = { openDialog = null }
+        onDismiss = { openDialog = null },
+        customFontName = customFontName,
+        onPickCustomFont = {
+            try {
+                fontFilePicker.launch(FONT_MIME_TYPES)
+            } catch (e: Exception) {
+                Log.e("PlaybackSettingsScreen", "Failed to launch document picker for font", e)
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.sub_font_picker_not_found),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        },
+        onClearCustomFont = {
+            coroutineScope.launch {
+                viewModel.clearCustomSubtitleFont()
+                customFontName = null
+            }
+        }
     )
 }

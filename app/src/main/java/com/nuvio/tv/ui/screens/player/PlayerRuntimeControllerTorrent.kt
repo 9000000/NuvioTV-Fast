@@ -390,7 +390,8 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
 
 internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
     hash: String,
-    streamUrl: String
+    streamUrl: String,
+    onNearCompletion: ((playbackUrl: String) -> Unit)? = null
 ): String {
     val uri = runCatching { android.net.Uri.parse(streamUrl) }.getOrNull()
         ?: return streamUrl
@@ -428,18 +429,46 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
 
     val startTime = System.currentTimeMillis()
     var pollCount = 0
+    var nearCompletionTriggered = false
 
     return try {
         val playbackUrl = withTimeoutOrNull(60_000L) {
             while (kotlinx.coroutines.currentCoroutineContext().isActive) {
                 pollCount++
+                val playbackTargetUrl = uri.toTorrServerPlaybackUrl()
+
+                // If player has already started rendering frames, exit preload wait immediately
+                if (hasRenderedFirstFrame) {
+                    Log.d(TAG, "Player already rendered first frame; ending preload wait")
+                    return@withTimeoutOrNull playbackTargetUrl
+                }
+
                 if (preloadHttpCompleted) {
                     Log.d(TAG, "Remote TorrServer preload HTTP stream finished; handing stream to player")
-                    return@withTimeoutOrNull uri.toTorrServerPlaybackUrl()
+                    return@withTimeoutOrNull playbackTargetUrl
                 }
 
                 val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
                 if (stats != null) {
+                    // Early buffer handoff: when preload is getting close to completion
+                    // (>= 50% preload progress, >= 12MB buffered data, or preload is ready),
+                    // notify caller so ExoPlayer starts preparing and downloading buffer ahead.
+                    val isNearReady = (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 50 / 100) ||
+                        stats.preloadedBytes >= 12_000_000L ||
+                        stats.loadedSize >= 12_000_000L ||
+                        stats.preloadProgress >= 0.5f ||
+                        stats.isPreloadReady
+
+                    if (isNearReady && !nearCompletionTriggered) {
+                        nearCompletionTriggered = true
+                        Log.d(
+                            TAG,
+                            "Remote TorrServer preload near completion (${(stats.preloadProgress * 100).toInt()}%); " +
+                                "requesting player to buffer ahead early!"
+                        )
+                        onNearCompletion?.invoke(playbackTargetUrl)
+                    }
+
                     if (stats.isPreloadReady) {
                         // User note: when starting, server may already be in active state.
                         // Ensure that on early polls (< 2 seconds), we only accept ready state
@@ -454,7 +483,7 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
                                 "Remote TorrServer preload ready: preloaded=${stats.preloadedBytes}, " +
                                     "preloadSize=${stats.preloadSize}, loaded=${stats.loadedSize}, stat=${stats.statString}"
                             )
-                            return@withTimeoutOrNull uri.toTorrServerPlaybackUrl()
+                            return@withTimeoutOrNull playbackTargetUrl
                         } else {
                             Log.d(
                                 TAG,

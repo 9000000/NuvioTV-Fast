@@ -2267,12 +2267,32 @@ internal fun PlayerRuntimeController.switchToTorrServerStream(
     resetPostPlayOverlayState(clearEpisode = false)
     startRemoteTorrServerStatsPolling(infoHash, streamUrl)
     scope.launch {
-        currentStreamUrl = awaitRemoteTorrServerPreload(infoHash, streamUrl)
-        preparePlaybackBeforeStart(
-            url = currentStreamUrl,
-            headers = emptyMap(),
-            loadSavedProgress = true
+        var hasStartedPlayback = false
+        val finalUrl = awaitRemoteTorrServerPreload(
+            hash = infoHash,
+            streamUrl = streamUrl,
+            onNearCompletion = { earlyPlaybackUrl ->
+                if (!hasStartedPlayback) {
+                    hasStartedPlayback = true
+                    currentStreamUrl = earlyPlaybackUrl
+                    Log.d(PlayerRuntimeController.TAG, "Stream switch preload near completion; early initializing player to buffer ahead: $earlyPlaybackUrl")
+                    preparePlaybackBeforeStart(
+                        url = earlyPlaybackUrl,
+                        headers = emptyMap(),
+                        loadSavedProgress = true
+                    )
+                }
+            }
         )
+        if (!hasStartedPlayback) {
+            hasStartedPlayback = true
+            currentStreamUrl = finalUrl
+            preparePlaybackBeforeStart(
+                url = finalUrl,
+                headers = emptyMap(),
+                loadSavedProgress = true
+            )
+        }
     }
     persistSelectedStreamForReuse(
         stream = stream,

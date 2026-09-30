@@ -10,6 +10,7 @@ import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.SubtitleFontOption
 import com.nuvio.tv.data.local.SubtitleLanguageOption
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.local.displayName
@@ -45,7 +46,8 @@ private val subtitleOutlineColors = listOf(
 internal fun PlaybackSubtitlesSection(
     settings: PlayerSettings,
     onUpdate: PlaybackSettingsUpdate,
-    onOpenDialog: (PlaybackDialog) -> Unit
+    onOpenDialog: (PlaybackDialog) -> Unit,
+    customFontName: String? = null
 ) {
     val style = settings.subtitleStyle
     val enabled = settings.playerPreference != PlayerPreference.EXTERNAL
@@ -93,6 +95,13 @@ internal fun PlaybackSubtitlesSection(
     )
 
     SettingsSectionLabel(text = stringResource(R.string.sub_style_label))
+    SettingsActionRow(
+        title = stringResource(R.string.sub_font),
+        subtitle = stringResource(R.string.sub_font_sub),
+        value = getSubtitleFontDisplayName(style.font, customFontName),
+        enabled = enabled,
+        onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_FONT) }
+    )
     SliderSettingsItem(
         title = stringResource(R.string.sub_size),
         value = style.size,
@@ -209,10 +218,23 @@ internal fun SubtitleSettingsDialogs(
     dialog: PlaybackDialog?,
     settings: PlayerSettings,
     onUpdate: PlaybackSettingsUpdate,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    customFontName: String? = null,
+    onPickCustomFont: () -> Unit = {},
+    onClearCustomFont: () -> Unit = {}
 ) {
     val style = settings.subtitleStyle
     when (dialog) {
+        PlaybackDialog.SUBTITLE_FONT -> SubtitleFontDialog(
+            selectedFont = style.font,
+            customFontName = customFontName,
+            onFontSelected = { font ->
+                onUpdate { setSubtitleFont(font) }
+            },
+            onPickCustomFont = onPickCustomFont,
+            onClearCustomFont = onClearCustomFont,
+            onDismiss = onDismiss
+        )
         PlaybackDialog.SUBTITLE_LANGUAGE -> LanguageSelectionDialog(
             title = stringResource(R.string.sub_preferred_lang),
             selectedLanguage = when {
@@ -283,4 +305,122 @@ internal fun SubtitleSettingsDialogs(
         )
         else -> Unit
     }
+}
+
+@Composable
+internal fun getSubtitleFontDisplayName(font: String, customFontName: String? = null): String {
+    return when (font) {
+        SubtitleFontOption.PHIMMOI -> stringResource(R.string.sub_font_phimmoi)
+        SubtitleFontOption.INTER -> stringResource(R.string.sub_font_inter)
+        SubtitleFontOption.OPENSANS -> stringResource(R.string.sub_font_opensans)
+        SubtitleFontOption.DMSANS -> stringResource(R.string.sub_font_dmsans)
+        SubtitleFontOption.OSWALD -> stringResource(R.string.sub_font_oswald)
+        SubtitleFontOption.CUSTOM -> customFontName ?: stringResource(R.string.sub_font_custom)
+        else -> stringResource(R.string.sub_font_default)
+    }
+}
+
+@Composable
+internal fun SubtitleFontDialog(
+    selectedFont: String,
+    onFontSelected: (String) -> Unit,
+    onPickCustomFont: () -> Unit,
+    onClearCustomFont: () -> Unit,
+    customFontName: String? = null,
+    onDismiss: () -> Unit
+) {
+    // Sentinel values for action items (not real font options)
+    val valuePickNew = "__pick_custom__"
+    val valueClear = "__clear_custom__"
+
+    val baseOptions = listOf(
+        SettingsPickerOption(
+            value = SubtitleFontOption.DEFAULT,
+            title = stringResource(R.string.sub_font_default)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.PHIMMOI,
+            title = stringResource(R.string.sub_font_phimmoi)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.INTER,
+            title = stringResource(R.string.sub_font_inter)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.OPENSANS,
+            title = stringResource(R.string.sub_font_opensans)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.DMSANS,
+            title = stringResource(R.string.sub_font_dmsans)
+        ),
+        SettingsPickerOption(
+            value = SubtitleFontOption.OSWALD,
+            title = stringResource(R.string.sub_font_oswald)
+        )
+    )
+
+    // When a custom font is already loaded: show its name as selected item
+    // plus two action items to change or remove it.
+    // When no custom font yet: show a single "pick from storage" item.
+    val customOptions: List<SettingsPickerOption<String>> = if (customFontName != null) {
+        listOf(
+            SettingsPickerOption(
+                value = SubtitleFontOption.CUSTOM,
+                title = stringResource(R.string.sub_font_custom_named, customFontName)
+            ),
+            SettingsPickerOption(
+                value = valuePickNew,
+                title = stringResource(R.string.sub_font_custom_change)
+            ),
+            SettingsPickerOption(
+                value = valueClear,
+                title = stringResource(R.string.sub_font_custom_remove)
+            )
+        )
+    } else {
+        listOf(
+            SettingsPickerOption(
+                value = SubtitleFontOption.CUSTOM,
+                title = stringResource(R.string.sub_font_custom_pick)
+            )
+        )
+    }
+
+    val options = baseOptions + customOptions
+    val dialogHeight = if (customFontName != null) 440.dp else 380.dp
+
+    SettingsSingleChoiceDialog(
+        title = stringResource(R.string.sub_font),
+        options = options,
+        selectedValue = selectedFont,
+        onOptionSelected = { value ->
+            when (value) {
+                valuePickNew -> {
+                    onDismiss()
+                    onPickCustomFont()
+                }
+                valueClear -> {
+                    onClearCustomFont()
+                    onDismiss()
+                }
+                SubtitleFontOption.CUSTOM -> {
+                    if (customFontName != null) {
+                        onFontSelected(value)
+                        onDismiss()
+                    } else {
+                        onDismiss()
+                        onPickCustomFont()
+                    }
+                }
+                else -> {
+                    onFontSelected(value)
+                    onDismiss()
+                }
+            }
+        },
+        onDismiss = onDismiss,
+        width = 460.dp,
+        maxHeight = dialogHeight
+    )
 }

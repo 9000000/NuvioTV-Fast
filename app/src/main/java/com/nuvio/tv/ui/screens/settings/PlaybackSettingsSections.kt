@@ -34,7 +34,8 @@ internal fun PlaybackSettingsSections(
     onOpenDialog: (PlaybackDialog) -> Unit,
     onMemorySettingChanged: () -> Unit,
     onClearTorrentCache: () -> Unit,
-    initialFocusRequester: FocusRequester? = null
+    initialFocusRequester: FocusRequester? = null,
+    customFontName: String? = null
 ) {
     val sections = visiblePlaybackSections(playerSettings)
     var expandedSections by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -72,7 +73,8 @@ internal fun PlaybackSettingsSections(
                         onUpdate = onUpdate,
                         onOpenDialog = onOpenDialog,
                         onMemorySettingChanged = onMemorySettingChanged,
-                        onClearTorrentCache = onClearTorrentCache
+                        onClearTorrentCache = onClearTorrentCache,
+                        customFontName = customFontName
                     )
                 }
             }
@@ -90,7 +92,8 @@ private fun PlaybackSectionContent(
     onUpdate: PlaybackSettingsUpdate,
     onOpenDialog: (PlaybackDialog) -> Unit,
     onMemorySettingChanged: () -> Unit,
-    onClearTorrentCache: () -> Unit
+    onClearTorrentCache: () -> Unit,
+    customFontName: String? = null
 ) {
     when (section) {
         PlaybackSection.PLAYER -> PlaybackPlayerSection(playerSettings, onUpdate, onOpenDialog)
@@ -99,7 +102,7 @@ private fun PlaybackSectionContent(
         PlaybackSection.SKIP_SEGMENTS -> PlaybackSkipSegmentsSection(playerSettings, onUpdate)
         PlaybackSection.PLAYER_INTERFACE -> PlaybackPlayerInterfaceSection(playerSettings, onUpdate)
         PlaybackSection.AUDIO -> PlaybackAudioSection(playerSettings, onUpdate, onOpenDialog)
-        PlaybackSection.SUBTITLES -> PlaybackSubtitlesSection(playerSettings, onUpdate, onOpenDialog)
+        PlaybackSection.SUBTITLES -> PlaybackSubtitlesSection(playerSettings, onUpdate, onOpenDialog, customFontName)
         PlaybackSection.VIDEO -> PlaybackVideoSection(playerSettings, transparentLetterbox, onUpdate, onOpenDialog)
         PlaybackSection.BUFFER_NETWORK -> PlaybackBufferNetworkSection(playerSettings, onUpdate, onMemorySettingChanged)
         PlaybackSection.P2P -> PlaybackP2pSection(p2p, onUpdate, onOpenDialog, onClearTorrentCache)
@@ -114,7 +117,10 @@ internal fun PlaybackSettingsDialogs(
     installedAddonNames: List<String>,
     enabledPluginNames: List<String>,
     onUpdate: PlaybackSettingsUpdate,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    customFontName: String? = null,
+    onPickCustomFont: () -> Unit = {},
+    onClearCustomFont: () -> Unit = {}
 ) {
     when (dialog) {
         null -> Unit
@@ -144,7 +150,7 @@ internal fun PlaybackSettingsDialogs(
         else -> {
             AutoPlaySettingsDialogs(dialog, settings, installedAddonNames, enabledPluginNames, onUpdate, onDismiss)
             AudioSettingsDialogs(dialog, settings, onUpdate, onDismiss)
-            SubtitleSettingsDialogs(dialog, settings, onUpdate, onDismiss)
+            SubtitleSettingsDialogs(dialog, settings, onUpdate, onDismiss, customFontName, onPickCustomFont, onClearCustomFont)
             VideoSettingsDialogs(dialog, settings, onUpdate, onDismiss)
             P2pSettingsDialogs(dialog, p2p, onUpdate, onDismiss)
         }

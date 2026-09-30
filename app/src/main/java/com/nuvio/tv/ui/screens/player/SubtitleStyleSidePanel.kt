@@ -163,14 +163,22 @@ internal fun SubtitleStyleSidePanel(
                         .width(StyleCardWidth)
                         .height(StyleCardHeight)
                 ) {
-                    val fontList = listOf(
-                        SubtitleFontOption.DEFAULT to stringResource(R.string.sub_font_default),
-                        SubtitleFontOption.PHIMMOI to stringResource(R.string.sub_font_phimmoi),
-                        SubtitleFontOption.INTER to stringResource(R.string.sub_font_inter),
-                        SubtitleFontOption.OPENSANS to stringResource(R.string.sub_font_opensans),
-                        SubtitleFontOption.DMSANS to stringResource(R.string.sub_font_dmsans),
-                        SubtitleFontOption.OSWALD to stringResource(R.string.sub_font_oswald)
-                    )
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val customFontName = remember {
+                        context.getSharedPreferences("nuvio_global_subtitle_prefs", android.content.Context.MODE_PRIVATE)
+                            .getString("custom_subtitle_font_name", null)
+                    }
+                    val fontList = buildList {
+                        add(SubtitleFontOption.DEFAULT to stringResource(R.string.sub_font_default))
+                        add(SubtitleFontOption.PHIMMOI to stringResource(R.string.sub_font_phimmoi))
+                        add(SubtitleFontOption.INTER to stringResource(R.string.sub_font_inter))
+                        add(SubtitleFontOption.OPENSANS to stringResource(R.string.sub_font_opensans))
+                        add(SubtitleFontOption.DMSANS to stringResource(R.string.sub_font_dmsans))
+                        add(SubtitleFontOption.OSWALD to stringResource(R.string.sub_font_oswald))
+                        if (!customFontName.isNullOrBlank()) {
+                            add(SubtitleFontOption.CUSTOM to customFontName)
+                        }
+                    }
                     val currentFontIndex = fontList.indexOfFirst { it.first == subtitleStyle.font }.coerceAtLeast(0)
                     val currentFontName = fontList[currentFontIndex].second
                     SubtitleStyleSettingRow {
