@@ -2255,10 +2255,12 @@ internal fun PlayerRuntimeController.switchToTorrServerStream(
             isLoadingSourceStreams = false,
             sourceStreamsError = null,
             isTorrentStream = true,
+            isTorrServerStream = true,
             showLoadingOverlay = true,
             hideTorrentStats = false
         )
     }
+    isTorrServerStream = true
     applyStreamMetadata(stream)
     currentFilename = filename ?: stream.behaviorHints?.filename ?: navigationArgs.filename
     currentStreamUrl = streamUrl

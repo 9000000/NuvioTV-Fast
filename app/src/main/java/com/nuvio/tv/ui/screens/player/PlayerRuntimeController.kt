@@ -680,6 +680,7 @@ class PlayerRuntimeController(
     internal var torrentStreamJob: Job? = null
     internal var torrentStateObserverJob: Job? = null
     internal var isTorrentStream: Boolean = navigationArgs.infoHash != null && !initialStreamUrl.startsWith("http")
+    internal var isTorrServerStream: Boolean = false
     internal var currentInfoHash: String? = navigationArgs.infoHash
     internal var currentFileIdx: Int? = navigationArgs.fileIdx
     internal var currentTorrentSources: List<String>? =

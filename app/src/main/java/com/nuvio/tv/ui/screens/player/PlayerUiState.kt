@@ -222,6 +222,7 @@ data class PlayerUiState(
     val streamInfoData: StreamInfoData? = null,
     // Torrent streaming state
     val isTorrentStream: Boolean = false,
+    val isTorrServerStream: Boolean = false,
     val torrentDownloadSpeed: Long = 0L,
     val torrentUploadSpeed: Long = 0L,
     val torrentPeers: Int = 0,

@@ -56,9 +56,11 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
     if (effectiveInfoHash != null && isTorrServer) {
         Log.d("PlayerStartup", "Starting remote TorrServer stream for $effectiveInfoHash: $currentStreamUrl")
         isTorrentStream = true
+        isTorrServerStream = true
         _uiState.update {
             it.copy(
                 isTorrentStream = true,
+                isTorrServerStream = true,
                 showLoadingOverlay = true,
                 hideTorrentStats = false
             )

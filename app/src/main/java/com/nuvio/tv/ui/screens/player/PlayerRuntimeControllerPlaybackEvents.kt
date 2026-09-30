@@ -312,18 +312,26 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         null
                     } else {
                         val speed = formatTorrentSpeed(context, _uiState.value.torrentDownloadSpeed)
-                        val peerInfo = context.getString(
-                            R.string.player_torrent_peer_info,
-                            _uiState.value.torrentSeeds,
-                            _uiState.value.torrentPeers
-                        )
                         val bufLabel = String.format("%.0fs", bufferedSec)
-                        context.getString(
-                            R.string.player_torrent_buffered_status,
-                            bufLabel,
-                            peerInfo,
-                            speed
-                        )
+                        if (isTorrServerStream || _uiState.value.isTorrServerStream) {
+                            // Khi dùng TorrServer: TẮT hiển thị seed và peer khi load/buffering, chỉ hiển thị với torrent
+                            val bufferedPattern = context.getString(R.string.player_torrent_buffered_status)
+                            val bufPrefix = bufferedPattern.substringBefore("%2").trim().trimEnd('·').trim()
+                            val bufText = runCatching { String.format(bufPrefix, bufLabel) }.getOrDefault(bufLabel)
+                            "$bufText · $speed"
+                        } else {
+                            val peerInfo = context.getString(
+                                R.string.player_torrent_peer_info,
+                                _uiState.value.torrentSeeds,
+                                _uiState.value.torrentPeers
+                            )
+                            context.getString(
+                                R.string.player_torrent_buffered_status,
+                                bufLabel,
+                                peerInfo,
+                                speed
+                            )
+                        }
                     }
                     val progress = (bufferedSec / 10f).coerceIn(0f, 1f)
                     _uiState.update {

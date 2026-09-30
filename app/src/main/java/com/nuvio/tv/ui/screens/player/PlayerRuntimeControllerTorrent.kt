@@ -59,6 +59,7 @@ internal fun PlayerRuntimeController.stopTorrentStream() {
     }
 
     isTorrentStream = false
+    isTorrServerStream = false
     currentInfoHash = null
     currentFileIdx = null
 }
@@ -257,6 +258,7 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
 ) {
     torrentStateObserverJob?.cancel()
     isTorrentStream = true
+    isTorrServerStream = true
     currentInfoHash = hash
 
     val serverUrl = runCatching {
@@ -267,6 +269,7 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
     _uiState.update {
         it.copy(
             isTorrentStream = true,
+            isTorrServerStream = true,
             showLoadingOverlay = true,
             showTorrentStats = false,
             hideTorrentStats = false
@@ -316,6 +319,7 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                             _uiState.update {
                                 it.copy(
                                     isTorrentStream = true,
+                                    isTorrServerStream = true,
                                     showLoadingOverlay = true,
                                     showTorrentStats = false,
                                     loadingMessage = message,
@@ -350,6 +354,7 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                                 _uiState.update {
                                     it.copy(
                                         isTorrentStream = true,
+                                        isTorrServerStream = true,
                                         showTorrentStats = false,
                                         loadingProgress = null,
                                         torrentDownloadSpeed = stats.downloadSpeed,
@@ -522,7 +527,7 @@ private fun formatTorrentLoadingDisplay(
     if (isPreloadActive && !isPreloadReady) {
         val percentStr = when {
             preloadProgress > 0f -> "${(preloadProgress * 100).toInt()}%"
-            stat == 1 -> statString ?: "0%"
+            stat == 1 -> cleanTorrServerStatString(statString) ?: "0%"
             else -> "0%"
         }
         val statusParts = listOfNotNull(
@@ -545,6 +550,20 @@ private fun formatTorrentLoadingDisplay(
         context.getString(R.string.player_loading_buffering)
     }
     return Pair(message, null)
+}
+
+internal fun cleanTorrServerStatString(statString: String?): String? {
+    if (statString.isNullOrBlank()) return null
+    // Extract percentage if available, e.g. "25%"
+    val percentMatch = Regex("""\b(\d{1,3})%""").find(statString)
+    if (percentMatch != null) {
+        return "${percentMatch.groupValues[1]}%"
+    }
+    // Otherwise strip any seed/peer references (e.g. "peers: 12", "12 peers", "seeds: 5", "5 seeds")
+    val stripped = statString
+        .replace(Regex("""(?i)\(?(?:\d+[\s:]*(?:seeds?|peers?|s/p)|(?:seeds?|peers?|s/p)[\s:]*\d+|seeds?|peers?)\)?\s*"""), "")
+        .trim(' ', '·', '-', '(', ')', ',', ':')
+    return stripped.takeIf { it.isNotBlank() && it.any { ch -> ch.isLetterOrDigit() } }
 }
 
 private fun android.net.Uri.toTorrServerPlaybackUrl(): String {
