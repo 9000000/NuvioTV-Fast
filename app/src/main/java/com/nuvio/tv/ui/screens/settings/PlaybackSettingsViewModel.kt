@@ -29,6 +29,7 @@ import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.core.torrent.TorrentCacheClearResult
 import com.nuvio.tv.core.torrent.TorrentCacheSize
 import com.nuvio.tv.core.torrent.TorrentCacheState
+import com.nuvio.tv.core.torrent.TorrentModeCoordinator
 import com.nuvio.tv.core.torrent.TorrentProfile
 import com.nuvio.tv.core.torrent.TorrentService
 import com.nuvio.tv.core.torrent.TorrentSettings
@@ -54,6 +55,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val pluginManager: PluginManager,
     private val torrentSettings: TorrentSettings,
     private val torrentService: TorrentService,
+    private val torrentModeCoordinator: TorrentModeCoordinator,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -64,7 +66,13 @@ class PlaybackSettingsViewModel @Inject constructor(
     val torrentCacheState: StateFlow<TorrentCacheState> = torrentService.cacheState
     val torrentState: StateFlow<TorrentState> = torrentService.state
 
-    fun setP2pEnabled(enabled: Boolean) = torrentSettings.setP2pEnabled(enabled)
+    fun setP2pEnabled(enabled: Boolean) {
+        if (enabled) {
+            torrentModeCoordinator.enableNativeTorrent()
+        } else {
+            torrentModeCoordinator.disableNativeTorrent()
+        }
+    }
     fun setHideTorrentStats(enabled: Boolean) = torrentSettings.setHideTorrentStats(enabled)
     fun setTorrentProfile(profile: TorrentProfile) = torrentSettings.setTorrentProfile(profile)
     fun setTorrentCacheSize(size: TorrentCacheSize) = torrentSettings.setCacheSize(size)

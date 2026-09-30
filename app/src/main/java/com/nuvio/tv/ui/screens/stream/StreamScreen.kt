@@ -461,12 +461,16 @@ fun StreamScreen(
                         if (currentIndex >= 0) {
                             focusedStreamIndex = currentIndex
                         }
-                        scope.coroutineLaunch {
-                            val playbackInfo = viewModel.resolveStreamForPlayback(stream)
-                            if (playbackInfo != null) {
-                                pendingRestoreOnResume = true
-                                routePlayback(playbackInfo)
-                                viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                        if (viewModel.isTorrServerStream(stream)) {
+                            viewModel.prepareTorrServerFilePicker(stream)
+                        } else {
+                            scope.coroutineLaunch {
+                                val playbackInfo = viewModel.resolveStreamForPlayback(stream)
+                                if (playbackInfo != null) {
+                                    pendingRestoreOnResume = true
+                                    routePlayback(playbackInfo)
+                                    viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                                }
                             }
                         }
                     },
@@ -527,6 +531,38 @@ fun StreamScreen(
                     // Cancelled P2P consent — fall back to manual stream selection
                     viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                 }
+            )
+        }
+
+        if (uiState.showTorrentFilePicker) {
+            com.nuvio.tv.ui.components.TorrentFilePickerDialog(
+                title = uiState.torrentFilePickerTitle,
+                isLoading = uiState.torrentFilePickerLoading,
+                error = uiState.torrentFilePickerError,
+                files = uiState.torrentFilePickerFiles,
+                targetSeason = uiState.season,
+                targetEpisode = uiState.episode,
+                contentType = uiState.contentType,
+                onFileSelected = { fileId ->
+                    scope.coroutineLaunch {
+                        val playbackInfo = viewModel.resolveTorrServerPlayback(fileId)
+                        if (playbackInfo != null) {
+                            pendingRestoreOnResume = true
+                            routePlayback(playbackInfo)
+                            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                        }
+                    }
+                },
+                onDismiss = {
+                    viewModel.dismissTorrentFilePicker()
+                }
+            )
+        }
+
+        if (uiState.showTorrServerPrompt) {
+            TorrServerEnablePromptDialog(
+                onEnable = { viewModel.onEvent(StreamScreenEvent.OnConfirmEnableTorrServer) },
+                onDismiss = { viewModel.onEvent(StreamScreenEvent.OnDismissTorrServerPrompt) }
             )
         }
 
@@ -1457,3 +1493,115 @@ internal fun PlayerChoiceDialog(
         }
     }
 }
+
+@Composable
+internal fun TorrServerEnablePromptDialog(
+    onEnable: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(NuvioTheme.radii.xl))
+                .background(NuvioTheme.colors.BackgroundCard)
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(440.dp)
+                    .padding(NuvioTheme.spacing.xl),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.torrserver_prompt_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioTheme.colors.TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
+
+                Text(
+                    text = stringResource(R.string.torrserver_prompt_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioTheme.colors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(NuvioTheme.spacing.xl))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    var cancelFocused by remember { mutableStateOf(false) }
+                    Card(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .onFocusChanged { cancelFocused = it.isFocused },
+                        colors = CardDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundElevated,
+                            focusedContainerColor = NuvioTheme.colors.Secondary
+                        ),
+                        border = CardDefaults.border(
+                            focusedBorder = Border(
+                                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                                shape = RoundedCornerShape(NuvioTheme.radii.md)
+                            )
+                        ),
+                        shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.md)),
+                        scale = CardDefaults.scale(focusedScale = 1.05f)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.torrserver_prompt_cancel),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (cancelFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary,
+                            modifier = Modifier
+                                .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
+                                .fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    var enableFocused by remember { mutableStateOf(false) }
+                    Card(
+                        onClick = onEnable,
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { enableFocused = it.isFocused },
+                        colors = CardDefaults.colors(
+                            containerColor = NuvioTheme.colors.Primary,
+                            focusedContainerColor = NuvioTheme.colors.Secondary
+                        ),
+                        border = CardDefaults.border(
+                            focusedBorder = Border(
+                                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                                shape = RoundedCornerShape(NuvioTheme.radii.md)
+                            )
+                        ),
+                        shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.md)),
+                        scale = CardDefaults.scale(focusedScale = 1.05f)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.torrserver_prompt_enable),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (enableFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.OnPrimary,
+                            modifier = Modifier
+                                .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
+                                .fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

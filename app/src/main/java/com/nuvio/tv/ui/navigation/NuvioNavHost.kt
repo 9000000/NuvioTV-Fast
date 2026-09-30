@@ -49,6 +49,7 @@ import com.nuvio.tv.ui.screens.settings.SupportersContributorsScreen
 import com.nuvio.tv.ui.screens.settings.ThemeSettingsScreen
 import com.nuvio.tv.ui.screens.settings.TrackingSettingsScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
+import com.nuvio.tv.ui.screens.settings.TorrServerSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
@@ -1312,6 +1313,12 @@ private fun PlaybackNavHost(
 
         composable(Screen.TmdbSettings.route) {
             TmdbSettingsScreen(
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.TorrServerSettings.route) {
+            TorrServerSettingsScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }
