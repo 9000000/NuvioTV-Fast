@@ -230,10 +230,17 @@ internal fun PlayerRuntimeController.launchTorrentSourceStream(
 }
 
 private fun formatSpeed(context: android.content.Context, bytesPerSec: Long): String {
+    val bitsPerSec = bytesPerSec * 8.0
     return when {
-        bytesPerSec >= 1_048_576 -> context.getString(R.string.unit_speed_mb_s, String.format("%.1f", bytesPerSec / 1_048_576.0))
-        bytesPerSec >= 1_024 -> context.getString(R.string.unit_speed_kb_s, String.format("%.0f", bytesPerSec / 1_024.0))
-        else -> context.getString(R.string.unit_speed_b_s, bytesPerSec)
+        bitsPerSec >= 1_000_000.0 -> context.getString(
+            R.string.unit_speed_mb_s,
+            String.format(java.util.Locale.US, "%.1f", bitsPerSec / 1_000_000.0)
+        )
+        bitsPerSec >= 1_000.0 -> context.getString(
+            R.string.unit_speed_kb_s,
+            String.format(java.util.Locale.US, "%.0f", bitsPerSec / 1_000.0)
+        )
+        else -> context.getString(R.string.unit_speed_b_s, bitsPerSec.toLong())
     }
 }
 
@@ -392,6 +399,8 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
     }
 
     val serverUrl = "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}"
+    var preloadHttpCompleted = false
+    var preloadHttpBytesRead = 0L
     val preloadCall = torrServerRemoteApi.newStreamCall(streamUrl)
     val preloadJob = scope.launch(kotlinx.coroutines.Dispatchers.IO) {
         try {
@@ -402,7 +411,10 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
                     while (isActive) {
                         val read = byteStream?.read(buffer) ?: -1
                         if (read == -1) break
+                        preloadHttpBytesRead += read
                     }
+                    preloadHttpCompleted = true
+                    Log.d(TAG, "Remote TorrServer preload HTTP completed (bytesRead=$preloadHttpBytesRead)")
                 } else {
                     Log.w(TAG, "Remote TorrServer preload request failed: ${response.code}")
                 }
@@ -414,13 +426,42 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
         }
     }
 
+    val startTime = System.currentTimeMillis()
+    var pollCount = 0
+
     return try {
         val playbackUrl = withTimeoutOrNull(60_000L) {
             while (kotlinx.coroutines.currentCoroutineContext().isActive) {
-                val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
-                if (stats?.isPreloadReady == true) {
-                    Log.d(TAG, "Remote TorrServer preload is active; handing stream to player")
+                pollCount++
+                if (preloadHttpCompleted) {
+                    Log.d(TAG, "Remote TorrServer preload HTTP stream finished; handing stream to player")
                     return@withTimeoutOrNull uri.toTorrServerPlaybackUrl()
+                }
+
+                val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
+                if (stats != null) {
+                    if (stats.isPreloadReady) {
+                        // User note: when starting, server may already be in active state.
+                        // Ensure that on early polls (< 2 seconds), we only accept ready state
+                        // if there is already substantial data buffered on the server.
+                        val elapsedMs = System.currentTimeMillis() - startTime
+                        val hasSufficientBuffer = stats.loadedSize >= 10_485_760L ||
+                            stats.preloadedBytes >= 10_485_760L ||
+                            (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 90 / 100)
+                        if (hasSufficientBuffer || elapsedMs >= 2000L || pollCount > 4) {
+                            Log.d(
+                                TAG,
+                                "Remote TorrServer preload ready: preloaded=${stats.preloadedBytes}, " +
+                                    "preloadSize=${stats.preloadSize}, loaded=${stats.loadedSize}, stat=${stats.statString}"
+                            )
+                            return@withTimeoutOrNull uri.toTorrServerPlaybackUrl()
+                        } else {
+                            Log.d(
+                                TAG,
+                                "Remote TorrServer server is active but buffer not yet sufficient; continuing preload wait..."
+                            )
+                        }
+                    }
                 }
                 delay(500L)
             }
@@ -452,16 +493,15 @@ private fun formatTorrentLoadingDisplay(
     val speed = formatSpeed(context, downloadSpeed)
 
     // Preload phase: only when preload is configured and not yet ready
-    if (isPreloadActive && !isPreloadReady && (preloadProgress < 1f || stat == 2)) {
+    if (isPreloadActive && !isPreloadReady) {
         val percentStr = when {
             preloadProgress > 0f -> "${(preloadProgress * 100).toInt()}%"
-            stat == 2 -> "0%"
-            stat == 1 -> statString
-            else -> null
+            stat == 1 -> statString ?: "0%"
+            else -> "0%"
         }
         val statusParts = listOfNotNull(
             percentStr,
-            speed.takeIf { downloadSpeed > 0 } ?: speed
+            speed
         )
         return Pair(statusParts.joinToString(" · "), preloadProgress)
     }

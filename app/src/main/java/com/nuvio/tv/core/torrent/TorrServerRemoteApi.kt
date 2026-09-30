@@ -44,16 +44,42 @@ data class TorrServerRemoteStatus(
     val files: List<TorrServerRemoteFile>
 ) {
     val isPreloadReady: Boolean
-        get() = (preloadSize > 0 && preloadedBytes >= preloadSize * 95 / 100) ||
-            stat == 3 ||
-            statString.equals("active", ignoreCase = true) ||
-            statString.equals("Torrent working", ignoreCase = true)
+        get() {
+            val target = if (preloadSize > 0) preloadSize else if (torrentSize in 1..33_554_432L) torrentSize else 33_554_432L
+            val buffered = if (preloadedBytes > 0) preloadedBytes else loadedSize
+
+            // Reached target preload threshold (90%)
+            if (target > 0 && buffered >= (target * 90 / 100)) {
+                return true
+            }
+
+            // Explicitly in preloading or metadata getting state: not ready
+            if (stat == 1 || stat == 2 || statString?.contains("preload", ignoreCase = true) == true) {
+                return false
+            }
+
+            // If preloadSize is known and we have not buffered enough yet: not ready
+            if (preloadSize > 0) {
+                return false
+            }
+
+            // When server status is active / Torrent working, but preloadSize is unknown (0):
+            // The server might have already been active right when we started polling.
+            // Only consider ready if we have buffered a reasonable amount of data (>= 10MB or 90% of small file)
+            if (stat == 3 || statString.equals("active", ignoreCase = true) || statString.equals("Torrent working", ignoreCase = true)) {
+                val minReady = if (torrentSize in 1..10_485_760L) torrentSize * 90 / 100 else 10_485_760L
+                return buffered >= minReady
+            }
+
+            return false
+        }
 
     val preloadProgress: Float
         get() {
             if (isPreloadReady) return 1f
-            val target = if (preloadSize > 0) preloadSize else if (stat == 2 && preloadedBytes > 0) 33_554_432L else 0L
-            return if (target > 0) (preloadedBytes.toFloat() / target).coerceIn(0f, 1f) else 0f
+            val target = if (preloadSize > 0) preloadSize else if (torrentSize in 1..33_554_432L) torrentSize else 33_554_432L
+            val buffered = if (preloadedBytes > 0) preloadedBytes else loadedSize
+            return if (target > 0) (buffered.toFloat() / target).coerceIn(0f, 1f) else 0f
         }
 }
 
