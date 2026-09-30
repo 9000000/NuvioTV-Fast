@@ -56,13 +56,37 @@ class TorrServerPreloadStatusTest {
     }
 
     @Test
-    fun `isPreloadReady is true when preloadedBytes reaches 90 percent of preloadSize`() {
+    fun `isPreloadReady is true when preloadedBytes reaches 95 percent of preloadSize`() {
         val targetSize = 33_554_432L
         val status = TorrServerRemoteStatus(
             hash = "dummy_hash",
             title = "Test Torrent",
             stat = 3,
             statString = "Torrent working",
+            downloadSpeed = 5_000_000L,
+            uploadSpeed = 0L,
+            preloadedBytes = (targetSize * 96 / 100),
+            preloadSize = targetSize,
+            loadedSize = (targetSize * 96 / 100),
+            torrentSize = 1_000_000_000L,
+            activePeers = 10,
+            connectedSeeders = 8,
+            totalPeers = 30,
+            files = emptyList()
+        )
+
+        assertTrue("Should be ready when 96% of preload buffer is reached", status.isPreloadReady)
+        assertEquals(1f, status.preloadProgress, 0.001f)
+    }
+
+    @Test
+    fun `isPreloadReady is false when preloadedBytes is below 95 percent of preloadSize`() {
+        val targetSize = 33_554_432L
+        val status = TorrServerRemoteStatus(
+            hash = "dummy_hash",
+            title = "Test Torrent",
+            stat = 2,
+            statString = "Torrent preloading",
             downloadSpeed = 5_000_000L,
             uploadSpeed = 0L,
             preloadedBytes = (targetSize * 92 / 100),
@@ -75,8 +99,7 @@ class TorrServerPreloadStatusTest {
             files = emptyList()
         )
 
-        assertTrue("Should be ready when 92% of preload buffer is reached", status.isPreloadReady)
-        assertEquals(1f, status.preloadProgress, 0.001f)
+        assertFalse("Should not be ready when 92% of preload buffer is reached (threshold is 95%)", status.isPreloadReady)
     }
 
     @Test

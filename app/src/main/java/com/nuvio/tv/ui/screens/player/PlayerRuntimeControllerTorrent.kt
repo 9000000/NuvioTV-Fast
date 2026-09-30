@@ -407,10 +407,10 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
         try {
             preloadCall.execute().use { response ->
                 if (response.isSuccessful) {
-                    val byteStream = response.body?.byteStream()
+                    val byteStream = response.body.byteStream()
                     val buffer = ByteArray(16384)
                     while (isActive) {
-                        val read = byteStream?.read(buffer) ?: -1
+                        val read = byteStream.read(buffer)
                         if (read == -1) break
                         preloadHttpBytesRead += read
                     }
@@ -451,12 +451,12 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
                 val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
                 if (stats != null) {
                     // Early buffer handoff: when preload is getting close to completion
-                    // (>= 50% preload progress, >= 12MB buffered data, or preload is ready),
+                    // (>= 85% preload progress, >= 12MB buffered data, or preload is ready),
                     // notify caller so ExoPlayer starts preparing and downloading buffer ahead.
-                    val isNearReady = (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 50 / 100) ||
+                    val isNearReady = (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 85 / 100) ||
                         stats.preloadedBytes >= 12_000_000L ||
                         stats.loadedSize >= 12_000_000L ||
-                        stats.preloadProgress >= 0.5f ||
+                        stats.preloadProgress >= 0.85f ||
                         stats.isPreloadReady
 
                     if (isNearReady && !nearCompletionTriggered) {
@@ -476,7 +476,7 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
                         val elapsedMs = System.currentTimeMillis() - startTime
                         val hasSufficientBuffer = stats.loadedSize >= 10_485_760L ||
                             stats.preloadedBytes >= 10_485_760L ||
-                            (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 90 / 100)
+                            (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 95 / 100)
                         if (hasSufficientBuffer || elapsedMs >= 2000L || pollCount > 4) {
                             Log.d(
                                 TAG,

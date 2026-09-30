@@ -48,8 +48,8 @@ data class TorrServerRemoteStatus(
             val target = if (preloadSize > 0) preloadSize else if (torrentSize in 1..33_554_432L) torrentSize else 33_554_432L
             val buffered = if (preloadedBytes > 0) preloadedBytes else loadedSize
 
-            // Reached target preload threshold (90%)
-            if (target > 0 && buffered >= (target * 90 / 100)) {
+            // Reached target preload threshold (95%)
+            if (target > 0 && buffered >= (target * 95 / 100)) {
                 return true
             }
 
@@ -65,9 +65,9 @@ data class TorrServerRemoteStatus(
 
             // When server status is active / Torrent working, but preloadSize is unknown (0):
             // The server might have already been active right when we started polling.
-            // Only consider ready if we have buffered a reasonable amount of data (>= 10MB or 90% of small file)
+            // Only consider ready if we have buffered a reasonable amount of data (>= 10MB or 95% of small file)
             if (stat == 3 || statString.equals("active", ignoreCase = true) || statString.equals("Torrent working", ignoreCase = true)) {
-                val minReady = if (torrentSize in 1..10_485_760L) torrentSize * 90 / 100 else 10_485_760L
+                val minReady = if (torrentSize in 1..10_485_760L) torrentSize * 95 / 100 else 10_485_760L
                 return buffered >= minReady
             }
 
@@ -136,7 +136,7 @@ class TorrServerRemoteApi @Inject constructor(
         try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (response.isSuccessful) {
-                    val version = response.body?.string()?.trim() ?: "Connected"
+                    val version = response.body.string().trim().ifEmpty { "Connected" }
                     Result.success(version)
                 } else {
                     Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
@@ -183,7 +183,7 @@ class TorrServerRemoteApi @Inject constructor(
                     Log.e(TAG, "addTorrent failed HTTP ${response.code}")
                     return@withContext null
                 }
-                val json = JSONObject(response.body?.string() ?: "{}")
+                val json = JSONObject(response.body.string().ifEmpty { "{}" })
                 val hash = json.optString("hash", "")
                 hash.ifEmpty { null }
             }
@@ -214,7 +214,7 @@ class TorrServerRemoteApi @Inject constructor(
         try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
-                val rawBody = response.body?.string().orEmpty()
+                val rawBody = response.body.string()
                 if (rawBody.isBlank()) return@withContext null
                 val json = JSONObject(rawBody)
 
@@ -341,7 +341,7 @@ class TorrServerRemoteApi @Inject constructor(
         try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (response.isSuccessful) {
-                    val body = response.body?.string() ?: ""
+                    val body = response.body.string()
                     val json = JSONObject(body)
                     val builtIn = json.optBoolean("built_in", false) || json.has("config")
                     Result.success(builtIn)

@@ -156,6 +156,17 @@ internal fun PlaybackSubtitlesSection(
             onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_OUTLINE_COLOR) },
             enabled = enabled
         )
+        SliderSettingsItem(
+            title = stringResource(R.string.sub_outline_width),
+            subtitle = stringResource(R.string.sub_outline_width_sub),
+            value = style.outlineWidth,
+            valueText = "${style.outlineWidth}px",
+            minValue = 1,
+            maxValue = 50,
+            step = 1,
+            onValueChange = { width -> onUpdate { setSubtitleOutlineWidth(width) } },
+            enabled = enabled
+        )
     }
 
     SettingsSectionLabel(text = stringResource(R.string.sub_advanced_section))
