@@ -16,6 +16,8 @@ internal enum class SettingsCategory(val group: SettingsRailGroup) {
     CONTENT_DISCOVERY(SettingsRailGroup.WATCH),
     PLAYBACK(SettingsRailGroup.WATCH),
     INTEGRATION(SettingsRailGroup.SERVICES),
+    LIVE_TV(SettingsRailGroup.SERVICES),
+    TORRSERVER(SettingsRailGroup.SERVICES),
     TRACKING(SettingsRailGroup.SERVICES),
     ADVANCED(SettingsRailGroup.SYSTEM),
     ABOUT(SettingsRailGroup.SYSTEM),

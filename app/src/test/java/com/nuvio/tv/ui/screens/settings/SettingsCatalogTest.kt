@@ -24,6 +24,8 @@ class SettingsCatalogTest {
                 SettingsCategory.CONTENT_DISCOVERY,
                 SettingsCategory.PLAYBACK,
                 SettingsCategory.INTEGRATION,
+                SettingsCategory.LIVE_TV,
+                SettingsCategory.TORRSERVER,
                 SettingsCategory.TRACKING,
                 SettingsCategory.ADVANCED,
                 SettingsCategory.ABOUT,

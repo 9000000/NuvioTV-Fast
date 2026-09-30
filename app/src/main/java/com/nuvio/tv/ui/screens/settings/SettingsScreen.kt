@@ -108,9 +108,7 @@ private enum class IntegrationSettingsSection {
     Debrid,
     Tmdb,
     MdbList,
-    AnimeSkip,
-    LiveTv,
-    TorrServer
+    AnimeSkip
 }
 
 internal enum class SettingsSectionDestination {
@@ -163,6 +161,8 @@ private fun settingsSectionSpec(category: SettingsCategory): SettingsSectionSpec
     SettingsCategory.CONTENT_DISCOVERY -> SettingsSectionSpec(category, stringResource(R.string.settings_content_discovery), Icons.Default.Explore, destination = SettingsSectionDestination.Inline)
     SettingsCategory.PLAYBACK -> SettingsSectionSpec(category, stringResource(R.string.settings_playback), Icons.Rounded.PlayArrow, destination = SettingsSectionDestination.Inline)
     SettingsCategory.INTEGRATION -> SettingsSectionSpec(category, stringResource(R.string.settings_integration), Icons.Default.Link, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.LIVE_TV -> SettingsSectionSpec(category, stringResource(R.string.settings_livetv_title), Icons.Default.LiveTv, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.TORRSERVER -> SettingsSectionSpec(category, stringResource(R.string.settings_torrserver_title), Icons.Default.CloudDownload, destination = SettingsSectionDestination.Inline)
     SettingsCategory.TRACKING -> SettingsSectionSpec(category, stringResource(R.string.settings_tracking_title), Icons.Default.Sync, destination = SettingsSectionDestination.External)
     SettingsCategory.ADVANCED -> SettingsSectionSpec(category, stringResource(R.string.settings_advanced), Icons.Default.Build, destination = SettingsSectionDestination.Inline)
     SettingsCategory.ABOUT -> SettingsSectionSpec(category, stringResource(R.string.about_title), Icons.Default.Info, destination = SettingsSectionDestination.Inline)
@@ -230,6 +230,8 @@ fun SettingsScreen(
             SettingsCategory.LAYOUT to FocusRequester(),
             SettingsCategory.CONTENT_DISCOVERY to FocusRequester(),
             SettingsCategory.INTEGRATION to FocusRequester(),
+            SettingsCategory.LIVE_TV to FocusRequester(),
+            SettingsCategory.TORRSERVER to FocusRequester(),
             SettingsCategory.PLAYBACK to FocusRequester(),
             SettingsCategory.ADVANCED to FocusRequester(),
             SettingsCategory.ABOUT to FocusRequester(),
@@ -242,8 +244,6 @@ fun SettingsScreen(
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
-    val integrationLiveTvFocusRequester = remember { FocusRequester() }
-    val integrationTorrServerFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
@@ -634,8 +634,6 @@ fun SettingsScreen(
                                 integrationTmdbFocusRequester = integrationTmdbFocusRequester,
                                 integrationMdbListFocusRequester = integrationMdbListFocusRequester,
                                 integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
-                                integrationLiveTvFocusRequester = integrationLiveTvFocusRequester,
-                                integrationTorrServerFocusRequester = integrationTorrServerFocusRequester,
                                 onNavigateToManageProfiles = onNavigateToManageProfiles,
                                 onNavigateToAddons = onNavigateToAddons,
                                 onNavigateToPlugins = onNavigateToPlugins,
@@ -775,8 +773,6 @@ fun SettingsScreen(
                         integrationTmdbFocusRequester = integrationTmdbFocusRequester,
                         integrationMdbListFocusRequester = integrationMdbListFocusRequester,
                         integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
-                        integrationLiveTvFocusRequester = integrationLiveTvFocusRequester,
-                        integrationTorrServerFocusRequester = integrationTorrServerFocusRequester,
                         onNavigateToManageProfiles = onNavigateToManageProfiles,
                         onNavigateToAddons = onNavigateToAddons,
                         onNavigateToPlugins = onNavigateToPlugins,
@@ -805,8 +801,6 @@ private fun SettingsDetailPane(
     integrationTmdbFocusRequester: FocusRequester,
     integrationMdbListFocusRequester: FocusRequester,
     integrationAnimeSkipFocusRequester: FocusRequester,
-    integrationLiveTvFocusRequester: FocusRequester,
-    integrationTorrServerFocusRequester: FocusRequester,
     onNavigateToManageProfiles: () -> Unit,
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
@@ -895,9 +889,21 @@ private fun SettingsDetailPane(
             tmdbFocusRequester = integrationTmdbFocusRequester,
             mdbListFocusRequester = integrationMdbListFocusRequester,
             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
-            liveTvFocusRequester = integrationLiveTvFocusRequester,
-            torrServerFocusRequester = integrationTorrServerFocusRequester,
             autoFocusEnabled = allowDetailAutofocus
+        )
+        SettingsCategory.LIVE_TV -> LiveTvSettingsContent(
+            initialFocusRequester = if (allowDetailAutofocus) {
+                contentFocusRequesters[SettingsCategory.LIVE_TV]
+            } else {
+                null
+            }
+        )
+        SettingsCategory.TORRSERVER -> TorrServerSettingsContent(
+            initialFocusRequester = if (allowDetailAutofocus) {
+                contentFocusRequesters[SettingsCategory.TORRSERVER]
+            } else {
+                null
+            }
         )
         SettingsCategory.ABOUT -> AboutSettingsContent(
             onNavigateToSupportersContributors = onNavigateToSupportersContributors,
@@ -1050,8 +1056,6 @@ private fun IntegrationSettingsContent(
     tmdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
-    liveTvFocusRequester: FocusRequester,
-    torrServerFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
@@ -1067,8 +1071,6 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
-            IntegrationSettingsSection.LiveTv -> liveTvFocusRequester
-            IntegrationSettingsSection.TorrServer -> torrServerFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -1128,22 +1130,6 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
                                 )
                             }
-                            item(key = "integration_hub_livetv") {
-                                SettingsActionRow(
-                                    title = stringResource(R.string.settings_livetv_title),
-                                    subtitle = stringResource(R.string.settings_livetv_subtitle),
-                                    leadingIcon = Icons.Default.LiveTv,
-                                    onClick = { onSelectSection(IntegrationSettingsSection.LiveTv) }
-                                )
-                            }
-                            item(key = "integration_hub_torrserver") {
-                                SettingsActionRow(
-                                    title = stringResource(R.string.settings_torrserver_title),
-                                    subtitle = stringResource(R.string.settings_torrserver_subtitle),
-                                    leadingIcon = Icons.Default.CloudDownload,
-                                    onClick = { onSelectSection(IntegrationSettingsSection.TorrServer) }
-                                )
-                            }
                         }
                         SettingsVerticalScrollIndicators(state = integrationHubState)
                     }
@@ -1172,18 +1158,6 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.AnimeSkip -> {
             AnimeSkipSettingsContent(
                 initialFocusRequester = animeSkipFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.LiveTv -> {
-            LiveTvSettingsContent(
-                initialFocusRequester = liveTvFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.TorrServer -> {
-            TorrServerSettingsContent(
-                initialFocusRequester = torrServerFocusRequester
             )
         }
     }
