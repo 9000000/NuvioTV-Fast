@@ -93,6 +93,7 @@ import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
+import com.nuvio.tv.core.torrent.TorrServerStreamProvider
 import com.nuvio.tv.ui.components.P2pConsentDialog
 import com.nuvio.tv.ui.components.StreamBadgeChips
 import com.nuvio.tv.ui.components.StreamsSkeletonList
@@ -197,7 +198,7 @@ fun StreamScreen(
             return
         }
         val preference = playerPreference ?: return
-        if (playbackInfo.isTorrent && !p2pEnabled) {
+        if (playbackInfo.isTorrent && playbackInfo.addonName != TorrServerStreamProvider.PROVIDER_NAME && !p2pEnabled) {
             pendingTorrentPlaybackInfo = playbackInfo
             showP2pConsentDialog = true
             return
@@ -223,8 +224,8 @@ fun StreamScreen(
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
             return
         }
-        // Always check P2P consent for torrents, even in direct auto-play flow
-        if (playbackInfo.isTorrent && !p2pEnabled) {
+        // Always check P2P consent for torrents, even in direct auto-play flow (excluding remote TorrServer)
+        if (playbackInfo.isTorrent && playbackInfo.addonName != TorrServerStreamProvider.PROVIDER_NAME && !p2pEnabled) {
             pendingTorrentPlaybackInfo = playbackInfo
             showP2pConsentDialog = true
             return
@@ -320,8 +321,8 @@ fun StreamScreen(
             return@LaunchedEffect
         }
         if (playbackInfo.url != null || (playbackInfo.isTorrent && playbackInfo.infoHash != null)) {
-            // Torrent cached links still need P2P consent
-            if (playbackInfo.isTorrent && !p2pEnabled) {
+            // Torrent cached links still need P2P consent (unless remote TorrServer)
+            if (playbackInfo.isTorrent && playbackInfo.addonName != TorrServerStreamProvider.PROVIDER_NAME && !p2pEnabled) {
                 pendingTorrentPlaybackInfo = playbackInfo
                 showP2pConsentDialog = true
                 return@LaunchedEffect

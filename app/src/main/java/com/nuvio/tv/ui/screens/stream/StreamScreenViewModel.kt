@@ -1818,7 +1818,8 @@ class StreamScreenViewModel @Inject constructor(
         persistBingeGroupForPlayback(playbackInfo)
 
         var playUrl = url
-        if (playbackInfo.isTorrent || url.startsWith("torrent:")) {
+        val isTorrServer = playbackInfo.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
+        if (!isTorrServer && (playbackInfo.isTorrent || url.startsWith("torrent:"))) {
             val torrentSettingsData = torrentSettings.settings.first()
             val statsHidden = torrentSettingsData.hideTorrentStats
 
