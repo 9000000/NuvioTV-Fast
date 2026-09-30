@@ -18,6 +18,7 @@ data class StreamDto(
     @Json(name = "infoHash") val infoHash: String? = null,
     @Json(name = "fileIdx") val fileIdx: Int? = null,
     @Json(name = "externalUrl") val externalUrl: String? = null,
+    @Json(name = "headers") val headers: Map<String, String>? = null,
     @Json(name = "behaviorHints") val behaviorHints: BehaviorHintsDto? = null,
     @Json(name = "sources") val sources: List<String>? = null,
     @Json(name = "subtitles") val subtitles: List<SubtitleDto>? = null,

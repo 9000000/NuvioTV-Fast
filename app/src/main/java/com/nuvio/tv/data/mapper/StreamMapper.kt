@@ -16,33 +16,48 @@ import com.nuvio.tv.domain.model.StreamClientResolveParsed
 import com.nuvio.tv.domain.model.StreamClientResolveRaw
 import com.nuvio.tv.domain.model.StreamClientResolveStream
 
-fun StreamDto.toDomain(addonName: String, addonLogo: String?): Stream = Stream(
-    name = name,
-    title = title,
-    description = description,
-    url = url,
-    ytId = ytId,
-    infoHash = infoHash,
-    fileIdx = fileIdx,
-    externalUrl = externalUrl,
-    behaviorHints = behaviorHints?.toDomain(),
-    addonName = addonName,
-    addonLogo = addonLogo,
-    sources = sources,
-    clientResolve = clientResolve?.toDomain(),
-    subtitles = subtitles.orEmpty().mapNotNull { dto ->
-        val url = dto.url.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-        Subtitle(
-            id = dto.id?.takeIf { it.isNotBlank() } ?: url,
-            url = url,
-            lang = dto.lang.ifBlank { "Unknown" },
-            addonName = addonName,
-            addonLogo = addonLogo,
-            isStreamProvided = true,
-            headers = dto.headers
+fun StreamDto.toDomain(addonName: String, addonLogo: String?): Stream {
+    val baseHints = behaviorHints?.toDomain()
+    val effectiveBehaviorHints = when {
+        baseHints == null && !headers.isNullOrEmpty() -> StreamBehaviorHints(
+            notWebReady = null,
+            bingeGroup = null,
+            countryWhitelist = null,
+            proxyHeaders = ProxyHeaders(request = sanitizeHeaderMap(headers), response = null)
         )
+        baseHints != null && baseHints.proxyHeaders?.request.isNullOrEmpty() && !headers.isNullOrEmpty() -> baseHints.copy(
+            proxyHeaders = ProxyHeaders(request = sanitizeHeaderMap(headers), response = baseHints.proxyHeaders?.response)
+        )
+        else -> baseHints
     }
-)
+    return Stream(
+        name = name,
+        title = title,
+        description = description,
+        url = url,
+        ytId = ytId,
+        infoHash = infoHash,
+        fileIdx = fileIdx,
+        externalUrl = externalUrl,
+        behaviorHints = effectiveBehaviorHints,
+        addonName = addonName,
+        addonLogo = addonLogo,
+        sources = sources,
+        clientResolve = clientResolve?.toDomain(),
+        subtitles = subtitles.orEmpty().mapNotNull { dto ->
+            val url = dto.url.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            Subtitle(
+                id = dto.id?.takeIf { it.isNotBlank() } ?: url,
+                url = url,
+                lang = dto.lang.ifBlank { "Unknown" },
+                addonName = addonName,
+                addonLogo = addonLogo,
+                isStreamProvided = true,
+                headers = dto.headers
+            )
+        }
+    )
+}
 
 fun StreamClientResolveDto.toDomain(): StreamClientResolve = StreamClientResolve(
     type = type,

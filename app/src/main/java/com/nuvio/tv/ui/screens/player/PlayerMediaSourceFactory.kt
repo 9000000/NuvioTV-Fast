@@ -173,7 +173,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         drmKey: String? = null,
         cacheKey: String? = null
     ): MediaSource {
-        val sanitizedHeaders = sanitizeHeaders(headers)
+        val sanitizedHeaders = sanitizeHeadersForUrl(url, headers)
         val httpDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, sanitizedHeaders, url)
 
         val resolvedMimeType = mimeTypeOverride ?: inferMimeType(
@@ -350,10 +350,17 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val mediaItem = mediaItemBuilder.build()
 
         val isTorrServerStream = isTorrServerUrl(url)
+        val isPresignedStream = isPresignedOrR2Url(url)
         if (isTorrServerStream) {
             Log.i(
                 "PlayerMediaSourceFactory",
                 "TorrServer stream detected: bypassing ParallelRangeDataSource and VOD Cache for single sequential HTTP stream"
+            )
+        }
+        if (isPresignedStream) {
+            Log.i(
+                "PlayerMediaSourceFactory",
+                "Cloudflare R2 / S3 Presigned stream detected: bypassing ParallelRangeDataSource and VOD Cache for single sequential HTTP stream"
             )
         }
 
@@ -370,10 +377,12 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 PlayerMemoryReporter.snapshot(context)
         )
         PlayerMemoryReporter.startSampling(context)
-        val useChunkSessionSource = !isTorrServerStream && useParallelConnections && !isHls && !isDash
+        val useChunkSessionSource = !isTorrServerStream && !isPresignedStream && useParallelConnections && !isHls && !isDash
         parallelStartupPrefetchUnlocked.set(!useChunkSessionSource)
         val progressiveUpstreamFactory: DataSource.Factory = if (useChunkSessionSource) {
-            val okHttpFactory = OkHttpDataSource.Factory(playbackHttpClient).apply {
+            val okHttpFactory = OkHttpDataSource.Factory(
+                PlayerPlaybackNetworking.createHttpClient(sanitizedHeaders)
+            ).apply {
                 setDefaultRequestProperties(sanitizedHeaders)
                 if (sanitizedHeaders.none { it.key.equals("User-Agent", ignoreCase = true) }) {
                     setUserAgent(DEFAULT_USER_AGENT)
@@ -404,7 +413,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         // 2. VOD disk cache (opt-in).
-        val useVodCache = !isTorrServerStream && ENABLE_VOD_CACHE && vodCacheEnabled && !isHls && !isDash && shouldUseVodCache(url)
+        val useVodCache = !isTorrServerStream && !isPresignedStream && ENABLE_VOD_CACHE && vodCacheEnabled && !isHls && !isDash && shouldUseVodCache(url)
         // A playback started inside the delay window would have its own data swept out from under it.
         pendingEvictionJob?.cancel()
         pendingEvictionJob = null
@@ -707,6 +716,15 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
         }
 
+        fun isPresignedOrR2Url(url: String?): Boolean {
+            if (url.isNullOrBlank()) return false
+            return url.contains("X-Amz-Signature", ignoreCase = true) ||
+                url.contains("X-Amz-SignedHeaders", ignoreCase = true) ||
+                url.contains("X-Amz-Algorithm", ignoreCase = true) ||
+                url.contains("r2.cloudflarestorage.com", ignoreCase = true) ||
+                url.contains(".r2.dev", ignoreCase = true)
+        }
+
         fun sanitizeHeaders(headers: Map<String, String>?): Map<String, String> {
             val raw: Map<*, *> = headers ?: return emptyMap()
             if (raw.isEmpty()) return emptyMap()
@@ -722,15 +740,23 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             return sanitized
         }
 
+        fun sanitizeHeadersForUrl(url: String, headers: Map<String, String>?): Map<String, String> {
+            val sanitized = sanitizeHeaders(headers)
+            if (isPresignedOrR2Url(url)) {
+                return sanitized.filterNot { it.key.equals("Authorization", ignoreCase = true) }
+            }
+            return sanitized
+        }
+
         fun normalizePlaybackRequest(
             url: String,
             headers: Map<String, String>?
         ): NormalizedPlaybackRequest {
-            val sanitizedHeaders = sanitizeHeaders(headers)
+            val sanitizedHeaders = sanitizeHeadersForUrl(url, headers)
             val (cleanUrl, mergedHeaders) = extractUserInfoAuth(url, sanitizedHeaders)
             return NormalizedPlaybackRequest(
                 url = cleanUrl,
-                headers = sanitizeHeaders(mergedHeaders)
+                headers = sanitizeHeadersForUrl(cleanUrl, mergedHeaders)
             )
         }
 
@@ -1146,27 +1172,30 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 return@withContext null
             }
             val sanitizedHeaders = sanitizeHeaders(headers)
-            // Presigned S3/R2 URLs sign only the 'host' header, so HEAD is rejected with 403.
-            // Detect these URLs by their query parameters and skip straight to GET.
-            val isPresignedUrl = url.contains("X-Amz-Signature", ignoreCase = true) ||
-                url.contains("X-Amz-SignedHeaders", ignoreCase = true)
+            val isPresignedUrl = isPresignedOrR2Url(url)
             val methods = if (isPresignedUrl) listOf("GET") else listOf("HEAD", "GET")
+            val effectiveHeaders = if (isPresignedUrl) {
+                sanitizedHeaders.filterNot { it.key.equals("Authorization", ignoreCase = true) }
+            } else {
+                sanitizedHeaders
+            }
+            val probeClient = PlayerPlaybackNetworking.createHttpClient(effectiveHeaders)
             for (method in methods) {
                 runCatching {
                     val requestBuilder = Request.Builder().url(url)
                     if (method == "GET") {
                         requestBuilder.header("Range", "bytes=0-2048")
                     }
-                    sanitizedHeaders.forEach { (key, value) ->
+                    effectiveHeaders.forEach { (key, value) ->
                         if (!key.equals("Range", ignoreCase = true)) {
                             requestBuilder.header(key, value)
                         }
                     }
-                    if (sanitizedHeaders.none { it.key.equals("User-Agent", ignoreCase = true) }) {
+                    if (effectiveHeaders.none { it.key.equals("User-Agent", ignoreCase = true) }) {
                         requestBuilder.header("User-Agent", DEFAULT_USER_AGENT)
                     }
 
-                    PlayerPlaybackNetworking.playbackHttpClient.newCall(requestBuilder.build()).execute().use { response ->
+                    probeClient.newCall(requestBuilder.build()).execute().use { response ->
                         if (!response.isSuccessful && response.code !in 200..308) {
                             return@use null
                         }
@@ -1181,7 +1210,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                         inferMimeTypeFromResponseHeaders(responseHeadersMap)?.let { return@withContext it }
 
                         if (method == "GET") {
-                            val snippet = response.body?.byteStream()?.use { stream ->
+                            val snippet = response.body.byteStream().use { stream ->
                                 val bytes = ByteArray(512)
                                 val read = stream.read(bytes)
                                 if (read > 0) String(bytes, 0, read, Charsets.UTF_8) else null
@@ -1209,17 +1238,30 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 ?.value
                 ?: return null
 
-            val filename = contentDisposition
-                .substringAfter("filename*=", missingDelimiterValue = "")
-                .substringAfterLast("''", missingDelimiterValue = "")
-                .ifBlank {
-                    contentDisposition.substringAfter("filename=", missingDelimiterValue = "")
-                }
-                .trim()
-                .trim('"', '\'')
-                .takeIf { it.isNotBlank() }
-
+            val filename = extractFilenameFromContentDisposition(contentDisposition)
             return inferMimeTypeFromPath(filename)
+        }
+
+        private fun extractFilenameFromContentDisposition(contentDisposition: String): String? {
+            val fnStar = contentDisposition.substringAfter("filename*=", missingDelimiterValue = "")
+            if (fnStar.isNotBlank()) {
+                val decoded = fnStar.substringAfterLast("''", missingDelimiterValue = fnStar)
+                    .substringBefore(';')
+                    .trim()
+                    .trim('"', '\'')
+                if (decoded.isNotBlank()) return decoded
+            }
+            val fn = contentDisposition.substringAfter("filename=", missingDelimiterValue = "")
+            if (fn.isNotBlank()) {
+                val trimmed = fn.trim()
+                val extracted = if (trimmed.startsWith('"')) {
+                    trimmed.drop(1).substringBefore('"')
+                } else {
+                    trimmed.substringBefore(';').trim('\'').trim()
+                }
+                if (extracted.isNotBlank()) return extracted
+            }
+            return null
         }
 
         private fun inferMimeTypeFromPath(path: String?): String? {
@@ -1256,7 +1298,18 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 val value = parameter.substringAfter('=', missingDelimiterValue = "").trim()
                 if (key.isBlank() || value.isBlank()) return@forEach
 
-                when (key) {
+                when (key.lowercase(Locale.ROOT)) {
+                    "response-content-disposition",
+                    "content-disposition",
+                    "content_disposition" -> {
+                        val decoded = runCatching { URLDecoder.decode(value, Charsets.UTF_8.name()) }.getOrDefault(value)
+                        val fn = extractFilenameFromContentDisposition(decoded) ?: decoded.trim().trim('"', '\'')
+                        inferMimeTypeFromPath(fn)?.let { return it }
+                    }
+                    "filename", "file" -> {
+                        val decoded = runCatching { URLDecoder.decode(value, Charsets.UTF_8.name()) }.getOrDefault(value)
+                        inferMimeTypeFromPath(decoded.trim().trim('"', '\''))?.let { return it }
+                    }
                     "format",
                     "mime",
                     "mime_type",
@@ -1365,7 +1418,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             if (userInfo.isBlank()) return url to headers
             val cleanUrl = stripRawUserInfo(uri) ?: return url to headers
             val mergedHeaders = LinkedHashMap(headers)
-            if (headers.none { it.key.equals("Authorization", ignoreCase = true) }) {
+            if (!isPresignedOrR2Url(url) && headers.none { it.key.equals("Authorization", ignoreCase = true) }) {
                 val encoded = Base64.getEncoder().encodeToString(userInfo.toByteArray(Charsets.UTF_8))
                 mergedHeaders["Authorization"] = "Basic $encoded"
             }

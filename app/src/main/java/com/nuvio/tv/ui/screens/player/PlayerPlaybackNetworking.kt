@@ -101,23 +101,74 @@ internal object PlayerPlaybackNetworking {
         if (useLongReadTimeout) {
             builder.readTimeout(LOOPBACK_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         }
-        if (defaultHeaders.any { it.key.equals("Authorization", ignoreCase = true) }) {
-            // OkHttp strips the Authorization header on cross-host redirects.
-            // WebDAV servers behind reverse proxies commonly redirect to a
-            // different host/port, causing auth to be lost. A network
-            // interceptor ensures the header is always present on every
-            // outgoing request — same behavior as mpv/curl.
-            val authValue = defaultHeaders.entries
-                .first { it.key.equals("Authorization", ignoreCase = true) }
-                .value
+        // Preserve essential headers across cross-host redirects (e.g. Pengu, VidFast, WebDAV)
+        // and sanitize headers when redirecting to presigned S3/R2 storage.
+        val authValue = defaultHeaders.entries
+            .firstOrNull { it.key.equals("Authorization", ignoreCase = true) }
+            ?.value
+        val refererValue = defaultHeaders.entries
+            .firstOrNull { it.key.equals("Referer", ignoreCase = true) }
+            ?.value
+        val userAgentValue = defaultHeaders.entries
+            .firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }
+            ?.value
+        val originValue = defaultHeaders.entries
+            .firstOrNull { it.key.equals("Origin", ignoreCase = true) }
+            ?.value
+
+        val customHeaders = defaultHeaders.filterKeys { key ->
+            !key.equals("Authorization", ignoreCase = true) &&
+                !key.equals("Referer", ignoreCase = true) &&
+                !key.equals("User-Agent", ignoreCase = true) &&
+                !key.equals("Origin", ignoreCase = true) &&
+                !key.equals("Range", ignoreCase = true) &&
+                !key.equals("Host", ignoreCase = true)
+        }
+
+        if (authValue != null || refererValue != null || userAgentValue != null || originValue != null || customHeaders.isNotEmpty()) {
             builder.addNetworkInterceptor { chain ->
                 val request = chain.request()
-                if (request.header("Authorization") == null) {
-                    chain.proceed(
-                        request.newBuilder()
-                            .header("Authorization", authValue)
-                            .build()
-                    )
+                val requestUrl = request.url.toString()
+                val isPresigned = PlayerMediaSourceFactory.isPresignedOrR2Url(requestUrl)
+
+                var modified = false
+                val reqBuilder = request.newBuilder()
+
+                if (isPresigned) {
+                    // S3/R2 presigned URLs reject requests with 400/403 if Authorization is sent.
+                    if (request.header("Authorization") != null) {
+                        reqBuilder.removeHeader("Authorization")
+                        modified = true
+                    }
+                } else if (authValue != null && request.header("Authorization") == null) {
+                    reqBuilder.header("Authorization", authValue)
+                    modified = true
+                }
+
+                if (refererValue != null && request.header("Referer") == null) {
+                    reqBuilder.header("Referer", refererValue)
+                    modified = true
+                }
+
+                if (userAgentValue != null && request.header("User-Agent") == null) {
+                    reqBuilder.header("User-Agent", userAgentValue)
+                    modified = true
+                }
+
+                if (originValue != null && request.header("Origin") == null) {
+                    reqBuilder.header("Origin", originValue)
+                    modified = true
+                }
+
+                customHeaders.forEach { (k, v) ->
+                    if (request.header(k) == null) {
+                        reqBuilder.header(k, v)
+                        modified = true
+                    }
+                }
+
+                if (modified) {
+                    chain.proceed(reqBuilder.build())
                 } else {
                     chain.proceed(request)
                 }
