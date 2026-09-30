@@ -163,8 +163,6 @@ class StreamRepositoryPluginIsolationTest {
         coEvery { availability.annotateCachedAvailability(any()) } coAnswers {
             firstArg<List<AddonStreams>>()
         }
-        val torrServerStreamProvider = mockk<com.nuvio.tv.core.torrent.TorrServerStreamProvider>(relaxed = true)
-        coEvery { torrServerStreamProvider.isEnabled() } returns false
 
         return Harness(
             repository = StreamRepositoryImpl(
@@ -176,8 +174,7 @@ class StreamRepositoryPluginIsolationTest {
                 debridSettingsDataStore = debridSettingsDataStore,
                 tmdbService = tmdbService,
                 debridStreamPresentation = presentation,
-                localDebridAvailabilityService = availability,
-                torrServerStreamProvider = torrServerStreamProvider
+                localDebridAvailabilityService = availability
             ),
             api = api,
             tmdbService = tmdbService,

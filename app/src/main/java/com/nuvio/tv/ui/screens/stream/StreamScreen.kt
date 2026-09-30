@@ -93,6 +93,7 @@ import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
+import com.nuvio.tv.ui.components.P2pConsentDialog
 import com.nuvio.tv.ui.components.StreamBadgeChips
 import com.nuvio.tv.ui.components.StreamsSkeletonList
 import com.nuvio.tv.ui.screens.player.LoadingOverlay
@@ -137,6 +138,9 @@ fun StreamScreen(
     var pendingRestoreOnResume by rememberSaveable { mutableStateOf(false) }
     var showPlayerChoiceDialog by remember { mutableStateOf(false) }
     var pendingPlaybackInfo by remember { mutableStateOf<StreamPlaybackInfo?>(null) }
+    var showP2pConsentDialog by remember { mutableStateOf(false) }
+    var pendingTorrentPlaybackInfo by remember { mutableStateOf<StreamPlaybackInfo?>(null) }
+    val p2pEnabled by viewModel.p2pEnabled.collectAsStateWithLifecycle(initialValue = false)
     val streamBadgeSettings by viewModel.streamBadgeSettings.collectAsStateWithLifecycle(
         initialValue = StreamBadgeSettings()
     )
@@ -193,6 +197,11 @@ fun StreamScreen(
             return
         }
         val preference = playerPreference ?: return
+        if (playbackInfo.isTorrent && !p2pEnabled) {
+            pendingTorrentPlaybackInfo = playbackInfo
+            showP2pConsentDialog = true
+            return
+        }
         when (preference) {
             PlayerPreference.INTERNAL -> {
                 launchInternalPlayer(playbackInfo)
@@ -212,6 +221,12 @@ fun StreamScreen(
     fun routeAutoPlay(playbackInfo: StreamPlaybackInfo) {
         if (openExternalInBrowser(playbackInfo)) {
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+            return
+        }
+        // Always check P2P consent for torrents, even in direct auto-play flow
+        if (playbackInfo.isTorrent && !p2pEnabled) {
+            pendingTorrentPlaybackInfo = playbackInfo
+            showP2pConsentDialog = true
             return
         }
         val preference = playerPreference ?: return
@@ -305,6 +320,12 @@ fun StreamScreen(
             return@LaunchedEffect
         }
         if (playbackInfo.url != null || (playbackInfo.isTorrent && playbackInfo.infoHash != null)) {
+            // Torrent cached links still need P2P consent
+            if (playbackInfo.isTorrent && !p2pEnabled) {
+                pendingTorrentPlaybackInfo = playbackInfo
+                showP2pConsentDialog = true
+                return@LaunchedEffect
+            }
             // Respect player preference for cached links too
             when (playerPreference ?: return@LaunchedEffect) {
                 PlayerPreference.EXTERNAL -> {
@@ -440,20 +461,12 @@ fun StreamScreen(
                         if (currentIndex >= 0) {
                             focusedStreamIndex = currentIndex
                         }
-                        if (viewModel.isTorrServerStream(stream)) {
-                            viewModel.prepareTorrServerFilePicker(stream)
-                        } else {
-                            scope.coroutineLaunch {
-                                if (viewModel.isRawTorrentStream(stream)) {
-                                    viewModel.onEvent(StreamScreenEvent.OnPromptEnableTorrServer(stream))
-                                } else {
-                                    val playbackInfo = viewModel.resolveStreamForPlayback(stream)
-                                    if (playbackInfo != null) {
-                                        pendingRestoreOnResume = true
-                                        routePlayback(playbackInfo)
-                                        viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
-                                    }
-                                }
+                        scope.coroutineLaunch {
+                            val playbackInfo = viewModel.resolveStreamForPlayback(stream)
+                            if (playbackInfo != null) {
+                                pendingRestoreOnResume = true
+                                routePlayback(playbackInfo)
+                                viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                             }
                         }
                     },
@@ -499,37 +512,24 @@ fun StreamScreen(
             )
         }
 
-        if (uiState.showTorrentFilePicker) {
-            com.nuvio.tv.ui.components.TorrentFilePickerDialog(
-                title = uiState.torrentFilePickerTitle,
-                isLoading = uiState.torrentFilePickerLoading,
-                error = uiState.torrentFilePickerError,
-                files = uiState.torrentFilePickerFiles,
-                targetSeason = uiState.season,
-                targetEpisode = uiState.episode,
-                contentType = uiState.contentType,
-                onFileSelected = { fileId ->
-                    scope.coroutineLaunch {
-                        val playbackInfo = viewModel.resolveTorrServerPlayback(fileId)
-                        if (playbackInfo != null) {
-                            pendingRestoreOnResume = true
-                            routePlayback(playbackInfo)
-                            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
-                        }
-                    }
+        if (showP2pConsentDialog && pendingTorrentPlaybackInfo != null) {
+            P2pConsentDialog(
+                onEnableP2p = {
+                    viewModel.enableP2p()
+                    showP2pConsentDialog = false
+                    val info = pendingTorrentPlaybackInfo!!
+                    pendingTorrentPlaybackInfo = null
+                    routePlayback(info)
                 },
                 onDismiss = {
-                    viewModel.dismissTorrentFilePicker()
+                    showP2pConsentDialog = false
+                    pendingTorrentPlaybackInfo = null
+                    // Cancelled P2P consent — fall back to manual stream selection
+                    viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                 }
             )
         }
 
-        if (uiState.showTorrServerPrompt) {
-            TorrServerEnablePromptDialog(
-                onEnable = { viewModel.onEvent(StreamScreenEvent.OnConfirmEnableTorrServer) },
-                onDismiss = { viewModel.onEvent(StreamScreenEvent.OnDismissTorrServerPrompt) }
-            )
-        }
     }
 }
 
@@ -800,9 +800,19 @@ private fun RightStreamSection(
             firstStreamFocusRequestId += 1
         }
     }
-    // Track first stream key without stealing focus or jumping scroll position when late addons arrive.
+    // When on "All" tab and new results arrive above the focused stream, move focus to the new first item.
     var trackedFirstStreamKey by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(firstStreamKey, selectedAddonFilter) {
+    LaunchedEffect(firstStreamKey, selectedAddonFilter, listHasFocus) {
+        if (selectedAddonFilter != null) {
+            trackedFirstStreamKey = firstStreamKey
+            return@LaunchedEffect
+        }
+        if (firstStreamKey != null && trackedFirstStreamKey != null &&
+            firstStreamKey != trackedFirstStreamKey &&
+            listHasFocus && !userMovedFromFirstResult
+        ) {
+            firstStreamFocusRequestId += 1
+        }
         trackedFirstStreamKey = firstStreamKey
     }
     fun requestChipFocus(index: Int) {
@@ -1447,115 +1457,3 @@ internal fun PlayerChoiceDialog(
         }
     }
 }
-
-@Composable
-internal fun TorrServerEnablePromptDialog(
-    onEnable: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(NuvioTheme.radii.xl))
-                .background(NuvioTheme.colors.BackgroundCard)
-        ) {
-            Column(
-                modifier = Modifier
-                    .width(440.dp)
-                    .padding(NuvioTheme.spacing.xl),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = stringResource(R.string.torrserver_prompt_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioTheme.colors.TextPrimary,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
-
-                Text(
-                    text = stringResource(R.string.torrserver_prompt_message),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioTheme.colors.TextSecondary,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(NuvioTheme.spacing.xl))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    var cancelFocused by remember { mutableStateOf(false) }
-                    Card(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .weight(1f)
-                            .onFocusChanged { cancelFocused = it.isFocused },
-                        colors = CardDefaults.colors(
-                            containerColor = NuvioTheme.colors.BackgroundElevated,
-                            focusedContainerColor = NuvioTheme.colors.Secondary
-                        ),
-                        border = CardDefaults.border(
-                            focusedBorder = Border(
-                                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
-                                shape = RoundedCornerShape(NuvioTheme.radii.md)
-                            )
-                        ),
-                        shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.md)),
-                        scale = CardDefaults.scale(focusedScale = 1.05f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.torrserver_prompt_cancel),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (cancelFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary,
-                            modifier = Modifier
-                                .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
-                                .fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                    var enableFocused by remember { mutableStateOf(false) }
-                    Card(
-                        onClick = onEnable,
-                        modifier = Modifier
-                            .weight(1f)
-                            .focusRequester(focusRequester)
-                            .onFocusChanged { enableFocused = it.isFocused },
-                        colors = CardDefaults.colors(
-                            containerColor = NuvioTheme.colors.Primary,
-                            focusedContainerColor = NuvioTheme.colors.Secondary
-                        ),
-                        border = CardDefaults.border(
-                            focusedBorder = Border(
-                                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
-                                shape = RoundedCornerShape(NuvioTheme.radii.md)
-                            )
-                        ),
-                        shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.md)),
-                        scale = CardDefaults.scale(focusedScale = 1.05f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.torrserver_prompt_enable),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (enableFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.OnPrimary,
-                            modifier = Modifier
-                                .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
-                                .fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-

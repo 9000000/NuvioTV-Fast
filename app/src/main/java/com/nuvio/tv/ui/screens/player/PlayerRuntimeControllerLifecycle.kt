@@ -44,6 +44,7 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
     hidePlayerEngineSwitchInfoJob?.cancel()
     hideSubtitleDelayOverlayJob?.cancel()
     subtitleAutoSyncLoadJob?.cancel()
+    cancelAutomaticSubtitleSync() // AutoSync hook
     stopSidecarAddonSubtitle(clearView = true)
     subtitleTimingRefreshJob?.cancel()
     subtitleTimingRefreshJob = null
@@ -57,8 +58,6 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
     nextEpisodeAutoPlayJob = null
     debridResolveJob?.cancel()
     debridResolveJob = null
-    torrentFilePickerJob?.cancel()
-    torrentFilePickerJob = null
     stillWatchingPromptJob?.cancel()
     stillWatchingPromptJob = null
     errorRetryJob?.cancel()

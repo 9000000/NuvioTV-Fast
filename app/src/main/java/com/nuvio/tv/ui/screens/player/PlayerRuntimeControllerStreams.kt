@@ -20,16 +20,12 @@ import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Hard ceiling for next-episode stream search to prevent hanging forever. */
@@ -46,28 +42,22 @@ internal fun PlayerRuntimeController.scheduleSourceBadgeApplication() {
     if (newAddons.isEmpty()) return
 
     sourceBadgeJob = scope.launch(kotlinx.coroutines.Dispatchers.Default) {
-        val currentRules = streamBadgeSettingsDataStore.settings.first().rules
-        if (!currentRules.hasImport) {
+        val allNewStreams = newAddons.flatMap { addonName ->
+            _uiState.value.sourceAllStreams.filter { it.addonName == addonName }
+        }
+        if (allNewStreams.isEmpty()) {
             sourceBadgedAddonNames = sourceBadgedAddonNames + newAddons.toSet()
             return@launch
         }
-        for (addonName in newAddons) {
-            ensureActive()
-            val streamsForAddon = _uiState.value.sourceAllStreams.filter { it.addonName == addonName }
-            if (streamsForAddon.isEmpty()) {
-                sourceBadgedAddonNames = sourceBadgedAddonNames + addonName
-                continue
-            }
-            val group = com.nuvio.tv.domain.model.AddonStreams(addonName = addonName, addonLogo = null, streams = streamsForAddon)
-            val badgedGroup = streamBadgePresentation.apply(listOf(group)).firstOrNull() ?: group
-            ensureActive()
-            val badgedStreamsByKey = badgedGroup.streams.associate { it.uniqueIdentityKey() to it.badges }
+        val chunks = allNewStreams.chunked(5)
+        for (chunk in chunks) {
+            val chunkGroup = com.nuvio.tv.domain.model.AddonStreams(addonName = "", addonLogo = null, streams = chunk)
+            val badgedChunk = streamBadgePresentation.apply(listOf(chunkGroup))
+                .firstOrNull()?.streams ?: chunk
+            val badgedByKey = badgedChunk.associateBy { it.sourceBadgeMergeKey() }
             _uiState.update { current ->
                 val updatedAll = current.sourceAllStreams.map { s ->
-                    if (s.addonName == addonName) {
-                        val badges = badgedStreamsByKey[s.uniqueIdentityKey()]
-                        if (!badges.isNullOrEmpty()) s.copy(badges = badges) else s
-                    } else s
+                    badgedByKey[s.sourceBadgeMergeKey()] ?: s
                 }
                 val selectedAddon = current.sourceSelectedAddonFilter
                 val fullFiltered = updatedAll.filterByAddon(selectedAddon)
@@ -80,7 +70,8 @@ internal fun PlayerRuntimeController.scheduleSourceBadgeApplication() {
                         else fullFiltered.subList(0, pageEnd)
                 )
             }
-            sourceBadgedAddonNames = sourceBadgedAddonNames + addonName
+            val coveredAddons = chunk.map { it.addonName }.toSet()
+            sourceBadgedAddonNames = sourceBadgedAddonNames + coveredAddons
         }
     }
 }
@@ -107,18 +98,13 @@ internal fun PlayerRuntimeController.scheduleEpisodeBadgeApplication() {
     }
 }
 
-private fun Stream.uniqueIdentityKey(): String = buildString {
-    append(addonName)
-    append('|')
-    append(url ?: "")
-    append('|')
-    append(infoHash?.lowercase() ?: "")
-    append('|')
-    append(getEffectiveFileIdx() ?: "")
-    append('|')
-    append(name ?: "")
-    append('|')
-    append(title ?: "")
+private fun Stream.sourceBadgeMergeKey(): String {
+    infoHash?.lowercase()?.let { return "$addonName|$it:${fileIdx ?: ""}" }
+    val playableUrl = url ?: clientResolve?.let { resolve ->
+        resolve.stream?.raw?.filename ?: resolve.infoHash
+    }
+    if (playableUrl != null) return "$addonName|$playableUrl"
+    return "$addonName|${name}:${title}:${description?.hashCode() ?: 0}"
 }
 
 internal fun PlayerRuntimeController.showEpisodesPanel() {
@@ -254,15 +240,15 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                             allStreams
                         }
                         // Preserve badges already computed by prior badge jobs
-                        val existingBadgesByKey = it.sourceAllStreams
+                        val existingBadged = it.sourceAllStreams
                             .filter { s -> s.badges.isNotEmpty() }
-                            .associate { s -> s.uniqueIdentityKey() to s.badges }
-                        val badgePreserved = if (existingBadgesByKey.isEmpty()) {
+                            .associateBy { s -> s.sourceBadgeMergeKey() }
+                        val badgePreserved = if (existingBadged.isEmpty()) {
                             mergedAllStreams
                         } else {
                             mergedAllStreams.map { s ->
-                                val badges = existingBadgesByKey[s.uniqueIdentityKey()]
-                                if (!badges.isNullOrEmpty() && s.badges.isEmpty()) s.copy(badges = badges) else s
+                                val existing = existingBadged[s.sourceBadgeMergeKey()]
+                                if (existing != null && s.badges.isEmpty()) s.copy(badges = existing.badges) else s
                             }
                         }
                         val mergedAvailableAddons = if (isResume && it.sourceAvailableAddons.isNotEmpty()) {
@@ -329,10 +315,14 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
  */
 private fun mergeSourceStreams(cached: List<Stream>, fresh: List<Stream>): List<Stream> {
     val merged = LinkedHashMap<String, Stream>()
-    cached.forEach { stream -> merged[stream.uniqueIdentityKey()] = stream }
-    fresh.forEach { stream -> merged[stream.uniqueIdentityKey()] = stream }
+    cached.forEach { stream -> merged[stream.mergeKey()] = stream }
+    fresh.forEach { stream -> merged[stream.mergeKey()] = stream }
     return merged.values.toList()
 }
+
+private fun Stream.mergeKey(): String =
+    infoHash?.lowercase()?.let { hash -> "$addonName|$hash:${fileIdx ?: ""}" }
+        ?: "$addonName|${getStreamUrl() ?: externalUrl ?: ytId ?: "${name}:${title}"}"
 
 private fun PlayerRuntimeController.launchSourceDebridPreparationIfNeeded(
     launched: Boolean,
@@ -787,8 +777,23 @@ internal fun PlayerRuntimeController.switchToSourceStream(
         return
     }
 
-    if (isTorrServerStream(stream)) {
-        prepareTorrServerFilePicker(stream)
+    if (stream.youTubeIdToResolve() != null) {
+        debridResolveJob?.cancel()
+        _uiState.update { it.copy(isLoadingSourceStreams = true, sourceStreamsError = null) }
+        debridResolveJob = scope.launch {
+            val resolved = resolveYouTubeStream(stream)
+            debridResolveJob = null
+            if (resolved != null) {
+                switchToSourceStream(resolved)
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isLoadingSourceStreams = false,
+                        sourceStreamsError = context.getString(com.nuvio.tv.R.string.youtube_resolution_failed)
+                    )
+                }
+            }
+        }
         return
     }
 
@@ -801,11 +806,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
             if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
                 switchToSourceStream(resolved)
             } else if (resolved != null) {
-                if (isTorrServerStream(resolved)) {
-                    prepareTorrServerFilePicker(resolved)
-                } else {
-                    switchToTorrentSourceStream(resolved)
-                }
+                switchToTorrentSourceStream(resolved)
             } else {
                 _uiState.update {
                     it.copy(
@@ -922,8 +923,6 @@ internal fun PlayerRuntimeController.switchToSourceStream(
                         responseHeaders = currentStreamResponseHeaders,
                         mimeTypeOverride = currentStreamMimeType,
                         audioDelayUsProvider = audioDelayUs::get,
-                        drmType = currentDrmType,
-                        drmKey = currentDrmKey,
                         cacheKey = currentStreamCacheKey
                     )
                 )
@@ -1327,8 +1326,23 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
         return
     }
 
-    if (!isAutoPlay && isTorrServerStream(stream)) {
-        prepareTorrServerFilePicker(stream)
+    if (stream.youTubeIdToResolve() != null) {
+        debridResolveJob?.cancel()
+        _uiState.update { it.copy(isLoadingEpisodeStreams = true, episodeStreamsError = null) }
+        debridResolveJob = scope.launch {
+            val resolved = resolveYouTubeStream(stream)
+            debridResolveJob = null
+            if (resolved != null) {
+                switchToEpisodeStream(resolved, forcedTargetVideo, isAutoPlay)
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isLoadingEpisodeStreams = false,
+                        episodeStreamsError = context.getString(com.nuvio.tv.R.string.youtube_resolution_failed)
+                    )
+                }
+            }
+        }
         return
     }
 
@@ -1343,11 +1357,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
             if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
                 switchToEpisodeStream(resolved, forcedTargetVideo, isAutoPlay)
             } else if (resolved != null) {
-                if (!isAutoPlay && isTorrServerStream(resolved)) {
-                    prepareTorrServerFilePicker(resolved)
-                } else {
-                    switchToTorrentEpisodeStream(resolved, forcedTargetVideo, isAutoPlay)
-                }
+                switchToTorrentEpisodeStream(resolved, forcedTargetVideo, isAutoPlay)
             } else {
                 _uiState.update {
                     it.copy(
@@ -1635,6 +1645,21 @@ internal fun PlayerRuntimeController.showEpisodeStreamPicker(video: Video, force
     }
     loadEpisodesIfNeeded()
     loadStreamsForEpisode(video = video, forceRefresh = forceRefresh)
+}
+
+internal suspend fun PlayerRuntimeController.resolveYouTubeStream(stream: Stream): Stream? {
+    recordLoadingDiagnosticEvent(
+        phase = "resolving_youtube",
+        message = context.getString(com.nuvio.tv.R.string.youtube_resolving_stream),
+        detail = stream.addonName
+    )
+    val resolved = youTubeStreamResolver.resolve(stream)
+    recordLoadingDiagnosticEvent(
+        phase = if (resolved != null) "resolving_youtube_done" else "resolving_youtube_failed",
+        message = context.getString(com.nuvio.tv.R.string.youtube_resolving_stream),
+        detail = stream.addonName
+    )
+    return resolved
 }
 
 internal suspend fun PlayerRuntimeController.resolveDirectDebridStreamIfNeeded(
@@ -2009,231 +2034,3 @@ private fun PlayerRuntimeController.playNextCloudLibraryFile(
         }
     }
 }
-
-internal fun PlayerRuntimeController.prepareTorrServerFilePicker(stream: Stream) {
-    torrentFilePickerJob?.cancel()
-    _uiState.update {
-        it.copy(
-            showTorrentFilePicker = true,
-            torrentFilePickerLoading = true,
-            torrentFilePickerError = null,
-            torrentFilePickerTitle = stream.title ?: stream.name ?: "",
-            torrentFilePickerFiles = emptyList(),
-            torrentFilePickerPendingStream = stream,
-            torrentFilePickerPendingHash = null,
-            showSourcesPanel = false,
-            showEpisodesPanel = false
-        )
-    }
-
-    torrentFilePickerJob = scope.launch(Dispatchers.IO) {
-        try {
-            val magnet = stream.torrentMagnetUri()
-                ?: stream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
-                ?: stream.getEffectiveInfoHash()?.let { hash ->
-                    val trackers = stream.sources
-                        ?.filter { it.startsWith("tracker:") }
-                        ?.map { it.removePrefix("tracker:") }
-                        ?: emptyList()
-                    val tr = trackers.joinToString("") { "&tr=$it" }
-                    "magnet:?xt=urn:btih:$hash$tr"
-                }
-
-            if (magnet.isNullOrBlank()) {
-                _uiState.update {
-                    it.copy(
-                        torrentFilePickerLoading = false,
-                        torrentFilePickerError = "Không tìm thấy thông tin magnet/hash cho torrent này"
-                    )
-                }
-                return@launch
-            }
-
-            val config = torrServerAddonConfig.config.first()
-            val serverUrl = torrentService.getActiveServerUrl()
-
-            val hash = torrServerRemoteApi.addTorrent(
-                magnetLink = magnet,
-                title = com.nuvio.tv.core.torrent.torrServerDisplayTitle(contentName ?: title),
-                poster = poster,
-                serverUrlOverride = serverUrl
-            ) ?: stream.getEffectiveInfoHash()
-
-            if (hash == null) {
-                _uiState.update {
-                    it.copy(
-                        torrentFilePickerLoading = false,
-                        torrentFilePickerError = "Không thể thêm torrent vào TorrServer"
-                    )
-                }
-                return@launch
-            }
-
-            _uiState.update {
-                it.copy(torrentFilePickerPendingHash = hash)
-            }
-
-            val deadline = System.currentTimeMillis() + 15_000L
-            var files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList()
-            var pollDelay = 250L
-
-            while (isActive && System.currentTimeMillis() < deadline) {
-                val details = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
-                if (details != null && details.files.isNotEmpty()) {
-                    files = details.files
-                    break
-                }
-                delay(pollDelay)
-                pollDelay = (pollDelay * 2).coerceAtMost(1000L)
-            }
-
-            if (files.isEmpty()) {
-                _uiState.update {
-                    it.copy(
-                        torrentFilePickerLoading = false,
-                        torrentFilePickerError = "Quá thời gian tải danh sách file từ torrent"
-                    )
-                }
-            } else {
-                _uiState.update {
-                    it.copy(
-                        torrentFilePickerLoading = false,
-                        torrentFilePickerFiles = files
-                    )
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(PlayerRuntimeController.TAG, "prepareTorrServerFilePicker error", e)
-            _uiState.update {
-                it.copy(
-                    torrentFilePickerLoading = false,
-                    torrentFilePickerError = e.message ?: "Lỗi tải danh sách file"
-                )
-            }
-        }
-    }
-}
-
-internal fun PlayerRuntimeController.dismissTorrentFilePicker() {
-    torrentFilePickerJob?.cancel()
-    torrentFilePickerJob = null
-    _uiState.update {
-        it.copy(
-            showTorrentFilePicker = false,
-            torrentFilePickerLoading = false,
-            torrentFilePickerError = null,
-            torrentFilePickerFiles = emptyList(),
-            torrentFilePickerPendingStream = null,
-            torrentFilePickerPendingHash = null
-        )
-    }
-}
-
-internal fun PlayerRuntimeController.resolveTorrServerPlaybackAndSwitch(fileId: Int) {
-    val pendingStream = _uiState.value.torrentFilePickerPendingStream ?: return
-    val hash = _uiState.value.torrentFilePickerPendingHash ?: pendingStream.getEffectiveInfoHash() ?: return
-    val selectedFile = _uiState.value.torrentFilePickerFiles.firstOrNull { it.id == fileId }
-
-    dismissTorrentFilePicker()
-
-    scope.launch(Dispatchers.IO) {
-        val config = torrServerAddonConfig.config.first()
-        val serverUrl = torrentService.getActiveServerUrl()
-        val magnet = pendingStream.torrentMagnetUri()
-            ?: pendingStream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
-            ?: "magnet:?xt=urn:btih:$hash"
-
-        val streamUrl = torrServerRemoteApi.buildStreamUrl(
-            serverUrl = serverUrl,
-            magnetLink = magnet,
-            fileIdx = fileId,
-            preload = config.preload,
-            save = config.saveToDb,
-            gst = config.gst,
-            hash = hash
-        )
-        val filename = selectedFile?.path?.substringAfterLast('/') ?: pendingStream.behaviorHints?.filename
-
-        withContext(Dispatchers.Main) {
-            switchToTorrServerStream(
-                stream = pendingStream,
-                streamUrl = streamUrl,
-                infoHash = hash,
-                fileIdx = fileId,
-                filename = filename
-            )
-        }
-    }
-}
-
-@androidx.annotation.OptIn(UnstableApi::class)
-internal fun PlayerRuntimeController.switchToTorrServerStream(
-    stream: Stream,
-    streamUrl: String,
-    infoHash: String,
-    fileIdx: Int,
-    filename: String?
-) {
-    sourceStreamsScope?.cancel()
-    sourceStreamsScope = null
-    sourceStreamsJob = null
-    stopTorrentStream()
-    nextEpisodeAutoPlayJob?.cancel()
-    nextEpisodeAutoPlayJob = null
-    flushPlaybackSnapshotForSwitchOrExit()
-    resetLoadingOverlayForNewStream()
-    releasePlayer(flushPlaybackState = false)
-    hasRetriedCurrentStreamAfter416 = false
-    errorRetryCount = 0
-    subtitleDisabledByPersistedPreference = false
-    subtitleAddonRestoredByPersistedPreference = false
-    pendingRestoredAddonSubtitle = null
-    lastSavedPosition = 0L
-
-    isTorrentStream = true
-    _uiState.update {
-        it.copy(
-            isBuffering = true,
-            error = null,
-            currentStreamName = stream.name ?: stream.addonName,
-            currentStreamUrl = streamUrl,
-            currentStreamInfoHash = infoHash,
-            currentStreamFileIdx = fileIdx,
-            currentStreamAddonName = com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME,
-            audioTracks = emptyList(),
-            subtitleTracks = emptyList(),
-            selectedAudioTrackIndex = -1,
-            selectedSubtitleTrackIndex = -1,
-            showSourcesPanel = false,
-            showEpisodesPanel = false,
-            isLoadingSourceStreams = false,
-            sourceStreamsError = null,
-            isTorrentStream = true,
-            showLoadingOverlay = true,
-            hideTorrentStats = false
-        )
-    }
-    applyStreamMetadata(stream)
-    currentFilename = filename ?: stream.behaviorHints?.filename ?: navigationArgs.filename
-    currentStreamUrl = streamUrl
-    currentHeaders = emptyMap()
-    showStreamSourceIndicator(stream)
-    resetPostPlayOverlayState(clearEpisode = false)
-    startRemoteTorrServerStatsPolling(infoHash, streamUrl)
-    scope.launch {
-        currentStreamUrl = awaitRemoteTorrServerPreload(infoHash, streamUrl)
-        preparePlaybackBeforeStart(
-            url = currentStreamUrl,
-            headers = emptyMap(),
-            loadSavedProgress = true
-        )
-    }
-    persistSelectedStreamForReuse(
-        stream = stream,
-        url = streamUrl,
-        headers = emptyMap()
-    )
-}
-

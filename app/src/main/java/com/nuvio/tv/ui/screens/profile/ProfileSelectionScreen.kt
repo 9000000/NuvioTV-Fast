@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.profile
 
+import androidx.tv.material3.MaterialTheme
+import com.nuvio.tv.ui.util.contentTextDirection
 import com.nuvio.tv.ui.theme.NuvioMotion
 
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -88,6 +90,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
@@ -1220,6 +1223,9 @@ private fun ProfileCard(
 
         Text(
             text = profile.name,
+            style = MaterialTheme.typography.labelLarge.copy(
+                textDirection = profile.name.contentTextDirection()
+            ),
             color = nameColor,
             fontSize = if (compact) 15.sp else 17.sp,
             fontWeight = nameWeight,
@@ -1520,6 +1526,9 @@ private fun CreateProfileOverlay(
 
                     Text(
                         text = profileName.ifBlank { stringResource(R.string.profile_name_placeholder) },
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            textDirection = profileName.contentTextDirection()
+                        ),
                         color = if (profileName.isBlank()) NuvioTheme.colors.TextSecondary else NuvioTheme.colors.TextPrimary,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
@@ -1814,6 +1823,9 @@ private fun EditProfileOverlay(
                     )
                     Text(
                         text = profile.name,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            textDirection = profile.name.contentTextDirection()
+                        ),
                         color = Color.White,
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Black
@@ -1863,6 +1875,9 @@ private fun EditProfileOverlay(
 
                     Text(
                         text = profileName.ifBlank { stringResource(R.string.profile_name_placeholder) },
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            textDirection = profileName.contentTextDirection()
+                        ),
                         color = if (profileName.isBlank()) NuvioTheme.colors.TextSecondary else NuvioTheme.colors.TextPrimary,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
@@ -2523,7 +2538,8 @@ private fun ProfileNameField(
                 .onFocusChanged { isFocused = it.isFocused },
             textStyle = TextStyle(
                 color = Color.White,
-                fontSize = 16.sp
+                fontSize = 16.sp,
+                textDirection = TextDirection.Content
             ),
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

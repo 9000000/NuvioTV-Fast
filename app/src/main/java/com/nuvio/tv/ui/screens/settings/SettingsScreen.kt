@@ -6,6 +6,15 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RawRes
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,23 +31,26 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
@@ -91,23 +103,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
 
-internal enum class SettingsCategory {
-    EXPERIENCE,
-    ACCOUNT,
-    PROFILES,
-    APPEARANCE,
-    LAYOUT,
-    CONTENT_DISCOVERY,
-    INTEGRATION,
-    TORRSERVER,
-    LIVETV,
-    PLAYBACK,
-    ADVANCED,
-    TRACKING,
-    ABOUT,
-    DEBUG
-}
-
 private enum class IntegrationSettingsSection {
     Hub,
     Debrid,
@@ -127,7 +122,6 @@ internal data class SettingsSectionSpec(
     val title: String,
     val icon: ImageVector? = null,
     @param:RawRes val rawIconRes: Int? = null,
-    val subtitle: String,
     val destination: SettingsSectionDestination
 )
 
@@ -160,152 +154,19 @@ private sealed interface ExperienceModeLoadState {
 }
 
 @Composable
-private fun rememberSettingsSectionSpecs(): List<SettingsSectionSpec> {
-    val experienceTitle = stringResource(R.string.settings_experience)
-    val experienceSubtitle = stringResource(R.string.settings_experience_subtitle)
-    val accountTitle = stringResource(R.string.settings_account)
-    val accountSubtitle = stringResource(R.string.settings_account_subtitle)
-    val profilesTitle = stringResource(R.string.settings_profiles)
-    val profilesSubtitle = stringResource(R.string.settings_profiles_subtitle)
-    val appearanceTitle = stringResource(R.string.appearance_title)
-    val appearanceSubtitle = stringResource(R.string.appearance_subtitle)
-    val layoutTitle = stringResource(R.string.settings_layout)
-    val layoutSubtitle = stringResource(R.string.settings_layout_subtitle)
-    val contentDiscoveryTitle = stringResource(R.string.settings_content_discovery)
-    val contentDiscoverySubtitle = stringResource(R.string.settings_content_discovery_subtitle)
-    val integrationTitle = stringResource(R.string.settings_integration)
-    val torrserverTitle = stringResource(R.string.settings_torrserver_title)
-    val torrserverSubtitle = stringResource(R.string.settings_torrserver_subtitle)
-    val liveTvTitle = stringResource(R.string.settings_livetv_title)
-    val liveTvSubtitle = stringResource(R.string.settings_livetv_subtitle)
-    val playbackTitle = stringResource(R.string.settings_playback)
-    val playbackSubtitle = stringResource(R.string.settings_playback_subtitle)
-    val trackingTitle = stringResource(R.string.settings_tracking_title)
-    val trackingSubtitle = stringResource(R.string.settings_tracking_subtitle)
-    val aboutTitle = stringResource(R.string.about_title)
-    val aboutSubtitle = stringResource(R.string.settings_about_subtitle)
-    val advancedTitle = stringResource(R.string.settings_advanced)
-    val advancedSubtitle = stringResource(R.string.settings_advanced_subtitle)
-    val debugTitle = stringResource(R.string.settings_debug)
-    val debugSubtitle = stringResource(R.string.settings_debug_subtitle)
-
-    return remember(
-        experienceTitle, experienceSubtitle,
-        accountTitle, accountSubtitle,
-        profilesTitle, profilesSubtitle,
-        appearanceTitle, appearanceSubtitle,
-        layoutTitle, layoutSubtitle,
-        contentDiscoveryTitle, contentDiscoverySubtitle,
-        integrationTitle,
-        liveTvTitle, liveTvSubtitle,
-        torrserverTitle, torrserverSubtitle,
-        playbackTitle, playbackSubtitle,
-        trackingTitle, trackingSubtitle,
-        aboutTitle, aboutSubtitle,
-        advancedTitle, advancedSubtitle,
-        debugTitle, debugSubtitle
-    ) {
-        listOf(
-            SettingsSectionSpec(
-                category = SettingsCategory.EXPERIENCE,
-                title = experienceTitle,
-                icon = Icons.Default.Tune,
-                subtitle = experienceSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.ACCOUNT,
-                title = accountTitle,
-                icon = Icons.Default.Person,
-                subtitle = accountSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.PROFILES,
-                title = profilesTitle,
-                icon = Icons.Default.People,
-                subtitle = profilesSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.APPEARANCE,
-                title = appearanceTitle,
-                icon = Icons.Default.Palette,
-                subtitle = appearanceSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.LAYOUT,
-                title = layoutTitle,
-                icon = Icons.Default.GridView,
-                subtitle = layoutSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.CONTENT_DISCOVERY,
-                title = contentDiscoveryTitle,
-                icon = Icons.Default.Explore,
-                subtitle = contentDiscoverySubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.INTEGRATION,
-                title = integrationTitle,
-                icon = Icons.Default.Link,
-                subtitle = "",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.LIVETV,
-                title = liveTvTitle,
-                icon = Icons.Default.LiveTv,
-                subtitle = liveTvSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.TORRSERVER,
-                title = torrserverTitle,
-                icon = Icons.Default.Storage,
-                subtitle = torrserverSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.PLAYBACK,
-                title = playbackTitle,
-                icon = Icons.Rounded.PlayArrow,
-                subtitle = playbackSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.TRACKING,
-                title = trackingTitle,
-                icon = Icons.Default.Sync,
-                subtitle = trackingSubtitle,
-                destination = SettingsSectionDestination.External
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.ABOUT,
-                title = aboutTitle,
-                icon = Icons.Default.Info,
-                subtitle = aboutSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.ADVANCED,
-                title = advancedTitle,
-                icon = Icons.Default.Build,
-                subtitle = advancedSubtitle,
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.DEBUG,
-                title = debugTitle,
-                icon = Icons.Default.BugReport,
-                subtitle = debugSubtitle,
-                destination = SettingsSectionDestination.Inline
-            )
-        )
-    }
+private fun settingsSectionSpec(category: SettingsCategory): SettingsSectionSpec = when (category) {
+    SettingsCategory.ACCOUNT -> SettingsSectionSpec(category, stringResource(R.string.settings_account), Icons.Default.Person, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.PROFILES -> SettingsSectionSpec(category, stringResource(R.string.settings_profiles), Icons.Default.People, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.APPEARANCE -> SettingsSectionSpec(category, stringResource(R.string.appearance_title), Icons.Default.Palette, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.LAYOUT -> SettingsSectionSpec(category, stringResource(R.string.settings_layout), Icons.Default.GridView, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.CONTENT_DISCOVERY -> SettingsSectionSpec(category, stringResource(R.string.settings_content_discovery), Icons.Default.Explore, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.PLAYBACK -> SettingsSectionSpec(category, stringResource(R.string.settings_playback), Icons.Rounded.PlayArrow, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.INTEGRATION -> SettingsSectionSpec(category, stringResource(R.string.settings_integration), Icons.Default.Link, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.TRACKING -> SettingsSectionSpec(category, stringResource(R.string.settings_tracking_title), Icons.Default.Sync, destination = SettingsSectionDestination.External)
+    SettingsCategory.ADVANCED -> SettingsSectionSpec(category, stringResource(R.string.settings_advanced), Icons.Default.Build, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.ABOUT -> SettingsSectionSpec(category, stringResource(R.string.about_title), Icons.Default.Info, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.DEBUG -> SettingsSectionSpec(category, stringResource(R.string.settings_debug), Icons.Default.BugReport, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.EXPERIENCE -> SettingsSectionSpec(category, stringResource(R.string.settings_experience), Icons.Default.Tune, destination = SettingsSectionDestination.Inline)
 }
 
 @Composable
@@ -341,22 +202,14 @@ fun SettingsScreen(
 
     val isEssentialMode = loadedExperienceMode == ExperienceMode.ESSENTIAL
 
-    val allSectionSpecs = rememberSettingsSectionSpecs()
-    val visibleSections = remember(isPrimaryProfileActive, isEssentialMode, allSectionSpecs) {
-        allSectionSpecs.filter { section ->
-            when (section.category) {
-                SettingsCategory.EXPERIENCE -> false
-                SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD && !isEssentialMode
-                SettingsCategory.PROFILES -> isPrimaryProfileActive
-                SettingsCategory.ACCOUNT -> isPrimaryProfileActive
-                SettingsCategory.LAYOUT -> true
-                SettingsCategory.CONTENT_DISCOVERY -> true
-                SettingsCategory.INTEGRATION -> true
-                SettingsCategory.ADVANCED -> true
-                else -> true
-            }
-        }
+    val visibleCategories = remember(isPrimaryProfileActive, isEssentialMode) {
+        visibleSettingsCategories(
+            isPrimaryProfile = isPrimaryProfileActive,
+            isEssentialMode = isEssentialMode,
+            isDebugBuild = BuildConfig.IS_DEBUG_BUILD
+        )
     }
+    val visibleSections = visibleCategories.map { category -> settingsSectionSpec(category) }
 
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     val isHorizonStyle = NuvioTheme.settingsUiStyle == SettingsUiStyle.HORIZON
@@ -376,8 +229,6 @@ fun SettingsScreen(
             SettingsCategory.LAYOUT to FocusRequester(),
             SettingsCategory.CONTENT_DISCOVERY to FocusRequester(),
             SettingsCategory.INTEGRATION to FocusRequester(),
-            SettingsCategory.TORRSERVER to FocusRequester(),
-            SettingsCategory.LIVETV to FocusRequester(),
             SettingsCategory.PLAYBACK to FocusRequester(),
             SettingsCategory.ADVANCED to FocusRequester(),
             SettingsCategory.ABOUT to FocusRequester(),
@@ -621,11 +472,16 @@ fun SettingsScreen(
                             .onGloballyPositioned { topBarCoordinates = it }
                     ) {
                         focusedTabBounds?.let { bounds ->
-                            val pillLeft = bounds.left
-                            val pillTop = bounds.top
-                            val pillWidth = bounds.width
-                            val pillHeight = bounds.height
-                            val pillAlpha = if (railHadFocus) 1f else 0f
+                            val glideSpec = tween<Float>(durationMillis = 250, easing = FastOutSlowInEasing)
+                            val pillLeft by animateFloatAsState(bounds.left, glideSpec, label = "pillLeft")
+                            val pillTop by animateFloatAsState(bounds.top, glideSpec, label = "pillTop")
+                            val pillWidth by animateFloatAsState(bounds.width, glideSpec, label = "pillWidth")
+                            val pillHeight by animateFloatAsState(bounds.height, glideSpec, label = "pillHeight")
+                            val pillAlpha by animateFloatAsState(
+                                targetValue = if (railHadFocus) 1f else 0f,
+                                animationSpec = tween(durationMillis = 200),
+                                label = "pillAlpha"
+                            )
                             Box(
                                 modifier = Modifier
                                     .align(AbsoluteAlignment.TopLeft)
@@ -685,39 +541,44 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm, Alignment.CenterHorizontally),
                             contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.md, vertical = NuvioTheme.spacing.xs)
                         ) {
-                            items(
+                            itemsIndexed(
                                 items = visibleSections,
-                                key = { it.category }
-                            ) { section ->
-                                SettingsTopBarTab(
-                                    title = section.title,
-                                    icon = section.icon,
-                                    rawIconRes = section.rawIconRes,
-                                    isSelected = selectedCategory == section.category,
-                                    focusRequester = railFocusRequesters[section.category],
-                                    onClick = { onSectionClick(section) },
-                                    onFocused = {
-                                        val restoringTo = railRestoringCategory
-                                        if (section.category == restoringTo) {
-                                            // Cleared here rather than waiting for the attempt to
-                                            // reach its next suspension point. The attempt is left
-                                            // running: it ends on its own once the request lands, and
-                                            // a directional press stops it early.
-                                            railRestoringCategory = null
-                                            railFocusCategoryName = section.category.name
-                                        } else if (restoringTo == null) {
-                                            railFocusCategoryName = section.category.name
-                                        }
-                                        if (section.destination == SettingsSectionDestination.Inline) {
-                                            focusedTabCategory = section.category
-                                        }
-                                    },
-                                    onFocusedTabPositioned = { tabCoordinates ->
-                                        topBarCoordinates?.let { container ->
-                                            focusedTabBounds = container.localBoundingBoxOf(tabCoordinates, clipBounds = false)
-                                        }
+                                key = { _, section -> section.category }
+                            ) { index, section ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (visibleCategories.startsNewGroup(index)) {
+                                        SettingsTopBarDivider()
                                     }
-                                )
+                                    SettingsTopBarTab(
+                                        title = section.title,
+                                        icon = section.icon,
+                                        rawIconRes = section.rawIconRes,
+                                        isSelected = selectedCategory == section.category,
+                                        focusRequester = railFocusRequesters[section.category],
+                                        onClick = { onSectionClick(section) },
+                                        onFocused = {
+                                            val restoringTo = railRestoringCategory
+                                            if (section.category == restoringTo) {
+                                                // Cleared here rather than waiting for the attempt to
+                                                // reach its next suspension point. The attempt is left
+                                                // running: it ends on its own once the request lands, and
+                                                // a directional press stops it early.
+                                                railRestoringCategory = null
+                                                railFocusCategoryName = section.category.name
+                                            } else if (restoringTo == null) {
+                                                railFocusCategoryName = section.category.name
+                                            }
+                                            if (section.destination == SettingsSectionDestination.Inline) {
+                                                focusedTabCategory = section.category
+                                            }
+                                        },
+                                        onFocusedTabPositioned = { tabCoordinates ->
+                                            topBarCoordinates?.let { container ->
+                                                focusedTabBounds = container.localBoundingBoxOf(tabCoordinates, clipBounds = false)
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                         SettingsHorizontalScrollIndicators(state = railListState)
@@ -734,15 +595,32 @@ fun SettingsScreen(
                                 }
                             }
                     ) {
-                        Box(
+                        AnimatedContent(
+                            targetState = selectedCategory,
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
                                 .fillMaxHeight()
                                 .widthIn(max = 880.dp)
-                                .fillMaxWidth()
-                        ) {
+                                .fillMaxWidth(),
+                            transitionSpec = {
+                                val order = visibleSections.map { it.category }
+                                val forward = order.indexOf(targetState) >= order.indexOf(initialState)
+                                val toStart = forward != isRtl
+                                (slideInHorizontally(
+                                    animationSpec = tween(SETTINGS_DETAIL_ANIM_IN_DURATION_MS, easing = FastOutSlowInEasing)
+                                ) { fullWidth -> if (toStart) fullWidth / 4 else -fullWidth / 4 } +
+                                    fadeIn(tween(SETTINGS_DETAIL_ANIM_IN_DURATION_MS)))
+                                    .togetherWith(
+                                        slideOutHorizontally(
+                                            animationSpec = tween(SETTINGS_DETAIL_ANIM_OUT_DURATION_MS, easing = FastOutSlowInEasing)
+                                        ) { fullWidth -> if (toStart) -fullWidth / 4 else fullWidth / 4 } +
+                                            fadeOut(tween(SETTINGS_DETAIL_ANIM_OUT_DURATION_MS))
+                                    )
+                            },
+                            label = "settingsDetailTransition"
+                        ) { animatedCategory ->
                             SettingsDetailPane(
-                                selectedCategory = selectedCategory,
+                                selectedCategory = animatedCategory,
                                 isEssentialMode = isEssentialMode,
                                 allowDetailAutofocus = allowDetailAutofocus,
                                 contentFocusRequesters = contentFocusRequesters,
@@ -766,11 +644,6 @@ fun SettingsScreen(
                     }
                 }
             } else {
-            val isZenRailGlide = NuvioTheme.settingsUiStyle == SettingsUiStyle.ZEN
-            var railCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-            var focusedRailBounds by remember { mutableStateOf<Rect?>(null) }
-            val density = LocalDensity.current
-
             Row(
                 modifier = Modifier.fillMaxSize(),
                 horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
@@ -779,26 +652,7 @@ fun SettingsScreen(
                     modifier = Modifier
                         .width(220.dp)
                         .fillMaxHeight()
-                        .onGloballyPositioned { railCoordinates = it }
                 ) {
-                    if (isZenRailGlide) {
-                        focusedRailBounds?.let { bounds ->
-                            val pillTop = bounds.top
-                            val pillAlpha = if (railHadFocus) 1f else 0f
-                            Box(
-                                modifier = Modifier
-                                    .align(AbsoluteAlignment.TopLeft)
-                                    .absoluteOffset { IntOffset(bounds.left.roundToInt(), pillTop.roundToInt()) }
-                                    .size(
-                                        width = with(density) { bounds.width.toDp() },
-                                        height = with(density) { bounds.height.toDp() }
-                                    )
-                                    .graphicsLayer { alpha = pillAlpha }
-                                    .clip(SettingsZenRowShape)
-                                    .background(settingsFocusFillColor())
-                            )
-                        }
-                    }
                     LazyColumn(
                         state = railListState,
                         modifier = Modifier
@@ -846,40 +700,36 @@ fun SettingsScreen(
                             },
                         verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
                     ) {
-                        items(
+                        itemsIndexed(
                             items = visibleSections,
-                            key = { it.category }
-                        ) { section ->
-                            SettingsRailButton(
-                                onFocused = {
-                                    val restoringTo = railRestoringCategory
-                                    if (section.category == restoringTo) {
-                                        // Cleared here rather than waiting for the attempt to
-                                        // reach its next suspension point. The attempt is left
-                                        // running: it ends on its own once the request lands, and
-                                        // a directional press stops it early.
-                                        railRestoringCategory = null
-                                        railFocusCategoryName = section.category.name
-                                    } else if (restoringTo == null) {
-                                        railFocusCategoryName = section.category.name
-                                    }
-                                },
-                                title = section.title,
-                                icon = section.icon,
-                                rawIconRes = section.rawIconRes,
-                                isSelected = selectedCategory == section.category,
-                                focusRequester = railFocusRequesters[section.category],
-                                onClick = { onSectionClick(section) },
-                                onFocusedItemPositioned = if (isZenRailGlide) {
-                                    { itemCoordinates ->
-                                        railCoordinates?.let { container ->
-                                            focusedRailBounds = container.localBoundingBoxOf(itemCoordinates, clipBounds = false)
-                                        }
-                                    }
-                                } else {
-                                    null
+                            key = { _, section -> section.category }
+                        ) { index, section ->
+                            Column {
+                                if (visibleCategories.startsNewGroup(index)) {
+                                    SettingsRailDivider()
                                 }
-                            )
+                                SettingsRailButton(
+                                    onFocused = {
+                                        val restoringTo = railRestoringCategory
+                                        if (section.category == restoringTo) {
+                                            // Cleared here rather than waiting for the attempt to
+                                            // reach its next suspension point. The attempt is left
+                                            // running: it ends on its own once the request lands, and
+                                            // a directional press stops it early.
+                                            railRestoringCategory = null
+                                            railFocusCategoryName = section.category.name
+                                        } else if (restoringTo == null) {
+                                            railFocusCategoryName = section.category.name
+                                        }
+                                    },
+                                    title = section.title,
+                                    icon = section.icon,
+                                    rawIconRes = section.rawIconRes,
+                                    isSelected = selectedCategory == section.category,
+                                    focusRequester = railFocusRequesters[section.category],
+                                    onClick = { onSectionClick(section) }
+                                )
+                            }
                         }
                     }
                     SettingsVerticalScrollIndicators(state = railListState)
@@ -1043,20 +893,6 @@ private fun SettingsDetailPane(
             liveTvFocusRequester = integrationLiveTvFocusRequester,
             autoFocusEnabled = allowDetailAutofocus
         )
-        SettingsCategory.TORRSERVER -> TorrServerSettingsContent(
-            initialFocusRequester = if (allowDetailAutofocus) {
-                contentFocusRequesters[SettingsCategory.TORRSERVER]
-            } else {
-                null
-            }
-        )
-        SettingsCategory.LIVETV -> LiveTvSettingsContent(
-            initialFocusRequester = if (allowDetailAutofocus) {
-                contentFocusRequesters[SettingsCategory.LIVETV]
-            } else {
-                null
-            }
-        )
         SettingsCategory.ABOUT -> AboutSettingsContent(
             onNavigateToSupportersContributors = onNavigateToSupportersContributors,
             onNavigateToLicensesAttributions = onNavigateToLicensesAttributions,
@@ -1109,7 +945,7 @@ private fun ContentDiscoverySettingsContent(
                 title = stringResource(R.string.addon_title),
                 subtitle = stringResource(R.string.settings_content_discovery_addons_subtitle),
                 onClick = onNavigateToAddons,
-                leadingIcon = Icons.Default.GridView,
+                leadingIcon = Icons.Default.Extension,
                 modifier = if (initialFocusRequester != null) {
                     Modifier.focusRequester(initialFocusRequester)
                 } else {
@@ -1121,7 +957,7 @@ private fun ContentDiscoverySettingsContent(
                     title = stringResource(R.string.plugin_title),
                     subtitle = stringResource(R.string.settings_content_discovery_plugins_subtitle),
                     onClick = onNavigateToPlugins,
-                    leadingIcon = Icons.Default.Build
+                    leadingIcon = Icons.Default.Power
                 )
             }
         }
@@ -1251,25 +1087,20 @@ private fun IntegrationSettingsContent(
                             state = integrationHubState,
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            item(key = "integration_hub_livetv") {
-                                SettingsActionRow(
-                                    title = stringResource(R.string.settings_livetv_title),
-                                    subtitle = stringResource(R.string.settings_livetv_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.LiveTv) },
-                                    modifier = Modifier.focusRequester(hubEntryFocusRequester)
-                                )
-                            }
                             item(key = "integration_hub_debrid") {
                                 SettingsActionRow(
                                     title = stringResource(R.string.debrid_title),
                                     subtitle = stringResource(R.string.settings_debrid_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.Debrid) }
+                                    leadingIcon = Icons.Default.CloudDownload,
+                                    onClick = { onSelectSection(IntegrationSettingsSection.Debrid) },
+                                    modifier = Modifier.focusRequester(hubEntryFocusRequester)
                                 )
                             }
                             item(key = "integration_hub_tmdb") {
                                 SettingsActionRow(
                                     title = "TMDB",
                                     subtitle = stringResource(R.string.settings_tmdb_subtitle),
+                                    leadingRawIconRes = R.raw.mdblist_tmdb,
                                     onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) }
                                 )
                             }
@@ -1277,6 +1108,7 @@ private fun IntegrationSettingsContent(
                                 SettingsActionRow(
                                     title = stringResource(R.string.mdblist_title),
                                     subtitle = stringResource(R.string.settings_mdblist_subtitle),
+                                    leadingRawIconRes = R.raw.mdblist_logo,
                                     onClick = { onSelectSection(IntegrationSettingsSection.MdbList) }
                                 )
                             }
@@ -1284,7 +1116,16 @@ private fun IntegrationSettingsContent(
                                 SettingsActionRow(
                                     title = "Anime-Skip",
                                     subtitle = stringResource(R.string.settings_animeskip_subtitle),
+                                    leadingIcon = Icons.Default.FastForward,
                                     onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
+                                )
+                            }
+                            item(key = "integration_hub_livetv") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.settings_livetv_title),
+                                    subtitle = stringResource(R.string.settings_livetv_subtitle),
+                                    leadingIcon = Icons.Default.LiveTv,
+                                    onClick = { onSelectSection(IntegrationSettingsSection.LiveTv) }
                                 )
                             }
                         }

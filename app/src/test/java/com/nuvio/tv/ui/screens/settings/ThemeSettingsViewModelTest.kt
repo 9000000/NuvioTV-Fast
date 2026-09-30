@@ -42,10 +42,12 @@ class ThemeSettingsViewModelTest {
         every { amoledSurfacesMode } returns flowOf(false)
         every { animationsEnabled } returns flowOf(true)
         every { settingsUiStyle } returns flowOf(SettingsUiStyle.CLASSIC)
+        every { posterBorderStyle } returns flowOf(com.nuvio.tv.domain.model.PosterBorderStyle.Default)
         coEvery { setCustomTheme(any()) } coAnswers {
             selection.value = ThemeSelection(AppTheme.CUSTOM, firstArg())
         }
         coEvery { setAnimationsEnabled(any()) } coAnswers { }
+        coEvery { setPosterBorderStyle(any()) } coAnswers { }
     }
 
     @Test
@@ -143,9 +145,11 @@ class ThemeSettingsViewModelTest {
             every { amoledSurfacesMode } returns flowOf(false)
             every { animationsEnabled } returns animationsFlow
             every { settingsUiStyle } returns flowOf(SettingsUiStyle.CLASSIC)
+            every { posterBorderStyle } returns flowOf(com.nuvio.tv.domain.model.PosterBorderStyle.Default)
             coEvery { setAnimationsEnabled(any()) } coAnswers {
                 animationsFlow.value = firstArg()
             }
+            coEvery { setPosterBorderStyle(any()) } coAnswers { }
         }
         val members = mockk<MemberAccessRepository> { every { access } returns this@ThemeSettingsViewModelTest.access }
         val icons = mockk<AppIconManager> { every { state } returns MutableStateFlow(AppIconSettingsState()) }

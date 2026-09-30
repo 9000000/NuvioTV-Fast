@@ -25,6 +25,7 @@ import com.nuvio.tv.core.tracking.TrackingScrobbleEvent
 import com.nuvio.tv.core.tracking.buildTrackingMediaReference
 import com.nuvio.tv.core.util.parseRuntimeMinutes
 import com.nuvio.tv.core.streams.StreamBadgePresentation
+import com.nuvio.tv.core.streams.YouTubeStreamResolver
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
@@ -79,7 +80,7 @@ class StreamScreenViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val streamBadgePresentation: StreamBadgePresentation,
-    private val streamBadgeSettingsDataStore: StreamBadgeSettingsDataStore,
+    streamBadgeSettingsDataStore: StreamBadgeSettingsDataStore,
     private val bingeGroupCacheDataStore: BingeGroupCacheDataStore,
     private val torrentSettings: TorrentSettings,
     private val watchProgressRepository: WatchProgressRepository,
@@ -87,12 +88,11 @@ class StreamScreenViewModel @Inject constructor(
     private val directDebridResolver: DirectDebridResolver,
     private val directDebridStreamPreparer: DirectDebridStreamPreparer,
     private val debridStreamPresentation: DebridStreamPresentation,
+    private val youTubeStreamResolver: YouTubeStreamResolver,
     private val externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker,
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val torrentService: TorrentService,
-    private val torrServerRemoteApi: com.nuvio.tv.core.torrent.TorrServerRemoteApi,
-    private val torrServerAddonConfig: com.nuvio.tv.core.torrent.TorrServerAddonConfig,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -111,7 +111,6 @@ class StreamScreenViewModel @Inject constructor(
     private var streamBadgePresentationRequestId = 0L
     private var badgedAddonNames: Set<String> = emptySet()
     private var playbackMetaVideos: List<Video>? = null
-    private var torrServerConfigData = com.nuvio.tv.core.torrent.TorrServerAddonConfigData()
 
     private val embeddedStreamGroupName: String by lazy {
         context.getString(R.string.stream_embedded_group)
@@ -165,6 +164,12 @@ class StreamScreenViewModel @Inject constructor(
         .map { it.playerPreference }
         .distinctUntilChanged()
 
+    val p2pEnabled = torrentSettings.settings
+        .map { it.p2pEnabled }
+        .distinctUntilChanged()
+
+    fun enableP2p() = torrentSettings.setP2pEnabled(true)
+
     private inline fun updateUiStateIfChanged(
         transform: (StreamScreenUiState) -> StreamScreenUiState
     ) {
@@ -184,22 +189,24 @@ class StreamScreenViewModel @Inject constructor(
         if (streamBadgePresentationJob?.isActive == true) return
 
         streamBadgePresentationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            val rules = streamBadgeSettingsDataStore.settings.first().rules
-            if (!rules.hasImport) {
-                // If badges are disabled or rules empty, preserve addon streams 100% as returned
-                badgedAddonNames = badgedAddonNames + newGroups.map { it.addonName }.toSet()
-                return@launch
-            }
-
             var pending = newGroups
             while (pending.isNotEmpty()) {
-                for (group in pending) {
+                val allNewStreams = pending.flatMap { it.streams }
+                val chunks = allNewStreams.chunked(5)
+                for (chunk in chunks) {
                     ensureActive()
-                    val badgedGroup = streamBadgePresentation.apply(listOf(group)).firstOrNull() ?: group
+                    val chunkGroup = AddonStreams(addonName = "", addonLogo = null, streams = chunk)
+                    val badgedChunk = streamBadgePresentation.apply(listOf(chunkGroup))
+                        .firstOrNull()?.streams ?: chunk
                     ensureActive()
+                    val badgedByKey = badgedChunk.associateBy { it.badgeMergeKey() }
                     updateUiStateIfChanged { state ->
-                        val updatedAddonStreams = state.addonStreams.map { existingGroup ->
-                            if (existingGroup.addonName == group.addonName) badgedGroup else existingGroup
+                        val updatedAddonStreams = state.addonStreams.map { group ->
+                            group.copy(
+                                streams = group.streams.map { stream ->
+                                    badgedByKey[stream.badgeMergeKey()] ?: stream
+                                }
+                            )
                         }
                         val updatedAllStreams = updatedAddonStreams.flatMap { it.streams }
                         val currentFilter = state.selectedAddonFilter
@@ -218,8 +225,9 @@ class StreamScreenViewModel @Inject constructor(
                                 else fullFiltered.subList(0, pageEnd)
                         )
                     }
-                    badgedAddonNames = badgedAddonNames + group.addonName
                 }
+                // Mark processed addons as done
+                badgedAddonNames = badgedAddonNames + pending.map { it.addonName }.toSet()
                 // Check if new addons arrived while we were processing
                 val currentAddons = _uiState.value.addonStreams
                 pending = currentAddons.filter { it.addonName !in badgedAddonNames }
@@ -228,11 +236,6 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     init {
-        viewModelScope.launch {
-            torrServerAddonConfig.config.collectLatest { config ->
-                torrServerConfigData = config
-            }
-        }
         viewModelScope.launch {
             _uiState
                 .map { state -> state.directAutoPlayMessage to state.directAutoPlayProgress }
@@ -270,41 +273,6 @@ class StreamScreenViewModel @Inject constructor(
             is StreamScreenEvent.OnAddonFilterSelected -> filterByAddon(event.addonName)
             is StreamScreenEvent.OnStreamSelected -> {
                 cancelStreamsLoad()
-            }
-            is StreamScreenEvent.OnTorrentFileSelected -> {
-                // Handled via resolveTorrServerPlayback
-            }
-            StreamScreenEvent.OnDismissTorrentFilePicker -> {
-                dismissTorrentFilePicker()
-            }
-            is StreamScreenEvent.OnPromptEnableTorrServer -> {
-                _uiState.update {
-                    it.copy(
-                        showTorrServerPrompt = true,
-                        pendingTorrentStream = event.stream
-                    )
-                }
-            }
-            StreamScreenEvent.OnConfirmEnableTorrServer -> {
-                val stream = _uiState.value.pendingTorrentStream
-                torrServerAddonConfig.setEnabled(true)
-                _uiState.update {
-                    it.copy(
-                        showTorrServerPrompt = false,
-                        pendingTorrentStream = null
-                    )
-                }
-                if (stream != null) {
-                    prepareTorrServerFilePicker(stream)
-                }
-            }
-            StreamScreenEvent.OnDismissTorrServerPrompt -> {
-                _uiState.update {
-                    it.copy(
-                        showTorrServerPrompt = false,
-                        pendingTorrentStream = null
-                    )
-                }
             }
             StreamScreenEvent.OnAutoPlayConsumed -> {
                 if (autoPlayHandledForSession &&
@@ -396,6 +364,17 @@ class StreamScreenViewModel @Inject constructor(
                     playerPreference = playerSettings.playerPreference,
                     streamAutoPlayMode = playerSettings.streamAutoPlayMode
                 )
+                // In MANUAL mode, still enable direct auto-play if a persisted
+                // binge group exists - same behavior as playNextEpisode in the player.
+                if (!directAutoPlayFlowEnabledForSession &&
+                    playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode &&
+                    playerSettings.streamAutoPlayReuseBingeGroup
+                ) {
+                    val hasBingeGroup = contentId?.let { bingeGroupCacheDataStore.get(it) } != null
+                    if (hasBingeGroup) {
+                        directAutoPlayFlowEnabledForSession = true
+                    }
+                }
                 directAutoPlayModeInitializedForSession = true
             }
 
@@ -489,8 +468,7 @@ class StreamScreenViewModel @Inject constructor(
             val installedAddonOrder = installedAddons.map { it.displayName }
             val directDebridSourceNames = emptyList<String>()
             val directDebridAvailable = false
-            val persistedBingeGroup = if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL &&
-                playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode &&
+            val persistedBingeGroup = if (playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode &&
                 playerSettings.streamAutoPlayReuseBingeGroup) {
                 contentId?.let { bingeGroupCacheDataStore.get(it) }
             } else null
@@ -503,19 +481,19 @@ class StreamScreenViewModel @Inject constructor(
 
                 // Preserve badges already computed by prior badge jobs so they
                 // don't vanish when repository emits fresh (badge-less) streams.
-                val existingBadgesByKey = _uiState.value.allStreams
+                val existingBadgedStreams = _uiState.value.allStreams
                     .filter { it.badges.isNotEmpty() }
-                    .associate { it.uniqueIdentityKey() to it.badges }
+                    .associateBy { it.badgeMergeKey() }
 
-                val mergedAddonStreams = if (existingBadgesByKey.isEmpty()) {
+                val mergedAddonStreams = if (existingBadgedStreams.isEmpty()) {
                     orderedAddonStreams
                 } else {
                     orderedAddonStreams.map { group ->
                         group.copy(
                             streams = group.streams.map { stream ->
-                                val existingBadges = existingBadgesByKey[stream.uniqueIdentityKey()]
-                                if (!existingBadges.isNullOrEmpty() && stream.badges.isEmpty()) {
-                                    stream.copy(badges = existingBadges)
+                                val existing = existingBadgedStreams[stream.badgeMergeKey()]
+                                if (existing != null && stream.badges.isEmpty()) {
+                                    stream.copy(badges = existing.badges)
                                 } else {
                                     stream
                                 }
@@ -529,11 +507,8 @@ class StreamScreenViewModel @Inject constructor(
                 // Auto-select only after all addons have responded or the
                 // configured timeout has elapsed. This gives slower addons a
                 // chance to return higher-quality streams before the selector
-                // picks from whatever is available. Never auto-select in MANUAL mode.
-                val shouldAutoSelect = !autoPlayHandledForSession &&
-                    !resolvedAutoPlayTarget &&
-                    isAllLoaded &&
-                    playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL
+                // picks from whatever is available.
+                val shouldAutoSelect = !autoPlayHandledForSession && !resolvedAutoPlayTarget && isAllLoaded
                 val selectedAutoPlayStream = if (!shouldAutoSelect) {
                     null
                 } else {
@@ -728,25 +703,23 @@ class StreamScreenViewModel @Inject constructor(
                                 // Before timeout: eagerly check binge group only
                                 // (no fallback to FIRST_STREAM/REGEX yet). If a
                                 // match is found we can start playback immediately
-                                // without waiting for the full timeout. Never in MANUAL mode.
-                                val earlyMatch = if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
-                                    val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
-                                        result.data, installedAddonOrder
-                                    )
-                                    val allStreams = orderedStreams.flatMap { it.streams }
-                                    StreamAutoPlaySelector.selectAutoPlayStream(
-                                        streams = allStreams,
-                                        mode = playerSettings.streamAutoPlayMode,
-                                        regexPattern = playerSettings.streamAutoPlayRegex,
-                                        source = playerSettings.streamAutoPlaySource,
-                                        installedAddonNames = installedAddonOrder.toSet(),
-                                        selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
-                                        selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
-                                        preferredBingeGroup = persistedBingeGroup,
-                                        preferBingeGroupInSelection = true,
-                                        bingeGroupOnly = false
-                                    )
-                                } else null
+                                // without waiting for the full timeout.
+                                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
+                                    result.data, installedAddonOrder
+                                )
+                                val allStreams = orderedStreams.flatMap { it.streams }
+                                val earlyMatch = StreamAutoPlaySelector.selectAutoPlayStream(
+                                    streams = allStreams,
+                                    mode = playerSettings.streamAutoPlayMode,
+                                    regexPattern = playerSettings.streamAutoPlayRegex,
+                                    source = playerSettings.streamAutoPlaySource,
+                                    installedAddonNames = installedAddonOrder.toSet(),
+                                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                                    preferredBingeGroup = persistedBingeGroup,
+                                    preferBingeGroupInSelection = true,
+                                    bingeGroupOnly = true
+                                )
                                 if (earlyMatch != null) {
                                     resolvedAutoPlayTarget = true
                                     autoSelectTriggered = true
@@ -840,11 +813,11 @@ class StreamScreenViewModel @Inject constructor(
             if (directFlowActive && !resolvedAutoPlayTarget && lastSuccessData != null && !isUnlimitedTimeout) {
                 // If torrents are still pending cache check, the next emission
                 // will carry the result — don't tear down yet.
-                val hasCheckingTorrents = lastSuccessData.any { group ->
+                val hasCheckingTorrents = lastSuccessData?.any { group ->
                     group.streams.any { s ->
                         s.isTorrent() && s.debridCacheStatus?.state == com.nuvio.tv.domain.model.StreamDebridCacheState.CHECKING
                     }
-                }
+                } == true
                 if (!hasCheckingTorrents) {
                     autoPlayHandledForSession = true
                     directAutoPlayFlowEnabledForSession = false
@@ -1189,15 +1162,11 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     suspend fun resolveStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
+        if (stream.youTubeIdToResolve() != null) {
+            return resolveYouTubeStreamForPlayback(stream)
+        }
         if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
             Log.d(TAG, "resolveStreamForPlayback: no debrid resolve needed, using direct URL")
-            if (isTorrServerStream(stream)) {
-                Log.d(TAG, "resolveStreamForPlayback: routing torrent via TorrServer")
-                val torrPlayback = resolveTorrServerPlaybackDirect(stream)
-                if (torrPlayback != null) {
-                    return torrPlayback
-                }
-            }
             return getStreamForPlayback(stream)
         }
 
@@ -1282,6 +1251,42 @@ class StreamScreenViewModel @Inject constructor(
                 null
             }
         }
+    }
+
+    private suspend fun resolveYouTubeStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
+        Log.d(TAG, "resolveStreamForPlayback: resolving YouTube stream=${stream.name} addon=${stream.addonName}")
+        val showLoadingStatus = playerSettingsDataStore.playerSettings.first().showPlayerLoadingStatus
+        updateUiStateIfChanged {
+            it.copy(
+                showDirectAutoPlayOverlay = true,
+                directAutoPlayMessage = if (showLoadingStatus) {
+                    context.getString(R.string.youtube_resolving_stream)
+                } else {
+                    null
+                },
+                playbackErrorMessage = null
+            )
+        }
+
+        val resolved = youTubeStreamResolver.resolve(stream)
+        if (resolved == null) {
+            showDirectDebridPlaybackError(context.getString(R.string.youtube_resolution_failed), refreshStreams = false)
+            return null
+        }
+        if (!_uiState.value.isDirectAutoPlayFlow) {
+            updateUiStateIfChanged {
+                it.copy(
+                    showDirectAutoPlayOverlay = false,
+                    directAutoPlayMessage = null
+                )
+            }
+        } else {
+            updateUiStateIfChanged {
+                it.copy(directAutoPlayMessage = null)
+            }
+        }
+        // The resolved URL stops working after a few hours, so it isn't kept for reusing the last link.
+        return getStreamForPlayback(resolved, saveLastLink = false)
     }
 
     fun onPlaybackErrorShown() {
@@ -1384,7 +1389,7 @@ class StreamScreenViewModel @Inject constructor(
     /**
      * Gets the selected stream for playback
      */
-    fun getStreamForPlayback(stream: Stream): StreamPlaybackInfo {
+    fun getStreamForPlayback(stream: Stream, saveLastLink: Boolean = true): StreamPlaybackInfo {
         cancelStreamsLoad()
         val playbackInfo = StreamPlaybackInfo(
             url = stream.getStreamUrl(),
@@ -1421,7 +1426,7 @@ class StreamScreenViewModel @Inject constructor(
         StreamSidecarSubtitles.set(playbackUrlFor(playbackInfo), stream.subtitles)
 
         val url = playbackInfo.url
-        if (!url.isNullOrBlank() && !playbackInfo.isExternal) {
+        if (saveLastLink && !url.isNullOrBlank() && !playbackInfo.isExternal) {
             pendingCacheSaveJob = viewModelScope.launch {
                 streamLinkCacheDataStore.save(
                     contentKey = streamCacheKey,
@@ -1447,264 +1452,6 @@ class StreamScreenViewModel @Inject constructor(
     private suspend fun persistBingeGroupForPlayback(playbackInfo: StreamPlaybackInfo) {
         val cid = playbackInfo.contentId?.takeIf { it.isNotBlank() } ?: return
         bingeGroupCacheDataStore.replace(cid, playbackInfo.bingeGroup)
-    }
-
-    fun isTorrServerStream(stream: Stream): Boolean {
-        val isExplicitTorrServer = stream.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
-        return isExplicitTorrServer || (torrServerConfigData.enabled && stream.isTorrent())
-    }
-
-    suspend fun isRawTorrentStream(stream: Stream): Boolean {
-        return stream.isTorrent() && !directDebridResolver.shouldResolveToPlayableStream(stream)
-    }
-
-    suspend fun resolveTorrServerPlaybackDirect(stream: Stream): StreamPlaybackInfo? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        val magnet = stream.torrentMagnetUri()
-            ?: stream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
-            ?: stream.getEffectiveInfoHash()?.let { hash ->
-                val trackers = stream.sources
-                    ?.filter { it.startsWith("tracker:") }
-                    ?.map { it.removePrefix("tracker:") }
-                    ?: emptyList()
-                val tr = trackers.joinToString("") { "&tr=$it" }
-                "magnet:?xt=urn:btih:$hash$tr"
-            } ?: return@withContext null
-
-        val config = torrServerAddonConfig.config.first()
-        val serverUrl = torrentService.getActiveServerUrl()
-
-        val hash = torrServerRemoteApi.addTorrent(
-            magnetLink = magnet,
-            title = com.nuvio.tv.core.torrent.torrServerDisplayTitle(contentName ?: title),
-            poster = poster,
-            serverUrlOverride = serverUrl
-        ) ?: stream.getEffectiveInfoHash() ?: return@withContext null
-
-        val deadline = System.currentTimeMillis() + 15_000L
-        var files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList()
-        var pollDelay = 250L
-
-        while (isActive && System.currentTimeMillis() < deadline) {
-            val details = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
-            if (details != null && details.files.isNotEmpty()) {
-                files = details.files
-                break
-            }
-            delay(pollDelay)
-            pollDelay = (pollDelay * 2).coerceAtMost(1000L)
-        }
-
-        val fileId = selectBestMatchingFileId(files, stream.getEffectiveFileIdx(), season, episode) ?: 1
-        val selectedFile = files.firstOrNull { it.id == fileId }
-
-        val streamUrl = torrServerRemoteApi.buildStreamUrl(
-            serverUrl = serverUrl,
-            magnetLink = magnet,
-            fileIdx = fileId,
-            preload = config.preload,
-            save = config.saveToDb,
-            gst = config.gst,
-            hash = hash
-        )
-
-        val baseInfo = getStreamForPlayback(stream)
-        baseInfo.copy(
-            url = streamUrl,
-            isTorrent = true,
-            infoHash = hash,
-            fileIdx = fileId,
-            filename = selectedFile?.path?.substringAfterLast('/') ?: baseInfo.filename,
-            videoSize = selectedFile?.length ?: baseInfo.videoSize,
-            addonName = com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
-        )
-    }
-
-    private fun selectBestMatchingFileId(
-        files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile>,
-        requestedIdx: Int?,
-        targetSeason: Int?,
-        targetEpisode: Int?
-    ): Int? {
-        if (files.isEmpty()) return requestedIdx
-        if (requestedIdx != null && files.any { it.id == requestedIdx }) {
-            return requestedIdx
-        }
-        val videoExtensions = setOf("mkv", "mp4", "avi", "webm", "ts", "m4v", "mov", "wmv", "flv")
-        val videoFiles = files.filter { f ->
-            val ext = f.path.substringAfterLast('.', "").lowercase()
-            ext in videoExtensions
-        }
-        val candidatePool = videoFiles.ifEmpty { files }
-
-        if (targetSeason != null && targetEpisode != null) {
-            val pattern = Regex("(?i)s0*${targetSeason}[ex]0*${targetEpisode}(?:[^0-9]|$)")
-            val match = candidatePool.firstOrNull { pattern.containsMatchIn(it.path) }
-            if (match != null) return match.id
-        } else if (targetEpisode != null) {
-            val epPattern = Regex("(?i)(?:ep|e|episode)\\s*0*${targetEpisode}(?:[^0-9]|$)")
-            val match = candidatePool.firstOrNull { epPattern.containsMatchIn(it.path) }
-            if (match != null) return match.id
-        }
-
-        return candidatePool.maxByOrNull { it.length }?.id ?: candidatePool.firstOrNull()?.id
-    }
-
-    private var torrentFilePickerJob: Job? = null
-
-    fun prepareTorrServerFilePicker(stream: Stream) {
-        torrentFilePickerJob?.cancel()
-        updateUiStateIfChanged {
-            it.copy(
-                showTorrentFilePicker = true,
-                torrentFilePickerLoading = true,
-                torrentFilePickerError = null,
-                torrentFilePickerTitle = stream.title ?: stream.name ?: "",
-                torrentFilePickerFiles = emptyList(),
-                torrentFilePickerPendingStream = stream,
-                torrentFilePickerPendingHash = null
-            )
-        }
-
-        torrentFilePickerJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val magnet = stream.torrentMagnetUri()
-                    ?: stream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
-                    ?: stream.getEffectiveInfoHash()?.let { hash ->
-                        val trackers = stream.sources
-                            ?.filter { it.startsWith("tracker:") }
-                            ?.map { it.removePrefix("tracker:") }
-                            ?: emptyList()
-                        val tr = trackers.joinToString("") { "&tr=$it" }
-                        "magnet:?xt=urn:btih:$hash$tr"
-                    }
-
-                if (magnet.isNullOrBlank()) {
-                    updateUiStateIfChanged {
-                        it.copy(
-                            torrentFilePickerLoading = false,
-                            torrentFilePickerError = "Không tìm thấy thông tin magnet/hash cho torrent này"
-                        )
-                    }
-                    return@launch
-                }
-
-                val config = torrServerAddonConfig.config.first()
-                val serverUrl = torrentService.getActiveServerUrl()
-
-                // Add torrent to remote TorrServer
-                val hash = torrServerRemoteApi.addTorrent(
-                    magnetLink = magnet,
-                    title = com.nuvio.tv.core.torrent.torrServerDisplayTitle(contentName ?: title),
-                    poster = poster,
-                    serverUrlOverride = serverUrl
-                ) ?: stream.getEffectiveInfoHash()
-
-                if (hash == null) {
-                    updateUiStateIfChanged {
-                        it.copy(
-                            torrentFilePickerLoading = false,
-                            torrentFilePickerError = "Không thể thêm torrent vào TorrServer"
-                        )
-                    }
-                    return@launch
-                }
-
-                updateUiStateIfChanged {
-                    it.copy(torrentFilePickerPendingHash = hash)
-                }
-
-                // Adaptive polling for metadata and files (up to 15 seconds)
-                val deadline = System.currentTimeMillis() + 15_000L
-                var files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList()
-                var pollDelay = 250L
-
-                while (isActive && System.currentTimeMillis() < deadline) {
-                    val details = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
-                    if (details != null && details.files.isNotEmpty()) {
-                        files = details.files
-                        break
-                    }
-                    delay(pollDelay)
-                    pollDelay = (pollDelay * 2).coerceAtMost(1000L)
-                }
-
-                if (files.isEmpty()) {
-                    updateUiStateIfChanged {
-                        it.copy(
-                            torrentFilePickerLoading = false,
-                            torrentFilePickerError = "Quá thời gian tải danh sách file từ torrent"
-                        )
-                    }
-                } else {
-                    updateUiStateIfChanged {
-                        it.copy(
-                            torrentFilePickerLoading = false,
-                            torrentFilePickerFiles = files
-                        )
-                    }
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "prepareTorrServerFilePicker error", e)
-                updateUiStateIfChanged {
-                    it.copy(
-                        torrentFilePickerLoading = false,
-                        torrentFilePickerError = e.message ?: "Lỗi tải danh sách file"
-                    )
-                }
-            }
-        }
-    }
-
-    suspend fun resolveTorrServerPlayback(fileId: Int): StreamPlaybackInfo? {
-        val pendingStream = _uiState.value.torrentFilePickerPendingStream ?: return null
-        val hash = _uiState.value.torrentFilePickerPendingHash ?: pendingStream.getEffectiveInfoHash() ?: return null
-        val config = torrServerAddonConfig.config.first()
-        val serverUrl = torrentService.getActiveServerUrl()
-
-        val magnet = pendingStream.torrentMagnetUri()
-            ?: pendingStream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
-            ?: "magnet:?xt=urn:btih:$hash"
-
-        val streamUrl = torrServerRemoteApi.buildStreamUrl(
-            serverUrl = serverUrl,
-            magnetLink = magnet,
-            fileIdx = fileId,
-            preload = config.preload,
-            save = config.saveToDb,
-            gst = config.gst,
-            hash = hash
-        )
-        val selectedFile = _uiState.value.torrentFilePickerFiles.firstOrNull { it.id == fileId }
-
-        dismissTorrentFilePicker()
-
-        val baseInfo = getStreamForPlayback(pendingStream)
-        return baseInfo.copy(
-            url = streamUrl,
-            isTorrent = true,
-            infoHash = hash,
-            fileIdx = fileId,
-            filename = selectedFile?.path?.substringAfterLast('/') ?: baseInfo.filename,
-            videoSize = selectedFile?.length ?: baseInfo.videoSize,
-            addonName = com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
-        )
-    }
-
-    fun dismissTorrentFilePicker() {
-        torrentFilePickerJob?.cancel()
-        torrentFilePickerJob = null
-        updateUiStateIfChanged {
-            it.copy(
-                showTorrentFilePicker = false,
-                torrentFilePickerLoading = false,
-                torrentFilePickerError = null,
-                torrentFilePickerFiles = emptyList(),
-                torrentFilePickerPendingStream = null,
-                torrentFilePickerPendingHash = null
-            )
-        }
     }
 
     override fun onCleared() {
@@ -1784,6 +1531,9 @@ class StreamScreenViewModel @Inject constructor(
                 )
             }
             
+            val fileLimit = playbackInfo.videoSize ?: Long.MAX_VALUE
+            val preloadTarget = minOf(5_242_880L, fileLimit)
+
             val preloadCompleted = kotlinx.coroutines.CompletableDeferred<Unit>()
             val statsJob = viewModelScope.launch {
                 torrentService.state.collectLatest { torrentState ->
@@ -1803,20 +1553,20 @@ class StreamScreenViewModel @Inject constructor(
                             } else {
                                 val speed = formatSpeed(context, torrentState.downloadSpeed)
                                 val peerInfo = context.getString(R.string.player_torrent_peer_info, torrentState.seeds, torrentState.peers)
-                                val mbLoaded = formatMB(context, torrentState.preloadedBytes)
-                                context.getString(R.string.player_torrent_buffered_status, mbLoaded, peerInfo, speed)
+                                val mbLoaded = formatMB(context, torrentState.loadedBytes)
+                                context.getString(R.string.player_torrent_loading_status, mbLoaded, peerInfo, speed)
                             }
-                            
-                            val progress = torrentState.preloadProgress
-                            
+
+                            val progress = (torrentState.deliveredBytes.toFloat() / preloadTarget).coerceIn(0f, 1f)
+
                             updateUiStateIfChanged {
                                 it.copy(
                                     directAutoPlayMessage = message,
                                     directAutoPlayProgress = progress
                                 )
                             }
-                            
-                            if (torrentState.isPreloadReady) {
+
+                            if (torrentState.deliveredBytes >= preloadTarget) {
                                 preloadCompleted.complete(Unit)
                             }
                         }
@@ -1870,8 +1620,7 @@ class StreamScreenViewModel @Inject constructor(
                         Log.d(TAG, "Preload background HTTP request cancelled or failed: ${e.message}")
                     }
                 }
-                
-                // Wait for TorrServer to preload (or timeout after 60 seconds)
+
                 val preloaded = kotlinx.coroutines.withTimeoutOrNull(60_000L) {
                     preloadCompleted.await()
                     true
@@ -1962,11 +1711,7 @@ class StreamScreenViewModel @Inject constructor(
             subtitles = subtitleInputs,
             autoLaunch = autoLaunch,
             nextEpisodeSnapshot = playbackMetaVideos?.let { videos ->
-                com.nuvio.tv.core.player.resolveExternalNextEpisodeSnapshot(
-                    videos = videos,
-                    currentSeason = metadata.season,
-                    currentEpisode = metadata.episode
-                )
+                externalPlaybackTracker.resolveNextEpisodeSnapshot(metadata, videos)
             },
             context = context
         )
@@ -2151,18 +1896,19 @@ class StreamScreenViewModel @Inject constructor(
 
 }
 
-private fun Stream.uniqueIdentityKey(): String = buildString {
-    append(addonName)
-    append('|')
-    append(url ?: "")
-    append('|')
-    append(infoHash?.lowercase() ?: "")
-    append('|')
-    append(getEffectiveFileIdx() ?: "")
-    append('|')
-    append(name ?: "")
-    append('|')
-    append(title ?: "")
+private fun Stream.badgeMergeKey(): String {
+    infoHash?.lowercase()?.let { hash -> return "$addonName|$hash:${fileIdx ?: ""}" }
+    // Use the playable URL as primary key - but for streams without a playable URL
+    // (e.g. statistic/informational entries that only have externalUrl), fall back
+    // to name+title+description to avoid all such streams collapsing to one key.
+    val playableUrl = url ?: clientResolve?.let { resolve ->
+        resolve.stream?.raw?.filename ?: resolve.infoHash
+    }
+    if (playableUrl != null) {
+        val nameSuffix = name?.takeIf { it.isNotBlank() }?.let { "|$it" } ?: ""
+        return "$addonName|$playableUrl$nameSuffix"
+    }
+    return "$addonName|${name}:${title}:${description?.hashCode() ?: 0}"
 }
 
 data class StreamPlaybackInfo(
@@ -2208,11 +1954,10 @@ private fun Stream.isReadyForDebridPreparation(): Boolean =
         (isDirectDebrid() || (needsLocalDebridResolve() && debridCacheStatus?.state == StreamDebridCacheState.CACHED))
 
 private fun formatSpeed(context: android.content.Context, bytesPerSec: Long): String {
-    val bitsPerSec = bytesPerSec * 8.0
     return when {
-        bitsPerSec >= 1_000_000.0 -> context.getString(R.string.unit_speed_mb_s, String.format(java.util.Locale.US, "%.1f", bitsPerSec / 1_000_000.0))
-        bitsPerSec >= 1_000.0 -> context.getString(R.string.unit_speed_kb_s, String.format(java.util.Locale.US, "%.0f", bitsPerSec / 1_000.0))
-        else -> context.getString(R.string.unit_speed_b_s, bitsPerSec.toLong())
+        bytesPerSec >= 1_048_576 -> context.getString(R.string.unit_speed_mb_s, String.format("%.1f", bytesPerSec / 1_048_576.0))
+        bytesPerSec >= 1_024 -> context.getString(R.string.unit_speed_kb_s, String.format("%.0f", bytesPerSec / 1_024.0))
+        else -> context.getString(R.string.unit_speed_b_s, bytesPerSec)
     }
 }
 

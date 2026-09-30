@@ -82,17 +82,17 @@ class PlayerRuntimeController(
     internal val streamBadgeSettingsDataStore: StreamBadgeSettingsDataStore,
     internal val bingeGroupCacheDataStore: BingeGroupCacheDataStore,
     internal val layoutPreferenceDataStore: com.nuvio.tv.data.local.LayoutPreferenceDataStore,
+    internal val episodeShufflePlayback: com.nuvio.tv.core.player.EpisodeShufflePlayback,
     internal val watchedItemsPreferences: com.nuvio.tv.data.local.WatchedItemsPreferences,
     internal val trackPreferenceDataStore: com.nuvio.tv.data.local.TrackPreferenceDataStore,
     internal val audioDelayRouteDataStore: AudioDelayRouteDataStore,
     internal val torrentService: TorrentService,
     internal val torrentSettings: com.nuvio.tv.core.torrent.TorrentSettings,
-    internal val torrServerRemoteApi: com.nuvio.tv.core.torrent.TorrServerRemoteApi,
-    internal val torrServerAddonConfig: com.nuvio.tv.core.torrent.TorrServerAddonConfig,
     internal val tmdbService: com.nuvio.tv.core.tmdb.TmdbService,
     internal val tmdbMetadataService: com.nuvio.tv.core.tmdb.TmdbMetadataService,
     internal val tmdbSettingsDataStore: com.nuvio.tv.data.local.TmdbSettingsDataStore,
     internal val directDebridResolver: DirectDebridResolver,
+    internal val youTubeStreamResolver: com.nuvio.tv.core.streams.YouTubeStreamResolver,
     internal val directDebridStreamPreparer: DirectDebridStreamPreparer,
     internal val cloudLibraryRepository: CloudLibraryRepository,
     internal val cloudPlaybackProgressStore: CloudLibraryPlaybackProgressStore,
@@ -321,9 +321,6 @@ class PlayerRuntimeController(
         )
     )
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
-    internal var torrServerConfigData: com.nuvio.tv.core.torrent.TorrServerAddonConfigData =
-        com.nuvio.tv.core.torrent.TorrServerAddonConfigData()
-
     init {
         scope.launch {
             _uiState
@@ -333,16 +330,6 @@ class PlayerRuntimeController(
                     com.nuvio.tv.core.recommendations.TvRecommendationManager.isPlaybackActive.value = isPlaying
                 }
         }
-        scope.launch {
-            torrServerAddonConfig.config.collect { config ->
-                torrServerConfigData = config
-            }
-        }
-    }
-
-    internal fun isTorrServerStream(stream: com.nuvio.tv.domain.model.Stream): Boolean {
-        val isExplicitTorrServer = stream.addonName == com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
-        return isExplicitTorrServer || (torrServerConfigData.enabled && stream.isTorrent())
     }
 
     internal fun consumePendingExitReason() {
@@ -434,8 +421,11 @@ class PlayerRuntimeController(
     internal var hidePlayerEngineSwitchInfoJob: Job? = null
     internal var hideSubtitleDelayOverlayJob: Job? = null
     internal var subtitleAutoSyncLoadJob: Job? = null
+    internal var automaticSubtitleSyncJob: Job? = null // AutoSync hook
     /** ExoPlayer sidecar path: external addon cues without setMediaSource (preserves buffer). */
     internal var sidecarSubtitleJob: Job? = null
+    internal var sidecarGenerationCounter: Long = 0L // AutoSync hook
+    internal var activeSidecarGeneration: Long = 0L // AutoSync hook
     internal var activeSidecarSubtitleKey: String? = null
     internal var sidecarTimedCues: List<androidx.media3.extractor.text.CuesWithTiming> = emptyList()
     internal var lastSidecarCueSignature: Long? = null
@@ -444,7 +434,6 @@ class PlayerRuntimeController(
     internal var subtitleTimingRefreshJob: Job? = null
     internal var nextEpisodeAutoPlayJob: Job? = null
     internal var debridResolveJob: Job? = null
-    internal var torrentFilePickerJob: Job? = null
     internal var stillWatchingPromptJob: Job? = null
     internal var startupLoadingReportJob: Job? = null
     internal var sourceStreamsJob: Job? = null
@@ -500,6 +489,7 @@ class PlayerRuntimeController(
     /** Back buffer (ms) the user configured, captured at build to restore once DV7 status is known. */
     internal var configuredBackBufferMs: Int = 0
     internal var metaVideos: List<Video> = emptyList()
+    internal var playbackShuffleState: com.nuvio.tv.core.player.PlaybackShuffleState? = null
     internal var cloudPlaybackContext: CloudLibraryPlaybackContext? =
         cloudPlaybackSessionStore.load(cloudSessionToken)
     internal var metaGenres: List<String> = emptyList()
@@ -648,8 +638,6 @@ class PlayerRuntimeController(
     internal var dv7ToDv81LastProbeReasonForCurrentPlayback: String? = null
 
     internal var playerInitializationStartedAtMs: Long = 0L
-    internal var httpStreamLoadedBytes: Long = 0L
-    internal var httpStreamSpeedBps: Long = 0L
     internal var pendingSeekTelemetryRequestedAtMs: Long = 0L
     internal var pendingSeekTelemetryTargetMs: Long = -1L
     internal var pendingSeekTelemetryReadyAtMs: Long = 0L
@@ -726,6 +714,8 @@ class PlayerRuntimeController(
         observeTorrentSettings()
         observeStreamBadgeSettings()
         observeDeviceLocalAspectMode()
+        observeDeviceLocalTransparentLetterbox()
+        observeDeviceLocalTunneledSurfaceFill()
         observePlayerStatsHud()
     }
 
@@ -754,6 +744,7 @@ class PlayerRuntimeController(
     fun onCleared() {
         releasePlayer()
         stopTorrentStream()
+        torrentService.shutdown()
         startupLoadingReportJob?.cancel()
         vodTelemetryJob?.cancel()
         mediaSourceFactory.shutdown()

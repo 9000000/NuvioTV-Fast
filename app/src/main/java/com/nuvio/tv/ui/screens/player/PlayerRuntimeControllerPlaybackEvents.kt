@@ -29,9 +29,14 @@ internal const val AUDIO_AMPLIFICATION_MIN_DB = 0
 internal const val AUDIO_AMPLIFICATION_MAX_DB = 10
 internal const val CENTER_MIX_LEVEL_MIN_DB = -10
 internal const val CENTER_MIX_LEVEL_MAX_DB = 30
-internal const val AUDIO_DELAY_MIN_MS = -3000
-internal const val AUDIO_DELAY_MAX_MS = 3000
+internal const val AUDIO_DELAY_MIN_MS = -60000
+internal const val AUDIO_DELAY_MAX_MS = 60000
 internal const val AUDIO_DELAY_STEP_MS = 25
+internal const val AUDIO_DELAY_HOLD_STEP_MS = 50
+internal const val AUDIO_DELAY_HOLD_FAST_STEP_MS = 100
+internal const val AUDIO_DELAY_HOLD_THRESHOLD_MS = 1000L
+internal const val AUDIO_DELAY_HOLD_FAST_THRESHOLD_MS = 2000L
+internal const val AUDIO_DELAY_HOLD_REPEAT_INTERVAL_MS = 100L
 internal const val WATCH_PROGRESS_SAVE_INTERVAL_MS = 90_000L
 
 internal fun PlayerRuntimeController.applyAudioDelay(
@@ -221,31 +226,6 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                                 }
                             }
                         }
-                    if (!firstFrameReady && !isTorrentStream) {
-                        val cacheBytes = view.demuxerCacheBytes()
-                        val cacheSpeed = view.demuxerCacheSpeedBps()
-                        if (cacheBytes > 0L || cacheSpeed > 0L) {
-                            val mb = formatPlaybackMB(context, cacheBytes)
-                            val speed = formatPlaybackSpeed(context, cacheSpeed)
-                            val message = if (cacheBytes > 0L) "$mb · $speed" else speed
-                            _uiState.update {
-                                it.copy(
-                                    loadingMessage = message,
-                                    streamDownloadSpeed = cacheSpeed,
-                                    streamLoadedBytes = cacheBytes
-                                )
-                            }
-                        }
-                    } else if (cacheBuffering && hasRenderedFirstFrame && !isTorrentStream) {
-                        val cacheSpeed = view.demuxerCacheSpeedBps()
-                        val speed = formatPlaybackSpeed(context, cacheSpeed)
-                        _uiState.update {
-                            it.copy(
-                                bufferingMessage = speed,
-                                streamDownloadSpeed = cacheSpeed
-                            )
-                        }
-                    }
                     if (playerDuration > lastKnownDuration) {
                         lastKnownDuration = playerDuration
                     }
@@ -323,25 +303,33 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     rebufferCount = rebufferCount,
                     rebufferTotalMs = rebufferTotalMs
                 )
-                // Update rebuffer progress and speed for both torrent and HTTP streams
-                if (_uiState.value.isBuffering && hasRenderedFirstFrame) {
+                // Update torrent rebuffer progress from ExoPlayer's buffer state
+                if (isTorrentStream && _uiState.value.isBuffering && hasRenderedFirstFrame) {
                     val bufferedAheadMs = (player.bufferedPosition - pos).coerceAtLeast(0)
                     val bufferedSec = bufferedAheadMs / 1000f
                     val statsHidden = _uiState.value.hideTorrentStats
                     val message = if (statsHidden) {
                         null
                     } else {
-                        val speedBytes = if (isTorrentStream) _uiState.value.torrentDownloadSpeed else _uiState.value.streamDownloadSpeed
-                        val speed = formatPlaybackSpeed(context, speedBytes)
-                        val bufLabel = String.format(java.util.Locale.US, "%.0fs", bufferedSec)
-                        if (speed.isNotBlank()) "$bufLabel · $speed" else bufLabel
+                        val speed = formatTorrentSpeed(context, _uiState.value.torrentDownloadSpeed)
+                        val peerInfo = context.getString(
+                            R.string.player_torrent_peer_info,
+                            _uiState.value.torrentSeeds,
+                            _uiState.value.torrentPeers
+                        )
+                        val bufLabel = String.format("%.0fs", bufferedSec)
+                        context.getString(
+                            R.string.player_torrent_buffered_status,
+                            bufLabel,
+                            peerInfo,
+                            speed
+                        )
                     }
                     val progress = (bufferedSec / 10f).coerceIn(0f, 1f)
                     _uiState.update {
                         it.copy(
-                            torrentBufferingMessage = if (isTorrentStream) message else null,
-                            torrentBufferingProgress = if (isTorrentStream) progress else 0f,
-                            bufferingMessage = message
+                            torrentBufferingMessage = message,
+                            torrentBufferingProgress = progress
                         )
                     }
                 }
@@ -1109,8 +1097,7 @@ internal fun PlayerRuntimeController.setSubtitleDelayMs(targetMs: Int, showOverl
         _uiState.update {
             it.copy(
                 subtitleDelayMs = newDelayMs,
-                showSubtitleDelayOverlay = false,
-                showControls = true
+                showSubtitleDelayOverlay = false
             )
         }
     }
@@ -1346,6 +1333,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
             resetSubtitleAutoSyncState()
+            cancelAutomaticSubtitleSync() // AutoSync hook
             rememberInternalSubtitleSelection(event.index)
             selectSubtitleTrack(event.index)
             _uiState.update {
@@ -1369,6 +1357,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
             resetSubtitleAutoSyncState()
+            cancelAutomaticSubtitleSync() // AutoSync hook
             rememberSubtitleDisabled()
             disableSubtitles()
             _uiState.update {
@@ -1391,6 +1380,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             autoSubtitleSelected = true
             rememberAddonSubtitleSelection(event.subtitle)
             selectAddonSubtitle(event.subtitle)
+            runSelectedAutomaticSubtitleSync(event.subtitle) // AutoSync hook
             _uiState.update {
                 it.copy(
                     showSubtitleOverlay = true,
@@ -1603,12 +1593,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         is PlayerEvent.OnSourceStreamSelected -> {
             switchToSourceStream(event.stream)
         }
-        PlayerEvent.OnDismissTorrentFilePicker -> {
-            dismissTorrentFilePicker()
-        }
-        is PlayerEvent.OnTorrentFileSelected -> {
-            resolveTorrServerPlaybackAndSwitch(event.fileId)
-        }
         PlayerEvent.OnDismissTransientOverlay -> {
             _uiState.update {
                 it.copy(
@@ -1725,19 +1709,13 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             scope.launch { playerSettingsDataStore.setSubtitleBold(event.bold) }
         }
         is PlayerEvent.OnSetSubtitleOutlineEnabled -> {
-            scope.launch {
-                playerSettingsDataStore.setSubtitleOutlineEnabled(event.enabled)
-                renderSidecarCuesAtCurrentPosition()
-            }
+            scope.launch { playerSettingsDataStore.setSubtitleOutlineEnabled(event.enabled) }
         }
         is PlayerEvent.OnSetSubtitleOutlineColor -> {
             scope.launch { playerSettingsDataStore.setSubtitleOutlineColor(event.color) }
         }
         is PlayerEvent.OnSetSubtitleOutlineWidth -> {
-            scope.launch {
-                playerSettingsDataStore.setSubtitleOutlineWidth(event.width)
-                renderSidecarCuesAtCurrentPosition()
-            }
+            scope.launch { playerSettingsDataStore.setSubtitleOutlineWidth(event.width) }
         }
         is PlayerEvent.OnSetSubtitleFont -> {
             scope.launch { playerSettingsDataStore.setSubtitleFont(event.font) }
@@ -1754,7 +1732,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 playerSettingsDataStore.setSubtitleOutlineEnabled(defaults.outlineEnabled)
                 playerSettingsDataStore.setSubtitleOutlineColor(defaults.outlineColor)
                 playerSettingsDataStore.setSubtitleOutlineWidth(defaults.outlineWidth)
-                playerSettingsDataStore.setSubtitleFont(defaults.font)
                 playerSettingsDataStore.setSubtitleVerticalOffset(defaults.verticalOffset)
                 playerSettingsDataStore.setSubtitleBackgroundColor(defaults.backgroundColor)
             }
@@ -1762,11 +1739,27 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnToggleAspectRatio -> {
             val state = _uiState.value
             if (state.tunnelingEnabled) {
+                val fill = !state.tunneledSurfaceFill
+                val label = PlayerDisplayModeUtils.resizeModeLabel(
+                    PlayerDisplayModeUtils.exoSurfaceResizeMode(
+                        tunnelingEnabled = true,
+                        tunneledSurfaceFill = fill
+                    ),
+                    context
+                )
+                Log.d(
+                    PlayerRuntimeController.TAG,
+                    "Tunneled surface resize toggled: fill=$fill ($label)"
+                )
                 _uiState.update {
                     it.copy(
+                        tunneledSurfaceFill = fill,
                         showAspectRatioIndicator = true,
-                        aspectRatioIndicatorText = context.getString(R.string.player_aspect_tunneling_unavailable)
+                        aspectRatioIndicatorText = label
                     )
+                }
+                scope.launch {
+                    deviceLocalPlayerPreferences.setTunneledSurfaceFill(fill)
                 }
                 hideAspectRatioIndicatorJob?.cancel()
                 hideAspectRatioIndicatorJob = scope.launch {
@@ -1901,46 +1894,10 @@ private fun String.safePlaybackEventsHost(): String {
     }.getOrDefault("unknown")
 }
 
-internal fun formatPlaybackSpeed(context: android.content.Context, bytesPerSec: Long): String {
-    val bitsPerSec = bytesPerSec * 8.0
+private fun formatTorrentSpeed(context: android.content.Context, bytesPerSec: Long): String {
     return when {
-        bitsPerSec >= 1_000_000.0 -> context.getString(R.string.unit_speed_mb_s, String.format(java.util.Locale.US, "%.1f", bitsPerSec / 1_000_000.0))
-        bitsPerSec >= 1_000.0 -> context.getString(R.string.unit_speed_kb_s, String.format(java.util.Locale.US, "%.0f", bitsPerSec / 1_000.0))
-        else -> context.getString(R.string.unit_speed_b_s, bitsPerSec.toLong())
+        bytesPerSec >= 1_048_576 -> context.getString(R.string.unit_speed_mb_s, String.format("%.1f", bytesPerSec / 1_048_576.0))
+        bytesPerSec >= 1_024 -> context.getString(R.string.unit_speed_kb_s, String.format("%.0f", bytesPerSec / 1_024.0))
+        else -> context.getString(R.string.unit_speed_b_s, bytesPerSec)
     }
 }
-
-internal fun formatPlaybackMB(context: android.content.Context, bytes: Long): String =
-    context.getString(R.string.unit_size_mb, String.format(java.util.Locale.US, "%.1f", bytes / 1_048_576.0))
-
-internal fun PlayerRuntimeController.onHttpBandwidthSample(bytesTransferred: Long, bitrateEstimate: Long) {
-    if (isTorrentStream) return
-    if (bytesTransferred > 0L) {
-        httpStreamLoadedBytes += bytesTransferred
-    }
-    val speedBps = (bitrateEstimate / 8L).coerceAtLeast(0L)
-    httpStreamSpeedBps = speedBps
-
-    val speed = formatPlaybackSpeed(context, speedBps)
-    val mb = formatPlaybackMB(context, httpStreamLoadedBytes)
-    val message = if (httpStreamLoadedBytes > 0L) "$mb · $speed" else speed
-
-    if (!hasRenderedFirstFrame) {
-        _uiState.update {
-            it.copy(
-                loadingMessage = message,
-                streamDownloadSpeed = speedBps,
-                streamLoadedBytes = httpStreamLoadedBytes
-            )
-        }
-    } else if (_uiState.value.isBuffering) {
-        _uiState.update {
-            it.copy(
-                bufferingMessage = message,
-                streamDownloadSpeed = speedBps,
-                streamLoadedBytes = httpStreamLoadedBytes
-            )
-        }
-    }
-}
-

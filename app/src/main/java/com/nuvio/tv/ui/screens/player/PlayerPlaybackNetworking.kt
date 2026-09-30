@@ -19,6 +19,8 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 internal object PlayerPlaybackNetworking {
+    private const val LOOPBACK_READ_TIMEOUT_SECONDS = 65L
+
     private val trustAllManager = object : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
 
@@ -91,8 +93,14 @@ internal object PlayerPlaybackNetworking {
             .build()
     }
 
-    fun createHttpClient(defaultHeaders: Map<String, String> = emptyMap()): OkHttpClient {
+    fun createHttpClient(
+        defaultHeaders: Map<String, String> = emptyMap(),
+        useLongReadTimeout: Boolean = false
+    ): OkHttpClient {
         val builder = playbackHttpClient.newBuilder()
+        if (useLongReadTimeout) {
+            builder.readTimeout(LOOPBACK_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        }
         if (defaultHeaders.any { it.key.equals("Authorization", ignoreCase = true) }) {
             // OkHttp strips the Authorization header on cross-host redirects.
             // WebDAV servers behind reverse proxies commonly redirect to a
@@ -123,18 +131,16 @@ internal object PlayerPlaybackNetworking {
     @UnstableApi
     fun createHttpDataSourceFactory(
         defaultHeaders: Map<String, String> = emptyMap(),
-        streamUrl: String = ""
+        streamUrl: String = "",
+        useLongReadTimeout: Boolean = false
     ): DataSource.Factory {
         // Auto-apply IPTV headers if needed
         val effectiveHeaders = IptvHeaderProvider.mergeWithDefaults(streamUrl, defaultHeaders)
-        
-        val client = createHttpClient(effectiveHeaders)
+
+        val client = createHttpClient(effectiveHeaders, useLongReadTimeout)
         val httpFactory = OkHttpDataSource.Factory(client).apply {
             setDefaultRequestProperties(effectiveHeaders)
-            val customUserAgent = effectiveHeaders.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
-            if (customUserAgent != null) {
-                setUserAgent(customUserAgent)
-            } else {
+            if (effectiveHeaders.none { it.key.equals("User-Agent", ignoreCase = true) }) {
                 setUserAgent(PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
             }
         }
@@ -145,9 +151,10 @@ internal object PlayerPlaybackNetworking {
     fun createDataSourceFactory(
         context: android.content.Context,
         defaultHeaders: Map<String, String> = emptyMap(),
-        streamUrl: String = ""
+        streamUrl: String = "",
+        useLongReadTimeout: Boolean = false
     ): DataSource.Factory {
-        return DefaultDataSource.Factory(context, createHttpDataSourceFactory(defaultHeaders, streamUrl))
+        return DefaultDataSource.Factory(context, createHttpDataSourceFactory(defaultHeaders, streamUrl, useLongReadTimeout))
     }
 
     fun openConnection(

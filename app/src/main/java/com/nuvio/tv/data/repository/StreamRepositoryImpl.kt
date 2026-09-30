@@ -39,13 +39,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.net.URLEncoder
 import java.security.MessageDigest
 import javax.inject.Inject
 
 private const val TAG = "StreamRepositoryImpl"
-private const val PER_ADDON_TIMEOUT_MS = 15_000L
 
 class StreamRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -56,8 +54,7 @@ class StreamRepositoryImpl @Inject constructor(
     private val debridSettingsDataStore: DebridSettingsDataStore,
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
-    private val localDebridAvailabilityService: LocalDebridAvailabilityService,
-    private val torrServerStreamProvider: com.nuvio.tv.core.torrent.TorrServerStreamProvider
+    private val localDebridAvailabilityService: LocalDebridAvailabilityService
 ) : StreamRepository {
     private val streamSearchSessions = StreamSearchSessionCache()
     private val localPluginSearchPaused = MutableStateFlow(false)
@@ -84,8 +81,7 @@ class StreamRepositoryImpl @Inject constructor(
         val enabledScrapers: List<ScraperInfo>,
         val groupPluginsByRepository: Boolean,
         val pluginRepositories: List<PluginRepository>,
-        val debridSettings: DebridSettings,
-        val torrServerEnabled: Boolean = false
+        val debridSettings: DebridSettings
     )
 
     override fun getStreamsFromAllAddons(
@@ -108,7 +104,6 @@ class StreamRepositoryImpl @Inject constructor(
                 enabledScrapers = sourceConfiguration.enabledScrapers,
                 groupPluginsByRepository = sourceConfiguration.groupPluginsByRepository,
                 pluginRepositories = sourceConfiguration.pluginRepositories,
-                torrServerEnabled = sourceConfiguration.torrServerEnabled,
                 debridPresentationConfiguration = sourceConfiguration.debridSettings
                     .withoutRawCredentials()
                     .toString()
@@ -128,8 +123,7 @@ class StreamRepositoryImpl @Inject constructor(
                     addons = sourceConfiguration.addons,
                     debridSettings = sourceConfiguration.debridSettings,
                     hasCompatiblePlugins = sourceConfiguration.pluginsEnabled &&
-                        sourceConfiguration.enabledScrapers.any { scraper -> scraper.supportsType(type) },
-                    hasTorrServer = sourceConfiguration.torrServerEnabled
+                        sourceConfiguration.enabledScrapers.any { scraper -> scraper.supportsType(type) }
                 )
             }
         )
@@ -144,7 +138,6 @@ class StreamRepositoryImpl @Inject constructor(
             val groupPluginsByRepository = pluginsEnabled && pluginManager.groupStreamsByRepository.first()
             val pluginRepositories = if (groupPluginsByRepository) pluginManager.repositories.first() else emptyList()
             val debridSettings = debridSettingsDataStore.settings.first()
-            val torrServerEnabled = torrServerStreamProvider.isEnabled()
 
             if (profileManager.activeProfileId.value != profileId) continue
 
@@ -155,8 +148,7 @@ class StreamRepositoryImpl @Inject constructor(
                 enabledScrapers = enabledScrapers,
                 groupPluginsByRepository = groupPluginsByRepository,
                 pluginRepositories = pluginRepositories,
-                debridSettings = debridSettings,
-                torrServerEnabled = torrServerEnabled
+                debridSettings = debridSettings
             )
         }
     }
@@ -169,8 +161,7 @@ class StreamRepositoryImpl @Inject constructor(
         episode: Int?,
         addons: List<Addon>,
         debridSettings: DebridSettings,
-        hasCompatiblePlugins: Boolean,
-        hasTorrServer: Boolean = false
+        hasCompatiblePlugins: Boolean
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
         emit(NetworkResult.Loading)
 
@@ -180,8 +171,7 @@ class StreamRepositoryImpl @Inject constructor(
                 addon.supportsStreamResource(type, videoId)
             }
 
-            val attemptedAddonNames = streamAddons.map { it.displayName } +
-                (if (hasTorrServer) listOf(com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME) else emptyList())
+            val attemptedAddonNames = streamAddons.map { it.displayName }
             val attemptedFailures = java.util.Collections.synchronizedList(
                 mutableListOf<StreamAttemptFailure>()
             )
@@ -194,63 +184,50 @@ class StreamRepositoryImpl @Inject constructor(
                 val resultChannel = Channel<AddonStreams>(Channel.UNLIMITED)
                 
                 // Track number of pending jobs
-                val totalJobs = streamAddons.size + 1 + (if (hasTorrServer) 1 else 0)
+                val totalJobs = streamAddons.size + 1
                 val completedJobs = java.util.concurrent.atomic.AtomicInteger(0)
 
                 // Launch addon jobs
                 streamAddons.forEach { addon ->
                     launch {
                         try {
-                            val streamsResult = withTimeoutOrNull(PER_ADDON_TIMEOUT_MS) {
-                                getStreamsFromAddon(addon, type, videoId)
-                            }
-                            if (streamsResult == null) {
-                                Log.w(TAG, "Addon ${addon.name} timed out after ${PER_ADDON_TIMEOUT_MS}ms")
-                                attemptedFailures += StreamAttemptFailure(
-                                    addonName = addon.displayName,
-                                    kind = StreamFailureKind.REQUEST_FAILED,
-                                    detail = context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_timeout)
-                                )
-                            } else {
-                                when (streamsResult) {
-                                    is NetworkResult.Success -> {
-                                        if (streamsResult.data.isNotEmpty()) {
-                                            val namedStreams = streamsResult.data.map {
-                                                it.copy(addonName = addon.displayName, addonLogo = addon.logo)
-                                            }
+                            val streamsResult = getStreamsFromAddon(addon, type, videoId)
+                            when (streamsResult) {
+                                is NetworkResult.Success -> {
+                                    if (streamsResult.data.isNotEmpty()) {
+                                        val namedStreams = streamsResult.data.map {
+                                            it.copy(addonName = addon.displayName, addonLogo = addon.logo)
+                                        }
+                                        resultChannel.send(
+                                            AddonStreams(
+                                                addonName = addon.displayName,
+                                                addonLogo = addon.logo,
+                                                streams = namedStreams
+                                            )
+                                        )
+                                    } else {
+                                        // Stream endpoint returned empty - try inline
+                                        // streams from meta response as fallback.
+                                        val inlineStreams = fetchInlineStreamsFromMeta(
+                                            addon, type, videoId
+                                        )
+                                        if (inlineStreams.isNotEmpty()) {
                                             resultChannel.send(
                                                 AddonStreams(
                                                     addonName = addon.displayName,
                                                     addonLogo = addon.logo,
-                                                    streams = namedStreams
+                                                    streams = inlineStreams
                                                 )
                                             )
                                         } else {
-                                            // Stream endpoint returned empty - try inline
-                                            // streams from meta response as fallback.
-                                            val inlineStreams = withTimeoutOrNull(PER_ADDON_TIMEOUT_MS) {
-                                                fetchInlineStreamsFromMeta(
-                                                    addon, type, videoId
-                                                )
-                                            } ?: emptyList()
-                                            if (inlineStreams.isNotEmpty()) {
-                                                resultChannel.send(
-                                                    AddonStreams(
-                                                        addonName = addon.displayName,
-                                                        addonLogo = addon.logo,
-                                                        streams = inlineStreams
-                                                    )
-                                                )
-                                            } else {
-                                                attemptedFailures += buildMissingStreamFailure(addon)
-                                            }
+                                            attemptedFailures += buildMissingStreamFailure(addon)
                                         }
                                     }
-                                    is NetworkResult.Error -> {
-                                        attemptedFailures += buildAddonFailure(addon, streamsResult)
-                                    }
-                                    NetworkResult.Loading -> Unit
                                 }
+                                is NetworkResult.Error -> {
+                                    attemptedFailures += buildAddonFailure(addon, streamsResult)
+                                }
+                                NetworkResult.Loading -> Unit
                             }
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
@@ -306,29 +283,6 @@ class StreamRepositoryImpl @Inject constructor(
                     }
                 }
 
-                if (hasTorrServer) {
-                    launch {
-                        try {
-                            val torrStreams = torrServerStreamProvider.getStreams(type, videoId)
-                            if (torrStreams != null && torrStreams.streams.isNotEmpty()) {
-                                resultChannel.send(torrStreams)
-                            }
-                        } catch (e: Exception) {
-                            if (e is CancellationException) throw e
-                            Log.e(TAG, "TorrServer stream provider failed: ${e.message}")
-                            attemptedFailures += StreamAttemptFailure(
-                                addonName = com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME,
-                                kind = StreamFailureKind.REQUEST_FAILED,
-                                detail = e.message ?: context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_request_failed)
-                            )
-                        } finally {
-                            if (completedJobs.incrementAndGet() >= totalJobs) {
-                                resultChannel.close()
-                            }
-                        }
-                    }
-                }
-
                 // Emit results as they arrive
                 for (result in resultChannel) {
                     val checkingResult = localDebridAvailabilityService.markChecking(listOf(result)).firstOrNull() ?: result
@@ -366,7 +320,6 @@ class StreamRepositoryImpl @Inject constructor(
         enabledScrapers: List<ScraperInfo>,
         groupPluginsByRepository: Boolean,
         pluginRepositories: List<PluginRepository>,
-        torrServerEnabled: Boolean,
         debridPresentationConfiguration: String
     ): String = buildString {
         append("addons:")
@@ -383,7 +336,6 @@ class StreamRepositoryImpl @Inject constructor(
                 append("|repo:").append(repository)
             }
         }
-        append("|torrServer:").append(torrServerEnabled)
         append("|debrid:").append(debridPresentationConfiguration)
     }.sha256()
 
@@ -584,11 +536,11 @@ class StreamRepositoryImpl @Inject constructor(
             ?: externalUrl
             ?: ytId
             ?: "${addonName}:${name}:${title}"
-        val discriminator = buildString {
-            name?.takeIf { it.isNotBlank() }?.let { append("|$it") }
-            title?.takeIf { it.isNotBlank() }?.let { append("|$it") }
-        }
-        return "$base$discriminator"
+        val nameSuffix = if (base == url) {
+            val discriminator = name?.takeIf { it.isNotBlank() }
+            if (discriminator != null) "|$discriminator" else ""
+        } else ""
+        return "$base$nameSuffix"
     }
 
     /**

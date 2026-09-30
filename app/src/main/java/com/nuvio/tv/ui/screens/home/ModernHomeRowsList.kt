@@ -109,6 +109,7 @@ internal fun ModernHomeRowsList(
     trailerPreviewUrls: StableMap<String, String>,
     trailerPreviewAudioUrls: StableMap<String, String>,
     useLandscapePosters: Boolean,
+    alwaysShowLandscapeClearlogo: Boolean = false,
     showLabels: Boolean,
     posterCardCornerRadius: Dp,
     focusedPosterBackdropTrailerMuted: Boolean,
@@ -429,6 +430,7 @@ internal fun ModernHomeRowsList(
                     rowTitleBottom = 14.dp, // rowTitleBottom
                     defaultBringIntoViewSpec = defaultBringIntoViewSpec,
                     focusStateCatalogRowScrollIndex = focusState.catalogRowScrollStates[row.key] ?: 0,
+                    focusStateCatalogRowScrollAnchor = focusState.catalogRowScrollAnchors[row.key],
                     focusedItemByRow = focusedItemByRow,
                     rowListStates = rowListStates,
                     loadMoreRequestedTotals = loadMoreRequestedTotals,
@@ -438,6 +440,7 @@ internal fun ModernHomeRowsList(
                     onPendingRowFocusCleared = onPendingRowFocusCleared,
                     onRowItemFocused = stableOnRowItemFocused,
                     useLandscapePosters = useLandscapePosters,
+                    alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
                     showLabels = showLabels,
                     posterCardCornerRadius = posterCardCornerRadius,
                     focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,

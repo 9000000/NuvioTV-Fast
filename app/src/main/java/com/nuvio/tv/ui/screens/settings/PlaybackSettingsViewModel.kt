@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.nuvio.tv.core.plugin.PluginManager
+import com.nuvio.tv.data.local.DeviceLocalPlayerPreferences
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.Dv7HandlingMode
@@ -25,14 +26,20 @@ import com.nuvio.tv.data.local.MpvHardwareDecodeMode
 import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
+import com.nuvio.tv.core.torrent.TorrentCacheClearResult
+import com.nuvio.tv.core.torrent.TorrentCacheSize
+import com.nuvio.tv.core.torrent.TorrentCacheState
+import com.nuvio.tv.core.torrent.TorrentProfile
+import com.nuvio.tv.core.torrent.TorrentService
 import com.nuvio.tv.core.torrent.TorrentSettings
 import com.nuvio.tv.core.torrent.TorrentSettingsData
+import com.nuvio.tv.core.torrent.TorrentState
 import com.nuvio.tv.data.local.VodCacheSizeMode
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
-import com.nuvio.tv.core.torrent.TorrServerAddonConfig
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -41,22 +48,27 @@ import javax.inject.Inject
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val deviceLocalPlayerPreferences: DeviceLocalPlayerPreferences,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val addonRepository: AddonRepository,
     private val pluginManager: PluginManager,
     private val torrentSettings: TorrentSettings,
-    private val torrServerAddonConfig: TorrServerAddonConfig,
+    private val torrentService: TorrentService,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
+    val transparentLetterbox: Flow<Boolean> = deviceLocalPlayerPreferences.transparentLetterbox
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
     val torrentSettingsFlow: Flow<TorrentSettingsData> = torrentSettings.settings
+    val torrentCacheState: StateFlow<TorrentCacheState> = torrentService.cacheState
+    val torrentState: StateFlow<TorrentState> = torrentService.state
 
-    fun setP2pEnabled(enabled: Boolean) {
-        torrentSettings.setP2pEnabled(enabled)
-    }
+    fun setP2pEnabled(enabled: Boolean) = torrentSettings.setP2pEnabled(enabled)
     fun setHideTorrentStats(enabled: Boolean) = torrentSettings.setHideTorrentStats(enabled)
+    fun setTorrentProfile(profile: TorrentProfile) = torrentSettings.setTorrentProfile(profile)
+    fun setTorrentCacheSize(size: TorrentCacheSize) = torrentSettings.setCacheSize(size)
+    suspend fun clearTorrentCache(): TorrentCacheClearResult = torrentService.clearCache()
 
     val lastPlaybackDiagnostics: Flow<LastPlaybackDiagnostics> = playerSettingsDataStore.lastPlaybackDiagnostics
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
@@ -166,6 +178,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setOsdClockEnabled(enabled: Boolean) {
         playerSettingsDataStore.setOsdClockEnabled(enabled)
+    }
+
+    suspend fun setTransparentLetterbox(enabled: Boolean) {
+        deviceLocalPlayerPreferences.setTransparentLetterbox(enabled)
     }
 
     suspend fun setSkipIntroEnabled(enabled: Boolean) {
