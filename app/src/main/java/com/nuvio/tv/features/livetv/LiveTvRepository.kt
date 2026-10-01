@@ -115,6 +115,9 @@ object LiveTvRepository {
         val playlists = loadSavedPlaylists()
         val recentIds = loadRecentChannelIds()
         val lastWatched = recentIds.firstOrNull() ?: LiveTvStorage.loadLastWatchedChannelId()
+        val savedPlaylistId = LiveTvStorage.loadLastWatchedPlaylistId()
+        val savedGroup = LiveTvStorage.loadLastWatchedGroup()
+        val savedFilterType = LiveTvStorage.loadLastWatchedFilterType()
         val stalker = LiveTvStorage.loadStalkerSettings()
         val xtream = LiveTvStorage.loadXtreamSettings()
         val cachedChannels = LiveTvStorage.loadChannelsCache()
@@ -127,6 +130,9 @@ object LiveTvRepository {
             channels = cachedChannels,
             favoriteChannelIds = loadFavoriteChannelIds(),
             lastWatchedChannelId = lastWatched,
+            lastWatchedPlaylistId = savedPlaylistId,
+            lastWatchedGroup = savedGroup,
+            lastWatchedFilterType = savedFilterType,
             recentChannelIds = recentIds,
             isNavigationEnabled = LiveTvStorage.loadNavigationEnabled() ?: true,
             isLoading = false,
@@ -704,19 +710,41 @@ object LiveTvRepository {
         _uiState.value = _uiState.value.copy(favoriteChannelIds = favorites)
     }
 
-    fun markChannelWatched(channel: LiveTvChannel) {
+    fun markChannelWatched(
+        channel: LiveTvChannel,
+        filterType: String? = null,
+        group: String? = null,
+        playlistId: String? = null
+    ) {
         ensureLoaded()
         val currentRecent = _uiState.value.recentChannelIds
         val updatedRecent = (listOf(channel.id) + currentRecent.filterNot { it == channel.id }).take(MAX_RECENT_CHANNELS)
         persistRecentChannelIds(updatedRecent)
         LiveTvStorage.saveLastWatchedChannelId(channel.id)
+
+        val effectivePlaylistId = playlistId ?: channel.playlistId
+        val effectiveGroup = if (filterType == "GROUP") (group ?: channel.group) else (group ?: channel.group)
+        val effectiveFilterType = filterType ?: if (!channel.group.isNullOrBlank()) "GROUP" else "PLAYLIST"
+
+        LiveTvStorage.saveLastWatchedPlaylistId(effectivePlaylistId)
+        LiveTvStorage.saveLastWatchedGroup(effectiveGroup)
+        LiveTvStorage.saveLastWatchedFilterType(effectiveFilterType)
+
         _uiState.value = _uiState.value.copy(
             lastWatchedChannelId = channel.id,
+            lastWatchedPlaylistId = effectivePlaylistId,
+            lastWatchedGroup = effectiveGroup,
+            lastWatchedFilterType = effectiveFilterType,
             recentChannelIds = updatedRecent
         )
     }
 
-    fun recordLastWatched(channel: LiveTvChannel) = markChannelWatched(channel)
+    fun recordLastWatched(
+        channel: LiveTvChannel,
+        filterType: String? = null,
+        group: String? = null,
+        playlistId: String? = null
+    ) = markChannelWatched(channel, filterType, group, playlistId)
 
     private fun publishNavigationVisibility() {
         LiveTvStorage.publishNavigationVisibility(_uiState.value.showInNavigation)

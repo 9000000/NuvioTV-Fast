@@ -11,6 +11,9 @@ object LiveTvStorage {
     private const val KEY_PLAYLISTS_BLOB = "playlists_blob"
     private const val KEY_FAVORITES_BLOB = "favorites_blob"
     private const val KEY_LAST_WATCHED_ID = "last_watched_id"
+    private const val KEY_LAST_WATCHED_PLAYLIST_ID = "last_watched_playlist_id"
+    private const val KEY_LAST_WATCHED_GROUP = "last_watched_group"
+    private const val KEY_LAST_WATCHED_FILTER_TYPE = "last_watched_filter_type"
     private const val KEY_RECENT_CHANNELS_BLOB = "recent_channels_blob"
     private const val KEY_NAV_ENABLED = "nav_enabled"
     private const val KEY_STALKER_SETTINGS = "stalker_settings"
@@ -48,6 +51,36 @@ object LiveTvStorage {
     fun loadLastWatchedChannelId(): String? = if (isReady) prefs.getString(KEY_LAST_WATCHED_ID, null) else null
     fun saveLastWatchedChannelId(channelId: String) {
         if (isReady) prefs.edit().putString(KEY_LAST_WATCHED_ID, channelId).apply()
+    }
+
+    fun loadLastWatchedPlaylistId(): String? = if (isReady) prefs.getString(KEY_LAST_WATCHED_PLAYLIST_ID, null) else null
+    fun saveLastWatchedPlaylistId(playlistId: String?) {
+        if (isReady) {
+            prefs.edit().apply {
+                if (playlistId != null) putString(KEY_LAST_WATCHED_PLAYLIST_ID, playlistId)
+                else remove(KEY_LAST_WATCHED_PLAYLIST_ID)
+            }.apply()
+        }
+    }
+
+    fun loadLastWatchedGroup(): String? = if (isReady) prefs.getString(KEY_LAST_WATCHED_GROUP, null) else null
+    fun saveLastWatchedGroup(group: String?) {
+        if (isReady) {
+            prefs.edit().apply {
+                if (group != null) putString(KEY_LAST_WATCHED_GROUP, group)
+                else remove(KEY_LAST_WATCHED_GROUP)
+            }.apply()
+        }
+    }
+
+    fun loadLastWatchedFilterType(): String? = if (isReady) prefs.getString(KEY_LAST_WATCHED_FILTER_TYPE, null) else null
+    fun saveLastWatchedFilterType(filterType: String?) {
+        if (isReady) {
+            prefs.edit().apply {
+                if (filterType != null) putString(KEY_LAST_WATCHED_FILTER_TYPE, filterType)
+                else remove(KEY_LAST_WATCHED_FILTER_TYPE)
+            }.apply()
+        }
     }
 
     fun loadRecentChannelIdsBlob(): String? = if (isReady) prefs.getString(KEY_RECENT_CHANNELS_BLOB, null) else null

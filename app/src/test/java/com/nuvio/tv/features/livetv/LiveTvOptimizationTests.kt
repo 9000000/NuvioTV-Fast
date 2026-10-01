@@ -76,4 +76,52 @@ class LiveTvOptimizationTests {
         }
         assertEquals(2, groupMatches.size)
     }
+
+    @Test
+    fun chipIndexCalculation_resolvesCorrectPositions() {
+        val allGroups = listOf("News", "Sports", "Movies")
+        val hasRecent = true
+        val selectedPlaylistId = "playlist_1"
+
+        // Helper replicating getActiveChipIndex logic
+        fun calculateIndex(filter: String, group: String?): Int {
+            val isAll = (filter == "ALL" || filter == "PLAYLIST") && group == null
+            return when {
+                isAll -> 1
+                filter == "RECENT" && hasRecent -> 2
+                filter == "FAVORITES" -> if (hasRecent) 3 else 2
+                filter == "GROUP" -> {
+                    val groupIdx = group?.let { allGroups.indexOf(it) } ?: -1
+                    val baseIndex = 2 + (if (hasRecent) 1 else 0) + 1
+                    if (groupIdx >= 0) baseIndex + groupIdx else 1
+                }
+                else -> 0
+            }
+        }
+
+        assertEquals(1, calculateIndex("PLAYLIST", null))
+        assertEquals(2, calculateIndex("RECENT", null))
+        assertEquals(3, calculateIndex("FAVORITES", null))
+        // Group "News" should be index 4 (item 0: dropdown, 1: all, 2: recent, 3: fav, 4: News)
+        assertEquals(4, calculateIndex("GROUP", "News"))
+        // Group "Sports" should be index 5
+        assertEquals(5, calculateIndex("GROUP", "Sports"))
+        // Group "Movies" should be index 6
+        assertEquals(6, calculateIndex("GROUP", "Movies"))
+    }
+
+    @Test
+    fun liveTvUiState_storesLastWatchedContext() {
+        val state = LiveTvUiState(
+            lastWatchedChannelId = "ch_123",
+            lastWatchedPlaylistId = "pl_456",
+            lastWatchedGroup = "Sports",
+            lastWatchedFilterType = "GROUP"
+        )
+
+        assertEquals("ch_123", state.lastWatchedChannelId)
+        assertEquals("pl_456", state.lastWatchedPlaylistId)
+        assertEquals("Sports", state.lastWatchedGroup)
+        assertEquals("GROUP", state.lastWatchedFilterType)
+    }
 }

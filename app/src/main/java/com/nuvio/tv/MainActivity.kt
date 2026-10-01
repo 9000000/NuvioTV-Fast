@@ -2312,9 +2312,6 @@ private fun navigateToDrawerRoute(
     currentRoute: String?,
     targetRoute: String
 ) {
-    if (targetRoute == Screen.LiveTv.route) {
-        com.nuvio.tv.features.livetv.LiveTvRepository.requestResetToNavigationDefault()
-    }
     if (currentRoute == targetRoute) {
         if (targetRoute == Screen.Home.route) {
             // Scroll Home to top by clearing saved focus/scroll state on the ViewModel.
