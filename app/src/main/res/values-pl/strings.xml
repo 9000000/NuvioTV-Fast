@@ -398,8 +398,8 @@
     <string name="layout_modern_desc">Stały hero z jednym aktywnym rzędem dla szybszego przeglądania</string>
     <string name="layout_section_home">Układ strony głównej</string>
     <string name="layout_section_home_desc">Wybierz strukturę i źródło hero.</string>
-    <string name="layout_landscape_posters">Poziome plakaty</string>
-    <string name="layout_landscape_posters_sub">Przełączaj między pionowymi i poziomymi kartami w widoku Modern.</string>
+    <string name="layout_landscape_posters">Tryb poziomy dla plakatów</string>
+    <string name="layout_landscape_posters_sub">Używaj poziomych kart wszędzie.</string>
     <string name="layout_preview_row">Pokaż wiersz podglądu</string>
     <string name="layout_preview_row_sub">Pokaż częściowy podgląd wiersza poniżej w układzie Modern Home.</string>
     <string name="layout_hero_catalogs">Katalogi hero</string>
