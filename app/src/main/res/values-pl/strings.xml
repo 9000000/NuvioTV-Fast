@@ -3384,4 +3384,43 @@
     <string name="custom_theme_remote_hint">← → Reguluj   ·   ↑ ↓ Przesuń   ·   Przytrzymaj, aby szybciej</string>
     <string name="custom_theme_preview">PODGLĄD</string>
     <string name="custom_theme_preview_ring">Wybrany element</string>
+
+    <string name="youtube_resolving_stream">Ładowanie wideo z YouTube</string>
+    <string name="youtube_resolution_failed">Nie udało się załadować tego wideo z YouTube.</string>
+
+    <string name="random_episode_title">Losowanie</string>
+    <string name="layout_random_episode_sub">Losuj odcinki z dowolnego serialu. Wyłączenie wstrzymuje losowanie.</string>
+    <string name="random_episode_unwatched">Nieobejrzane odcinki</string>
+    <string name="random_episode_include_watched">Wszystkie odcinki</string>
+    <string name="random_episode_empty_subtitle">Brak odcinków do wylosowania.</string>
+    <string name="random_episode_caught_up">Obejrzałeś wszystkie odcinki. Wybierz Wszystkie odcinki, aby obejrzeć ponownie.</string>
+    <string name="random_episode_loading">Ładowanie odcinków…</string>
+    <string name="shuffle_starting">Rozpoczynanie losowania…</string>
+    <string name="shuffle_choose_episodes">Wybierz, które odcinki losować.</string>
+    <string name="shuffle_preview_title">Twój odcinek</string>
+    <string name="shuffle_play_episode">Odtwórz odcinek</string>
+    <string name="shuffle_again">Losuj ponownie</string>
+    <string name="shuffle_only_episode">To jedyny odcinek w Twoim wyborze.</string>
+    <string name="shuffle_artwork_hidden">Grafika ukryta, aby uniknąć spoilerów</string>
+    <string name="shuffle_stop">Zatrzymaj losowanie</string>
+    <string name="shuffle_enabled_all">Losowanie wł. · Wszystkie odcinki</string>
+    <string name="shuffle_enabled_unwatched">Losowanie wł. · Nieobejrzane odcinki</string>
+    <string name="shuffle_disabled">Losowanie wył.</string>
+    <string name="shuffle_save_failed">Nie udało się zaktualizować losowania. Spróbuj ponownie.</string>
+    <string name="shuffle_change_selection">Wybierz odcinki</string>
+    <string name="shuffle_badge">Losowanie odcinków włączone</string>
+
+    <!-- Subtitle AutoSync -->
+    <string name="autosync_setting_title">Automatyczna synchronizacja napisów</string>
+    <string name="autosync_setting_description">Dopasuj napisy z dodatku do napisów osadzonych w wideo.</string>
+    <string name="autosync_tolerance_title">Tolerancja synchronizacji</string>
+    <string name="autosync_tolerance_description">Zachowaj oryginalny czas, gdy wymagana korekta jest równa lub mniejsza od tej wartości.</string>
+    <string name="autosync_tolerance_off">Wył.</string>
+    <string name="autosync_tolerance_value">%1$d ms</string>
+    <string name="autosync_thorough_title">Dokładne wyszukiwanie synchronizacji</string>
+    <string name="autosync_thorough_description">Porównuj kolejne ścieżki napisów w poszukiwaniu lepszego dopasowania przed synchronizacją. Po wyłączeniu pierwsze silne dopasowanie jest używane szybciej. Tylko pewne dopasowania są stosowane.</string>
+    <string name="autosync_toast_failed">Synchronizacja nie powiodła się: nie udało się dopasować napisów do wideo.</string>
+    <string name="autosync_toast_failed_no_reference">Synchronizacja nie powiodła się: wideo nie zawiera osadzonych napisów do porównania.</string>
+    <string name="autosync_toast_failed_unsupported">Synchronizacja nie powiodła się: ten format napisów nie jest obsługiwany.</string>
+    <string name="autosync_label_synced">Zsynchronizowane automatycznie</string>
 </resources>
