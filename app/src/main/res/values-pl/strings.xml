@@ -332,6 +332,8 @@
     <string name="sub_style_label">Styl</string>
 
     <!-- PlaybackAutoPlaySettings -->
+    <string name="autoplay_preload_next_episode">Wstępne ładowanie źródeł następnego odcinka</string>
+    <string name="autoplay_preload_next_episode_sub">Rozpocznij wyszukiwanie źródeł w tle zanim pojawi się przycisk następnego odcinka.</string>
     <string name="autoplay_reuse_last_link">Ponownie użyj ostatniego linku</string>
     <string name="autoplay_reuse_last_link_sub">Auto-odtwarzaj ostatni działający strumień dla tego samego filmu/odcinka gdy cache jest aktualny</string>
     <string name="autoplay_last_link_cache">Czas ważności cache linku</string>
