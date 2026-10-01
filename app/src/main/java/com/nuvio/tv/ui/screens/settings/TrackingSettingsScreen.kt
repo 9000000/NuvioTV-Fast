@@ -51,6 +51,7 @@ fun TrackingSettingsScreen(
     val traktState by traktViewModel.uiState.collectAsStateWithLifecycle()
     val simklState by simklViewModel.uiState.collectAsStateWithLifecycle()
     val mdbListState by mdbListViewModel.uiState.collectAsStateWithLifecycle()
+    val mdbListLibraryLists by mdbListViewModel.libraryLists.collectAsStateWithLifecycle()
     val trackingState by trackingViewModel.uiState.collectAsStateWithLifecycle()
     val traktFocusRequester = remember { FocusRequester() }
     val simklFocusRequester = remember { FocusRequester() }
@@ -245,9 +246,12 @@ fun TrackingSettingsScreen(
         TrackingProviderId.MDBLIST -> {
             MdbListAccountDialog(
                 state = mdbListState,
+                libraryLists = mdbListLibraryLists,
                 onStartConnection = mdbListViewModel::onConnect,
                 onRetryPolling = mdbListViewModel::onRetryPolling,
                 onSync = mdbListViewModel::onSyncNow,
+                onOpenLibraryLists = mdbListViewModel::onLibraryListsOpened,
+                onToggleLibraryList = mdbListViewModel::onToggleLibraryList,
                 onDisconnect = {
                     activeProvider = null
                     dismissOnConnected = null

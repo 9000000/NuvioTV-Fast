@@ -877,6 +877,9 @@
     <string name="mdblist_dialog_placeholder">Introduzir chave API MDBList</string>
     <string name="mdblist_not_set">Não definido</string>
     <string name="mdblist_invalid_api_key">Chave API MDBList inválida</string>
+    <string name="mdblist_library_lists">Listas da Biblioteca</string>
+    <string name="mdblist_library_lists_description">Escolhe que listas do MDBList aparecem na Biblioteca e em Gerir Listas. A Lista de Interesse aparece sempre.</string>
+    <string name="mdblist_library_lists_empty">Ainda não foram encontradas listas na tua conta MDBList. Sincroniza para as carregar.</string>
     <string name="debrid_title">Serviços Ligados</string>
     <string name="debrid_subtitle">Liga contas para aceder a ligações e à biblioteca</string>
     <string name="debrid_experimental_notice">Estas integrações são experimentais e podem ser mantidas, alteradas ou removidas mais tarde.</string>
