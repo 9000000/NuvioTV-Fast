@@ -16,6 +16,7 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamDebridCacheState
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.enabledAddons
+import com.nuvio.tv.core.torrent.TorrentEpisodeMatcher
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import kotlinx.coroutines.CancellationException
@@ -781,7 +782,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
     }
 
     if (isTorrServerStream(stream)) {
-        prepareTorrServerFilePicker(stream)
+        prepareTorrServerFilePicker(stream, currentSeason, currentEpisode)
         return
     }
 
@@ -815,7 +816,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
                 switchToSourceStream(resolved)
             } else if (resolved != null) {
                 if (isTorrServerStream(resolved)) {
-                    prepareTorrServerFilePicker(resolved)
+                    prepareTorrServerFilePicker(resolved, currentSeason, currentEpisode)
                 } else {
                     switchToTorrentSourceStream(resolved)
                 }
@@ -1338,8 +1339,15 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
         return
     }
 
-    if (!isAutoPlay && isTorrServerStream(stream)) {
-        prepareTorrServerFilePicker(stream)
+    val resolveSeason = forcedTargetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
+    val resolveEpisode = forcedTargetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
+
+    if (isTorrServerStream(stream)) {
+        if (isAutoPlay) {
+            autoPlayTorrServerEpisode(stream, resolveSeason, resolveEpisode, forcedTargetVideo)
+        } else {
+            prepareTorrServerFilePicker(stream, resolveSeason, resolveEpisode)
+        }
         return
     }
 
@@ -1364,8 +1372,6 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
     }
 
     if (stream.isTorrent()) {
-        val resolveSeason = forcedTargetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
-        val resolveEpisode = forcedTargetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
         debridResolveJob?.cancel()
         _uiState.update { it.copy(isLoadingEpisodeStreams = true, episodeStreamsError = null) }
         debridResolveJob = scope.launch {
@@ -1374,8 +1380,12 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
             if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
                 switchToEpisodeStream(resolved, forcedTargetVideo, isAutoPlay)
             } else if (resolved != null) {
-                if (!isAutoPlay && isTorrServerStream(resolved)) {
-                    prepareTorrServerFilePicker(resolved)
+                if (isTorrServerStream(resolved)) {
+                    if (isAutoPlay) {
+                        autoPlayTorrServerEpisode(resolved, resolveSeason, resolveEpisode, forcedTargetVideo)
+                    } else {
+                        prepareTorrServerFilePicker(resolved, resolveSeason, resolveEpisode)
+                    }
                 } else {
                     switchToTorrentEpisodeStream(resolved, forcedTargetVideo, isAutoPlay)
                 }
@@ -2056,7 +2066,11 @@ private fun PlayerRuntimeController.playNextCloudLibraryFile(
     }
 }
 
-internal fun PlayerRuntimeController.prepareTorrServerFilePicker(stream: Stream) {
+internal fun PlayerRuntimeController.prepareTorrServerFilePicker(
+    stream: Stream,
+    targetSeason: Int? = null,
+    targetEpisode: Int? = null
+) {
     torrentFilePickerJob?.cancel()
     _uiState.update {
         it.copy(
@@ -2066,7 +2080,9 @@ internal fun PlayerRuntimeController.prepareTorrServerFilePicker(stream: Stream)
             torrentFilePickerTitle = stream.name ?: stream.title ?: title ?: "",
             torrentFilePickerFiles = emptyList(),
             torrentFilePickerPendingStream = stream,
-            torrentFilePickerPendingHash = stream.getEffectiveInfoHash()
+            torrentFilePickerPendingHash = stream.getEffectiveInfoHash(),
+            torrentFilePickerTargetSeason = targetSeason,
+            torrentFilePickerTargetEpisode = targetEpisode
         )
     }
 
@@ -2170,8 +2186,105 @@ internal fun PlayerRuntimeController.dismissTorrentFilePicker() {
             torrentFilePickerError = null,
             torrentFilePickerFiles = emptyList(),
             torrentFilePickerPendingStream = null,
-            torrentFilePickerPendingHash = null
+            torrentFilePickerPendingHash = null,
+            torrentFilePickerTargetSeason = null,
+            torrentFilePickerTargetEpisode = null
         )
+    }
+}
+
+internal fun PlayerRuntimeController.autoPlayTorrServerEpisode(
+    stream: Stream,
+    targetSeason: Int?,
+    targetEpisode: Int?,
+    forcedTargetVideo: Video?
+) {
+    scope.launch(Dispatchers.IO) {
+        val magnet = stream.torrentMagnetUri()
+            ?: stream.url?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
+            ?: stream.getEffectiveInfoHash()?.let { hash ->
+                val trackers = stream.sources
+                    ?.filter { it.startsWith("tracker:") }
+                    ?.map { it.removePrefix("tracker:") }
+                    ?: emptyList()
+                val tr = trackers.joinToString("") { "&tr=$it" }
+                "magnet:?xt=urn:btih:$hash$tr"
+            }
+
+        if (magnet.isNullOrBlank()) {
+            withContext(Dispatchers.Main) {
+                prepareTorrServerFilePicker(stream, targetSeason, targetEpisode)
+            }
+            return@launch
+        }
+
+        val config = torrServerAddonConfig.config.first()
+        val serverUrl = config.effectiveServerUrl
+
+        val hash = torrServerRemoteApi.addTorrent(
+            magnetLink = magnet,
+            title = com.nuvio.tv.core.torrent.torrServerDisplayTitle(contentName ?: title),
+            poster = poster,
+            serverUrlOverride = serverUrl
+        ) ?: stream.getEffectiveInfoHash()
+
+        if (hash == null) {
+            withContext(Dispatchers.Main) {
+                prepareTorrServerFilePicker(stream, targetSeason, targetEpisode)
+            }
+            return@launch
+        }
+
+        val deadline = System.currentTimeMillis() + 15_000L
+        var files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList()
+        var pollDelay = 250L
+
+        while (isActive && System.currentTimeMillis() < deadline) {
+            val details = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
+            if (details != null && details.files.isNotEmpty()) {
+                files = details.files
+                break
+            }
+            delay(pollDelay)
+            pollDelay = (pollDelay * 2).coerceAtMost(1000L)
+        }
+
+        val fileId = TorrentEpisodeMatcher.selectBestMatchingFileId(
+            files = files,
+            requestedIdx = stream.getEffectiveFileIdx(),
+            targetSeason = targetSeason,
+            targetEpisode = targetEpisode
+        )
+
+        if (fileId == null) {
+            withContext(Dispatchers.Main) {
+                prepareTorrServerFilePicker(stream, targetSeason, targetEpisode)
+            }
+            return@launch
+        }
+
+        val selectedFile = files.firstOrNull { it.id == fileId }
+        val streamUrl = torrServerRemoteApi.buildStreamUrl(
+            serverUrl = serverUrl,
+            magnetLink = magnet,
+            fileIdx = fileId,
+            preload = config.preload,
+            save = config.saveToDb,
+            gst = config.gst,
+            hash = hash
+        )
+        val filename = selectedFile?.path?.substringAfterLast('/') ?: stream.behaviorHints?.filename
+
+        withContext(Dispatchers.Main) {
+            switchToEpisodeStreamCommon(stream, forcedTargetVideo)
+            switchToTorrServerStream(
+                stream = stream,
+                streamUrl = streamUrl,
+                infoHash = hash,
+                fileIdx = fileId,
+                filename = filename
+            )
+        }
     }
 }
 

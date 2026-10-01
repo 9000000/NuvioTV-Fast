@@ -15,6 +15,7 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.torrent.TorrentSettings
 import com.nuvio.tv.core.torrent.TorrentService
 import com.nuvio.tv.core.torrent.TorrentState
+import com.nuvio.tv.core.torrent.TorrentEpisodeMatcher
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.core.tracking.TrackingMediaKind
@@ -1543,7 +1544,12 @@ class StreamScreenViewModel @Inject constructor(
             pollDelay = (pollDelay * 2).coerceAtMost(1000L)
         }
 
-        val fileId = selectBestMatchingFileId(files, stream.getEffectiveFileIdx(), season, episode) ?: 1
+        val fileId = TorrentEpisodeMatcher.selectBestMatchingFileId(
+            files = files,
+            requestedIdx = stream.getEffectiveFileIdx(),
+            targetSeason = season,
+            targetEpisode = episode
+        ) ?: 1
         val selectedFile = files.firstOrNull { it.id == fileId }
 
         val streamUrl = torrServerRemoteApi.buildStreamUrl(
@@ -1566,36 +1572,6 @@ class StreamScreenViewModel @Inject constructor(
             videoSize = selectedFile?.length ?: baseInfo.videoSize,
             addonName = com.nuvio.tv.core.torrent.TorrServerStreamProvider.PROVIDER_NAME
         )
-    }
-
-    private fun selectBestMatchingFileId(
-        files: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile>,
-        requestedIdx: Int?,
-        targetSeason: Int?,
-        targetEpisode: Int?
-    ): Int? {
-        if (files.isEmpty()) return requestedIdx
-        if (requestedIdx != null && files.any { it.id == requestedIdx }) {
-            return requestedIdx
-        }
-        val videoExtensions = setOf("mkv", "mp4", "avi", "webm", "ts", "m4v", "mov", "wmv", "flv")
-        val videoFiles = files.filter { f ->
-            val ext = f.path.substringAfterLast('.', "").lowercase()
-            ext in videoExtensions
-        }
-        val candidatePool = videoFiles.ifEmpty { files }
-
-        if (targetSeason != null && targetEpisode != null) {
-            val pattern = Regex("(?i)s0*${targetSeason}[ex]0*${targetEpisode}(?:[^0-9]|$)")
-            val match = candidatePool.firstOrNull { pattern.containsMatchIn(it.path) }
-            if (match != null) return match.id
-        } else if (targetEpisode != null) {
-            val epPattern = Regex("(?i)(?:ep|e|episode)\\s*0*${targetEpisode}(?:[^0-9]|$)")
-            val match = candidatePool.firstOrNull { epPattern.containsMatchIn(it.path) }
-            if (match != null) return match.id
-        }
-
-        return candidatePool.maxByOrNull { it.length }?.id ?: candidatePool.firstOrNull()?.id
     }
 
     private var torrentFilePickerJob: Job? = null

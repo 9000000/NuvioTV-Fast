@@ -169,6 +169,8 @@ data class PlayerUiState(
     val torrentFilePickerFiles: List<com.nuvio.tv.core.torrent.TorrServerRemoteFile> = emptyList(),
     val torrentFilePickerPendingStream: Stream? = null,
     val torrentFilePickerPendingHash: String? = null,
+    val torrentFilePickerTargetSeason: Int? = null,
+    val torrentFilePickerTargetEpisode: Int? = null,
     val showFileSizeBadges: Boolean = true,
     val showAddonLogo: Boolean = true,
     val streamBadgePlacement: StreamBadgePlacement = StreamBadgePlacement.BOTTOM,

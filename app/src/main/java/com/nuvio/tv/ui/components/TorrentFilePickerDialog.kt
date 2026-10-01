@@ -49,6 +49,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.core.torrent.TorrServerRemoteFile
+import com.nuvio.tv.core.torrent.TorrentEpisodeMatcher
 import com.nuvio.tv.ui.theme.NuvioTheme
 import java.util.Locale
 
@@ -363,55 +364,5 @@ private fun formatFileSize(bytes: Long): String {
 
 internal fun buildEpisodeMatcher(season: Int?, episode: Int?): (String) -> Boolean {
     if (episode == null) return { false }
-    val epPattern = String.format(Locale.US, "%02d", episode)
-    val epSingle = episode.toString()
-
-    val explicitSeasonEpPatterns = if (season != null) {
-        val sPattern = String.format(Locale.US, "%02d", season)
-        val sSingle = season.toString()
-        listOf(
-            "s${sPattern}e${epPattern}",
-            "s${sSingle}e${epPattern}",
-            "s${sPattern}e${epSingle}",
-            "s${sSingle}e${epSingle}",
-            "${sSingle}x${epPattern}",
-            "${sSingle}x${epSingle}"
-        )
-    } else emptyList()
-
-    val epPrefixedPatterns = listOf(
-        "e${epPattern}",
-        "ep${epPattern}",
-        "ep.${epPattern}",
-        "episode ${epSingle}",
-        "episode ${epPattern}"
-    )
-
-    // Regex for anime filenames (e.g. "One Piece - 1050", "[SubsPlease] One Piece - 1050 (1080p)", "One Piece 0500")
-    val animeEpRegex = Regex("""(?i)(?<!\d)(?:e|ep|ep\.|episode[\s._-]*)?0*${episode}(?:v\d+)?(?![pPkK\d])(?=[\s._\-\])]|$)""")
-    val otherSeasonRegex = if (season != null) {
-        Regex("""(?i)\b[sS]0*(\d+)[eE]""")
-    } else null
-
-    return { path ->
-        val clean = path.substringAfterLast('/').substringBeforeLast('.')
-        // 1. Explicit SxxExx match takes highest priority
-        if (explicitSeasonEpPatterns.any { clean.contains(it, ignoreCase = true) }) {
-            true
-        } else {
-            // Check if file specifies a different season (e.g. S02E... when targeting season 1)
-            val hasDifferentSeason = otherSeasonRegex?.find(clean)?.let { matchResult ->
-                val fileSeason = matchResult.groupValues[1].toIntOrNull()
-                fileSeason != null && fileSeason != season
-            } ?: false
-
-            if (hasDifferentSeason) {
-                false
-            } else if (epPrefixedPatterns.any { clean.contains(it, ignoreCase = true) }) {
-                true
-            } else {
-                animeEpRegex.containsMatchIn(clean)
-            }
-        }
-    }
+    return { path -> TorrentEpisodeMatcher.matchesEpisode(path, season, episode) }
 }

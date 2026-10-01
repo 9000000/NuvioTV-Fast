@@ -1716,8 +1716,8 @@ fun PlayerScreen(
                 isLoading = uiState.torrentFilePickerLoading,
                 error = uiState.torrentFilePickerError,
                 files = uiState.torrentFilePickerFiles,
-                targetSeason = uiState.episodesSelectedSeason ?: uiState.currentSeason,
-                targetEpisode = uiState.currentEpisode,
+                targetSeason = uiState.torrentFilePickerTargetSeason ?: uiState.episodesSelectedSeason ?: uiState.currentSeason,
+                targetEpisode = uiState.torrentFilePickerTargetEpisode ?: uiState.currentEpisode,
                 contentType = uiState.contentType,
                 onFileSelected = { fileId ->
                     viewModel.onEvent(PlayerEvent.OnTorrentFileSelected(fileId))
