@@ -923,6 +923,8 @@
     <string name="sub_org_by_addon_desc">Altyazıları eklenti kaynağına göre gruplandır.</string>
 
     <!-- PlaybackAutoPlaySettings -->
+    <string name="autoplay_preload_next_episode">Sonraki Bölüm Kaynaklarını Önceden Yükle</string>
+    <string name="autoplay_preload_next_episode_sub">Sonraki bölüm düğmesi görünmeden önce kaynakları arka planda aramaya başla.</string>
     <string name="autoplay_reuse_last_link">Son Bağlantıyı Yeniden Kullan</string>
     <string name="autoplay_reuse_last_link_sub">Aynı film/bölüm için önbellek hala geçerliyken çalışan son yayınınızı otomatik oynatın</string>
     <string name="autoplay_last_link_cache">Son Bağlantı Önbellek Süresi</string>
