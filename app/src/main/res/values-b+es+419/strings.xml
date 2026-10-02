@@ -788,7 +788,7 @@
     <string name="playback_engine_mvplayer_desc">Usa libmpv con controles OSD de Nuvio. Experimental.</string>
 
     <string name="video_section">Video</string>
-    <string name="audio_trailer_section">Tráiler</string>
+    <string name="playback_true_black_letterbox">Barras en negro real</string>
     <string name="playback_true_black_letterbox_sub">Deja las barras alrededor de la imagen sin pintar para que el HDR mantenga el negro real. Mantén esta opción desactivada si aparece una línea brillante en las barras.</string>
     <string name="audio_trailer_section">Tráiler</string>
     <string name="audio_autoplay_trailers">Auto-reproducir Tráileres</string>
