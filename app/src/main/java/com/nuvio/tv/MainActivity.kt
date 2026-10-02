@@ -173,6 +173,8 @@ import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.ui.components.NuvioScrollDefaults
 import com.nuvio.tv.ui.components.BrandWordmark
 import com.nuvio.tv.ui.components.LocalCardDepthStyle
+import com.nuvio.tv.ui.components.LocalLandscapePosterMode
+import com.nuvio.tv.ui.components.LocalAlwaysBackdropWithLogo
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
@@ -252,7 +254,17 @@ private data class MainUiPrefs(
     val settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
     val cardDepthStyle: CardDepthStyle = CardDepthStyle(),
     val animationsEnabled: Boolean = true,
-    val posterBorderStyle: PosterBorderStyle = PosterBorderStyle.Default
+    val posterBorderStyle: PosterBorderStyle = PosterBorderStyle.Default,
+    val landscapePosterMode: Boolean = false,
+    val alwaysBackdropWithLogo: Boolean = false
+)
+
+private data class ExtendedVisualPrefs(
+    val cardDepthStyle: CardDepthStyle,
+    val animationsEnabled: Boolean,
+    val posterBorderStyle: PosterBorderStyle,
+    val landscapePosterMode: Boolean,
+    val alwaysBackdropWithLogo: Boolean
 )
 
 @AndroidEntryPoint
@@ -555,6 +567,11 @@ open class MainActivity : ComponentActivity() {
                         settingsUiStyle = settingsUiStyle,
                     )
                 }
+                val landscapePrefsFlow = combine(
+                    layoutPreferenceDataStore.modernLandscapePostersEnabled,
+                    layoutPreferenceDataStore.alwaysShowLandscapeClearlogo
+                ) { landscape, backdropWithLogo -> landscape to backdropWithLogo }
+
                 combine(
                     themeAndExperienceFlow,
                     layoutAndFeaturesFlow,
@@ -562,11 +579,18 @@ open class MainActivity : ComponentActivity() {
                     combine(
                         layoutPreferenceDataStore.cardDepthStyle,
                         themeDataStore.animationsEnabled,
-                        themeDataStore.posterBorderStyle
-                    ) { cardDepthStyle, animationsEnabled, posterBorderStyle ->
-                        Triple(cardDepthStyle, animationsEnabled, posterBorderStyle)
+                        themeDataStore.posterBorderStyle,
+                        landscapePrefsFlow
+                    ) { cardDepthStyle, animationsEnabled, posterBorderStyle, (landscapePosterMode, alwaysBackdropWithLogo) ->
+                        ExtendedVisualPrefs(
+                            cardDepthStyle = cardDepthStyle,
+                            animationsEnabled = animationsEnabled,
+                            posterBorderStyle = posterBorderStyle,
+                            landscapePosterMode = landscapePosterMode,
+                            alwaysBackdropWithLogo = alwaysBackdropWithLogo
+                        )
                     }
-                ) { themePrefs, layoutPrefs, extraPrefs, (cardDepthStyle, animationsEnabled, posterBorderStyle) ->
+                ) { themePrefs, layoutPrefs, extraPrefs, visualPrefs ->
                     themePrefs.copy(
                         hasChosenLayout = layoutPrefs.hasChosenLayout,
                         sidebarCollapsed = layoutPrefs.sidebarCollapsed,
@@ -578,9 +602,11 @@ open class MainActivity : ComponentActivity() {
                         fastHorizontalNavigationEnabled = extraPrefs.fastHorizontalNavigationEnabled,
                         composeHighlighterEnabled = extraPrefs.composeHighlighterEnabled,
                         settingsUiStyle = extraPrefs.settingsUiStyle,
-                        animationsEnabled = animationsEnabled,
-                        cardDepthStyle = cardDepthStyle,
-                        posterBorderStyle = posterBorderStyle
+                        animationsEnabled = visualPrefs.animationsEnabled,
+                        cardDepthStyle = visualPrefs.cardDepthStyle,
+                        posterBorderStyle = visualPrefs.posterBorderStyle,
+                        landscapePosterMode = visualPrefs.landscapePosterMode,
+                        alwaysBackdropWithLogo = visualPrefs.alwaysBackdropWithLogo
                     )
                 }
             }
@@ -700,6 +726,8 @@ open class MainActivity : ComponentActivity() {
                     LocalFastHorizontalNavigationEnabled provides mainUiPrefs.fastHorizontalNavigationEnabled,
                     LocalRecompositionHighlighterEnabled provides highlighterEnabled,
                     LocalCardDepthStyle provides mainUiPrefs.cardDepthStyle,
+                    LocalLandscapePosterMode provides mainUiPrefs.landscapePosterMode,
+                    LocalAlwaysBackdropWithLogo provides mainUiPrefs.alwaysBackdropWithLogo,
                     LocalMemberAccess provides mainUiPrefs.memberAccess,
                     com.nuvio.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool,
                     LocalSplashBackground provides splashBackground,

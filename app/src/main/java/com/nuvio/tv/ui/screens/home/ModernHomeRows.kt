@@ -1143,8 +1143,7 @@ private fun ModernCarouselCard(
     var isFocused by remember { mutableStateOf(false) }
     val payload = item.payload as? ModernPayload.CollectionFolder
     val isCollectionFolder = item.payload is ModernPayload.CollectionFolder
-    val hasCustomPosterOverlay = item.metaPreview?.rawPosterUrl != null
-    val effectiveIgnoreLandscapePoster = alwaysShowLandscapeClearlogo && !hasCustomPosterOverlay
+    val effectiveIgnoreLandscapePoster = alwaysShowLandscapeClearlogo
     val baseImageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         if (useLandscapeOverlayTreatment) {
             if (effectiveIgnoreLandscapePoster) {
