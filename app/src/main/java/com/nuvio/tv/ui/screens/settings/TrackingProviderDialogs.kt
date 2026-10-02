@@ -491,8 +491,7 @@ internal fun ConnectedTrackingAccountContent(
     stats: TraktProgressService.TraktCachedStats? = null,
     isStatsLoading: Boolean = false,
     onVisit: (() -> Unit)? = null,
-    onInfo: (() -> Unit)? = null,
-    infoLabel: String? = null
+    onInfo: (() -> Unit)? = null
 ) {
     TrackingConnectedWordmark(
         brand = brand,
@@ -563,7 +562,7 @@ internal fun ConnectedTrackingAccountContent(
         )
         if (onInfo != null) {
             TrackingBrandFooterButton(
-                text = infoLabel ?: stringResource(R.string.simkl_sync_info_action),
+                text = stringResource(R.string.simkl_sync_info_action),
                 onClick = onInfo,
                 modifier = Modifier.weight(1.55f),
                 fillContentWidth = true
@@ -648,7 +647,7 @@ private fun SimklSyncInfoContent(
 }
 
 @Composable
-internal fun TrackingConnectedWordmark(
+private fun TrackingConnectedWordmark(
     brand: TrackingDialogBrand,
     logo: Painter,
     contentDescription: String
@@ -730,7 +729,7 @@ private fun TrackingBrandPrimaryButton(
 }
 
 @Composable
-internal fun TrackingBrandFooterButton(
+private fun TrackingBrandFooterButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -767,7 +766,7 @@ internal fun TrackingBrandFooterButton(
 }
 
 @Composable
-internal fun TrackingBrandMessage(
+private fun TrackingBrandMessage(
     text: String,
     isError: Boolean
 ) {

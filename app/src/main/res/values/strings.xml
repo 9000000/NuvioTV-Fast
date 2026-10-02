@@ -1233,6 +1233,9 @@
     <string name="mdblist_library_lists">Library lists</string>
     <string name="mdblist_library_lists_description">Choose which MDBList lists appear in the Library and in Manage Lists. The Watchlist is always shown.</string>
     <string name="mdblist_library_lists_empty">No lists found in your MDBList account yet. Sync to load them.</string>
+    <string name="mdblist_library_lists_summary">%1$d of %2$d shown</string>
+    <string name="tracking_mdblist_features_title">MDBList features</string>
+    <string name="tracking_mdblist_features_subtitle">MDBList-specific settings</string>
 
     <string name="debrid_title">Connected Services</string>
     <string name="debrid_subtitle">Connect accounts for links and library access</string>
