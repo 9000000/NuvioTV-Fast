@@ -40,8 +40,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -50,6 +48,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.util.contentLayoutDirection
+import com.nuvio.tv.ui.util.contentTextDirection
 import kotlinx.coroutines.launch
 
 @Composable
@@ -60,7 +59,6 @@ fun P2pConsentDialog(
     val focusRequester = remember { FocusRequester() }
     val bodyText = stringResource(R.string.p2p_consent_body)
     val layoutDirection = remember(bodyText) { bodyText.contentLayoutDirection() }
-    val isRtl = layoutDirection == LayoutDirection.Rtl
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -123,7 +121,7 @@ fun P2pConsentDialog(
                         Text(
                             text = bodyText,
                             style = MaterialTheme.typography.bodyMedium.copy(
-                                textDirection = if (isRtl) TextDirection.Rtl else TextDirection.Ltr
+                                textDirection = bodyText.contentTextDirection()
                             ),
                             color = NuvioTheme.colors.TextSecondary,
                             textAlign = TextAlign.Start,
