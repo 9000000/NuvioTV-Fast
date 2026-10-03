@@ -1072,6 +1072,13 @@
     <string name="upcoming_section_title">Sắp ra mắt</string>
     <string name="layout_trailer_button">Hiển thị nút Trailer</string>
     <string name="layout_trailer_button_sub">Hiển thị nút trailer trên trang chi tiết (chỉ khi có trailer).</string>
+    <string name="layout_trailer_play_in_background">Phát ở phông nền</string>
+    <string name="layout_trailer_play_in_background_sub">Phát trailer thay cho phông nền trong khi trang vẫn hiển thị.</string>
+    <string name="layout_trailer_pause_on_scroll">Tạm dừng khi cuộn</string>
+    <string name="layout_trailer_pause_on_scroll_sub">Tạm dừng trailer khi cuộn xuống và tiếp tục phát khi quay lại đầu trang.</string>
+    <string name="layout_detail_group_episodes">Các tập</string>
+    <string name="layout_detail_group_trailers">Trailer</string>
+    <string name="layout_detail_group_metadata">Siêu dữ liệu</string>
     <string name="layout_prefer_external_meta">Ưu tiên siêu dữ liệu từ tiện ích bên ngoài</string>
     <string name="layout_prefer_external_meta_sub">Dùng siêu dữ liệu từ tiện ích bên ngoài thay vì tiện ích danh mục.</string>
     <string name="layout_show_full_release_date">Hiển thị ngày phát hành đầy đủ</string>
