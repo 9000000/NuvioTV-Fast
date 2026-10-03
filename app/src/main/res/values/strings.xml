@@ -911,6 +911,9 @@
     <string name="sub_org_by_lang_desc">Group subtitles by language.</string>
     <string name="sub_org_by_addon_desc">Group subtitles by addon source.</string>
 
+    <string name="autoplay_preload_next_episode">Preload Next Episode Sources</string>
+    <string name="autoplay_preload_next_episode_sub">Start searching for sources in the background before the next episode button appears.</string>
+
     <string name="autoplay_reuse_last_link">Reuse Last Link</string>
     <string name="autoplay_reuse_last_link_sub">Auto-play your last working stream for this same movie/episode when cache is still valid</string>
     <string name="autoplay_last_link_cache">Last Link Cache Duration</string>
@@ -979,8 +982,8 @@
     <string name="layout_modern_desc">Fixed hero with a single active row for faster browsing</string>
     <string name="layout_section_home">Home Layout</string>
     <string name="layout_section_home_desc">Choose structure and hero source.</string>
-    <string name="layout_landscape_posters">Landscape Posters</string>
-    <string name="layout_landscape_posters_sub">Switch between portrait and landscape cards for Modern view.</string>
+    <string name="layout_landscape_posters">Landscape Poster Mode</string>
+    <string name="layout_landscape_posters_sub">Use landscape cards everywhere.</string>
     <string name="layout_preview_row">Show Preview Row</string>
     <string name="layout_preview_row_sub">Show a partial preview of the row below in Modern Home layout.</string>
     <string name="layout_hero_catalogs">Hero Catalogs</string>
@@ -1221,6 +1224,10 @@
     <string name="mdblist_metacritic_subtitle">Show Metacritic score</string>
     <string name="mdblist_mal_title">MyAnimeList</string>
     <string name="mdblist_mal_subtitle">Show MyAnimeList rating</string>
+    <string name="mdblist_show_on_hero_title">Use Ratings on Hero</string>
+    <string name="mdblist_show_on_hero_subtitle">Show MDBList ratings on hero carousel (modern and classic/grid)</string>
+    <string name="mdblist_rating_order_title">Rating Order</string>
+    <string name="mdblist_rating_order_subtitle">First 3 enabled and available ratings are shown on the modern hero. Use arrows to reorder.</string>
     <string name="mdblist_dialog_title">MDBList API Key</string>
     <string name="mdblist_dialog_subtitle">Enter your API key to fetch external ratings</string>
     <string name="mdblist_dialog_placeholder">Enter MDBList API key</string>
@@ -1727,6 +1734,8 @@
     <string name="debrid_missing_api_key">Add a Debrid API key in Settings.</string>
     <string name="debrid_not_cached">Not cached on this service.</string>
     <string name="debrid_resolution_failed">Could not resolve this Debrid stream.</string>
+    <string name="youtube_resolving_stream">Loading YouTube video</string>
+    <string name="youtube_resolution_failed">Could not load this YouTube video.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
     <string name="p2p_consent_title">P2P Streaming</string>
@@ -3308,4 +3317,39 @@
     <string name="stream_test_video_bitrate">Average Video Bitrate: %1$s</string>
     <string name="stream_test_error_connection">Connection failed. The last played stream link may have expired or is unreachable. Please play the video again and retry.</string>
 
+    <string name="random_episode_title">Shuffle</string>
+    <string name="layout_random_episode_sub">Shuffle episodes from any series. Turning this off pauses shuffle.</string>
+    <string name="random_episode_unwatched">Unwatched episodes</string>
+    <string name="random_episode_include_watched">All episodes</string>
+    <string name="random_episode_empty_subtitle">No episodes are available to shuffle.</string>
+    <string name="random_episode_caught_up">You have watched every episode. Choose All episodes to watch again.</string>
+    <string name="random_episode_loading">Loading episodes…</string>
+    <string name="shuffle_starting">Starting shuffle…</string>
+    <string name="shuffle_choose_episodes">Choose which episodes to shuffle.</string>
+    <string name="shuffle_preview_title">Your episode</string>
+    <string name="shuffle_play_episode">Play episode</string>
+    <string name="shuffle_again">Shuffle again</string>
+    <string name="shuffle_only_episode">This is the only episode in your selection.</string>
+    <string name="shuffle_artwork_hidden">Artwork hidden to avoid spoilers</string>
+    <string name="shuffle_stop">Stop shuffle</string>
+    <string name="shuffle_enabled_all">Shuffle on · All episodes</string>
+    <string name="shuffle_enabled_unwatched">Shuffle on · Unwatched episodes</string>
+    <string name="shuffle_disabled">Shuffle off</string>
+    <string name="shuffle_save_failed">Could not update shuffle. Try again.</string>
+    <string name="shuffle_change_selection">Choose episodes</string>
+    <string name="shuffle_badge">Episode shuffle enabled</string>
+
+    <!-- Subtitle AutoSync -->
+    <string name="autosync_setting_title">Auto Sync Subtitles</string>
+    <string name="autosync_setting_description">Match the selected add-on subtitle to the timing of the subtitles embedded in the video.</string>
+    <string name="autosync_tolerance_title">Auto Sync Tolerance</string>
+    <string name="autosync_tolerance_description">Keep the original timing when the correction needed is this small or smaller.</string>
+    <string name="autosync_tolerance_off">Off</string>
+    <string name="autosync_tolerance_value">%1$d ms</string>
+    <string name="autosync_thorough_title">Thorough Auto Sync Search</string>
+    <string name="autosync_thorough_description">Keep comparing other subtitles and embedded tracks for a closer match before syncing. When off, the first strong match is used sooner. Only confident matches are ever applied.</string>
+    <string name="autosync_toast_failed">Sync failed: Auto Sync couldn\'t match this subtitle to the video.</string>
+    <string name="autosync_toast_failed_no_reference">Sync failed: this video has no embedded subtitles to compare with.</string>
+    <string name="autosync_toast_failed_unsupported">Sync failed: Auto Sync doesn\'t support this subtitle format.</string>
+    <string name="autosync_label_synced">Auto synced</string>
 </resources>

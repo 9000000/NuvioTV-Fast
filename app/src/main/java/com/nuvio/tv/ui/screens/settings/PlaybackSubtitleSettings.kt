@@ -68,6 +68,8 @@ internal fun PlaybackSubtitlesSection(
         enabled = languageSelectionEnabled,
         onClick = { onOpenDialog(PlaybackDialog.SECONDARY_SUBTITLE_LANGUAGE) }
     )
+    autoSyncSettingsItems(enabled = enabled) // AutoSync hook
+
     SettingsToggleRow(
         title = stringResource(R.string.sub_use_forced_subtitles),
         subtitle = stringResource(R.string.sub_use_forced_subtitles_desc),
