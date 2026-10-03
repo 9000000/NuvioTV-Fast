@@ -946,6 +946,9 @@
     <string name="sub_org_by_lang_desc">Nhóm phụ đề theo ngôn ngữ.</string>
     <string name="sub_org_by_addon_desc">Nhóm phụ đề theo nguồn của tiện ích.</string>
 
+    <string name="autoplay_preload_next_episode">Tải trước nguồn tập tiếp theo</string>
+    <string name="autoplay_preload_next_episode_sub">Bắt đầu tìm kiếm nguồn phát trong nền trước khi nút tập tiếp theo xuất hiện.</string>
+
     <string name="autoplay_reuse_last_link">Dùng lại liên kết cuối</string>
     <string name="autoplay_reuse_last_link_sub">Tự động phát luồng hoạt động gần nhất cho cùng một phim điện ảnh/tập phim khi bộ nhớ đệm vẫn còn hiệu lực.</string>
     <string name="autoplay_last_link_cache">Thời gian lưu bộ nhớ đệm liên kết cuối</string>

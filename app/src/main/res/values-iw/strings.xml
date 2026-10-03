@@ -911,6 +911,9 @@
     <string name="sub_org_by_lang_desc">קיבוץ כתוביות לפי שפה.</string>
     <string name="sub_org_by_addon_desc">קיבוץ כתוביות לפי מקור התוסף.</string>
 
+    <string name="autoplay_preload_next_episode">טעינה מוקדמת של מקורות עבור הפרק הבא</string>
+    <string name="autoplay_preload_next_episode_sub">התחלת חיפוש מקורות ברקע לפני הופעת הכפתור למעבר לפרק הבא.</string>
+
     <string name="autoplay_reuse_last_link">שימוש חוזר בקישור האחרון</string>
     <string name="autoplay_reuse_last_link_sub">הפעלה אוטומטית של המקור האחרון שעבד עבור אותו סרט/פרק, כשהמטמון עדיין תקף</string>
     <string name="autoplay_last_link_cache">משך מטמון קישור אחרון</string>
