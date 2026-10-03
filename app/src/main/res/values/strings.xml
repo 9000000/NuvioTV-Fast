@@ -1072,6 +1072,13 @@
     <string name="upcoming_section_title">Upcoming</string>
     <string name="layout_trailer_button">Show Trailer Button</string>
     <string name="layout_trailer_button_sub">Show trailer button on detail page (only when trailer is available).</string>
+    <string name="layout_trailer_play_in_background">Play in Background</string>
+    <string name="layout_trailer_play_in_background_sub">Play the trailer in place of the backdrop while the page stays visible.</string>
+    <string name="layout_trailer_pause_on_scroll">Pause When Scrolling</string>
+    <string name="layout_trailer_pause_on_scroll_sub">Pause the trailer when you scroll down and resume it when you return to the top.</string>
+    <string name="layout_detail_group_episodes">Episodes</string>
+    <string name="layout_detail_group_trailers">Trailers</string>
+    <string name="layout_detail_group_metadata">Metadata</string>
     <string name="layout_prefer_external_meta">Prefer meta from external addon</string>
     <string name="layout_prefer_external_meta_sub">Use metadata from external addon instead of catalog addon.</string>
     <string name="layout_show_full_release_date">Show full release date</string>
