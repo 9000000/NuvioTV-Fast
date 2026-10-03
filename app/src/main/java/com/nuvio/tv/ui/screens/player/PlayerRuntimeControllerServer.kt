@@ -12,11 +12,13 @@ import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.ProxyHeaders
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBehaviorHints
+import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.enabledAddons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal fun PlayerRuntimeController.reportServerPlayback() {
     val url = currentStreamUrl
@@ -51,6 +53,24 @@ internal fun PlayerRuntimeController.serverPlaybackSummary(): String? {
     val method = context.getString(session.playMethod.labelRes())
     val reasons = session.transcodeReasons.joinToString(", ", transform = ::readableTranscodeReason)
     return if (reasons.isEmpty()) method else "$method · $reasons"
+}
+
+internal suspend fun PlayerRuntimeController.newerServerProgress(saved: WatchProgress?): WatchProgress? {
+    if (!isServerStream) return saved
+    val state = try {
+        withTimeoutOrNull(SERVER_RESUME_TIMEOUT_MS) { serverPlayback.resumeState(currentStreamUrl) }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        null
+    } ?: return saved
+    val lastPlayed = state.lastPlayedEpochMs
+        ?.takeIf { !state.played && state.positionMs > 0L && state.durationMs > 0L }
+        ?: return saved
+    if (saved != null && saved.lastWatched >= lastPlayed) return saved
+    val parentContentId = contentId ?: return saved
+    val base = saved ?: currentWatchProgress(parentContentId, contentType ?: "movie", 0L, 0L, 0L)
+    return base.copy(position = state.positionMs, duration = state.durationMs, lastWatched = lastPlayed, progressPercent = null)
 }
 
 internal fun PlayerRuntimeController.serverImdbId(contentId: String): String? =
@@ -183,3 +203,5 @@ private fun PlayerRuntimeController.applyPreferredServerAudio(tracks: List<Track
     } ?: return
     if (!preferred.isSelected) switchServerAudio(preferred.index)
 }
+
+private const val SERVER_RESUME_TIMEOUT_MS = 2_000L

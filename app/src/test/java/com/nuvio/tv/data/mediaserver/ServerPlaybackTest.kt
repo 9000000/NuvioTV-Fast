@@ -218,6 +218,18 @@ class ServerPlaybackTest {
     }
 
     @Test
+    fun readsTheServerResumePointForThePlayingItem() = runBlocking {
+        val provider = FakeServerProvider().apply {
+            userStates["7"] = listOf(ServerUserState("v7", positionMs = 30_000L, durationMs = 60_000L, played = false, lastPlayedEpochMs = 5_000L))
+        }
+        val harness = harness(provider)
+        val url = harness.playback.prepare(ServerPlaybackTarget(ServerItemRef(harness.connection.id, "7"), "src-7")).url
+
+        assertEquals(30_000L, harness.playback.resumeState(url)?.positionMs)
+        assertNull(harness.playback.resumeState("https://other.example/7"))
+    }
+
+    @Test
     fun directPlayLeavesTracksToThePlayer() = runBlocking {
         val harness = harness()
         val url = harness.playback.prepare(ServerPlaybackTarget(ServerItemRef(harness.connection.id, "7"), "src-7")).url

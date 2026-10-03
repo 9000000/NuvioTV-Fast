@@ -18,7 +18,8 @@ data class SyncedServer(
     val token: String,
     val libraries: List<SyncedLibrary> = emptyList(),
     val enabled: Boolean = true,
-    @SerialName("use_catalog_metadata") val useCatalogMetadata: Boolean = false
+    @SerialName("use_catalog_metadata") val useCatalogMetadata: Boolean = false,
+    @SerialName("import_watch_state") val importWatchState: Boolean? = null
 ) {
     val key: String
         get() = serverKey(providerId, remoteServerId, remoteUserId)
@@ -56,7 +57,11 @@ internal fun mergeSyncedServers(
 ): List<SyncedServer> {
     val localByKey = local.associateBy { it.key }
     val remoteKeys = remote.mapTo(mutableSetOf()) { it.key }
-    val kept = remote.map { server -> localByKey[server.key]?.let { server.copy(id = it.id) } ?: server }
+    val kept = remote.map { server ->
+        localByKey[server.key]?.let { local ->
+            server.copy(id = local.id, importWatchState = server.importWatchState ?: local.importWatchState)
+        } ?: server
+    }
     val added = local.filter { it.key !in remoteKeys && (syncedKeys == null || it.key !in syncedKeys) }
     return kept + added
 }
@@ -72,7 +77,8 @@ internal fun ServerConnection.toSynced(token: String) = SyncedServer(
     token = token,
     libraries = libraries.map { SyncedLibrary(it.id, it.name, it.kind.contentType, it.selected) },
     enabled = enabled,
-    useCatalogMetadata = useCatalogMetadata
+    useCatalogMetadata = useCatalogMetadata,
+    importWatchState = importWatchState
 )
 
 internal fun SyncedServer.toConnection(id: String, credentialRef: String) = ServerConnection(
@@ -90,5 +96,6 @@ internal fun SyncedServer.toConnection(id: String, credentialRef: String) = Serv
         }
     },
     enabled = enabled,
-    useCatalogMetadata = useCatalogMetadata
+    useCatalogMetadata = useCatalogMetadata,
+    importWatchState = importWatchState ?: false
 )

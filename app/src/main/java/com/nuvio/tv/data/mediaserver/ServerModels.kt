@@ -48,7 +48,8 @@ data class ServerConnection(
     val credentialRef: String,
     val libraries: List<ServerLibrary> = emptyList(),
     val enabled: Boolean = true,
-    val useCatalogMetadata: Boolean = false
+    val useCatalogMetadata: Boolean = false,
+    val importWatchState: Boolean = false
 ) {
     val selectedLibraries: List<ServerLibrary>
         get() = libraries.filter { it.selected }

@@ -77,6 +77,11 @@ class ServerPlayback internal constructor(
 
     fun session(url: String?): ServerPlaybackSession? = url?.let { synchronized(lock) { active[it] } }?.playback
 
+    suspend fun resumeState(url: String?): ServerUserState? {
+        val current = url?.let { synchronized(lock) { active[it] } } ?: return null
+        return current.provider.details(current.session, current.playback.target.item.itemId).userStates.firstOrNull()
+    }
+
     fun isServerSource(url: String?): Boolean = url != null && synchronized(lock) { url in active }
 
     fun onPlaybackSnapshot(url: String?, positionMs: Long, isPlaying: Boolean, isLoading: Boolean, isEnded: Boolean) {
@@ -111,7 +116,7 @@ class ServerPlayback internal constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            Log.w(TAG, "Playback restart failed: ${error.serverFailure()}")
+            Log.w(TAG, "Playback restart for ${current.label} failed: ${error.serverFailure()} (${error.message})")
             return null
         }
         stop(url)
@@ -126,6 +131,7 @@ class ServerPlayback internal constructor(
         val session: ServerSession,
         val playback: ServerPlaybackSession
     ) {
+        val label = "${provider.id} item ${playback.target.item.itemId}"
         private val events = Channel<ServerPlaybackEvent>(Channel.UNLIMITED)
         var started = false
             private set
@@ -135,14 +141,21 @@ class ServerPlayback internal constructor(
         private var lastReportAtMs = 0L
 
         init {
+            Log.i(TAG, "Prepared $label as ${playback.playMethod} ${playback.transcodeReasons}")
             scope.launch {
                 for (event in events) {
                     try {
-                        withTimeoutOrNull(REPORT_TIMEOUT_MS) { provider.report(session, playback, event) }
+                        val sent = withTimeoutOrNull(REPORT_TIMEOUT_MS) { provider.report(session, playback, event) }
+                        when {
+                            sent == null -> Log.w(TAG, "Playback report ${event.type} for $label timed out")
+                            event.type != ServerPlaybackEventType.PROGRESS -> {
+                                Log.i(TAG, "Playback report ${event.type} for $label sent at ${event.positionMs}ms")
+                            }
+                        }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (error: Exception) {
-                        Log.w(TAG, "Playback report ${event.type} failed: ${error.serverFailure()}")
+                        Log.w(TAG, "Playback report ${event.type} for $label failed: ${error.serverFailure()} (${error.message})")
                     }
                 }
             }

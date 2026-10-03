@@ -46,7 +46,7 @@ class ServerUserStateProjection @Inject constructor(
     suspend fun apply(details: ServerItemDetails) {
         val meta = details.meta
         val ref = ServerItemRef.parse(meta.id) ?: return
-        val connection = repository.connection(ref.connectionId) ?: return
+        val connection = repository.connection(ref.connectionId)?.takeIf { it.importWatchState } ?: return
         val isSeries = meta.type == ContentType.SERIES
         val profileId = profileManager.activeProfileId.value
 

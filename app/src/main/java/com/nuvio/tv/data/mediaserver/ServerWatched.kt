@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.mediaserver
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import com.nuvio.tv.R
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -56,7 +57,11 @@ class ServerWatched internal constructor(
         if (targets.isEmpty()) return null
         return scope.launch {
             val failed = write(targets, played)
-            if (failed.isEmpty()) return@launch
+            if (failed.isEmpty()) {
+                Log.i(TAG, "Marked ${targets.size} server items played=$played")
+                return@launch
+            }
+            Log.w(TAG, "Could not mark ${failed.size} of ${targets.size} server items played=$played")
             notifyFailure()
             onFailed(failed)
             failed.mapNotNull { ServerItemRef.parse(it.contentId) }.distinct().forEach { resync(it) }
@@ -74,16 +79,30 @@ class ServerWatched internal constructor(
                     ?: return@flatMap emptyList()
                 connections.filter { matcher.supports(it, request.kind) }.flatMap { connection ->
                     try {
-                        matcher.match(connection, request, forceRefresh = false).map { it to mark }
+                        matcher.match(connection, request, forceRefresh = false)
+                            .also { if (it.isEmpty()) Log.i(TAG, "No ${connection.providerId} match for ${mark.label()}") }
+                            .map { it to mark }
                     } catch (error: CancellationException) {
                         throw error
-                    } catch (_: Exception) {
+                    } catch (error: Exception) {
                         lookupFailures++
+                        Log.w(TAG, "Looking up ${mark.label()} on ${connection.providerId} failed", error)
                         emptyList()
                     }
                 }
             }.distinctBy { it.first }
-            if (lookupFailures > 0 || write(targets, played).isNotEmpty()) notifyFailure()
+            if (lookupFailures > 0) {
+                Log.w(TAG, "Skipped mirroring played=$played after $lookupFailures failed lookups")
+                notifyFailure()
+                return@launch
+            }
+            val failed = write(targets, played)
+            if (failed.isNotEmpty()) {
+                Log.w(TAG, "Could not mirror played=$played to ${failed.size} of ${targets.size} server items")
+                notifyFailure()
+                return@launch
+            }
+            Log.i(TAG, "Mirrored played=$played to ${targets.size} server items")
         }
     }
 
@@ -117,7 +136,8 @@ class ServerWatched internal constructor(
             true
         } catch (error: CancellationException) {
             throw error
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            Log.w(TAG, "Setting played=$played on ${ref.label()} failed", error)
             false
         }
 
@@ -126,11 +146,17 @@ class ServerWatched internal constructor(
             catalog.details(ref)
         } catch (error: CancellationException) {
             throw error
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            Log.w(TAG, "Refreshing ${ref.label()} after a failed write failed", error)
         }
     }
 
+    private fun ServerItemRef.label(): String = "${repository.connection(connectionId)?.providerId ?: connectionId} item $itemId"
+
+    private fun ServerWatchMark.label(): String = "$contentType ${videoId ?: contentId}"
+
     private companion object {
+        const val TAG = "ServerWatched"
         const val WRITE_BATCH = 6
     }
 }

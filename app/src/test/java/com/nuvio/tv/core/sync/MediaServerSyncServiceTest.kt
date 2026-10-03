@@ -71,6 +71,16 @@ class MediaServerSyncServiceTest {
     }
 
     @Test
+    fun keepsLocalImportSettingWhenRemoteHasNone() = runBlocking {
+        repository.store(connection("local-a", server = "s1").copy(importWatchState = true), token = "token-a")
+        remote = listOf(synced("remote-a", server = "s1", token = "token-a"))
+
+        service.syncFromRemote(1).getOrThrow()
+
+        assertTrue(repository.uiState.value.connections.single().importWatchState)
+    }
+
+    @Test
     fun serversRemovedOnAnotherDeviceAreRemovedLocally() = runBlocking {
         remote = listOf(synced("a", server = "s1"), synced("b", server = "s2"))
         service.syncFromRemote(1).getOrThrow()
@@ -204,7 +214,7 @@ class MediaServerSyncServiceTest {
     private companion object {
         val REQUIRED_KEYS = setOf(
             "id", "provider_id", "name", "address", "remote_server_id", "remote_user_id",
-            "user_name", "token", "libraries", "enabled", "use_catalog_metadata"
+            "user_name", "token", "libraries", "enabled", "use_catalog_metadata", "import_watch_state"
         )
     }
 }

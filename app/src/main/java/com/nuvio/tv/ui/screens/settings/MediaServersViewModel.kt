@@ -92,6 +92,8 @@ class MediaServersViewModel @Inject constructor(
 
     fun setCatalogMetadata(connectionId: String, enabled: Boolean) = repository.setCatalogMetadata(connectionId, enabled)
 
+    fun setImportWatchState(connectionId: String, enabled: Boolean) = repository.setImportWatchState(connectionId, enabled)
+
     fun setLibrarySelected(connectionId: String, libraryId: String, selected: Boolean) =
         repository.setLibrarySelected(connectionId, libraryId, selected)
 

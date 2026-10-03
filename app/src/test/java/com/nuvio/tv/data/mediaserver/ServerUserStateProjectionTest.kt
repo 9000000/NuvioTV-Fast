@@ -45,7 +45,22 @@ class ServerUserStateProjectionTest {
     )
 
     @Test
+    fun importsNothingUntilEnabled() = runBlocking {
+        val details = ServerItemDetails(
+            meta = meta(seriesId, ServerMediaKind.SERIES, "Show"),
+            externalIds = TrackingExternalIds(),
+            userStates = listOf(state(1, played = true), state(2, played = false, positionMs = 30_000L))
+        )
+
+        projection.apply(details)
+
+        coVerify(exactly = 0) { watchedPreferences.markAsWatchedBatch(any(), any()) }
+        coVerify(exactly = 0) { progressRepository.saveProgressBatch(any(), any()) }
+    }
+
+    @Test
     fun mirrorsServerStateIntoLocalHistory() = runBlocking {
+        server.first.setImportWatchState(connection.id, true)
         every { watchedPreferences.getWatchedEpisodesForContent(seriesId, 1) } returns flowOf(setOf(1 to 2, 1 to 3))
         every { progressPreferences.getEpisodeProgress(seriesId, 1, 4, 1) } returns flowOf(null)
         every { progressPreferences.getEpisodeProgress(seriesId, 1, 5, 1) } returns flowOf(

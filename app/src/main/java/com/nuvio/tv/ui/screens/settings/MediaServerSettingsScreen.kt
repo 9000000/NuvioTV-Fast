@@ -100,6 +100,17 @@ internal fun MediaServerSettingsContent(
                             )
                         }
                     }
+                    if (provider?.supports(ServerCapability.USER_STATE_READ) == true) {
+                        item(key = "server_import_watch_state") {
+                            SettingsToggleRow(
+                                title = stringResource(R.string.servers_import_watch_state),
+                                subtitle = stringResource(R.string.servers_import_watch_state_description, providerName),
+                                checked = connection.importWatchState,
+                                enabled = connection.enabled,
+                                onToggle = { viewModel.setImportWatchState(connection.id, !connection.importWatchState) }
+                            )
+                        }
+                    }
                     item(key = "server_libraries_label") {
                         Column(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)) {
                             ServerSectionLabel(stringResource(R.string.servers_libraries))
