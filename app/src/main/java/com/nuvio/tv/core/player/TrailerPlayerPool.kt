@@ -9,12 +9,17 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Application-scoped singleton that holds a single ExoPlayer instance dedicated to
@@ -37,25 +42,36 @@ class TrailerPlayerPool @Inject constructor(
 ) {
     companion object {
         private const val TAG = "TrailerPlayerPool"
+
+        // A trailer plays on top of the home UI and its image caches, so it gets a small byte cap
+        // rather than Media3's default (~144 MB for video + audio). Low-RAM sticks get the smallest.
+        private const val LOW_RAM_TRAILER_BUFFER_MB = 32
+        private const val TRAILER_BUFFER_MB = 100
     }
 
     private var _player: ExoPlayer? = null
     private val yielded = AtomicBoolean(false)
     private val released = AtomicBoolean(false)
+    private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
     private var cachedForceNative: Boolean = false
 
+    @Volatile
+    private var cachedPlayerSettings: PlayerSettings? = null
+
+    // Kept current so a player rebuilt after [yield] picks up buffer changes made since launch.
     init {
-        Thread {
-            try {
-                cachedForceNative = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
-                    playerSettingsDataStore.nuvioPerformanceModeEnabled.first()
-                }
-            } catch (_: Exception) {
-                cachedForceNative = false
+        settingsScope.launch {
+            runCatching {
+                playerSettingsDataStore.nuvioPerformanceModeEnabled.collect { cachedForceNative = it }
             }
-        }.start()
+        }
+        settingsScope.launch {
+            runCatching {
+                playerSettingsDataStore.playerSettings.collect { cachedPlayerSettings = it }
+            }
+        }
     }
 
     /**
@@ -128,7 +144,12 @@ class TrailerPlayerPool @Inject constructor(
 
     private fun createPlayer(): ExoPlayer {
         val forceNative = cachedForceNative
-        Log.d(TAG, "Creating shared trailer ExoPlayer instance with forceNativeAllocation = $forceNative")
+        val targetBufferMb = trailerTargetBufferMb(cachedPlayerSettings)
+        Log.d(
+            TAG,
+            "Creating shared trailer ExoPlayer instance with forceNativeAllocation = $forceNative, " +
+                "targetBufferMb = $targetBufferMb"
+        )
         val loadControlBuilder = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 /* minBufferMs = */ 30_000,
@@ -136,6 +157,10 @@ class TrailerPlayerPool @Inject constructor(
                 /* bufferForPlaybackMs = */ 5_000,
                 /* bufferForPlaybackAfterRebufferMs = */ 10_000
             )
+            .setTargetBufferBytes(targetBufferMb * 1024 * 1024)
+            // The byte cap must hold even before minBufferMs is reached, or a high-bitrate
+            // trailer keeps allocating until the process is killed for low memory.
+            .setPrioritizeTimeOverSizeThresholds(false)
         if (forceNative) {
             val allocator = DefaultAllocator(
                 /* trimOnReset = */ true,
@@ -168,5 +193,15 @@ class TrailerPlayerPool @Inject constructor(
             .apply {
                 repeatMode = Player.REPEAT_MODE_OFF
             }
+    }
+
+    /** Trailer cap for this device tier, lowered further when the user set a smaller Target Buffer Size. */
+    private fun trailerTargetBufferMb(settings: PlayerSettings?): Int {
+        val tierCapMb = if (MemoryBudget.isLowRamTier) LOW_RAM_TRAILER_BUFFER_MB else TRAILER_BUFFER_MB
+        val userTargetMb = settings
+            ?.takeIf { it.bufferEngineEnabled && !it.bufferBudgetManaged }
+            ?.let { MemoryBudget.effectiveBufferMb(it.bufferSettings.targetBufferSizeMb) }
+            ?: return tierCapMb
+        return userTargetMb.coerceAtMost(tierCapMb)
     }
 }
