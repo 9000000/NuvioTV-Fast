@@ -1144,6 +1144,9 @@ private fun ModernCarouselCard(
     val payload = item.payload as? ModernPayload.CollectionFolder
     val isCollectionFolder = item.payload is ModernPayload.CollectionFolder
     val effectiveIgnoreLandscapePoster = alwaysShowLandscapeClearlogo
+    val useLandscapeAsExpanded = focusedPosterBackdropExpandEnabled && isBackdropExpanded &&
+        !alwaysShowLandscapeClearlogo &&
+        !item.metaPreview?.landscapePoster.isNullOrBlank()
     val baseImageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         if (useLandscapeOverlayTreatment) {
             if (effectiveIgnoreLandscapePoster) {
@@ -1151,6 +1154,8 @@ private fun ModernCarouselCard(
             } else {
                 item.metaPreview?.landscapePoster ?: effectiveBackdropUrl ?: item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
             }
+        } else if (useLandscapeAsExpanded) {
+            item.metaPreview?.landscapePoster
         } else {
             item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
         }
@@ -1243,6 +1248,7 @@ private fun ModernCarouselCard(
     }
     var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
     val shouldPlayTrailerInCard = playTrailerInExpandedCard && !trailerPreviewUrl.isNullOrBlank()
+    var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
 
     // Use the image model directly — Coil's memory cache handles repeated
     // requests efficiently without needing scroll-aware request swapping.
@@ -1252,6 +1258,7 @@ private fun ModernCarouselCard(
             !isCollectionFolder &&
             !effectiveLogoUrl.isNullOrBlank() &&
             !landscapeLogoLoadFailed &&
+            !(useLandscapeAsExpanded && !trailerFirstFrameRendered) &&
             (effectiveIgnoreLandscapePoster || isBackdropExpanded || item.metaPreview?.landscapePoster.isNullOrBlank() || customPosterLoadFailed)
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
@@ -1447,6 +1454,7 @@ private fun ModernCarouselCard(
                                 trailerAudioUrl = trailerPreviewAudioUrl,
                                 isPlaying = true,
                                 onEnded = onTrailerEnded,
+                                onFirstFrameRendered = { trailerFirstFrameRendered = true },
                                 muted = focusedPosterBackdropTrailerMuted,
                                 cropToFill = true,
                                 overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
@@ -1469,7 +1477,7 @@ private fun ModernCarouselCard(
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart
                     )
-                } else if ((useLandscapeOverlayTreatment || isBackdropExpanded) && !isCollectionFolder && (effectiveIgnoreLandscapePoster || item.metaPreview?.landscapePoster.isNullOrBlank() || customPosterLoadFailed)) {
+                } else if ((useLandscapeOverlayTreatment || isBackdropExpanded) && !isCollectionFolder && !(useLandscapeAsExpanded && !trailerFirstFrameRendered) && (effectiveIgnoreLandscapePoster || item.metaPreview?.landscapePoster.isNullOrBlank() || customPosterLoadFailed)) {
                     Text(
                         text = item.title,
                         style = titleStyle.copy(

@@ -1107,6 +1107,13 @@
     <string name="upcoming_section_title">Sắp ra mắt</string>
     <string name="layout_trailer_button">Hiển thị nút Trailer</string>
     <string name="layout_trailer_button_sub">Hiển thị nút trailer trên trang chi tiết (chỉ khi có trailer).</string>
+    <string name="layout_trailer_play_in_background">Phát ở phông nền</string>
+    <string name="layout_trailer_play_in_background_sub">Phát trailer thay cho phông nền trong khi trang vẫn hiển thị.</string>
+    <string name="layout_trailer_pause_on_scroll">Tạm dừng khi cuộn</string>
+    <string name="layout_trailer_pause_on_scroll_sub">Tạm dừng trailer khi cuộn xuống và tiếp tục phát khi quay lại đầu trang.</string>
+    <string name="layout_detail_group_episodes">Các tập</string>
+    <string name="layout_detail_group_trailers">Trailer</string>
+    <string name="layout_detail_group_metadata">Siêu dữ liệu</string>
     <string name="layout_prefer_external_meta">Ưu tiên siêu dữ liệu từ tiện ích bên ngoài</string>
     <string name="layout_prefer_external_meta_sub">Dùng siêu dữ liệu từ tiện ích bên ngoài thay vì tiện ích danh mục.</string>
     <string name="layout_show_full_release_date">Hiển thị ngày phát hành đầy đủ</string>
@@ -1268,6 +1275,12 @@
     <string name="mdblist_dialog_placeholder">Nhập mã khóa API của MDBList</string>
     <string name="mdblist_not_set">Chưa đặt</string>
     <string name="mdblist_invalid_api_key">Mã khóa API của MDBList không hợp lệ</string>
+    <string name="mdblist_library_lists">Danh sách thư viện</string>
+    <string name="mdblist_library_lists_description">Chọn các danh sách MDBList xuất hiện trong Thư viện và Quản lý danh sách. Danh sách theo dõi luôn được hiển thị.</string>
+    <string name="mdblist_library_lists_empty">Chưa tìm thấy danh sách nào trong tài khoản MDBList của bạn. Hãy đồng bộ để tải danh sách.</string>
+    <string name="mdblist_library_lists_summary">Đã hiển thị %1$d trên %2$d</string>
+    <string name="tracking_mdblist_features_title">Tính năng MDBList</string>
+    <string name="tracking_mdblist_features_subtitle">Cài đặt dành riêng cho MDBList</string>
 
     <string name="debrid_title">Dịch vụ liên kết</string>
     <string name="debrid_subtitle">Kết nối tài khoản để truy cập liên kết và thư viện nội dung</string>

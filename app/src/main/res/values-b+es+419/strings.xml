@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nuvio TV</string>
+    <string name="app_name">Nuvio</string>
     <string name="tv_channel_continue_watching">Seguir viendo</string>
     <string name="type_movie">Película</string>
     <string name="type_movies">Películas</string>
@@ -235,6 +235,7 @@
     <string name="detail_tab_trailer">Tráiler</string>
     <string name="detail_more_like_this_powered_by_tmdb">Con tecnología de TMDB</string>
     <string name="detail_more_like_this_powered_by_trakt">Con tecnología de Trakt</string>
+    <string name="detail_more_like_this_powered_by_simkl">Desarrollado por Simkl</string>
     <string name="detail_comments_title">Comentarios</string>
     <string name="detail_comments_subtitle">Reseñas de Trakt</string>
     <string name="detail_comments_subtitle_episode">Reseñas de Trakt para T%1$dE%2$d</string>
@@ -513,6 +514,8 @@
     <string name="essential_autoplay_next_episode">Reproducción automática del siguiente episodio</string>
     <string name="essential_autoplay_next_episode_subtitle">Continúa al siguiente episodio cuando termine un stream.</string>
     <string name="external_auto_next_loading">Cargando el siguiente episodio…</string>
+    <string name="essential_p2p_streams">Streams P2P</string>
+    <string name="essential_p2p_streams_subtitle">Permitir fuentes de stream peer-to-peer.</string>
     <string name="essential_subtitle_language_subtitle">Idioma preferido de subtítulos.</string>
     <string name="essential_audio_language_subtitle">Idioma preferido de audio.</string>
     <!-- Account / sign-in error messages -->
@@ -588,6 +591,8 @@
     <string name="sentry_turn_off">Desactivar</string>
     <string name="sentry_turn_on">Activar</string>
     <string name="advanced_section_cache">Caché</string>
+    <string name="advanced_section_startup">Inicio y salida</string>
+    <string name="advanced_section_network_tests">Pruebas de red</string>
     <string name="advanced_section_dv_diagnostics" translatable="false">DV Diagnostics</string>
     <string name="advanced_fast_horizontal_navigation">Navegación horizontal rápida</string>
     <string name="advanced_fast_horizontal_navigation_subtitle">Aumenta la velocidad de repetición del D-pad en las filas mientras mantiene habilitada la limitación de repetición.</string>
@@ -647,7 +652,7 @@
     <string name="supporters_contributors_donate_copy">Nuvio seguirá siendo gratuito y de código abierto. Si quieres apoyar el proyecto, puedes ayudar a cubrir el tiempo y la infraestructura necesarios para mantenerlo.</string>
     <string name="supporters_contributors_donation_progress_title">Servidores y mantenimiento de este mes</string>
     <string name="supporters_contributors_donation_progress_complete">Cubierto. El apoyo adicional ahora se destina al desarrollo.</string>
-    <string name="supporters_contributors_donation_progress_remaining" formatted="false">Después del 100%, el apoyo adicional se destina al desarrollo.</string>
+    <string name="supporters_contributors_donation_progress_remaining">Después del 100%, el apoyo adicional se destina al desarrollo.</string>
     <string name="supporters_contributors_loading_donation_progress">Cargando progreso de financiación...</string>
     <string name="supporters_contributors_donate_button">Donar a Nuvio</string>
     <string name="supporters_contributors_qr_title">Escanear para donar</string>
@@ -701,6 +706,27 @@
     <string name="contributors_hide_kofi_qr">Ocultar QR de Ko-fi</string>
     <string name="contributors_profile_unavailable">Enlace al perfil de GitHub no disponible.</string>
 
+    <string name="playback_section_player_title">Reproductor</string>
+    <string name="playback_section_player_title_desc">Reproductor predeterminado, motor interno y alternativa en caso de errores.</string>
+    <string name="playback_section_stream_selection">Selección de streams</string>
+    <string name="playback_section_stream_selection_desc">Cómo se selecciona un stream cuando presionas reproducir.</string>
+    <string name="playback_section_up_next">A continuación</string>
+    <string name="playback_section_up_next_desc">Reproducción automática del siguiente episodio y sugerencias después de reproducir.</string>
+    <string name="playback_section_skip">Omitir segmentos</string>
+    <string name="playback_section_skip_desc">Omitir intros, resúmenes y créditos.</string>
+    <string name="playback_section_interface">Interfaz del reproductor</string>
+    <string name="playback_section_interface_desc">Superposiciones, reloj y detalles mostrados durante la reproducción.</string>
+    <string name="playback_section_audio_only_desc">Idiomas, decodificación y salida de audio.</string>
+    <string name="playback_section_video_desc">Ajuste de frecuencia de cuadros, Dolby Vision y HDR.</string>
+    <string name="playback_default_player">Reproductor predeterminado</string>
+    <string name="playback_external_player_label">Reproductor externo</string>
+    <string name="playback_afr_mode">Ajuste de frecuencia de cuadros</string>
+    <string name="playback_dv_hdr_label">Dolby Vision &amp; HDR</string>
+    <string name="playback_mpv_decoding_label">Decodificación MPV</string>
+    <string name="playback_network_label">Red</string>
+    <string name="sub_languages_label">Idiomas</string>
+    <string name="sub_style_label">Estilo</string>
+    <string name="autoplay_selected_count">%1$d seleccionados</string>
     <string name="playback_loading_overlay">Pantalla de Carga</string>
     <string name="playback_loading_overlay_sub">Mostrar pantalla de carga hasta que aparezca el primer cuadro de video.</string>
     <string name="playback_pause_overlay">Pantalla de Pausa</string>
@@ -762,6 +788,8 @@
     <string name="playback_engine_mvplayer_desc">Usa libmpv con controles OSD de Nuvio. Experimental.</string>
 
     <string name="video_section">Video</string>
+    <string name="playback_true_black_letterbox">Barras en negro real</string>
+    <string name="playback_true_black_letterbox_sub">Deja las barras alrededor de la imagen sin pintar para que el HDR mantenga el negro real. Mantén esta opción desactivada si aparece una línea brillante en las barras.</string>
     <string name="audio_trailer_section">Tráiler</string>
     <string name="audio_autoplay_trailers">Auto-reproducir Tráileres</string>
     <string name="audio_autoplay_trailers_sub">Reproducir automáticamente los tráileres en la pantalla de detalles tras un periodo de inactividad</string>
@@ -883,6 +911,9 @@
     <string name="sub_org_by_lang_desc">Agrupar subtítulos por idioma.</string>
     <string name="sub_org_by_addon_desc">Agrupar subtítulos por el addon de origen.</string>
 
+    <string name="autoplay_preload_next_episode">Precargar fuentes del siguiente episodio</string>
+    <string name="autoplay_preload_next_episode_sub">Comienza a buscar fuentes en segundo plano antes de que aparezca el botón del siguiente episodio.</string>
+
     <string name="autoplay_reuse_last_link">Reutilizar Último Enlace</string>
     <string name="autoplay_reuse_last_link_sub">Auto-reproducir la última fuente que funcionó para esta película/episodio si la caché sigue activa</string>
     <string name="autoplay_last_link_cache">Duración de la Caché del Último Enlace</string>
@@ -959,6 +990,10 @@
     <string name="layout_hero_catalogs_sub">Selecciona uno o más catálogos para el contenido destacado.</string>
     <string name="layout_section_content">Contenido de Inicio</string>
     <string name="layout_section_content_desc">Controla lo que aparece en inicio y búsqueda.</string>
+    <string name="layout_section_sidebar">Barra lateral y navegación</string>
+    <string name="layout_section_sidebar_desc">Estilo de la barra lateral y dónde aparece Descubrir.</string>
+    <string name="layout_section_card_depth_desc">Iluminación de los bordes y brillo en las tarjetas de imágenes.</string>
+    <string name="layout_section_custom_poster_desc">Usar imágenes de un servicio externo de pósters.</string>
     <string name="layout_collapse_sidebar">Contraer Barra Lateral</string>
     <string name="layout_collapse_sidebar_sub">Ocultar la barra lateral por defecto; mostrarla al interactuar con ella.</string>
     <string name="layout_hide_floating_pill">Ocultar indicador flotante</string>
@@ -982,7 +1017,7 @@
     <string name="layout_discover_location_in_sidebar">Mostrar en el panel lateral</string>
     <string name="layout_discover_location_in_sidebar_desc">Descubrir obtiene su propio elemento en el panel lateral.</string>
     <string name="layout_poster_labels">Mostrar Etiquetas de Pósteres</string>
-    <string name="layout_poster_labels_sub">Mostrar los títulos debajo de los pósteres en filas, cuadrículas y en \"ver todo\".</string>
+    <string name="layout_poster_labels_sub">Mostrar los títulos debajo de los pósteres en filas, cuadrículas y en "ver todo".</string>
     <string name="layout_addon_name">Mostrar Nombre del Addon</string>
     <string name="layout_addon_name_sub">Mostrar el nombre de la fuente debajo de los títulos del catálogo.</string>
     <string name="layout_catalog_type">Mostrar Tipo de Catálogo</string>
@@ -1005,7 +1040,7 @@
     <string name="layout_section_continue_watching_desc">Configuraciones para la sección Continuar viendo.</string>
     <string name="layout_cw_enabled">Mostrar Continuar viendo</string>
     <string name="layout_cw_enabled_sub">Mostrar la fila de Continuar viendo en la pantalla de inicio.</string>
-    <string name="layout_use_episode_thumbnails_cw">Usar miniaturas de episodios en \"Continuar viendo\"</string>
+    <string name="layout_use_episode_thumbnails_cw">Usar miniaturas de episodios en "Continuar viendo"</string>
     <string name="layout_use_episode_thumbnails_cw_sub">Usa miniaturas de episodios como imagen predeterminada. Cuando está desactivado, se usa el fondo.</string>
     <string name="layout_blur_unwatched">Desenfocar Episodios No Vistos</string>
     <string name="layout_blur_unwatched_sub">Desenfocar miniaturas de episodios hasta que sean vistos para evitar spoilers.</string>
@@ -1022,7 +1057,7 @@
     <string name="layout_next_up_furthest_episode">Siguiente desde el episodio más avanzado</string>
     <string name="layout_next_up_furthest_episode_sub">Muestra el siguiente episodio según el episodio más avanzado visto. Desactívalo si estás volviendo a ver para usar el episodio visto más recientemente.</string>
     <string name="layout_show_unaired_next_up">Mostrar próximos episodios no emitidos</string>
-    <string name="layout_show_unaired_next_up_sub">Incluye episodios próximos en \"Continuar viendo\" antes de su emisión.</string>
+    <string name="layout_show_unaired_next_up_sub">Incluye episodios próximos en "Continuar viendo" antes de su emisión.</string>
     <string name="layout_cw_card_style_card">Tarjeta</string>
     <string name="layout_cw_card_style_wide">Ancha</string>
     <string name="layout_cw_card_style_poster">Póster</string>
@@ -1108,14 +1143,24 @@
     <string name="layout_custom">Personalizado</string>
 
 <!-- Custom Poster URL -->
-<string name="layout_custom_poster_title">Fuente de póster personalizada</string>
-<string name="layout_custom_poster_description">Proporciona un patrón de URL de póster desde un servicio externo. Si un marcador no tiene un valor para un título determinado, se utilizará el póster original.</string>
-<string name="layout_custom_poster_clear">Borrar</string>
-<string name="layout_custom_poster_active">✓ Fuente de póster personalizada activa</string>
-<string name="layout_custom_poster_qr">Configurar desde el teléfono</string>
-<string name="custom_poster_qr_instruction">Escanea el código QR con tu teléfono para pegar un patrón de URL de póster</string>
+    <string name="layout_custom_poster_title">Fuente de póster personalizada</string>
+    <string name="layout_custom_poster_description">Proporciona un patrón de URL de póster desde un servicio externo. Si un marcador no tiene un valor para un título determinado, se utilizará el póster original.</string>
+    <string name="layout_custom_poster_clear">Borrar</string>
+    <string name="layout_custom_poster_active">✓ Fuente de póster personalizada activa</string>
+    <string name="layout_custom_poster_qr">Configurar desde el teléfono</string>
+    <string name="custom_poster_qr_instruction">Escanea el código QR con tu teléfono para pegar un patrón de URL de póster</string>
+
+        <!-- Custom Poster URL - Screen Toggles -->
+    <string name="layout_custom_poster_screen_home">Inicio</string>
+    <string name="layout_custom_poster_screen_continue_watching">Seguir viendo</string>
+    <string name="layout_custom_poster_screen_collections">Colecciones</string>
+    <string name="layout_custom_poster_screen_library">Biblioteca</string>
+    <string name="layout_custom_poster_screen_search">Búsqueda</string>
+    <string name="layout_custom_poster_screen_details">Pantalla de detalles</string>
 
 <!-- Custom Poster Web Page -->
+    <string name="layout_always_show_landscape_clearlogo">Mostrar siempre fondo con logotipo para pósters horizontales</string>
+    <string name="layout_always_show_landscape_clearlogo_sub">Ignorar el póster horizontal del addon y usar el fondo con el logotipo superpuesto en su lugar.</string>
     <string name="web_custom_poster_title">Fuente de póster personalizada</string>
     <string name="web_custom_poster_subtitle">Pega un patrón de URL de póster a continuación y presiona Guardar.</string>
     <string name="web_custom_poster_label">Patrón de URL</string>
@@ -1179,6 +1224,10 @@
     <string name="mdblist_metacritic_subtitle">Mostrar puntuación de Metacritic</string>
     <string name="mdblist_mal_title">MyAnimeList</string>
     <string name="mdblist_mal_subtitle">Mostrar la calificación de MyAnimeList</string>
+    <string name="mdblist_show_on_hero_title">Usar calificaciones en el hero</string>
+    <string name="mdblist_show_on_hero_subtitle">Mostrar las calificaciones de MDBList en el carrusel del hero (moderno y clásico/cuadrícula)</string>
+    <string name="mdblist_rating_order_title">Orden de calificaciones</string>
+    <string name="mdblist_rating_order_subtitle">Las primeras 3 calificaciones habilitadas y disponibles se muestran en el hero moderno. Usa las flechas para cambiar el orden.</string>
     <string name="mdblist_dialog_title">Clave API de MDBList</string>
     <string name="mdblist_dialog_subtitle">Ingresa tu clave API para obtener calificaciones externas</string>
     <string name="mdblist_dialog_placeholder">Ingresa la clave API de MDBList</string>
@@ -1450,6 +1499,7 @@
     <string name="trakt_more_like_this_source_dialog_subtitle">Selecciona la fuente de las recomendaciones mostradas en las páginas de detalles.</string>
     <string name="trakt_more_like_this_source_trakt">Trakt</string>
     <string name="trakt_more_like_this_source_tmdb">TMDB</string>
+    <string name="trakt_more_like_this_source_simkl">Simkl</string>
     <string name="trakt_cached_label">En caché</string>
     <string name="trakt_stat_movies">Películas</string>
     <string name="trakt_stat_shows">Series</string>
@@ -1684,10 +1734,40 @@
     <string name="debrid_missing_api_key">Agrega una clave API de Debrid en Configuración.</string>
     <string name="debrid_not_cached">No está en caché en este servicio.</string>
     <string name="debrid_resolution_failed">No se pudo resolver este stream de Debrid.</string>
+    <string name="youtube_resolving_stream">Cargando video de YouTube</string>
+    <string name="youtube_resolution_failed">No se pudo cargar este video de YouTube.</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
+    <string name="p2p_consent_title">Streaming P2P</string>
+    <string name="p2p_consent_body">Este contenido utiliza tecnología peer-to-peer (P2P). Al habilitar P2P, reconoces y aceptas que:\n\n\u2022 Tu dirección IP será visible para otros pares en la red\n\u2022 Eres el único responsable del contenido al que accedes\n\u2022 Confirmas que tienes el derecho legal para reproducir este contenido en tu jurisdicción\n\u2022 Nuvio no aloja, distribuye ni controla contenido P2P\n\u2022 Nuvio no asume responsabilidad por consecuencias legales derivadas del uso de P2P\n\nUsas esta función bajo tu propio riesgo. Puedes desactivar P2P en cualquier momento desde Configuración.</string>
+    <string name="p2p_consent_enable">Activar P2P</string>
+    <string name="p2p_consent_cancel">Cancelar</string>
+    <string name="settings_p2p_title">Streaming P2P</string>
+    <string name="settings_p2p_subtitle">Permitir transmisiones peer-to-peer (torrent)</string>
     <string name="settings_p2p_hide_stats_title">Ocultar estadísticas de torrent</string>
     <string name="settings_p2p_hide_stats_subtitle">Ocultar buffer, seeds, peers y velocidad de descarga durante la carga y reproducción</string>
+    <string name="settings_p2p_profile_title">Perfil de torrent</string>
+    <string name="settings_p2p_profile_soft">Suave</string>
+    <string name="settings_p2p_profile_balanced">Equilibrado</string>
+    <string name="settings_p2p_profile_fast">Rápido</string>
+    <string name="settings_p2p_profile_soft_description">Usa menos conexiones con pares para reducir el consumo de batería y la carga de la red</string>
+    <string name="settings_p2p_profile_balanced_description">Equilibrio recomendado entre velocidad de inicio y estabilidad de la conexión</string>
+    <string name="settings_p2p_profile_fast_description">Usa más conexiones con pares para torrents difíciles o de alta tasa de bits</string>
+    <string name="settings_p2p_cache_size_title">Tamaño de la caché de torrents</string>
+    <string name="settings_p2p_cache_size_description">Datos de torrents descargados que se conservan en este dispositivo para reproducirlos más rápido</string>
+    <string name="settings_p2p_cache_none">Sin caché persistente</string>
+    <string name="settings_p2p_cache_2_gb">2 GB</string>
+    <string name="settings_p2p_cache_5_gb">5 GB</string>
+    <string name="settings_p2p_cache_10_gb">10 GB</string>
+    <string name="settings_p2p_clear_cache_title">Borrar caché de torrents</string>
+    <string name="settings_p2p_clear_cache_usage">%1$s usados actualmente</string>
+    <string name="settings_p2p_clear_cache_usage_pending">El uso se mide después de iniciar P2P; selecciona para borrar los datos de torrents almacenados en caché</string>
+    <string name="settings_p2p_clear_cache_clearing">Borrando datos de torrents inactivos…</string>
+    <string name="settings_p2p_clear_cache_playback_active">Detén la reproducción P2P antes de borrar la caché</string>
+    <string name="settings_p2p_clear_cache_done">Se borraron %1$s de datos de torrents inactivos</string>
+    <string name="settings_p2p_clear_cache_failed">No se pudo borrar la caché de torrents</string>
+    <string name="p2p_download_title">Descargando motor P2P</string>
+    <string name="p2p_download_subtitle">Esta es una descarga única necesaria para el streaming P2P.</string>
     <string name="stream_type_external">Externo</string>
     <string name="stream_player_picker_title">¿Qué reproductor se debería usar?</string>
     <string name="stream_player_internal">Interno</string>
@@ -1983,6 +2063,7 @@
     <string name="library_sort_added_asc">Agregado ↑</string>
     <string name="library_sort_title_asc">Título A-Z</string>
     <string name="library_sort_title_desc">Título Z-A</string>
+    <string name="library_error_sort_failed">No se pudo cargar el orden de clasificación. Se muestra el orden del proveedor.</string>
     <string name="library_manage_lists">Administrar listas</string>
     <string name="library_manage_trakt_lists">Administrar listas de Trakt</string>
     <string name="library_no_lists">Aún no hay listas personales.</string>
@@ -2529,6 +2610,7 @@
     <string name="collections_editor_shape_wide">Panorámico</string>
     <string name="collections_editor_shape_square">Cuadrado</string>
     <string name="collections_editor_addon_missing">Complemento no instalado: %1$s</string>
+    <string name="collections_editor_catalog_missing">Catálogo no disponible</string>
     <string name="collections_editor_add_tmdb_source">Agregar fuente de TMDB</string>
     <string name="collections_editor_add_trakt_source">Agregar lista de Trakt</string>
     <string name="collections_editor_edit_tmdb_source">Editar fuente de TMDB</string>
@@ -2772,6 +2854,10 @@
     <string name="player_torrent_status">%1$s · %2$s</string>
     <string name="player_torrent_stats">%1$d peers · %2$d seeds · %3$d%%</string>
     <string name="player_torrent_connecting_peers">Conectando a peers…</string>
+    <string name="player_torrent_fetching_metadata">Obteniendo metadatos del torrent…</string>
+    <string name="player_torrent_preparing_stream">Preparando stream del torrent…</string>
+    <string name="player_torrent_connecting_status">%1$s · %2$s · %3$s</string>
+    <string name="player_torrent_loading_status">%1$s descargado · %2$s · %3$s</string>
     <string name="player_track_audio_fallback">Audio %1$d</string>
     <string name="player_track_subtitle_fallback">Subtítulo %1$d</string>
 
@@ -2942,6 +3028,7 @@
     <string name="network_fast_error_token_missing">fast.com: token no encontrado en el paquete</string>
 
     <!-- Torrent service / TorrServer binary errors -->
+    <string name="torrent_error_start_timeout">El stream del torrent no se inició dentro de %1$ds</string>
 
     <!-- Player runtime: stream / external link errors -->
     <string name="player_torrent_starting_engine">Iniciando motor P2P…</string>
@@ -3127,7 +3214,7 @@
     <string name="playback_cache_vod_size">Tamaño de la caché VOD</string>
     <string name="playback_cache_vod_size_sub">Uso máximo del disco para la caché VOD progresiva (eliminación LRU).</string>
     <string name="playback_cache_info_range">Rango: %1$d-%2$d MB.</string>
-    <string name="playback_cache_info_auto" formatted="false">El modo automático apunta a aproximadamente el 10 % del espacio libre.</string>
+    <string name="playback_cache_info_auto">El modo automático apunta a aproximadamente el 10 % del espacio libre.</string>
     <string name="playback_cache_info_manual_headroom">El modo manual mantiene aproximadamente %1$d MB libres.</string>
     <string name="playback_cache_info_free_disk">Espacio libre disponible: %1$s.</string>
     <string name="playback_cache_info_restart">El nuevo límite de caché se aplicará tras reiniciar la aplicación al cambiar entre modos o tamaños.</string>
@@ -3230,4 +3317,39 @@
     <string name="stream_test_video_bitrate">Tasa de bits promedio del video: %1$s</string>
     <string name="stream_test_error_connection">La conexión falló. Es posible que el enlace de la última transmisión reproducida haya expirado o no esté disponible. Reproduce el video nuevamente e inténtalo otra vez.</string>
 
+    <string name="random_episode_title">Aleatorio</string>
+    <string name="layout_random_episode_sub">Reproduce aleatoriamente episodios de cualquier serie. Desactivar esta opción pausa la reproducción aleatoria.</string>
+    <string name="random_episode_unwatched">Episodios no vistos</string>
+    <string name="random_episode_include_watched">Todos los episodios</string>
+    <string name="random_episode_empty_subtitle">No hay episodios disponibles para reproducir aleatoriamente.</string>
+    <string name="random_episode_caught_up">Has visto todos los episodios. Elige Todos los episodios para volver a verlos.</string>
+    <string name="random_episode_loading">Cargando episodios…</string>
+    <string name="shuffle_starting">Iniciando reproducción aleatoria…</string>
+    <string name="shuffle_choose_episodes">Elige qué episodios reproducir aleatoriamente.</string>
+    <string name="shuffle_preview_title">Tu episodio</string>
+    <string name="shuffle_play_episode">Reproducir episodio</string>
+    <string name="shuffle_again">Reproducir otro aleatoriamente</string>
+    <string name="shuffle_only_episode">Este es el único episodio de tu selección.</string>
+    <string name="shuffle_artwork_hidden">Imágenes ocultas para evitar spoilers</string>
+    <string name="shuffle_stop">Detener reproducción aleatoria</string>
+    <string name="shuffle_enabled_all">Aleatorio activado · Todos los episodios</string>
+    <string name="shuffle_enabled_unwatched">Aleatorio activado · Episodios no vistos</string>
+    <string name="shuffle_disabled">Aleatorio desactivado</string>
+    <string name="shuffle_save_failed">No se pudo actualizar la reproducción aleatoria. Inténtalo de nuevo.</string>
+    <string name="shuffle_change_selection">Elegir episodios</string>
+    <string name="shuffle_badge">Reproducción aleatoria de episodios activada</string>
+
+        <!-- Subtitle AutoSync -->
+    <string name="autosync_setting_title">Sincronización automática de subtítulos</string>
+    <string name="autosync_setting_description">Ajusta el subtítulo del addon seleccionado al tiempo de los subtítulos integrados en el video.</string>
+    <string name="autosync_tolerance_title">Tolerancia de sincronización automática</string>
+    <string name="autosync_tolerance_description">Mantiene el tiempo original cuando la corrección necesaria es igual o menor a este valor.</string>
+    <string name="autosync_tolerance_off">Desactivada</string>
+    <string name="autosync_tolerance_value">%1$d ms</string>
+    <string name="autosync_thorough_title">Búsqueda exhaustiva de sincronización automática</string>
+    <string name="autosync_thorough_description">Continúa comparando otros subtítulos y pistas integradas para encontrar una coincidencia más precisa antes de sincronizar. Cuando está desactivada, se utiliza antes la primera coincidencia sólida. Solo se aplican coincidencias confiables.</string>
+    <string name="autosync_toast_failed">Error de sincronización: la sincronización automática no pudo hacer coincidir este subtítulo con el video.</string>
+    <string name="autosync_toast_failed_no_reference">Error de sincronización: este video no tiene subtítulos integrados para comparar.</string>
+    <string name="autosync_toast_failed_unsupported">Error de sincronización: la sincronización automática no admite este formato de subtítulos.</string>
+    <string name="autosync_label_synced">Sincronizado automáticamente</string>
     </resources>
