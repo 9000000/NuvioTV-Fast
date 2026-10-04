@@ -824,7 +824,7 @@
     <string name="dv7_mode_auto">Tự động (khuyến nghị)</string>
     <string name="dv7_mode_auto_desc">Tự động nhận diện màn hình và chọn chế độ phù hợp nhất. Nếu gặp sự cố khi phát, vui lòng thử lớp nền HDR10.</string>
     <string name="dv7_mode_hdr10_base_layer">Lớp nền HDR10</string>
-    <string name="dv7_mode_hdr10_base_layer_desc">Bỏ qua dữ liệu nâng cao Dolby Vision. Có thể giúp trên các thiết bị hỗ trợ HDR nhưng gặp vấn đề với DV Profile 7.</string>
+    <string name="dv7_mode_hdr10_base_layer_desc">Bỏ qua dữ liệu nâng cao Dolby Vision. Có thể giúp ích trên các thiết bị hỗ trợ HDR nhưng gặp vấn đề với DV Profile 7.</string>
     <string name="dv7_mode_dv81_libdovi">Chuyển đổi sang DV8.1</string>
     <string name="dv7_mode_dv81_libdovi_desc">Chuyển DV7 sang DV8.1 một lớp. Yêu cầu thiết bị hiển thị hỗ trợ Dolby Vision.</string>
     <string name="dv7_mode_off">Tắt (gốc)</string>
