@@ -11,6 +11,7 @@ import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.atomic.AtomicBoolean
@@ -38,7 +39,8 @@ import kotlinx.coroutines.launch
 @Singleton
 class TrailerPlayerPool @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val playerSettingsDataStore: PlayerSettingsDataStore
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore
 ) {
     companion object {
         private const val TAG = "TrailerPlayerPool"
@@ -60,8 +62,19 @@ class TrailerPlayerPool @Inject constructor(
     @Volatile
     private var cachedPlayerSettings: PlayerSettings? = null
 
+    @Volatile
+    private var cachedAllow4k: Boolean = TrailerVideoPolicy.default4kTrailers(context)
+
+    // Height cap currently applied to the player's track selection; reset when the player is rebuilt.
+    private var appliedMaxHeight: Int? = null
+
     // Kept current so a player rebuilt after [yield] picks up buffer changes made since launch.
     init {
+        settingsScope.launch {
+            runCatching {
+                trailerSettingsDataStore.settings.collect { cachedAllow4k = it.allow4k }
+            }
+        }
         settingsScope.launch {
             runCatching {
                 playerSettingsDataStore.nuvioPerformanceModeEnabled.collect { cachedForceNative = it }
@@ -84,7 +97,24 @@ class TrailerPlayerPool @Inject constructor(
             // Reclaim was not called yet but someone wants the player — rebuild.
             reclaim()
         }
-        return _player ?: createPlayer().also { _player = it }
+        val player = _player ?: createPlayer().also {
+            _player = it
+            appliedMaxHeight = null
+        }
+        applyVideoSizeCap(player)
+        return player
+    }
+
+    // Caps HLS variants; adaptive YouTube streams are already capped by the extractor.
+    private fun applyVideoSizeCap(player: ExoPlayer) {
+        val maxHeight = TrailerVideoPolicy.maxTrailerVideoHeight(cachedAllow4k)
+        if (appliedMaxHeight == maxHeight) return
+        val maxWidth = if (maxHeight == Int.MAX_VALUE) Int.MAX_VALUE else maxHeight * 16 / 9
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setMaxVideoSize(maxWidth, maxHeight)
+            .build()
+        appliedMaxHeight = maxHeight
     }
 
     /**
@@ -171,16 +201,13 @@ class TrailerPlayerPool @Inject constructor(
             loadControlBuilder.setAllocator(allocator)
         }
         val loadControl = loadControlBuilder.build()
-        // Caps HLS variants; adaptive YouTube streams are already capped by the extractor.
-        val maxHeight = TrailerVideoPolicy.maxTrailerVideoHeight(context)
-        val maxWidth = if (maxHeight == Int.MAX_VALUE) Int.MAX_VALUE else maxHeight * 16 / 9
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
                     .setMaxVideoSizeSd()
                     .clearVideoSizeConstraints()
                     .setForceHighestSupportedBitrate(true)
-                    .setMaxVideoSize(maxWidth, maxHeight)
+                    .setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE)
             )
         }
         return ExoPlayer.Builder(context)
