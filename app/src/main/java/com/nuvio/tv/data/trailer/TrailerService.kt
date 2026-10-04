@@ -1,11 +1,14 @@
 package com.nuvio.tv.data.trailer
 
+import android.content.Context
 import android.util.Log
+import com.nuvio.tv.core.player.TrailerVideoPolicy
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.nuvio.tv.data.remote.api.TmdbVideoResult
 import com.nuvio.tv.data.remote.api.TrailerApi
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Clock
 import java.net.URI
 import java.time.Instant
@@ -29,7 +32,8 @@ class TrailerService(
     private val inAppYouTubeExtractor: InAppYouTubeExtractor,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
-    private val clock: Clock
+    private val clock: Clock = Clock.systemUTC(),
+    private val maxTrailerVideoHeight: Int = Int.MAX_VALUE
 ) {
     @Inject
     constructor(
@@ -37,14 +41,16 @@ class TrailerService(
         tmdbApi: TmdbApi,
         inAppYouTubeExtractor: InAppYouTubeExtractor,
         tmdbSettingsDataStore: TmdbSettingsDataStore,
-        tmdbService: TmdbService
+        tmdbService: TmdbService,
+        @ApplicationContext context: Context
     ) : this(
         trailerApi = trailerApi,
         tmdbApi = tmdbApi,
         inAppYouTubeExtractor = inAppYouTubeExtractor,
         tmdbSettingsDataStore = tmdbSettingsDataStore,
         tmdbService = tmdbService,
-        clock = Clock.systemUTC()
+        clock = Clock.systemUTC(),
+        maxTrailerVideoHeight = TrailerVideoPolicy.maxTrailerVideoHeight(context)
     )
 
     // Cache: "title|year|tmdbId|type" -> trailer playback source (NEGATIVE_CACHE sentinel for misses)
@@ -241,7 +247,7 @@ class TrailerService(
             }
 
             Log.d(TAG, "Attempting in-app YouTube extraction for ${summarizeUrl(youtubeUrl)}")
-            val localSource = inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl)
+            val localSource = inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl, maxTrailerVideoHeight)
             if (localSource != null) {
                 if (!youtubeKey.isNullOrBlank()) {
                     youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(

@@ -45,7 +45,7 @@ class TrailerPlayerPool @Inject constructor(
 
         // A trailer plays on top of the home UI and its image caches, so it gets a small byte cap
         // rather than Media3's default (~144 MB for video + audio). Low-RAM sticks get the smallest.
-        private const val LOW_RAM_TRAILER_BUFFER_MB = 32
+        private const val LOW_RAM_TRAILER_BUFFER_MB = 48
         private const val TRAILER_BUFFER_MB = 100
     }
 
@@ -171,13 +171,16 @@ class TrailerPlayerPool @Inject constructor(
             loadControlBuilder.setAllocator(allocator)
         }
         val loadControl = loadControlBuilder.build()
+        // Caps HLS variants; adaptive YouTube streams are already capped by the extractor.
+        val maxHeight = TrailerVideoPolicy.maxTrailerVideoHeight(context)
+        val maxWidth = if (maxHeight == Int.MAX_VALUE) Int.MAX_VALUE else maxHeight * 16 / 9
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
                     .setMaxVideoSizeSd()
                     .clearVideoSizeConstraints()
                     .setForceHighestSupportedBitrate(true)
-                    .setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE)
+                    .setMaxVideoSize(maxWidth, maxHeight)
             )
         }
         return ExoPlayer.Builder(context)
