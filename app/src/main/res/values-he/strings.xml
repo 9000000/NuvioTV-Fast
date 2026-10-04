@@ -107,14 +107,14 @@
     <string name="error_state_possible_fix">פתרון אפשרי: %1$s</string>
     <string name="error_state_fix_retry_soon">אפשר לנסות שוב בעוד רגע.</string>
     <string name="error_state_issue_no_metadata_any_addon">לא ניתן לטעון פרטים עבור פריט זה כי אף אחד מהתוספים המותקנים לא סיפק עליו מידע.</string>
-    <string name="error_state_fix_no_metadata_any_addon">אפשר לנסות תוסף אחר, לבטל את \"העדפת מטה מתוסף חיצוני\" בהגדרות התצוגה, או לבדוק שתוסף מותקן תומך במזהה זה.</string>
+    <string name="error_state_fix_no_metadata_any_addon">אפשר לנסות תוסף אחר, לבטל את \"העדפת מטא-דאטה מתוסף חיצוני\" בהגדרות התצוגה, או לבדוק שתוסף מותקן תומך במזהה זה.</string>
     <string name="error_state_prefix_no_supported_metadata">אין תוסף מותקן שתומך במידע עבור </string>
     <string name="error_state_prefix_no_addon_for_id">אף תוסף מותקן לא הצליח לספק מידע עבור מזהה:</string>
     <string name="error_state_fix_no_supported_metadata">יש להתקין או לעדכן תוסף שתומך בסוג תוכן זה, ואז לנסות שוב.</string>
     <string name="error_state_prefix_tried_meta_addons">תוספי מידע שנוסו:</string>
     <string name="error_state_fix_tried_meta_addons">יש להתקין תוסף שתומך במזהה זה, או להגדיר/לעדכן את התוסף מחדש ולנסות שוב.</string>
     <string name="error_state_issue_missing_metadata_for_id">אין מידע זמין עבור מזהה זה</string>
-    <string name="error_state_fix_missing_metadata_for_id">אפשר לפתוח מזהה זה מתוסף אחר, לבטל את \"העדפת מטה מתוסף חיצוני\", או לבדוק שהתוסף תומך במזהה זה.</string>
+    <string name="error_state_fix_missing_metadata_for_id">אפשר לפתוח מזהה זה מתוסף אחר, לבטל את \"העדפת מטא-דאטה מתוסף חיצוני\", או לבדוק שהתוסף תומך במזהה זה.</string>
     <string name="error_state_issue_addon_unreachable">לא ניתן להתחבר לתוסף</string>
     <string name="error_state_fix_addon_unreachable">יש לבדוק את חיבור האינטרנט, לוודא שכתובת ה-URL של התוסף עדיין פעילה, ואז לנסות שוב.</string>
     <string name="error_state_issue_addon_connection_failed">התוסף דחה את החיבור</string>
@@ -125,12 +125,12 @@
     <string name="error_state_fix_addon_cleartext">יש לשנות את כתובת ה-URL של התוסף ל-HTTPS או לעדכן את הגדרות התוסף.</string>
     <string name="error_state_fix_addon_generic">כדאי לנסות שוב, לעדכן או להתקין מחדש את התוסף, או לנסות תוסף אחר.</string>
     <string name="error_state_addon_issue_template">%1$s: %2$s.</string>
-    <string name="error_meta_not_found">מטה-דאטה לא נמצאה</string>
-    <string name="error_meta_no_supported_addon">אין תוסף מותקן שתומך במטה-דאטה עבור \"%1$s\".</string>
-    <string name="error_meta_no_addon_for_id">אין תוסף מותקן שיכול לספק מטה-דאטה עבור id=%1$s (type=%2$s).</string>
-    <string name="error_meta_tried_none">תוספי מטה-דאטה שנוסו: %1$s. אף אחד לא סיפק מטה-דאטה עבור id=%2$s (type=%3$s).</string>
-    <string name="error_meta_tried_generic">תוספי מטה-דאטה שנוסו: %1$s. לא ניתן לטעון מטה-דאטה עבור id=%2$s (type=%3$s).</string>
-    <string name="error_meta_tried_issues">תוספי מטה-דאטה שנוסו: %1$s. לא ניתן לטעון מטה-דאטה עבור id=%2$s (type=%3$s). בעיות: %4$s.</string>
+    <string name="error_meta_not_found">מטא-דאטה לא נמצאה</string>
+    <string name="error_meta_no_supported_addon">אין תוסף מותקן שתומך במטא-דאטה עבור \"%1$s\".</string>
+    <string name="error_meta_no_addon_for_id">אין תוסף מותקן שיכול לספק מטא-דאטה עבור id=%1$s (type=%2$s).</string>
+    <string name="error_meta_tried_none">תוספי מטא-דאטה שנוסו: %1$s. אף אחד לא סיפק מטא-דאטה עבור id=%2$s (type=%3$s).</string>
+    <string name="error_meta_tried_generic">תוספי מטא-דאטה שנוסו: %1$s. לא ניתן לטעון מטא-דאטה עבור id=%2$s (type=%3$s).</string>
+    <string name="error_meta_tried_issues">תוספי מטא-דאטה שנוסו: %1$s. לא ניתן לטעון מטא-דאטה עבור id=%2$s (type=%3$s). בעיות: %4$s.</string>
     <string name="error_stream_no_supported_addon">אין תוסף מותקן שתומך במקורות עבור \"%1$s\".</string>
     <string name="error_stream_tried_none">תוספי סטרים שנוסו: %1$s. אף אחד מהם לא החזיר מקורות עבור id=%2$s (type=%3$s).</string>
     <string name="error_stream_tried_generic">תוספי סטרים שנוסו: %1$s. לא ניתן היה לטעון מקורות עבור id=%2$s (type=%3$s).</string>
@@ -420,13 +420,13 @@
     <string name="licenses_attributions_section_app">רישיון האפליקציה</string>
     <string name="licenses_attributions_section_data">מידע ושירותים</string>
     <string name="licenses_attributions_section_playback">רישיונות הפעלת Android</string>
-    <string name="licenses_attributions_section_ui">UI LIBRARIES</string>
+    <string name="licenses_attributions_section_ui">ספריות ממשק משתמש</string>
     <string name="licenses_attributions_haze_title">Haze 1.7.2</string>
     <string name="licenses_attributions_haze_body">משמש לאפקטים של טשטוש רקע. נוצר על ידי Chris Banes. מסופק תחת רישיון Apache License, גרסה 2.0.</string>
     <string name="licenses_attributions_nuvio_title">Nuvio TV</string>
     <string name="licenses_attributions_nuvio_body">קוד המקור ותנאי הרישיון זמינים במאגר הפרויקט. מורשה תחת רישיון GNU General Public License v3.0.</string>
     <string name="licenses_attributions_tmdb_title">The Movie Database (TMDB)</string>
-    <string name="licenses_attributions_tmdb_body">Nuvio משתמשת ב-API של TMDB עבור מטה-דאטה של סרטים וסדרות, תמונות, טריילרים, שחקנים, פרטי הפקה, אוספים והמלצות. מוצר זה משתמש ב-API של TMDB אך אינו מאושר או מאומת על ידי TMDB.</string>
+    <string name="licenses_attributions_tmdb_body">Nuvio משתמשת ב-API של TMDB עבור מטא-דאטה של סרטים וסדרות, תמונות, טריילרים, שחקנים, פרטי הפקה, אוספים והמלצות. מוצר זה משתמש ב-API של TMDB אך אינו מאושר או מאומת על ידי TMDB.</string>
     <string name="licenses_attributions_trakt_title">Trakt</string>
     <string name="licenses_attributions_trakt_body">Nuvio מתחברת ל-Trakt לצורך אימות חשבון, היסטוריית צפייה, סנכרון התקדמות, נתוני ספרייה, דירוגים, רשימות ותגובות. Nuvio אינה קשורה או מאושרת על ידי Trakt.</string>
     <string name="licenses_attributions_simkl_title">Simkl</string>
@@ -629,7 +629,7 @@
     <string name="account_stat_watched">נצפה</string>
     <string name="settings_integrations_section">אינטגרציות</string>
     <string name="settings_integrations_section_subtitle">ניהול אינטגרציות זמינות</string>
-    <string name="settings_tmdb_subtitle">בקרות העשרת מטה-דאטה</string>
+    <string name="settings_tmdb_subtitle">בקרות העשרת מטא-דאטה</string>
     <string name="settings_mdblist_subtitle">ספקי דירוג חיצוניים</string>
     <string name="settings_animeskip_subtitle">חותמות זמן לדילוג על פתיחים וסיומים באנימה</string>
     <string name="settings_debrid_subtitle">מקורות חשבון ענן ניסיוניים</string>
@@ -729,8 +729,8 @@
     <string name="autoplay_selected_count">%1$d נבחרו</string>
     <string name="playback_loading_overlay">שכבת טעינה</string>
     <string name="playback_loading_overlay_sub">הצגת מסך טעינה עד להופעת הפריים הראשון.</string>
-    <string name="playback_pause_overlay">שכבת השהייה</string>
-    <string name="playback_pause_overlay_sub">הצגת פרטי הכותרת לאחר 5 שניות של השהייה (Pause).</string>
+    <string name="playback_pause_overlay">שכבת השהיה</string>
+    <string name="playback_pause_overlay_sub">הצגת פרטי הכותרת לאחר 5 שניות של השהיה (Pause).</string>
     <string name="playback_show_clock_sub">הצגת שעה נוכחית ושעת סיום כשהפקדים גלויים.</string>
     <string name="playback_osd_clock">שעון</string>
     <string name="playback_skip_intro">דילוג על ההקדמה</string>
@@ -1072,14 +1072,21 @@
     <string name="upcoming_section_title">עתידי</string>
     <string name="layout_trailer_button">הצגת כפתור טריילר</string>
     <string name="layout_trailer_button_sub">הצגת כפתור טריילר בעמוד הפרטים (רק כשטריילר זמין).</string>
-    <string name="layout_prefer_external_meta">העדפת מטה מתוסף חיצוני</string>
-    <string name="layout_prefer_external_meta_sub">שימוש במטה-דאטה מתוסף חיצוני במקום תוסף הקטלוג.</string>
+    <string name="layout_trailer_play_in_background">הפעלה ברקע</string>
+    <string name="layout_trailer_play_in_background_sub">הפעלת הטריילר במקום תמונת הרקע בזמן שהעמוד נשאר גלוי.</string>
+    <string name="layout_trailer_pause_on_scroll">השהיה בזמן גלילה</string>
+    <string name="layout_trailer_pause_on_scroll_sub">השהיית הטריילר בגלילה למטה והמשכתו מאותה הנקודה בגלילה מעלה.</string>
+    <string name="layout_detail_group_episodes">פרקים</string>
+    <string name="layout_detail_group_trailers">טריילרים</string>
+    <string name="layout_detail_group_metadata">מטא-דאטה</string>
+    <string name="layout_prefer_external_meta">העדפת מטא-דאטה מתוסף חיצוני</string>
+    <string name="layout_prefer_external_meta_sub">שימוש במטא-דאטה מתוסף חיצוני במקום תוסף הקטלוג.</string>
     <string name="layout_show_full_release_date">הצגת תאריך יציאה מלא</string>
     <string name="layout_show_full_release_date_sub">עבור סרטים, הצגת תאריך יציאה מלא במקום שנה בלבד.</string>
     <string name="layout_section_focused">פוסטר ממוקד</string>
     <string name="layout_section_focused_desc">התנהגות מתקדמת לכרטיסי פוסטר ממוקדים.</string>
     <string name="layout_expand_poster">הרחבת פוסטר ממוקד לרקע</string>
-    <string name="layout_expand_poster_sub">הרחבת פוסטר ממוקד לאחר השהייה.</string>
+    <string name="layout_expand_poster_sub">הרחבת פוסטר ממוקד לאחר השהיה.</string>
     <string name="layout_expand_delay">עיכוב לפני הרחבת הרקע</string>
     <string name="layout_expand_delay_sub">כמה זמן להמתין לפני הרחבת כרטיסים ממוקדים.</string>
     <string name="layout_autoplay_trailer">הפעלה אוטומטית של טריילר</string>
@@ -1202,7 +1209,7 @@
     <string name="mdblist_title">דירוגי MDBList</string>
     <string name="mdblist_subtitle">הגדרת דירוגים חיצוניים המוצגים בהירו של פרטים</string>
     <string name="mdblist_enable_title">אפשור דירוגי MDBList</string>
-    <string name="mdblist_enable_subtitle">משוך דירוגים מספקים חיצוניים במסך פרטי מטה</string>
+    <string name="mdblist_enable_subtitle">משוך דירוגים מספקים חיצוניים במסך פרטי מטא-דאטה</string>
     <string name="mdblist_api_key_title">מפתח API</string>
     <string name="mdblist_api_key_subtitle">נדרש לאחזור דירוגים מ-MDBList</string>
     <string name="mdblist_ratings_credentials_subtitle">ניתן להשתמש בחשבון ה-MDBList המחובר במעקב, או להזין מפתח API נפרד לדירוגים.</string>
@@ -1233,6 +1240,12 @@
     <string name="mdblist_dialog_placeholder">מפתח API של MDBList</string>
     <string name="mdblist_not_set">לא הוגדר</string>
     <string name="mdblist_invalid_api_key">מפתח API של MDBList לא תקין</string>
+    <string name="mdblist_library_lists">רשימות ספרייה</string>
+    <string name="mdblist_library_lists_description">בחירת רשימות ה-MDBList שיוצגו בספרייה ובניהול רשימות. רשימת הצפייה מוצגת תמיד.</string>
+    <string name="mdblist_library_lists_empty">עדיין לא נמצאו רשימות בחשבון ה-MDBList. יש לסנכרן כדי לטעון אותן.</string>
+    <string name="mdblist_library_lists_summary">%1$d מתוך %2$d מוצגות</string>
+    <string name="tracking_mdblist_features_title">תכונות MDBList</string>
+    <string name="tracking_mdblist_features_subtitle">הגדרות ייעודיות ל-MDBList</string>
 
     <string name="debrid_title">שירותים מחוברים</string>
     <string name="debrid_subtitle">חיבור חשבונות לגישה לקישורים ולספרייה</string>
@@ -1410,15 +1423,15 @@
     <string name="action_clear">ניקוי</string>
 
     <string name="tmdb_title">העשרת TMDB</string>
-    <string name="tmdb_subtitle">בחירת שדות המטה-דאטה שיגיעו מ-TMDB</string>
+    <string name="tmdb_subtitle">בחירת שדות המטא-דאטה שיגיעו מ-TMDB</string>
     <string name="tmdb_enable_title">אפשור העשרת TMDB</string>
-    <string name="tmdb_enable_subtitle">שימוש ב-TMDB כמקור מטה-דאטה לשיפור נתוני תוסף</string>
+    <string name="tmdb_enable_subtitle">שימוש ב-TMDB כמקור מטא-דאטה לשיפור נתוני תוסף</string>
     <string name="tmdb_modern_home_title">הפעלה בתצוגה מודרנית</string>
     <string name="tmdb_modern_home_subtitle">החלת העשרת TMDB גם על הכרטיס הראשי והכרטיסים הממוקדים בדף הבית המודרני</string>
     <string name="tmdb_enrich_continue_watching_title">העשרת המשך הצפייה</string>
     <string name="tmdb_enrich_continue_watching_subtitle">החלת העשרת TMDB על פריטי המשך הצפייה</string>
     <string name="tmdb_language_title">שפה</string>
-    <string name="tmdb_language_subtitle">שפת מטה-דאטה TMDB לכותרת, לוגו ושדות מופעלים. (מומלץ לשנות לעברית).</string>
+    <string name="tmdb_language_subtitle">שפת מטא-דאטה TMDB לכותרת, לוגו ושדות מופעלים. (מומלץ לשנות לעברית).</string>
     <string name="tmdb_artwork_title">עיצוב</string>
     <string name="tmdb_artwork_subtitle">לוגו ותמונות רקע מ-TMDB</string>
     <string name="tmdb_basic_info_title">מידע בסיסי</string>
@@ -1488,11 +1501,11 @@
     <string name="trakt_unaired_now_shown">פרקי הבא שטרם שודרו מוצגים עכשיו</string>
     <string name="trakt_unaired_now_hidden">פרקי הבא שטרם שודרו מוסתרים עכשיו</string>
     <string name="trakt_comments_title">תגובות</string>
-    <string name="trakt_comments_subtitle">הצגת ביקורות Trakt בעמודי מטה-דאטה</string>
+    <string name="trakt_comments_subtitle">הצגת ביקורות Trakt בעמודי מטא-דאטה</string>
     <string name="trakt_comments_dialog_title">תגובות</string>
-    <string name="trakt_comments_dialog_subtitle">בחירה אם עמודי מטה-דאטה יציגו ביקורות Trakt כאשר החשבון שלך מחובר.</string>
-    <string name="trakt_comments_now_shown">ביקורות Trakt בעמודי מטה-דאטה מוצגות כעת</string>
-    <string name="trakt_comments_now_hidden">ביקורות Trakt בעמודי מטה-דאטה מוסתרות כעת</string>
+    <string name="trakt_comments_dialog_subtitle">בחירה אם עמודי מטא-דאטה יציגו ביקורות Trakt כאשר החשבון שלך מחובר.</string>
+    <string name="trakt_comments_now_shown">ביקורות Trakt בעמודי מטא-דאטה מוצגות כעת</string>
+    <string name="trakt_comments_now_hidden">ביקורות Trakt בעמודי מטא-דאטה מוסתרות כעת</string>
     <string name="trakt_more_like_this_source_title">מקור \"עוד כמו זה\"</string>
     <string name="trakt_more_like_this_source_subtitle">בחירת מקור ההמלצות במסכי הפרטים ואחרי ההפעלה</string>
     <string name="trakt_more_like_this_source_dialog_title">מקור \"עוד כמו זה\"</string>
@@ -1799,7 +1812,7 @@
     <string name="subtitle_timing_select_addon_first">קודם יש לבחור רצועת כתוביות מתוסף (לא כתוביות מובנות).</string>
     <string name="subtitle_auto_sync_select_addon_track">יש לבחור רצועת כתוביות מתוסף כדי להשתמש בסנכרון אוטומטי.</string>
     <string name="subtitle_auto_sync_applied">הסנכרון הוחל: %1$s</string>
-    <string name="subtitle_timing_loading">טוען שורות כתוביות…</string>
+    <string name="subtitle_timing_loading">השורות של הכתוביות נטענות…</string>
     <string name="subtitle_timing_no_lines_found">לא נמצאו שורות כתוביות סביב רגע זה.</string>
     <string name="subtitle_timing_press_back_cancel">יש לבחור את השורה שנשמעה בזמן הלחיצה על \"סנכרון\". לביטול, יש ללחוץ חזרה.</string>
     <string name="subtitle_timing_captured_at">נלכד ב-%1$s</string>
@@ -1908,7 +1921,7 @@
 
     <string name="subtitle_dialog_title">כתוביות</string>
     <string name="subtitle_no_builtin">אין כתוביות מובנות זמינות</string>
-    <string name="subtitle_loading_addon">טוען כתוביות מתוספים…</string>
+    <string name="subtitle_loading_addon">הכתוביות מהתוספים נטענות…</string>
     <string name="subtitle_no_addon">אין כתוביות תוסף זמינות</string>
     <string name="subtitle_text_color">צבע טקסט</string>
     <string name="subtitle_outline_color">צבע מתאר</string>
