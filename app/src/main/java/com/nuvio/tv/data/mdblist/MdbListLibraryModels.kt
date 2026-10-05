@@ -40,7 +40,8 @@ data class MdbListLibraryItem(
     val description: String? = null,
     val genres: List<String> = emptyList(),
     val listedAt: Long = 0,
-    val rank: Int? = null
+    val rank: Int? = null,
+    val releaseDate: String? = null
 ) {
     val key: String get() = "$type:${media.ids.key}"
     fun matches(other: MdbListLibraryItem): Boolean = type == other.type && media.ids.matches(other.media.ids)

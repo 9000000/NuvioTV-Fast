@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 // Cached next to the added orders ("asc"/"desc") of each list, oldest release first.
-internal const val RELEASED_ORDER_KEY = "released"
+internal const val RELEASED_ORDER_KEY = "released_oldest"
 
 internal class MdbListLibrarySorter(
     private val api: MdbListApiClient,
@@ -28,9 +28,12 @@ internal class MdbListLibrarySorter(
         return observeOrder(listKey, direction, reversed = false) { it.items(listKey, "added", direction) }
     }
 
-    // One oldest-first order serves both directions.
+    // One oldest-first order serves both directions. Like added, MDBList returns the newest
+    // releases for order=asc, so the oldest are requested with order=desc.
     override fun observeReleaseOrder(listKey: String, descending: Boolean): Flow<List<String>?> =
-        observeOrder(listKey, RELEASED_ORDER_KEY, reversed = descending) { it.items(listKey, "released").oldestFirst() }
+        observeOrder(listKey, RELEASED_ORDER_KEY, reversed = descending) {
+            it.items(listKey, "released", "desc").oldestFirst()
+        }
 
     private fun observeOrder(
         listKey: String,
@@ -54,11 +57,10 @@ internal class MdbListLibrarySorter(
         }
     }.distinctUntilChanged()
 
-    // MDBList does not document which end order=asc starts from for every sort field, so the
-    // release order is oriented by the release years it returns.
+    // The order direction is undocumented, so it is checked against the returned release dates.
     private fun List<MdbListLibraryItem>.oldestFirst(): List<MdbListLibraryItem> {
-        val years = mapNotNull { it.media.year }
-        return if (years.isNotEmpty() && years.first() > years.last()) reversed() else this
+        val dates = mapNotNull { it.releaseDate ?: it.media.year?.toString() }
+        return if (dates.isNotEmpty() && dates.first() > dates.last()) reversed() else this
     }
 
     private fun MdbListLibrarySnapshot.orderKeys(order: List<MdbListLibraryOrderItem>, reversed: Boolean): List<String> {
