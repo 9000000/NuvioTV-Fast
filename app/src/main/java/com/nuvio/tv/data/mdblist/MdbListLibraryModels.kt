@@ -7,6 +7,9 @@ import kotlinx.serialization.Serializable
 internal const val MDBLIST_WATCHLIST_KEY = "mdblist:watchlist"
 internal const val MDBLIST_LIST_KEY_PREFIX = "mdblist:list:"
 
+/** Bumped when list items are requested in a different order, so cached lists are downloaded again. */
+internal const val MDBLIST_ITEMS_ORDER = 1
+
 @Serializable
 data class MdbListLibraryList(
     val id: Long,
@@ -60,7 +63,8 @@ data class MdbListLibrarySnapshot(
     val checkedAtEpochMs: Long? = null,
     val invalidated: Boolean = false,
     val addedOrders: Map<String, Map<String, List<MdbListLibraryOrderItem>>> = emptyMap(),
-    val hiddenListKeys: Set<String> = emptySet()
+    val hiddenListKeys: Set<String> = emptySet(),
+    val itemsOrder: Int = 0
 ) {
     /** Tabs shown in Nuvio: lists the user hid in MDBList settings are left out. */
     fun visibleTabs(): List<LibraryListTab> = tabs().filterNot { it.key in hiddenListKeys }

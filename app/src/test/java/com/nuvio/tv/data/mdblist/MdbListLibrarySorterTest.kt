@@ -164,6 +164,7 @@ class MdbListLibrarySorterTest {
         )))
         h.http.reply(body = mdbListLibraryListsBody())
         h.http.reply(body = MDBLIST_EMPTY_LIBRARY_PAGE)
+        h.http.reply(body = page)
         val service = h.libraryService(backgroundScope)
         service.refresh(TrackingRefreshIntent.USER_INITIATED)
         assertEquals(mapOf(MDBLIST_TEST_LIST_KEY to orders), h.repository.currentSnapshot()!!.library!!.addedOrders)

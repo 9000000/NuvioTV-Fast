@@ -1,9 +1,19 @@
 package com.nuvio.tv.data.mdblist
 
 internal class MdbListLibraryRemote(private val api: MdbListApiClient, private val scope: MdbListAuthScope) {
-    suspend fun synchronize(previous: MdbListLibrarySnapshot?, accountId: Long, now: Long): MdbListLibrarySnapshot {
+    /**
+     * [reloadItems] downloads unchanged lists too: changing only a list's saved sort order on
+     * mdblist.com does not change its update time.
+     */
+    suspend fun synchronize(
+        previous: MdbListLibrarySnapshot?,
+        accountId: Long,
+        now: Long,
+        reloadItems: Boolean = false
+    ): MdbListLibrarySnapshot {
         val lists = decodeMdbListLibraryLists(api.get("/lists/user", mapOf("unified" to "false", "sort" to "ranked"), scope).body, accountId)
         val items = linkedMapOf(MDBLIST_WATCHLIST_KEY to items(MDBLIST_WATCHLIST_KEY))
+        val reuseItems = !reloadItems && previous?.itemsOrder == MDBLIST_ITEMS_ORDER
         val previousLists = previous?.lists.orEmpty().associateBy { it.id }
         val addedOrders = previous?.addedOrders.orEmpty().toMutableMap().apply { remove(MDBLIST_WATCHLIST_KEY) }
         val hidden = previous?.hiddenListKeys.orEmpty()
@@ -16,10 +26,11 @@ internal class MdbListLibraryRemote(private val api: MdbListApiClient, private v
             val cached = previous?.itemsByList?.get(list.key)
             val unchanged = previous?.invalidated != true && list.updatedAt != null &&
                 previousLists[list.id]?.updatedAt == list.updatedAt
-            items[list.key] = if (unchanged && cached != null) cached else items(list.key)
+            items[list.key] = if (unchanged && reuseItems && cached != null) cached else items(list.key)
             if (!unchanged || cached == null) addedOrders.remove(list.key)
         }
-        val snapshot = MdbListLibrarySnapshot(lists, items, now, addedOrders = addedOrders.filterKeys { it in items })
+        val snapshot = MdbListLibrarySnapshot(lists, items, now, addedOrders = addedOrders.filterKeys { it in items },
+            itemsOrder = MDBLIST_ITEMS_ORDER)
         // Drop hidden keys of lists that were deleted in MDBList.
         return snapshot.copy(hiddenListKeys = hidden intersect snapshot.tabs().mapTo(mutableSetOf()) { it.key })
     }
