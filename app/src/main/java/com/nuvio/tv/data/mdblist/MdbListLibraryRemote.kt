@@ -24,11 +24,10 @@ internal class MdbListLibraryRemote(private val api: MdbListApiClient, private v
         return snapshot.copy(hiddenListKeys = hidden intersect snapshot.tabs().mapTo(mutableSetOf()) { it.key })
     }
 
-    suspend fun items(key: String, addedOrder: String? = null): List<MdbListLibraryItem> {
+    suspend fun items(key: String, sort: String = "rank", order: String = "asc"): List<MdbListLibraryItem> {
         val path = mdbListLibraryItemsPath(key)
-        val initial = mapOf("limit" to "1000", "sort" to if (addedOrder == null) "rank" else "added",
-            "order" to (addedOrder ?: "asc"), "unified" to "true") +
-            if (addedOrder == null) mapOf("append_to_response" to "poster,description,genres") else emptyMap()
+        val initial = mapOf("limit" to "1000", "sort" to sort, "order" to order, "unified" to "true") +
+            if (sort == "rank") mapOf("append_to_response" to "poster,description,genres") else emptyMap()
         var query = initial
         val visited = mutableSetOf<Map<String, String>>()
         val items = mutableListOf<MdbListLibraryItem>()

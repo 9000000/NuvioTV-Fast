@@ -65,6 +65,27 @@ class MdbListLibrarySorterTest {
     }
 
     @Test
+    fun `release order is fetched once, oriented oldest first by year and serves both directions`() = runTest {
+        for (newestFirst in listOf(false, true)) {
+            val h = MdbListSyncTestHarness(backgroundScope)
+            h.seedLibrary(mdbListLibrarySnapshot(h.http.now).copy(itemsByList = mapOf(MDBLIST_TEST_LIST_KEY to items)))
+            h.repository.ensureLoaded()
+            val sorter = h.libraryService(backgroundScope).listSorter
+            val rows = listOf("""{"id":1,"mediatype":"show","release_year":1990}""", """{"id":2,"mediatype":"movie"}""",
+                """{"id":1,"mediatype":"movie","release_year":2020}""")
+            h.http.reply(body = (if (newestFirst) rows.reversed() else rows).joinToString(",", "[", "]"))
+            val oldest = listOf("series:tmdb:1", "movie:tmdb:2", "movie:tmdb:1")
+            repeat(2) {
+                assertEquals(oldest, sorter.observeReleaseOrder(MDBLIST_TEST_LIST_KEY, false).first())
+                assertEquals(oldest.reversed(), sorter.observeReleaseOrder(MDBLIST_TEST_LIST_KEY, true).first())
+            }
+            assertEquals(1, h.http.engine.requests.size)
+            assertEquals("released", h.http.engine.requests.single().query["sort"])
+            assertEquals(setOf(RELEASED_ORDER_KEY), h.repository.currentSnapshot()!!.library!!.addedOrders.getValue(MDBLIST_TEST_LIST_KEY).keys)
+        }
+    }
+
+    @Test
     fun `unified order follows header cursors across mixed media pages`() = runTest {
         val h = MdbListSyncTestHarness(backgroundScope)
         h.seedLibrary()
