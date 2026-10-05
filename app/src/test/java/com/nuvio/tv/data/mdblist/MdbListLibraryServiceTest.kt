@@ -167,6 +167,8 @@ class MdbListLibraryServiceTest {
             val queries = h.http.engine.requests.map { it.query }
             assertEquals(if (cursor) "page-two" else "1", queries[1][if (cursor) "cursor" else "offset"])
             assertTrue(queries.all { it["limit"] == "1000" && it["append_to_response"] == "poster,description,genres" })
+            // No sort, so MDBList applies the sort order saved for the list.
+            assertTrue(queries.none { "sort" in it || "order" in it })
         }
     }
 
