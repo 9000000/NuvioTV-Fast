@@ -339,6 +339,9 @@ class PlayerRuntimeController(
         isLive: Boolean = _playbackTimeline.value.isLive,
         watchedDurationMs: Long = _playbackTimeline.value.watchedDurationMs
     ) {
+        if (_uiState.value.isLive != isLive) {
+            _uiState.update { it.copy(isLive = isLive) }
+        }
         _playbackTimeline.update {
             it.copy(
                 currentPosition = currentPosition.coerceAtLeast(0L),
@@ -384,6 +387,9 @@ class PlayerRuntimeController(
         livePlaybackLatched = false
         liveWatchClock.reset()
         pendingPreviewSeekPosition = null
+        if (_uiState.value.isLive) {
+            _uiState.update { it.copy(isLive = false) }
+        }
         _playbackTimeline.value = PlaybackTimelineState()
     }
 
