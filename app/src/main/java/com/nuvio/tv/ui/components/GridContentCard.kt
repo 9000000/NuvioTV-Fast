@@ -93,17 +93,21 @@ fun GridContentCard(
         PosterShape.SQUARE -> posterCardStyle.width
     }
 
-    val requestCardWidth = if (globalLandscape) posterCardStyle.height else posterCardStyle.width
+    // Items that are already landscape (e.g. More Like This, Collections, Trailers)
+    // keep their explicit posterCardStyle width even in global landscape mode.
+    // fillMaxWidth only makes sense inside a grid where cells constrain width.
+    val isNativelyLandscape = item.posterShape == PosterShape.LANDSCAPE
+
+    val requestCardWidth = if (globalLandscape && !isNativelyLandscape) posterCardStyle.height else posterCardStyle.width
     val requestWidthPx = remember(density, requestCardWidth) { with(density) { requestCardWidth.roundToPx() }.coerceAtLeast(1) }
     val requestHeightPx = remember(density, cardHeight) { with(density) { cardHeight.roundToPx() }.coerceAtLeast(1) }
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
 
-
     Column(
         modifier = modifier
-            .then(if (globalLandscape) Modifier.fillMaxWidth() else Modifier.width(posterCardStyle.width))
+            .then(if (globalLandscape && !isNativelyLandscape) Modifier.fillMaxWidth() else Modifier.width(posterCardStyle.width))
             .recompositionHighlighter()
     ) {
         Card(
