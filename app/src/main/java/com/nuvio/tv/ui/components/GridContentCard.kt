@@ -90,7 +90,10 @@ fun GridContentCard(
     // This ensures grids and rows display landscape/square shapes correctly.
     val cardHeight = when (effectivePosterShape) {
         PosterShape.POSTER -> posterCardStyle.height
-        PosterShape.LANDSCAPE -> posterCardStyle.width / PosterShape.LANDSCAPE.aspectRatio()
+        PosterShape.LANDSCAPE -> {
+            val landscapeWidth = if (globalLandscape) posterCardStyle.height else posterCardStyle.width
+            landscapeWidth / PosterShape.LANDSCAPE.aspectRatio()
+        }
         PosterShape.SQUARE -> posterCardStyle.width
     }
 
@@ -99,7 +102,9 @@ fun GridContentCard(
     // fillMaxWidth only makes sense inside a grid where cells constrain width.
     val isNativelyLandscape = item.posterShape == PosterShape.LANDSCAPE
 
-    val requestCardWidth = if (globalLandscape && !isNativelyLandscape) posterCardStyle.height else posterCardStyle.width
+    val landscapeCardWidth = if (globalLandscape && !isNativelyLandscape) posterCardStyle.height else posterCardStyle.width
+
+    val requestCardWidth = landscapeCardWidth
     val requestWidthPx = remember(density, requestCardWidth) { with(density) { requestCardWidth.roundToPx() }.coerceAtLeast(1) }
     val requestHeightPx = remember(density, cardHeight) { with(density) { cardHeight.roundToPx() }.coerceAtLeast(1) }
     var isFocused by remember { mutableStateOf(false) }
@@ -108,7 +113,7 @@ fun GridContentCard(
 
     Column(
         modifier = modifier
-            .then(if (globalLandscape && !isNativelyLandscape) Modifier.fillMaxWidth() else Modifier.width(posterCardStyle.width))
+            .width(landscapeCardWidth)
             .recompositionHighlighter()
     ) {
         Card(
