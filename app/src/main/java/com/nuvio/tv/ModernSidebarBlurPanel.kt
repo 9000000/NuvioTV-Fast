@@ -39,6 +39,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
@@ -300,6 +305,11 @@ private fun SidebarNavigationItem(
     ) {
         Row(
             modifier = Modifier
+                .semantics {
+                    contentDescription = label
+                    role = Role.Tab
+                    this.selected = selected
+                }
                 .fillMaxWidth()
                 .padding(horizontal = NuvioTheme.spacing.lg - NuvioTheme.spacing.xxs, vertical = NuvioTheme.spacing.sm + NuvioTheme.spacing.xxs),
             verticalAlignment = Alignment.CenterVertically
@@ -345,7 +355,7 @@ private fun SidebarNavigationItem(
                 .weight(1f)
                 .graphicsLayer { alpha = labelAlpha }
         )
-    }
+        }
     }
 }
 
@@ -388,6 +398,10 @@ private fun SidebarProfileItem(
     ) {
         Row(
             modifier = Modifier
+                .semantics {
+                    contentDescription = profileName
+                    role = Role.Button
+                }
                 .fillMaxWidth()
                 .padding(horizontal = NuvioTheme.spacing.lg - NuvioTheme.spacing.xxs, vertical = NuvioTheme.spacing.sm + NuvioTheme.spacing.xxs),
             verticalAlignment = Alignment.CenterVertically
@@ -416,7 +430,7 @@ private fun SidebarProfileItem(
                 textDirection = profileName.contentTextDirection()
             )
         )
-    }
+        }
     }
 }
 

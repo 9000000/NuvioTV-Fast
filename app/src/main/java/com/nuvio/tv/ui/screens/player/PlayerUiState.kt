@@ -241,7 +241,8 @@ data class PlayerUiState(
     val torrentBufferingProgress: Float = 0f,
     // When true, suppress all torrent stats text (buffer, seeds, peers, speed)
     // from loading overlay, rebuffering indicator, and corner overlay.
-    val hideTorrentStats: Boolean = false
+    val hideTorrentStats: Boolean = false,
+    val isLive: Boolean = false
 )
 
 data class PlaybackTimelineState(
