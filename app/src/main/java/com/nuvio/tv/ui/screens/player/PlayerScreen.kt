@@ -1192,7 +1192,12 @@ fun PlayerScreen(
             suppressFocus = (uiState.postPlayMode is PostPlayMode.AutoPlay &&
                 postPlayRecommendationState.recommendation == null) || !skipIntroCanFocus,
             canFocus = skipIntroCanFocus,
-            onSkip = { viewModel.onEvent(PlayerEvent.OnSkipIntro) },
+            onSkip = {
+                if (uiState.showControls) {
+                    runCatching { playPauseFocusRequester.requestFocus() }
+                }
+                viewModel.onEvent(PlayerEvent.OnSkipIntro)
+            },
             onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissSkipIntro) },
             onVisibilityChanged = { skipButtonActuallyVisible = it },
             onFocused = { viewModel.scheduleHideControls() },
