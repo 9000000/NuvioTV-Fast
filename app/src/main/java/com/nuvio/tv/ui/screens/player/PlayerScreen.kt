@@ -195,6 +195,7 @@ fun PlayerScreen(
     var skipButtonActuallyVisible by remember { mutableStateOf(false) }
     var restoreStreamInfoFocus by remember { mutableStateOf(false) }
     var focusPlayAfterMoreBack by remember { mutableStateOf(false) }
+    var hideControlsAfterStreamInfo by remember { mutableStateOf(false) }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
     var subtitleDelayFocusTarget by remember { mutableStateOf(SubtitleDelayFocusTarget.SLIDER) }
     val subtitleDelayResetFocusRequester = remember { FocusRequester() }
@@ -313,6 +314,13 @@ fun PlayerScreen(
             viewModel.onEvent(PlayerEvent.OnDismissTransientOverlay)
         } else if (uiState.showStreamInfoOverlay) {
             dismissStreamInfoOverlay()
+            if (hideControlsAfterStreamInfo) {
+                viewModel.hideControls()
+            } else if (uiState.showControls) {
+                restoreStreamInfoFocus = true
+                viewModel.onEvent(PlayerEvent.OnShowMoreDialog)
+            }
+            hideControlsAfterStreamInfo = false
         } else if (uiState.showPauseOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
         } else if (uiState.showMoreDialog) {
@@ -892,6 +900,22 @@ fun PlayerScreen(
                                     )
                                 )
                             )
+                            true
+                        }
+                        KeyEvent.KEYCODE_INFO -> {
+                            if (uiState.showStreamInfoOverlay) {
+                                viewModel.onEvent(PlayerEvent.OnDismissStreamInfo)
+                                if (hideControlsAfterStreamInfo) {
+                                    viewModel.hideControls()
+                                } else if (uiState.showControls) {
+                                    restoreStreamInfoFocus = true
+                                    viewModel.onEvent(PlayerEvent.OnShowMoreDialog)
+                                }
+                                hideControlsAfterStreamInfo = false
+                            } else {
+                                hideControlsAfterStreamInfo = !uiState.showControls
+                                viewModel.onEvent(PlayerEvent.OnShowStreamInfo)
+                            }
                             true
                         }
                         else -> false
