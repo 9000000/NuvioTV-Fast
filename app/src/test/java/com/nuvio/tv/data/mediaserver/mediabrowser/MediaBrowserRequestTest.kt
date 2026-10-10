@@ -287,6 +287,7 @@ class MediaBrowserRequestTest {
         assertEquals("ms1", info.url.queryParameter("mediaSourceId"))
         assertEquals("2", info.url.queryParameter("audioStreamIndex"))
         assertTrue(info.text.contains("\"AudioStreamIndex\":2"))
+        assertTrue(info.text.contains("\"IsPlayback\":true"))
         assertTrue(info.text.contains("{\"Format\":\"subrip\",\"Method\":\"Embed\"}"))
         assertTrue(info.text.contains("{\"Format\":\"subrip\",\"Method\":\"External\"}"))
         assertTrue(playback.url.startsWith("https://media.example.com/emby/Videos/i1/stream?static=true"))
