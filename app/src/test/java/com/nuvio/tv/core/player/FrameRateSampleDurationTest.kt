@@ -2,6 +2,7 @@ package com.nuvio.tv.core.player
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FrameRateSampleDurationTest {
@@ -32,6 +33,21 @@ class FrameRateSampleDurationTest {
     fun `23_976 fps in decode order cut inside a group reads as 23_976 fps`() {
         val frameUs = 1_001_000.0 / 24.0
         val average = FrameRateUtils.averageSampleDurationUs(decodeOrder(350, frameUs), 3, 16)!!
+        assertEquals(frameUs, average.toDouble(), 1.0)
+    }
+
+    @Test
+    fun `without the margin the same 23_976 fps window is off by more than the 24 fps gap`() {
+        val frameUs = 1_001_000.0 / 24.0
+        val average = FrameRateUtils.averageSampleDurationUs(decodeOrder(350, frameUs), 3, 0)!!
+        val error = average.toDouble() / frameUs - 1.0
+        assertTrue("error $error", error > 0.005)
+    }
+
+    @Test
+    fun `a read that stops early inside a group still reads as 23_976 fps`() {
+        val frameUs = 1_001_000.0 / 24.0
+        val average = FrameRateUtils.averageSampleDurationUs(decodeOrder(203, frameUs), 3, 16)!!
         assertEquals(frameUs, average.toDouble(), 1.0)
     }
 

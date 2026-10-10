@@ -474,14 +474,14 @@ object FrameRateUtils {
     }
 
     // Samples come in decode order. With B-frames that is not presentation order, and the newest samples
-    // of a read that stopped early can be missing frames that come before them, so sort and leave those out.
+    // of any read can be ahead of frames that were never read, so sort and leave those out.
+    // skipFirst drops the lowest timestamps after sorting, not the first samples decoded.
     internal fun averageSampleDurationUs(timestampsUs: List<Long>, skipFirst: Int, skipLast: Int): Float? {
         val sorted = timestampsUs.sorted()
-        val first = skipFirst
         val last = sorted.size - 1 - skipLast
-        val intervals = last - first
+        val intervals = last - skipFirst
         if (intervals < 30) return null
-        val average = (sorted[last] - sorted[first]).toFloat() / intervals
+        val average = (sorted[last] - sorted[skipFirst]).toFloat() / intervals
         return average.takeIf { it > 0f }
     }
 
@@ -1511,9 +1511,8 @@ object FrameRateUtils {
                 if (!extractor.advance()) break
             }
 
-            val reorderMargin = if (timestamps.size >= targetSamples) TIMESTAMP_REORDER_MARGIN else 0
-            val averageFrameDurationUs = averageSampleDurationUs(timestamps, ignoreSamples, reorderMargin)
-                ?: return null
+            val averageFrameDurationUs =
+                averageSampleDurationUs(timestamps, ignoreSamples, TIMESTAMP_REORDER_MARGIN) ?: return null
 
             val measured = 1_000_000f / averageFrameDurationUs
             if (!isValidVideoFrameRate(measured)) return null
