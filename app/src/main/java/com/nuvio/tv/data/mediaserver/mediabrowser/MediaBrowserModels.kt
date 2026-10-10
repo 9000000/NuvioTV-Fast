@@ -2,13 +2,15 @@ package com.nuvio.tv.data.mediaserver.mediabrowser
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 internal data class PublicInfo(
     @SerialName("ServerName") val serverName: String? = null,
     @SerialName("Version") val version: String? = null,
     @SerialName("ProductName") val productName: String? = null,
-    @SerialName("Id") val id: String? = null
+    @SerialName("Id") val id: String? = null,
+    @SerialName("aiostreams") val aioStreams: JsonElement? = null
 )
 
 @Serializable
