@@ -26,7 +26,8 @@ data class AdvancedSettingsUiState(
     val playerStatsHudEnabled: Boolean = false,
     val rgb565Enabled: Boolean = true,
     val sentryEnabled: Boolean = true,
-    val animationsEnabled: Boolean = true
+    val animationsEnabled: Boolean = true,
+    val gpuOffscreenCompositingEnabled: Boolean = false
 )
 
 sealed class AdvancedSettingsEvent {
@@ -38,6 +39,7 @@ sealed class AdvancedSettingsEvent {
     data class SetRgb565Enabled(val enabled: Boolean) : AdvancedSettingsEvent()
     data class SetSentryEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
     data class SetAnimationsEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
+    data class SetGpuOffscreenCompositingEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
 }
 
 @HiltViewModel
@@ -90,6 +92,11 @@ class AdvancedSettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(animationsEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.gpuOffscreenCompositingEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(gpuOffscreenCompositingEnabled = enabled) }
+            }
+        }
     }
 
     fun onEvent(event: AdvancedSettingsEvent) {
@@ -133,6 +140,11 @@ class AdvancedSettingsViewModel @Inject constructor(
             is AdvancedSettingsEvent.SetAnimationsEnabled -> {
                 viewModelScope.launch {
                     themeDataStore.setAnimationsEnabled(event.enabled)
+                }
+            }
+            is AdvancedSettingsEvent.SetGpuOffscreenCompositingEnabled -> {
+                viewModelScope.launch {
+                    layoutPreferenceDataStore.setGpuOffscreenCompositingEnabled(event.enabled)
                 }
             }
         }

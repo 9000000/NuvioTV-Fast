@@ -605,7 +605,10 @@ private fun EpisodesListView(
                         .fillMaxHeight()
                         .focusProperties { up = seasonTabFocusRequester }
                 ) {
-                    itemsIndexed(uiState.episodes) { index, episode ->
+                    itemsIndexed(
+                        items = uiState.episodes,
+                        key = { index, episode -> "${episode.season}_${episode.episode}_${episode.id ?: index}" }
+                    ) { index, episode ->
                         val isCurrent = episode.season == uiState.currentSeason &&
                             episode.episode == uiState.currentEpisode
                         val requestInitialFocus = when {

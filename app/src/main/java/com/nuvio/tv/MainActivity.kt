@@ -180,6 +180,7 @@ import com.nuvio.tv.ui.components.BrandWordmark
 import com.nuvio.tv.ui.components.LocalCardDepthStyle
 import com.nuvio.tv.ui.components.LocalLandscapePosterMode
 import com.nuvio.tv.ui.components.LocalAlwaysBackdropWithLogo
+import com.nuvio.tv.ui.components.LocalGpuOffscreenCompositing
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
@@ -261,7 +262,8 @@ private data class MainUiPrefs(
     val animationsEnabled: Boolean = true,
     val posterBorderStyle: PosterBorderStyle = PosterBorderStyle.Default,
     val landscapePosterMode: Boolean = false,
-    val alwaysBackdropWithLogo: Boolean = false
+    val alwaysBackdropWithLogo: Boolean = false,
+    val gpuOffscreenCompositingEnabled: Boolean = false
 )
 
 private data class ExtendedVisualPrefs(
@@ -269,7 +271,8 @@ private data class ExtendedVisualPrefs(
     val animationsEnabled: Boolean,
     val posterBorderStyle: PosterBorderStyle,
     val landscapePosterMode: Boolean,
-    val alwaysBackdropWithLogo: Boolean
+    val alwaysBackdropWithLogo: Boolean,
+    val gpuOffscreenCompositingEnabled: Boolean
 )
 
 @AndroidEntryPoint
@@ -574,8 +577,9 @@ open class MainActivity : ComponentActivity() {
                 }
                 val landscapePrefsFlow = combine(
                     layoutPreferenceDataStore.modernLandscapePostersEnabled,
-                    layoutPreferenceDataStore.alwaysShowLandscapeClearlogo
-                ) { landscape, backdropWithLogo -> landscape to backdropWithLogo }
+                    layoutPreferenceDataStore.alwaysShowLandscapeClearlogo,
+                    layoutPreferenceDataStore.gpuOffscreenCompositingEnabled
+                ) { landscape, backdropWithLogo, gpuOffscreen -> Triple(landscape, backdropWithLogo, gpuOffscreen) }
 
                 combine(
                     themeAndExperienceFlow,
@@ -586,13 +590,14 @@ open class MainActivity : ComponentActivity() {
                         themeDataStore.animationsEnabled,
                         themeDataStore.posterBorderStyle,
                         landscapePrefsFlow
-                    ) { cardDepthStyle, animationsEnabled, posterBorderStyle, (landscapePosterMode, alwaysBackdropWithLogo) ->
+                    ) { cardDepthStyle, animationsEnabled, posterBorderStyle, (landscapePosterMode, alwaysBackdropWithLogo, gpuOffscreen) ->
                         ExtendedVisualPrefs(
                             cardDepthStyle = cardDepthStyle,
                             animationsEnabled = animationsEnabled,
                             posterBorderStyle = posterBorderStyle,
                             landscapePosterMode = landscapePosterMode,
-                            alwaysBackdropWithLogo = alwaysBackdropWithLogo
+                            alwaysBackdropWithLogo = alwaysBackdropWithLogo,
+                            gpuOffscreenCompositingEnabled = gpuOffscreen
                         )
                     }
                 ) { themePrefs, layoutPrefs, extraPrefs, visualPrefs ->
@@ -611,7 +616,8 @@ open class MainActivity : ComponentActivity() {
                         cardDepthStyle = visualPrefs.cardDepthStyle,
                         posterBorderStyle = visualPrefs.posterBorderStyle,
                         landscapePosterMode = visualPrefs.landscapePosterMode,
-                        alwaysBackdropWithLogo = visualPrefs.alwaysBackdropWithLogo
+                        alwaysBackdropWithLogo = visualPrefs.alwaysBackdropWithLogo,
+                        gpuOffscreenCompositingEnabled = visualPrefs.gpuOffscreenCompositingEnabled
                     )
                 }
             }
@@ -737,7 +743,8 @@ open class MainActivity : ComponentActivity() {
                     com.nuvio.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool,
                     LocalSplashBackground provides splashBackground,
                     LocalStartupLoadingState provides startupLoadingState,
-                    LocalStartupSplashEnabled provides startupSplashEnabled
+                    LocalStartupSplashEnabled provides startupSplashEnabled,
+                    LocalGpuOffscreenCompositing provides mainUiPrefs.gpuOffscreenCompositingEnabled
                 ) {
                 val transparentPlayerBackdrop = PlayerWindowBackdrop.isTransparentRequested
                 Surface(
@@ -1946,13 +1953,12 @@ private fun ModernSidebarScaffold(
     val sidebarSurfaceAlpha by animateFloatAsState(
         targetValue = if (isSidebarExpanded) 1f else 0f,
         animationSpec = if (NuvioTheme.animationsEnabled) {
-            tween(durationMillis = if (isSidebarExpanded) 280 else 200, easing = animationEasing)
+            tween(durationMillis = if (isSidebarExpanded) 220 else 180, easing = animationEasing)
         } else {
             tween(durationMillis = 0)
         },
         label = "sidebarSurfaceAlpha"
     )
-    val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled
     val sidebarTransition = updateTransition(
         targetState = isSidebarExpanded,
         label = "sidebarTransition"
@@ -1977,6 +1983,7 @@ private fun ModernSidebarScaffold(
     val sidebarBlocksContentKeys by remember { derivedStateOf { sidebarExpandProgress > 0.2f } }
     val sidebarShowExpandedPanel by remember { derivedStateOf { sidebarExpandProgress > 0.01f } }
     val sidebarShowCollapsedPill by remember { derivedStateOf { sidebarExpandProgress < 0.98f } }
+    val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled && (isSidebarExpanded || sidebarShowExpandedPanel)
 
     val sidebarIconScale = 1f
     val sidebarBloomScale = 1f

@@ -613,6 +613,8 @@
     <string name="advanced_section_dv_diagnostics" translatable="false">DV Diagnostics</string>
     <string name="advanced_fast_horizontal_navigation">Điều hướng ngang nhanh</string>
     <string name="advanced_fast_horizontal_navigation_subtitle">Tăng tốc độ lặp của phím điều hướng trong các hàng nhưng vẫn bật tính năng giới hạn tốc độ lặp.</string>
+    <string name="advanced_gpu_offscreen_compositing">Bộ đệm GPU Offscreen</string>
+    <string name="advanced_gpu_offscreen_compositing_subtitle">Bật bộ đệm texture GPU ngoài màn hình cho các lớp phủ. Tắt (khuyên dùng) để giao diện mượt mà 60 FPS nhất trên TV.</string>
     <string name="advanced_nuvio_performance_mode">Bộ nhớ Tầng thấp ExoPlayer</string>
     <string name="advanced_nuvio_performance_mode_subtitle">Bật bộ cấp phát hệ thống hiệu năng cao, bộ nhớ ngoài vùng nhớ đống và tối ưu mạng để phát lại mượt hơn</string>
     <string name="buffer_device_ram_info">RAM thiết bị: %s</string>

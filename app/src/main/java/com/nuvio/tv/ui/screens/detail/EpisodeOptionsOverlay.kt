@@ -245,6 +245,7 @@ internal fun EpisodeOptionsOverlay(
     }
     val initialActionIndex = actions.indexOfFirst { it.enabled }.coerceAtLeast(0)
     var acceptsSelectKey by remember { mutableStateOf(false) }
+    val forceOffscreen = com.nuvio.tv.ui.components.LocalGpuOffscreenCompositing.current
 
     LaunchedEffect(Unit) {
         primaryFocusRequester.requestFocus()
@@ -286,7 +287,9 @@ internal fun EpisodeOptionsOverlay(
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+                        .graphicsLayer {
+                            if (forceOffscreen) compositingStrategy = CompositingStrategy.Offscreen
+                        },
                     contentScale = ContentScale.Crop,
                     alignment = Alignment.Center,
                     filterQuality = FilterQuality.High
@@ -296,7 +299,9 @@ internal fun EpisodeOptionsOverlay(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .graphicsLayer {
+                            if (forceOffscreen) compositingStrategy = CompositingStrategy.Offscreen
+                        }
                         .drawWithCache {
                             val brush = Brush.horizontalGradient(
                                 colorStops = arrayOf(

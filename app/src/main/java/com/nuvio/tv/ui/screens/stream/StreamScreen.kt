@@ -577,6 +577,7 @@ private fun StreamBackdrop(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val forceOffscreen = com.nuvio.tv.ui.components.LocalGpuOffscreenCompositing.current
     val backgroundColor = NuvioTheme.colors.Background
     val backdropModel = remember(context, backdrop) {
         backdrop?.let { image ->
@@ -594,7 +595,9 @@ private fun StreamBackdrop(
 
     Box(modifier = modifier
         .fillMaxSize()
-        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .graphicsLayer {
+            if (forceOffscreen) compositingStrategy = CompositingStrategy.Offscreen
+        }
     ) {
         // Backdrop image
         if (backdropModel != null) {
@@ -1134,10 +1137,13 @@ private fun StreamsList(
         val requestedKey = firstStreamKey
         if (firstStreamFocusRequestId <= 0 || requestedKey == null) return@LaunchedEffect
         streamListState.scrollToItem(0)
-        repeat(30) {
+        repeat(4) {
             withFrameNanos { }
             if (firstCardHasFocus) return@LaunchedEffect
-            runCatching { streamFocusRequesters.getValue(requestedKey).requestFocus() }
+            val requester = streamFocusRequesters[requestedKey]
+            if (requester != null) {
+                runCatching { requester.requestFocus() }
+            }
         }
     }
 

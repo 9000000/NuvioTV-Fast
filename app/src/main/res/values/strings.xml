@@ -615,6 +615,8 @@
     <string name="advanced_section_dv_diagnostics" translatable="false">DV Diagnostics</string>
     <string name="advanced_fast_horizontal_navigation">Fast Horizontal Navigation</string>
     <string name="advanced_fast_horizontal_navigation_subtitle">Increase D-pad repeat speed in rows while keeping repeat throttling enabled.</string>
+    <string name="advanced_gpu_offscreen_compositing">Offscreen GPU Compositing</string>
+    <string name="advanced_gpu_offscreen_compositing_subtitle">Enable extra GPU offscreen render buffers for layers. Disable (recommended) for maximum 60 FPS fluidity on TV devices.</string>
     <string name="advanced_nuvio_performance_mode">ExoPlayer Native Memory</string>
     <string name="advanced_nuvio_performance_mode_subtitle">Enables high-performance native allocator, off-heap memory, and network optimizations for smoother playback</string>
     <string name="buffer_device_ram_info">Device RAM: %s</string>

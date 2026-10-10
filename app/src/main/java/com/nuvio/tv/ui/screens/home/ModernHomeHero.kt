@@ -200,10 +200,11 @@ internal fun ModernHeroGradientLayer(
     modifier: Modifier
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val forceOffscreen = com.nuvio.tv.ui.components.LocalGpuOffscreenCompositing.current
     Box(
         modifier = modifier
             .graphicsLayer {
-                compositingStrategy = CompositingStrategy.Offscreen
+                if (forceOffscreen) compositingStrategy = CompositingStrategy.Offscreen
                 alpha = if (isTrailerPlayingFullScreen()) 0f else 1f
             }
             .drawWithCache {

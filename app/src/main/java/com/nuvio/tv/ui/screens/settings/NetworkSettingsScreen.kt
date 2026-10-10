@@ -460,6 +460,18 @@ fun AdvancedSettingsContent(
                     }
                 )
                 SettingsToggleRow(
+                    title = stringResource(R.string.advanced_gpu_offscreen_compositing),
+                    subtitle = stringResource(R.string.advanced_gpu_offscreen_compositing_subtitle),
+                    checked = uiState.gpuOffscreenCompositingEnabled,
+                    onToggle = {
+                        viewModel.onEvent(
+                            AdvancedSettingsEvent.SetGpuOffscreenCompositingEnabled(
+                                !uiState.gpuOffscreenCompositingEnabled
+                            )
+                        )
+                    }
+                )
+                SettingsToggleRow(
                     title = stringResource(R.string.advanced_rgb565),
                     subtitle = stringResource(R.string.advanced_rgb565_subtitle),
                     checked = uiState.rgb565Enabled,

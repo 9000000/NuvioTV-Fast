@@ -84,6 +84,7 @@ fun GridContentCard(
     val cardDepthStyle = LocalCardDepthStyle.current
     val density = LocalDensity.current
     val globalLandscape = LocalLandscapePosterMode.current
+    val forceOffscreen = LocalGpuOffscreenCompositing.current
     val effectivePosterShape = if (globalLandscape) PosterShape.LANDSCAPE else item.posterShape
 
     // Derive card height from item's posterShape aspect ratio while keeping width from posterCardStyle.
@@ -324,9 +325,7 @@ fun GridContentCard(
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .height(cardHeight * 0.45f)
-                            .graphicsLayer {
-                                compositingStrategy = CompositingStrategy.Offscreen
-                            }
+                            .nuvioOffscreenStrategy(forceOffscreen)
                             .drawWithCache {
                                 val gradient = Brush.verticalGradient(
                                     listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f))

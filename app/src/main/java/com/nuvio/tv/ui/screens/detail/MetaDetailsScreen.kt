@@ -3256,8 +3256,9 @@ private fun BackdropLayer(
             AsyncImage(
                 model = heroBackdropRequest,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                alpha = backdropAlphaState.value,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = backdropAlphaState.value },
                 contentScale = ContentScale.Crop,
                 alignment = Alignment.TopEnd
             )
@@ -3265,8 +3266,9 @@ private fun BackdropLayer(
         AsyncImage(
             model = backdropRequest,
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            alpha = backdropAlphaState.value,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = backdropAlphaState.value },
             onSuccess = { showHeroBackdropUnderlay = false },
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopEnd

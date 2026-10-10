@@ -20,12 +20,43 @@ class BlurTransformation(
     override suspend fun transform(input: Bitmap, size: Size): Bitmap {
         val r = radius.coerceIn(1, 250)
 
-        // Work on a mutable copy
-        val bitmap = input.copy(Bitmap.Config.ARGB_8888, true)
-            ?: return input
+        // Downscale image by 2x or 4x before blurring for massive memory & CPU savings.
+        // A blurred background does not require high pixel resolution; scaling down produces
+        // an even smoother bokeh effect while eliminating multi-megabyte IntArray allocations.
+        val scale = when {
+            input.width > 800 || input.height > 800 -> 4
+            input.width > 300 || input.height > 300 -> 2
+            else -> 1
+        }
 
-        stackBlur(bitmap, r)
-        return bitmap
+        val scaledWidth = (input.width / scale).coerceAtLeast(1)
+        val scaledHeight = (input.height / scale).coerceAtLeast(1)
+        val scaledRadius = (r / scale).coerceIn(1, 250)
+
+        val scaledBitmap = if (scale > 1) {
+            Bitmap.createScaledBitmap(input, scaledWidth, scaledHeight, true)
+        } else {
+            input.copy(Bitmap.Config.ARGB_8888, true) ?: return input
+        }
+
+        val mutableBitmap = if (scaledBitmap.isMutable) scaledBitmap else {
+            scaledBitmap.copy(Bitmap.Config.ARGB_8888, true) ?: scaledBitmap
+        }
+
+        stackBlur(mutableBitmap, scaledRadius)
+
+        return if (scale > 1) {
+            val result = Bitmap.createScaledBitmap(mutableBitmap, input.width, input.height, true)
+            if (mutableBitmap != scaledBitmap && !mutableBitmap.isRecycled) {
+                mutableBitmap.recycle()
+            }
+            if (!scaledBitmap.isRecycled && scaledBitmap != input) {
+                scaledBitmap.recycle()
+            }
+            result
+        } else {
+            mutableBitmap
+        }
     }
 
     /**

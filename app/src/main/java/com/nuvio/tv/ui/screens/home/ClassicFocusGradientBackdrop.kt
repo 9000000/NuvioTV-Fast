@@ -130,6 +130,7 @@ internal fun ClassicFocusGradientBackdrop(
         (color1 == Color.Transparent || alpha1 < 0.005f)
     ) return
 
+    val forceOffscreen = com.nuvio.tv.ui.components.LocalGpuOffscreenCompositing.current
     Box(modifier = modifier.fillMaxSize()) {
         if (color0 != Color.Transparent && alpha0 >= 0.005f) {
             Canvas(
@@ -137,7 +138,7 @@ internal fun ClassicFocusGradientBackdrop(
                     .fillMaxSize()
                     .graphicsLayer {
                         alpha = alpha0
-                        compositingStrategy = CompositingStrategy.Offscreen
+                        if (forceOffscreen) compositingStrategy = CompositingStrategy.Offscreen
                     }
             ) {
                 drawFocusGradient(color0)
@@ -149,7 +150,7 @@ internal fun ClassicFocusGradientBackdrop(
                     .fillMaxSize()
                     .graphicsLayer {
                         alpha = alpha1
-                        compositingStrategy = CompositingStrategy.Offscreen
+                        if (forceOffscreen) compositingStrategy = CompositingStrategy.Offscreen
                     }
             ) {
                 drawFocusGradient(color1)

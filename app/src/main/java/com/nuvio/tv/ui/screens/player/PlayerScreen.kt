@@ -3673,7 +3673,10 @@ private fun SpeedSelectionDialog(
                     verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm),
                     contentPadding = PaddingValues(top = NuvioTheme.spacing.xs)
                 ) {
-                    itemsIndexed(PLAYBACK_SPEEDS) { index, speed ->
+                    itemsIndexed(
+                        items = PLAYBACK_SPEEDS,
+                        key = { _, speed -> speed }
+                    ) { index, speed ->
                         SpeedItem(
                             modifier = Modifier.focusRequester(speedFocusRequesters[index]),
                             speed = speed,

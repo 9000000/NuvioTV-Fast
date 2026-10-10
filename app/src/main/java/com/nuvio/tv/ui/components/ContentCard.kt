@@ -140,6 +140,7 @@ fun ContentCard(
     var isBackdropExpanded by remember { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val forceOffscreen = LocalGpuOffscreenCompositing.current
 
     LaunchedEffect(isBackdropExpanded) {
         onBackdropExpandedChanged?.invoke(isBackdropExpanded)
@@ -502,9 +503,7 @@ fun ContentCard(
                             .align(Alignment.BottomStart)
                             .fillMaxWidth()
                             .height(96.dp)
-                            .graphicsLayer {
-                                compositingStrategy = CompositingStrategy.Offscreen
-                            }
+                            .nuvioOffscreenStrategy(forceOffscreen)
                             .drawWithCache {
                                 val gradient = Brush.verticalGradient(
                                     colors = listOf(
@@ -558,7 +557,7 @@ fun ContentCard(
                         modifier = Modifier
                             .fillMaxSize()
                             .zIndex(1.5f)
-                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                            .nuvioOffscreenStrategy(forceOffscreen)
                             .drawWithCache {
                                 val gradient = Brush.verticalGradient(
                                     colorStops = arrayOf(
@@ -588,7 +587,7 @@ fun ContentCard(
                         modifier = Modifier
                             .fillMaxSize()
                             .zIndex(1.5f)
-                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                            .nuvioOffscreenStrategy(forceOffscreen)
                             .drawWithCache {
                                 val gradient = Brush.verticalGradient(
                                     colorStops = arrayOf(

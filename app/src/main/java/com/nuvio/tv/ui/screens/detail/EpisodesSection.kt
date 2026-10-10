@@ -809,6 +809,7 @@ private fun EpisodeCard(
         episode.episode?.let { number -> "$prefix $number" } ?: prefix
     }
 
+    val forceOffscreen = com.nuvio.tv.ui.components.LocalGpuOffscreenCompositing.current
     val primaryColor = NuvioTheme.colors.Secondary
     val textPrimary = NuvioTheme.colors.TextPrimary
     val focusRingBorder = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs)
@@ -904,20 +905,14 @@ private fun EpisodeCard(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        compositingStrategy =
-                            CompositingStrategy.Offscreen
+                        if (forceOffscreen) {
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }
                     }
                     .clipToBounds()
 
                     //Gradient for text legibility
-                    .drawWithContent {
-                        drawContent()
-
-                        // Floor-fade text-protection scrim across the whole card: fully transparent
-                        // over the artwork up top, easing in gradually (no abrupt onset, which banded
-                        // into a visible "line" over smooth/blurred thumbnails) and ramping to ~95%
-                        // black in the bottom strip where the text sits. The scrim — not the shadow —
-                        // carries legibility (WCAG 3:1 title / ~4.5:1 description).
+                    .drawWithCache {
                         val localBrush = Brush.verticalGradient(
                             colorStops = arrayOf(
                                 0.0f to Color.Transparent,
@@ -931,10 +926,13 @@ private fun EpisodeCard(
                             startY = 0f,
                             endY = size.height
                         )
-                        drawRect(
-                            brush = localBrush,
-                            alpha = if (isFocusedState.value) 1f else 0.94f
-                        )
+                        onDrawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = localBrush,
+                                alpha = if (isFocusedState.value) 1f else 0.94f
+                            )
+                        }
                     },
                 contentScale = ContentScale.Crop,
                 placeholder = bgPainter,
