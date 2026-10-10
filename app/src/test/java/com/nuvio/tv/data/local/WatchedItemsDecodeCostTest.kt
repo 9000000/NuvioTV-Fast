@@ -122,7 +122,7 @@ class WatchedItemsDecodeCostTest {
         const val EPISODES_PER_SHOW = 20
         // Roughly the number of live watched-list collectors while the player is open.
         const val COLLECTORS = 10
-        const val QUIET_WINDOW_MS = 2_000L
+        const val QUIET_WINDOW_MS = 1_000L
         const val AWAIT_TIMEOUT_MS = 30_000L
     }
 }
