@@ -5,6 +5,8 @@ import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.mediaserver.FakeServerProvider
 import com.nuvio.tv.data.mediaserver.MemoryServerPersistence
 import com.nuvio.tv.data.mediaserver.ServerConnection
+import com.nuvio.tv.data.mediaserver.ServerLibrary
+import com.nuvio.tv.data.mediaserver.ServerMediaKind
 import com.nuvio.tv.data.mediaserver.ServerRepository
 import com.nuvio.tv.data.mediaserver.SyncedLibrary
 import com.nuvio.tv.data.mediaserver.SyncedServer
@@ -78,6 +80,20 @@ class MediaServerSyncServiceTest {
         service.syncFromRemote(1).getOrThrow()
 
         assertTrue(repository.uiState.value.connections.single().importWatchState)
+    }
+
+    @Test
+    fun syncsMixedLibraries() = runBlocking {
+        val mixed = ServerLibrary("90", "Everything", ServerMediaKind.MIXED)
+        repository.store(connection("local-a", server = "s1").copy(libraries = listOf(mixed)), token = "token-a")
+
+        service.syncFromRemote(1).getOrThrow()
+        assertEquals(listOf(SyncedLibrary("90", "Everything", "mixed", true)), remote!!.single().libraries)
+
+        remote = listOf(synced("remote-a", server = "s1", token = "token-a").copy(libraries = listOf(SyncedLibrary("90", "Everything", "mixed", false))))
+        service.syncFromRemote(1).getOrThrow()
+
+        assertEquals(listOf(mixed.copy(selected = false)), repository.uiState.value.connections.single().libraries)
     }
 
     @Test

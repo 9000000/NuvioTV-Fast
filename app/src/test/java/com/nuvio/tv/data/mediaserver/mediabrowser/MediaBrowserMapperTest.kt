@@ -66,6 +66,20 @@ class MediaBrowserMapperTest {
     }
 
     @Test
+    fun skipsVersionsThatCannotPlay() {
+        val withNotices = movie.copy(
+            mediaSources = movie.mediaSources + json.decodeFromString(
+                MediaSource.serializer(),
+                """{"Id": "notice", "Type": "Placeholder", "Name": "Torrentio: rate limited"}"""
+            )
+        )
+        assertEquals(listOf("ms1", "ms2"), mapper.candidates(withNotices).map { it.target.mediaSourceId })
+
+        val onlyNotice = movie.copy(mediaSources = withNotices.mediaSources.takeLast(1))
+        assertTrue(mapper.candidates(onlyNotice).isEmpty())
+    }
+
+    @Test
     fun missingItemsHaveNoCandidates() {
         assertTrue(mapper.candidates(movie.copy(locationType = "Virtual")).isEmpty())
     }
@@ -89,6 +103,9 @@ class MediaBrowserMapperTest {
         assertEquals("collection", mapper.preview(movie.copy(type = "Folder"))!!.apiType)
         assertEquals(ServerMediaKind.COLLECTION, libraryKind("boxsets"))
         assertNull(libraryKind("music"))
+        assertEquals(ServerMediaKind.MIXED, libraryKind(null, "CollectionFolder"))
+        assertEquals(ServerMediaKind.MIXED, libraryKind("mixed", "CollectionFolder"))
+        assertNull(libraryKind(null, "UserView"))
     }
 
     @Test

@@ -11,7 +11,6 @@ import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.enabledAddons
-import com.nuvio.tv.domain.model.supportsExtra
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -52,8 +51,15 @@ class ServerCatalog @Inject constructor(
         .distinctUntilChanged()
 
     val searchAddons: Flow<List<Addon>> = addons.map { addons ->
-        addons.map { addon -> addon.copy(catalogs = addon.catalogs.filter { it.supportsExtra("search") }) }
-            .filter { it.catalogs.isNotEmpty() }
+        addons.map { addon ->
+            addon.copy(
+                catalogs = addon.catalogs.filter {
+                    it.id != RESUME_ID &&
+                        it.apiType != ServerMediaKind.COLLECTION.contentType &&
+                        it.apiType != ServerMediaKind.MIXED.contentType
+                }
+            )
+        }.filter { it.catalogs.isNotEmpty() }
     }
 
     fun libraries(): List<ServerLibraryRef> =
@@ -87,7 +93,7 @@ class ServerCatalog @Inject constructor(
                     provider.collectionPage(session, catalogId.removePrefix(COLLECTION_PREFIX), skip, PAGE_SIZE)
                 }
             }
-            query != null -> searchPage(connection, catalogId, query, skip)
+            catalogId.startsWith(SEARCH_PREFIX) -> searchPage(connection, catalogId.removePrefix(SEARCH_PREFIX), query, skip)
             else -> {
                 val library = connection.libraries.firstOrNull { it.id == catalogId }
                     ?: throw ServerException(ServerFailure.NOT_FOUND)
@@ -173,16 +179,22 @@ class ServerCatalog @Inject constructor(
                 rawType = library.kind.contentType,
                 id = library.id,
                 name = "${connection.name} · ${library.name}",
-                extra = buildList {
-                    add(CatalogExtra(name = "skip"))
-                    if (library.kind != ServerMediaKind.COLLECTION && provider.supports(ServerCapability.SEARCH)) {
-                        add(CatalogExtra(name = "search"))
-                    }
-                },
+                extra = listOf(CatalogExtra(name = "skip")),
                 showInHome = true,
                 hasExplicitShowInHome = true
             )
         }
+        val searches = SEARCH_KINDS
+            .filter { kind -> provider.supports(ServerCapability.SEARCH) && libraries.any { it.holds(kind) } }
+            .map { kind ->
+                CatalogDescriptor(
+                    type = kind.domainType(),
+                    rawType = kind.contentType,
+                    id = SEARCH_PREFIX + kind.contentType,
+                    name = "${connection.name} · ${context.getString(kind.searchLabel())}",
+                    extra = listOf(CatalogExtra(name = "search", isRequired = true))
+                )
+            }
         val label = repository.sourceLabel(connection)
         return Addon(
             id = addonId(connection.id),
@@ -192,7 +204,7 @@ class ServerCatalog @Inject constructor(
             description = null,
             logo = null,
             baseUrl = baseUrl(connection.id),
-            catalogs = listOfNotNull(resume) + catalogs,
+            catalogs = listOfNotNull(resume) + catalogs + searches,
             types = listOf(ContentType.MOVIE, ContentType.SERIES),
             resources = listOf(AddonResource(name = "catalog", types = emptyList(), idPrefixes = null))
         )
@@ -206,16 +218,20 @@ class ServerCatalog @Inject constructor(
         return Page(items, null)
     }
 
-    private suspend fun searchPage(connection: ServerConnection, libraryId: String, query: String, skip: Int): Page {
-        if (skip > 0) return Page(emptyList(), null)
-        val library = connection.libraries.firstOrNull { it.id == libraryId } ?: throw ServerException(ServerFailure.NOT_FOUND)
+    private suspend fun searchPage(connection: ServerConnection, contentType: String, query: String?, skip: Int): Page {
+        val kind = ServerMediaKind.fromContentType(contentType)
+        if (query == null || kind == null || skip > 0) return Page(emptyList(), null)
+        val libraries = connection.selectedLibraries(kind)
         val presenter = presenter(connection)
         val items = repository.call(connection.id) { provider, session ->
             if (!provider.supports(ServerCapability.SEARCH)) throw ServerException(ServerFailure.UNSUPPORTED)
-            provider.search(session, library, query, SEARCH_LIMIT)
+            provider.search(session, kind, libraries, query, SEARCH_LIMIT)
         }.map(presenter)
         return Page(items, null)
     }
+
+    private fun ServerMediaKind.searchLabel(): Int =
+        if (this == ServerMediaKind.SERIES) R.string.type_series_plural else R.string.type_movies
 
     private suspend fun pageOf(
         connection: ServerConnection,
@@ -242,6 +258,8 @@ class ServerCatalog @Inject constructor(
         private const val DETAILS_BUFFER = 16
         private const val RESUME_ID = "resume"
         private const val COLLECTION_PREFIX = "collection:"
+        private const val SEARCH_PREFIX = "search."
+        private val SEARCH_KINDS = listOf(ServerMediaKind.MOVIE, ServerMediaKind.SERIES)
         private const val BASE_URL_PREFIX = "nuvio-server://"
         private const val ADDON_ID_PREFIX = "server."
 

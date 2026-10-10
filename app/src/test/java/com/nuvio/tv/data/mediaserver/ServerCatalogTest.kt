@@ -7,6 +7,7 @@ import com.nuvio.tv.domain.model.AddonResource
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.domain.model.supportsExtra
 import com.nuvio.tv.domain.repository.AddonRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -72,9 +73,11 @@ class ServerCatalogTest {
         assertEquals(ServerCatalog.addonId(connection.id), addon.id)
         assertEquals("Fake · Box", addon.displayName)
         assertTrue(ServerCatalog.isServerAddon(addon.baseUrl))
-        assertEquals(listOf("resume", "10"), addon.catalogs.map { it.id })
-        assertEquals("Box · Movies", addon.catalogs.last().name)
-        assertEquals(listOf("10"), catalog.searchAddons.first().single().catalogs.map { it.id })
+        assertEquals(listOf("resume", "10", "search.movie"), addon.catalogs.map { it.id })
+        assertEquals("Box · Movies", addon.catalogs.single { it.id == "10" }.name)
+        assertEquals(listOf("10", "search.movie"), catalog.searchAddons.first().single().catalogs.map { it.id })
+        assertEquals(listOf("search.movie"), addon.catalogs.filter { it.supportsExtra("search") }.map { it.id })
+        assertTrue(addon.catalogs.last().extra.single().isRequired)
     }
 
     @Test
@@ -97,15 +100,30 @@ class ServerCatalogTest {
     }
 
     @Test
-    fun searchesAndResumesThroughTheLibraryRows() = runTest {
-        val (catalog, _, connection) = catalog()
+    fun searchesEachTypeOnceAndResumes() = runTest {
+        val provider = FakeServerProvider()
+        val (catalog, _, connection) = catalog(provider)
 
-        val search = catalog.page(connection, FakeServerProvider.MOVIE_LIBRARY.id, skip = 0, extra = mapOf("search" to "item"))
+        val search = catalog.page(connection, "search.series", skip = 0, extra = mapOf("search" to "item"))
         assertEquals(listOf(ServerItemRef(connection.id, "7").encode()), search.items.map { it.id })
         assertFalse(search.hasMore)
+        assertEquals(listOf(ServerMediaKind.SERIES to listOf(FakeServerProvider.SERIES_LIBRARY.id)), provider.searches)
 
         val resume = catalog.page(connection, "resume", skip = 0)
         assertEquals(listOf(ServerItemRef(connection.id, "3").encode()), resume.items.map { it.id })
+    }
+
+    @Test
+    fun mixedLibrariesServeBothSearches() = runTest {
+        val provider = FakeServerProvider()
+        val mixed = ServerLibrary("90", "Everything", ServerMediaKind.MIXED)
+        val (catalog, _, connection) = catalog(provider, libraries = listOf(mixed))
+
+        val addon = catalog.addons.first().single()
+        assertEquals(listOf("resume", "90", "search.movie", "search.series"), addon.catalogs.map { it.id })
+        assertEquals(listOf("search.movie", "search.series"), catalog.searchAddons.first().single().catalogs.map { it.id })
+        catalog.page(connection, "search.movie", skip = 0, extra = mapOf("search" to "item"))
+        assertEquals(listOf(ServerMediaKind.MOVIE to listOf("90")), provider.searches)
     }
 
     @Test

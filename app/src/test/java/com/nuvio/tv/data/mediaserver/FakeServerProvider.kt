@@ -26,6 +26,7 @@ internal class FakeServerProvider(
     val episodes = mutableMapOf<Pair<Int, Int>, ServerEpisode>()
     val reported = mutableListOf<ServerPlaybackEventType>()
     val playbackRequests = mutableListOf<ServerPlaybackRequest>()
+    val searches = mutableListOf<Pair<ServerMediaKind, List<String>>>()
     val playedChanges = mutableListOf<Pair<String, Boolean>>()
     val failingPlayed = mutableSetOf<String>()
     val failingLibraries = mutableSetOf<String>()
@@ -56,10 +57,14 @@ internal class FakeServerProvider(
 
     override suspend fun search(
         session: ServerSession,
-        library: ServerLibrary,
+        kind: ServerMediaKind,
+        libraries: List<ServerLibrary>,
         query: String,
         limit: Int
-    ): List<ServerTitle> = listOf(title(session, "7"))
+    ): List<ServerTitle> {
+        searches += kind to libraries.map { it.id }
+        return listOf(title(session, "7"))
+    }
 
     override suspend fun resumeItems(session: ServerSession, limit: Int): List<ServerTitle> = listOf(title(session, "3"))
 
