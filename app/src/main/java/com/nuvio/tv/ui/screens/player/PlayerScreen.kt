@@ -340,9 +340,10 @@ fun PlayerScreen(
             postPlayRecommendationState.recommendation == null
         ) {
             viewModel.onEvent(PlayerEvent.OnDismissNextEpisodeCard)
-            // Transfer focus to skip button if it's still visible
             if (skipButtonActuallyVisible) {
                 runCatching { skipIntroFocusRequester.requestFocus() }
+            } else {
+                runCatching { containerFocusRequester.requestFocus() }
             }
         } else if (skipButtonActuallyVisible && !uiState.showControls) {
             viewModel.onEvent(PlayerEvent.OnDismissSkipIntro)
