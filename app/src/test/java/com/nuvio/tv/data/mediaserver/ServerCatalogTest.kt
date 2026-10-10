@@ -114,6 +114,19 @@ class ServerCatalogTest {
     }
 
     @Test
+    fun mixedLibrariesServeBothSearches() = runTest {
+        val provider = FakeServerProvider()
+        val mixed = ServerLibrary("90", "Everything", ServerMediaKind.MIXED)
+        val (catalog, _, connection) = catalog(provider, libraries = listOf(mixed))
+
+        val addon = catalog.addons.first().single()
+        assertEquals(listOf("resume", "90", "search.movie", "search.series"), addon.catalogs.map { it.id })
+        assertEquals(listOf("search.movie", "search.series"), catalog.searchAddons.first().single().catalogs.map { it.id })
+        catalog.page(connection, "search.movie", skip = 0, extra = mapOf("search" to "item"))
+        assertEquals(listOf(ServerMediaKind.MOVIE to listOf("90")), provider.searches)
+    }
+
+    @Test
     fun collectionCardsOpenTheirContentsAsACatalog() = runTest {
         val (catalog, _, connection) = catalog(
             libraries = listOf(FakeServerProvider.MOVIE_LIBRARY, FakeServerProvider.COLLECTION_LIBRARY)

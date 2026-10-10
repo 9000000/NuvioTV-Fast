@@ -109,7 +109,7 @@ internal abstract class MediaBrowserProvider(
         get(session, viewsEndpoint(session.userId), ItemsResult.serializer())
             .items
             .mapNotNull { view ->
-                val kind = libraryKind(view.collectionType) ?: return@mapNotNull null
+                val kind = libraryKind(view.collectionType, view.type) ?: return@mapNotNull null
                 ServerLibrary(id = view.id, name = view.name.orEmpty(), kind = kind)
             }
 
@@ -239,10 +239,13 @@ internal abstract class MediaBrowserProvider(
                 "enableImageTypes" to "Primary,Backdrop,Logo,Thumb"
             )
         )
-        val allowed = session.connection.selectedLibraries.map { it.kind }.toSet()
+        val libraries = session.connection.selectedLibraries
         return result.items
             .mapNotNull(mapper(session)::resumeTitle)
-            .filter { title -> allowed.any { it.contentType == title.preview.apiType } }
+            .filter { title ->
+                val kind = ServerMediaKind.fromContentType(title.preview.apiType)
+                kind != null && libraries.any { it.holds(kind) }
+            }
             .distinctBy { it.preview.id }
     }
 
@@ -545,6 +548,7 @@ internal abstract class MediaBrowserProvider(
         ServerMediaKind.MOVIE -> "Movie"
         ServerMediaKind.SERIES -> "Series"
         ServerMediaKind.COLLECTION -> "BoxSet"
+        ServerMediaKind.MIXED -> "Movie,Series"
     }
 
     private fun deviceProfile(capabilities: ServerPlayerCapabilities) = DeviceProfile(

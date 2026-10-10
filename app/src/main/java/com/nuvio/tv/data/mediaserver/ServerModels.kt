@@ -11,7 +11,8 @@ import kotlinx.serialization.Serializable
 enum class ServerMediaKind(val contentType: String) {
     MOVIE("movie"),
     SERIES("series"),
-    COLLECTION("collection");
+    COLLECTION("collection"),
+    MIXED("mixed");
 
     companion object {
         fun fromContentType(type: String?): ServerMediaKind? = when (type?.trim()?.lowercase()) {
@@ -25,7 +26,8 @@ enum class ServerMediaKind(val contentType: String) {
 fun ServerMediaKind.domainType(): ContentType = when (this) {
     ServerMediaKind.MOVIE -> ContentType.MOVIE
     ServerMediaKind.SERIES -> ContentType.SERIES
-    ServerMediaKind.COLLECTION -> ContentType.UNKNOWN
+    ServerMediaKind.COLLECTION,
+    ServerMediaKind.MIXED -> ContentType.UNKNOWN
 }
 
 @Serializable
@@ -34,7 +36,10 @@ data class ServerLibrary(
     val name: String,
     val kind: ServerMediaKind,
     val selected: Boolean = true
-)
+) {
+    fun holds(kind: ServerMediaKind): Boolean =
+        this.kind == kind || (this.kind == ServerMediaKind.MIXED && kind != ServerMediaKind.COLLECTION)
+}
 
 @Serializable
 data class ServerConnection(
@@ -55,7 +60,7 @@ data class ServerConnection(
         get() = libraries.filter { it.selected }
 
     fun selectedLibraries(kind: ServerMediaKind): List<ServerLibrary> =
-        selectedLibraries.filter { it.kind == kind }
+        selectedLibraries.filter { it.holds(kind) }
 }
 
 class ServerSession(

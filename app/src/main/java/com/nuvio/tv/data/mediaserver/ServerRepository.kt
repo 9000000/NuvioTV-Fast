@@ -228,7 +228,9 @@ class ServerRepository(
             usedIds += id
             updatedTokens[credentialRef] = server.token
             if (local != null && currentTokens[credentialRef] != server.token) setFailure(local.id, null)
-            server.toConnection(id, credentialRef)
+            server.toConnection(id, credentialRef).let { synced ->
+                synced.copy(libraries = synced.libraries + local?.libraries.orEmpty().filter { it.kind == ServerMediaKind.MIXED })
+            }
         }
         (current.map { it.id } - usedIds).forEach { setFailure(it, null) }
         pendingPush = false

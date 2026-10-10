@@ -54,7 +54,9 @@ class ServerCatalog @Inject constructor(
         addons.map { addon ->
             addon.copy(
                 catalogs = addon.catalogs.filter {
-                    it.id != RESUME_ID && it.apiType != ServerMediaKind.COLLECTION.contentType
+                    it.id != RESUME_ID &&
+                        it.apiType != ServerMediaKind.COLLECTION.contentType &&
+                        it.apiType != ServerMediaKind.MIXED.contentType
                 }
             )
         }.filter { it.catalogs.isNotEmpty() }
@@ -183,7 +185,7 @@ class ServerCatalog @Inject constructor(
             )
         }
         val searches = SEARCH_KINDS
-            .filter { kind -> provider.supports(ServerCapability.SEARCH) && libraries.any { it.kind == kind } }
+            .filter { kind -> provider.supports(ServerCapability.SEARCH) && libraries.any { it.holds(kind) } }
             .map { kind ->
                 CatalogDescriptor(
                     type = kind.domainType(),
@@ -219,7 +221,7 @@ class ServerCatalog @Inject constructor(
     private suspend fun searchPage(connection: ServerConnection, contentType: String, query: String?, skip: Int): Page {
         val kind = ServerMediaKind.fromContentType(contentType)
         if (query == null || kind == null || skip > 0) return Page(emptyList(), null)
-        val libraries = connection.selectedLibraries.filter { it.kind == kind }
+        val libraries = connection.selectedLibraries(kind)
         val presenter = presenter(connection)
         val items = repository.call(connection.id) { provider, session ->
             if (!provider.supports(ServerCapability.SEARCH)) throw ServerException(ServerFailure.UNSUPPORTED)

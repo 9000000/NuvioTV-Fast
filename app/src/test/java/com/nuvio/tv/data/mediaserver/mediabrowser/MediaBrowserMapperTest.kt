@@ -103,6 +103,9 @@ class MediaBrowserMapperTest {
         assertEquals("collection", mapper.preview(movie.copy(type = "Folder"))!!.apiType)
         assertEquals(ServerMediaKind.COLLECTION, libraryKind("boxsets"))
         assertNull(libraryKind("music"))
+        assertEquals(ServerMediaKind.MIXED, libraryKind(null, "CollectionFolder"))
+        assertEquals(ServerMediaKind.MIXED, libraryKind("mixed", "CollectionFolder"))
+        assertNull(libraryKind(null, "UserView"))
     }
 
     @Test
