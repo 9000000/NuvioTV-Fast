@@ -45,19 +45,22 @@ class WatchedItemsPreferences @Inject constructor(
     // decodes the full set on each change; reusing unchanged entries keeps a single write (such as
     // marking an episode watched during playback) from re-parsing the whole history in every
     // collector at once. Values depend only on the key, so a lost update only costs cache hits.
-    private val decodeCaches = ConcurrentHashMap<Int, AtomicReference<Map<String, WatchedItem>>>()
+    // Entries that fail to parse are cached as null so they are only parsed once.
+    private val decodeCaches = ConcurrentHashMap<Int, AtomicReference<Map<String, WatchedItem?>>>()
 
     private fun decodeItems(profileId: Int, raw: Set<String>): List<WatchedItem> {
         val cache = decodeCaches.getOrPut(profileId) { AtomicReference(emptyMap()) }
         val previous = cache.get()
-        val decoded = HashMap<String, WatchedItem>(raw.size * 2)
+        val decoded = HashMap<String, WatchedItem?>(raw.size * 2)
         val items = ArrayList<WatchedItem>(raw.size)
         raw.forEach { json ->
-            val item = previous[json]
-                ?: runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-                ?: return@forEach
+            val item = if (previous.containsKey(json)) {
+                previous[json]
+            } else {
+                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
+            }
             decoded[json] = item
-            items += item
+            if (item != null) items += item
         }
         cache.set(decoded)
         return items

@@ -1,5 +1,7 @@
 package com.nuvio.tv.data.local
 
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nuvio.tv.TestPreferencesStore
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.domain.model.WatchedItem
@@ -144,6 +146,29 @@ class WatchedItemsPreferencesSyncTest {
         harness.preferences.markAsWatched(item("show", 200L), 1)
 
         assertEquals(listOf(item("show", 200L)), harness.preferences.getAllItems(1))
+    }
+
+    @Test
+    fun `entries that fail to parse are skipped on every read`() = runTest {
+        val store = TestPreferencesStore()
+        val factory = mockk<ProfileDataStoreFactory>()
+        every { factory.get(any(), any()) } returns store
+        val profileManager = mockk<ProfileManager>()
+        every { profileManager.activeProfileId } returns MutableStateFlow(1)
+        val preferences = WatchedItemsPreferences(factory, profileManager)
+        val valid = item("valid", 100L)
+        preferences.markAsWatched(valid, 1)
+        store.edit { prefs ->
+            val key = stringSetPreferencesKey("watched_items")
+            prefs[key] = prefs[key].orEmpty() + "{not json"
+        }
+
+        val first = preferences.getAllItems(1)
+        val second = preferences.getAllItems(1)
+
+        assertEquals(listOf(valid), first)
+        assertEquals(listOf(valid), second)
+        assertSame(first.single(), second.single())
     }
 
     private fun harness(): Harness {
