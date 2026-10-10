@@ -83,20 +83,17 @@ class MediaServerSyncServiceTest {
     }
 
     @Test
-    fun keepsMixedLibrariesOnThisDevice() = runBlocking {
+    fun syncsMixedLibraries() = runBlocking {
         val mixed = ServerLibrary("90", "Everything", ServerMediaKind.MIXED)
-        repository.store(connection("local-a", server = "s1").copy(libraries = listOf(FakeServerProvider.MOVIE_LIBRARY, mixed)), token = "token-a")
+        repository.store(connection("local-a", server = "s1").copy(libraries = listOf(mixed)), token = "token-a")
 
         service.syncFromRemote(1).getOrThrow()
-        assertEquals(listOf("10"), remote!!.single().libraries.map { it.id })
+        assertEquals(listOf(SyncedLibrary("90", "Everything", "mixed", true)), remote!!.single().libraries)
 
-        remote = listOf(synced("remote-a", server = "s1", token = "token-a", selected = false))
+        remote = listOf(synced("remote-a", server = "s1", token = "token-a").copy(libraries = listOf(SyncedLibrary("90", "Everything", "mixed", false))))
         service.syncFromRemote(1).getOrThrow()
 
-        assertEquals(
-            listOf("10" to false, "90" to true),
-            repository.uiState.value.connections.single().libraries.map { it.id to it.selected }
-        )
+        assertEquals(listOf(mixed.copy(selected = false)), repository.uiState.value.connections.single().libraries)
     }
 
     @Test
