@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -115,6 +116,34 @@ class WatchedItemsPreferencesSyncTest {
 
         assertEquals(listOf(firstProfileItem), fixedProfileFlow.first())
         assertFalse(fixedProfileFlow.first().contains(secondProfileItem))
+    }
+
+    @Test
+    fun `unchanged entries reuse decoded items across reads`() = runTest {
+        val harness = harness()
+        val first = item("first", 100L)
+        val second = item("second", 200L)
+        harness.preferences.markAsWatched(first, 1)
+        val before = harness.preferences.getAllItems(1).single()
+
+        harness.preferences.markAsWatched(second, 1)
+        harness.preferences.advanceLastSuccessfulPushMs(300L, 1)
+        val after = harness.preferences.getAllItems(1)
+
+        assertEquals(setOf(first, second), after.toSet())
+        assertSame(before, after.single { it.contentId == "first" })
+        assertEquals(after.toSet(), harness.preferences.observeAllItems(1).first().toSet())
+    }
+
+    @Test
+    fun `decoded items follow updates to the same entry`() = runTest {
+        val harness = harness()
+        harness.preferences.markAsWatched(item("show", 100L), 1)
+        harness.preferences.getAllItems(1)
+
+        harness.preferences.markAsWatched(item("show", 200L), 1)
+
+        assertEquals(listOf(item("show", 200L)), harness.preferences.getAllItems(1))
     }
 
     private fun harness(): Harness {

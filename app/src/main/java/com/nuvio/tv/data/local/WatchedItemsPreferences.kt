@@ -12,10 +12,13 @@ import com.nuvio.tv.domain.model.WatchedMutationKey
 import com.nuvio.tv.domain.model.mutationKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,6 +40,28 @@ class WatchedItemsPreferences @Inject constructor(
     private val lastSuccessfulPushMsKey = longPreferencesKey("last_successful_watched_push_ms")
     private val deltaCursorKey = longPreferencesKey("watched_items_delta_cursor")
     private val deltaInitializedKey = booleanPreferencesKey("watched_items_delta_initialized")
+
+    // Decoded items per profile, keyed by their stored JSON. Every collector of observeAllItems
+    // decodes the full set on each change; reusing unchanged entries keeps a single write (such as
+    // marking an episode watched during playback) from re-parsing the whole history in every
+    // collector at once. Values depend only on the key, so a lost update only costs cache hits.
+    private val decodeCaches = ConcurrentHashMap<Int, AtomicReference<Map<String, WatchedItem>>>()
+
+    private fun decodeItems(profileId: Int, raw: Set<String>): List<WatchedItem> {
+        val cache = decodeCaches.getOrPut(profileId) { AtomicReference(emptyMap()) }
+        val previous = cache.get()
+        val decoded = HashMap<String, WatchedItem>(raw.size * 2)
+        val items = ArrayList<WatchedItem>(raw.size)
+        raw.forEach { json ->
+            val item = previous[json]
+                ?: runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
+                ?: return@forEach
+            decoded[json] = item
+            items += item
+        }
+        cache.set(decoded)
+        return items
+    }
 
     suspend fun getLastSuccessfulPushMs(profileId: Int = profileManager.activeProfileId.value): Long {
         val prefs = store(profileId).data.first()
@@ -78,12 +103,12 @@ class WatchedItemsPreferences @Inject constructor(
     }
 
     fun observeAllItems(profileId: Int): Flow<List<WatchedItem>> {
-        return store(profileId).data.map { preferences ->
-            val raw = preferences[watchedItemsKey] ?: emptySet()
-            raw.mapNotNull { json ->
-                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-            }
-        }.flowOn(Dispatchers.Default)
+        return store(profileId).data
+            .map { preferences -> preferences[watchedItemsKey] ?: emptySet() }
+            // The store also holds push and delta bookkeeping; skip those writes.
+            .distinctUntilChanged()
+            .map { raw -> decodeItems(profileId, raw) }
+            .flowOn(Dispatchers.Default)
     }
 
     fun isWatched(contentId: String, season: Int? = null, episode: Int? = null): Flow<Boolean> {
@@ -177,17 +202,13 @@ class WatchedItemsPreferences @Inject constructor(
 
     suspend fun getAllItems(profileId: Int = profileManager.activeProfileId.value): List<WatchedItem> {
         val preferences = store(profileId).data.first()
-        return (preferences[watchedItemsKey] ?: emptySet()).mapNotNull { raw ->
-            runCatching { gson.fromJson(raw, WatchedItem::class.java) }.getOrNull()
-        }
+        return decodeItems(profileId, preferences[watchedItemsKey] ?: emptySet())
     }
 
     suspend fun mergeRemoteItems(remoteItems: List<WatchedItem>, profileId: Int = profileManager.activeProfileId.value) {
         store(profileId).edit { preferences ->
             val current = preferences[watchedItemsKey] ?: emptySet()
-            val localItems = current.mapNotNull { json ->
-                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-            }
+            val localItems = decodeItems(profileId, current)
             val localKeys = localItems.map { Triple(it.contentId, it.season, it.episode) }.toSet()
 
             val newItems = remoteItems.filter { remote ->
@@ -217,9 +238,7 @@ class WatchedItemsPreferences @Inject constructor(
             val current = preferences[watchedItemsKey] ?: emptySet()
             beforeCount = current.size
             val itemsByKey = linkedMapOf<Triple<String, Int?, Int?>, WatchedItem>()
-            current.mapNotNull { json ->
-                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-            }.forEach { item ->
+            decodeItems(profileId, current).forEach { item ->
                 itemsByKey[Triple(item.contentId, item.season, item.episode)] = item
             }
             deletes.forEach { (contentId, season, episode) ->
@@ -262,9 +281,7 @@ class WatchedItemsPreferences @Inject constructor(
             remoteItems.filterNot { it.mutationKey() in pendingDeleteKeys }.forEach { item ->
                 deduped[Triple(item.contentId, item.season, item.episode)] = item
             }
-            val localItems = current.mapNotNull { json ->
-                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-            }
+            val localItems = decodeItems(profileId, current)
             localItems.forEach { localItem ->
                 val mutationKey = localItem.mutationKey()
                 val itemKey = Triple(localItem.contentId, localItem.season, localItem.episode)
@@ -292,6 +309,7 @@ class WatchedItemsPreferences @Inject constructor(
             preferences.remove(deltaCursorKey)
             preferences.remove(deltaInitializedKey)
         }
+        decodeCaches.remove(profileId)
     }
 
     private fun watchedItemKey(item: WatchedItem): String =

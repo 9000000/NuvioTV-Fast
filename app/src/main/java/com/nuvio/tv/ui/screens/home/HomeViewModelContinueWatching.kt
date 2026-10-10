@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.recommendations.TvRecommendationManager
 import com.nuvio.tv.core.util.isEpisodeReleaseAired
 import com.nuvio.tv.core.util.parseEpisodeReleaseInstant
 import com.nuvio.tv.core.util.selectEpisodeReleaseValue
@@ -21,9 +22,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -261,6 +265,19 @@ private class CwDebugSession {
     fun logSummary(cancelled: Boolean = false) = Unit
 }
 
+/**
+ * Holds pipeline runs while the player is playing. Home is covered then, and a rebuild (for
+ * example when the episode crosses the watched threshold) allocates enough to stall playback
+ * on low-memory TV devices. The latest snapshot runs once playback pauses or stops; pausing
+ * and resuming without a newer snapshot does not run it again.
+ */
+private fun Flow<ContinueWatchingSettingsSnapshot>.holdWhilePlaybackActive(): Flow<ContinueWatchingSettingsSnapshot> =
+    combine(this, TvRecommendationManager.isPlaybackActive) { snapshot, playing ->
+        snapshot.takeUnless { playing }
+    }
+        .filterNotNull()
+        .distinctUntilChanged { old, new -> old === new }
+
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     cwPipelineJob?.cancel()
@@ -303,7 +320,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 watchedItemsVersion = watchedItemsSize,
                 hasLoadedRemoteProgress = hasLoadedRemoteProgress
             )
-        }.debounce(CW_PROGRESS_DEBOUNCE_MS).collectLatest { snapshot ->
+        }.debounce(CW_PROGRESS_DEBOUNCE_MS).holdWhilePlaybackActive().collectLatest { snapshot ->
             val debug = CwDebugSession()
             val pipelineProfileId = profileManager.activeProfileId.value
             try {
