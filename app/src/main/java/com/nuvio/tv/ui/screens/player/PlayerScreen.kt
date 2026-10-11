@@ -195,6 +195,7 @@ fun PlayerScreen(
     var skipButtonActuallyVisible by remember { mutableStateOf(false) }
     var restoreStreamInfoFocus by remember { mutableStateOf(false) }
     var focusPlayAfterMoreBack by remember { mutableStateOf(false) }
+    var hideControlsAfterStreamInfo by remember { mutableStateOf(false) }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
     var subtitleDelayFocusTarget by remember { mutableStateOf(SubtitleDelayFocusTarget.SLIDER) }
     val subtitleDelayResetFocusRequester = remember { FocusRequester() }
@@ -313,6 +314,13 @@ fun PlayerScreen(
             viewModel.onEvent(PlayerEvent.OnDismissTransientOverlay)
         } else if (uiState.showStreamInfoOverlay) {
             dismissStreamInfoOverlay()
+            if (hideControlsAfterStreamInfo) {
+                viewModel.hideControls()
+            } else if (uiState.showControls) {
+                restoreStreamInfoFocus = true
+                viewModel.onEvent(PlayerEvent.OnShowMoreDialog)
+            }
+            hideControlsAfterStreamInfo = false
         } else if (uiState.showPauseOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
         } else if (uiState.showMoreDialog) {
@@ -340,9 +348,10 @@ fun PlayerScreen(
             postPlayRecommendationState.recommendation == null
         ) {
             viewModel.onEvent(PlayerEvent.OnDismissNextEpisodeCard)
-            // Transfer focus to skip button if it's still visible
             if (skipButtonActuallyVisible) {
                 runCatching { skipIntroFocusRequester.requestFocus() }
+            } else {
+                runCatching { containerFocusRequester.requestFocus() }
             }
         } else if (skipButtonActuallyVisible && !uiState.showControls) {
             viewModel.onEvent(PlayerEvent.OnDismissSkipIntro)
@@ -893,6 +902,22 @@ fun PlayerScreen(
                             )
                             true
                         }
+                        KeyEvent.KEYCODE_INFO -> {
+                            if (uiState.showStreamInfoOverlay) {
+                                viewModel.onEvent(PlayerEvent.OnDismissStreamInfo)
+                                if (hideControlsAfterStreamInfo) {
+                                    viewModel.hideControls()
+                                } else if (uiState.showControls) {
+                                    restoreStreamInfoFocus = true
+                                    viewModel.onEvent(PlayerEvent.OnShowMoreDialog)
+                                }
+                                hideControlsAfterStreamInfo = false
+                            } else {
+                                hideControlsAfterStreamInfo = !uiState.showControls
+                                viewModel.onEvent(PlayerEvent.OnShowStreamInfo)
+                            }
+                            true
+                        }
                         else -> false
                     }
                 } else false
@@ -1192,7 +1217,12 @@ fun PlayerScreen(
             suppressFocus = (uiState.postPlayMode is PostPlayMode.AutoPlay &&
                 postPlayRecommendationState.recommendation == null) || !skipIntroCanFocus,
             canFocus = skipIntroCanFocus,
-            onSkip = { viewModel.onEvent(PlayerEvent.OnSkipIntro) },
+            onSkip = {
+                if (uiState.showControls) {
+                    runCatching { playPauseFocusRequester.requestFocus() }
+                }
+                viewModel.onEvent(PlayerEvent.OnSkipIntro)
+            },
             onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissSkipIntro) },
             onVisibilityChanged = { skipButtonActuallyVisible = it },
             onFocused = { viewModel.scheduleHideControls() },
