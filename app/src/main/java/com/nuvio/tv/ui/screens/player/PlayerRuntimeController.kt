@@ -35,6 +35,8 @@ import com.nuvio.tv.data.local.StreamLinkCacheDataStore
 import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
 import com.nuvio.tv.data.local.BingeGroupCacheDataStore
 import com.nuvio.tv.data.local.StreamAutoPlayMode
+import com.nuvio.tv.data.mediaserver.ServerPlayback
+import com.nuvio.tv.data.mediaserver.ServerStreams
 import com.nuvio.tv.data.repository.ParentalGuideRepository
 import com.nuvio.tv.data.repository.PlaybackIssueErrorInput
 import com.nuvio.tv.data.repository.PlaybackIssueReportRepository
@@ -103,6 +105,8 @@ class PlayerRuntimeController(
     internal val streamBadgePresentation: com.nuvio.tv.core.streams.StreamBadgePresentation,
     internal val playbackIssueReportRepository: PlaybackIssueReportRepository,
     internal val tvRecommendationManager: com.nuvio.tv.core.recommendations.TvRecommendationManager,
+    internal val serverPlayback: ServerPlayback,
+    internal val serverStreams: ServerStreams,
     internal val profileId: Int,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
@@ -208,6 +212,9 @@ class PlayerRuntimeController(
         PlayerMediaSourceFactory.vodCachePlayheadBytesProvider = vodCachePlayheadBytesProvider
     }
 
+    // Closed on exit (stopAndRelease) or when the ViewModel is cleared, whichever comes first.
+    private val playerSession = com.nuvio.tv.core.player.PlayerSessionTracker.open()
+
     internal var currentVideoHash: String? = navigationArgs.videoHash
     internal var currentVideoSize: Long? = navigationArgs.videoSize
     internal var currentFilename: String? = navigationArgs.filename
@@ -222,6 +229,8 @@ class PlayerRuntimeController(
     internal var currentVideoHeight: Int? = null
     internal var currentVideoBitrate: Int? = null
     internal var currentStreamUrl: String
+    internal var reportedServerUrl: String? = null
+    internal var serverAudioChosenByUser = false
     internal var currentStreamResponseHeaders: Map<String, String> = emptyMap()
     internal var currentStreamCacheKey: String? = null
     internal var currentStreamMimeType: String?
@@ -274,6 +283,7 @@ class PlayerRuntimeController(
         releaseProcessWideReferences()
         mediaSourceFactory.evictCachedSession()
         releasePlayer()
+        playerSession.close()
     }
 
     // These are process wide, so without this the exited player stays reachable until the next one
@@ -773,6 +783,8 @@ class PlayerRuntimeController(
     }
 
     fun onCleared() {
+        playerSession.close()
+        stopServerPlayback()
         releasePlayer()
         stopTorrentStream()
         torrentService.shutdown()

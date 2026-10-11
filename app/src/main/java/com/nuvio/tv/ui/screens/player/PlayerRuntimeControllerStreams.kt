@@ -214,9 +214,10 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
             )
         }
 
-        val installedAddons = addonRepository.getInstalledAddons().first().enabledAddons()
+        val installedAddons = streamAddonsFor(vid)
         val installedAddonOrder = installedAddons.map { it.displayName }
         val installedAddonNames = installedAddonOrder.toSet()
+        val preferredServerNames = serverStreams.preferredSourceNames(type, vid)
         var debridPreparationLaunched = false
 
         // On resume, skip chip reset — keep existing chip statuses
@@ -233,7 +234,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
-                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
+                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder, preferredServerNames)
                     val allStreams = addonStreams.flatMap { it.streams }
                     val availableAddons = addonStreams.map { it.addonName }
                     _uiState.update {
@@ -439,7 +440,7 @@ private suspend fun PlayerRuntimeController.updateSourceChipsForFetchStart(
         .map { it.displayName }
 
     val pluginNames = try {
-        if (pluginManager.pluginsEnabled.first()) {
+        if (!serverStreams.isNativeRequest(videoId) && pluginManager.pluginsEnabled.first()) {
             val mediaType = when (type.lowercase()) {
                 "series", "tv", "show" -> "tv"
                 else -> type.lowercase()
@@ -466,7 +467,7 @@ private suspend fun PlayerRuntimeController.updateSourceChipsForFetchStart(
         emptyList()
     }
 
-    val ordered = (addonNames + pluginNames).distinct()
+    val ordered = (serverSourceNames(type, videoId) + addonNames + pluginNames).distinct()
     _uiState.update {
         it.copy(
             sourceChips = ordered.map { name -> SourceChipItem(name, SourceChipStatus.LOADING) }
@@ -533,7 +534,7 @@ private suspend fun PlayerRuntimeController.updateEpisodeSourceChipsForFetchStar
         .map { it.displayName }
 
     val pluginNames = try {
-        if (pluginManager.pluginsEnabled.first()) {
+        if (!serverStreams.isNativeRequest(videoId) && pluginManager.pluginsEnabled.first()) {
             val mediaType = when (type.lowercase()) {
                 "series", "tv", "show" -> "tv"
                 else -> type.lowercase()
@@ -560,7 +561,7 @@ private suspend fun PlayerRuntimeController.updateEpisodeSourceChipsForFetchStar
         emptyList()
     }
 
-    val ordered = (addonNames + pluginNames).distinct()
+    val ordered = (serverSourceNames(type, videoId) + addonNames + pluginNames).distinct()
     _uiState.update {
         it.copy(
             episodeSourceChips = ordered.map { name -> SourceChipItem(name, SourceChipStatus.LOADING) }
@@ -666,7 +667,7 @@ private fun PlayerRuntimeController.persistSelectedStreamForReuse(
     url: String,
     headers: Map<String, String>
 ) {
-    if (!streamReuseLastLinkEnabled) return
+    if (!streamReuseLastLinkEnabled || stream.serverTarget != null) return
 
     val key = streamCacheKey ?: return
     val streamName = (stream.name?.takeIf { it.isNotBlank() } ?: stream.addonName)?.takeIf { it.isNotBlank() }
@@ -783,6 +784,21 @@ internal fun PlayerRuntimeController.switchToSourceStream(
 
     if (isTorrServerStream(stream)) {
         prepareTorrServerFilePicker(stream, currentSeason, currentEpisode)
+        return
+    }
+
+    if (stream.serverTarget != null && stream.getStreamUrl().isNullOrBlank()) {
+        debridResolveJob?.cancel()
+        _uiState.update { it.copy(isLoadingSourceStreams = true, sourceStreamsError = null) }
+        debridResolveJob = scope.launch {
+            val prepared = prepareServerStream(stream)
+            debridResolveJob = null
+            if (prepared != null) {
+                switchToSourceStream(prepared)
+            } else {
+                _uiState.update { it.copy(isLoadingSourceStreams = false) }
+            }
+        }
         return
     }
 
@@ -1170,9 +1186,10 @@ internal fun PlayerRuntimeController.loadStreamsForEpisode(video: Video, forceRe
             )
         }
 
-        val installedAddons = addonRepository.getInstalledAddons().first().enabledAddons()
+        val installedAddons = streamAddonsFor(video.id)
         val installedAddonOrder = installedAddons.map { it.displayName }
         val installedAddonNames = installedAddonOrder.toSet()
+        val preferredServerNames = serverStreams.preferredSourceNames(type, video.id)
         var debridPreparationLaunched = false
 
         // Initialize episode source chips with LOADING status
@@ -1187,7 +1204,7 @@ internal fun PlayerRuntimeController.loadStreamsForEpisode(video: Video, forceRe
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
-                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
+                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder, preferredServerNames)
                     val allStreams = addonStreams.flatMap { it.streams }
                     val availableAddons = addonStreams.map { it.addonName }
                     val currentFilter = _uiState.value.episodeSelectedAddonFilter
@@ -1347,6 +1364,21 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
             autoPlayTorrServerEpisode(stream, resolveSeason, resolveEpisode, forcedTargetVideo)
         } else {
             prepareTorrServerFilePicker(stream, resolveSeason, resolveEpisode)
+        }
+        return
+    }
+
+    if (stream.serverTarget != null && stream.getStreamUrl().isNullOrBlank()) {
+        debridResolveJob?.cancel()
+        _uiState.update { it.copy(isLoadingEpisodeStreams = true, episodeStreamsError = null) }
+        debridResolveJob = scope.launch {
+            val prepared = prepareServerStream(stream)
+            debridResolveJob = null
+            if (prepared != null) {
+                switchToEpisodeStream(prepared, forcedTargetVideo, isAutoPlay)
+            } else {
+                _uiState.update { it.copy(isLoadingEpisodeStreams = false) }
+            }
         }
         return
     }
@@ -1817,8 +1849,9 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 return@launch
             }
 
-            val installedAddons = addonRepository.getInstalledAddons().first().enabledAddons()
+            val installedAddons = streamAddonsFor(nextVideo.id)
             val installedAddonOrder = installedAddons.map { it.displayName }
+            val preferredServerNames = serverStreams.preferredSourceNames(type, nextVideo.id)
             val effectiveMode = if (shouldAutoSelectInManualMode) {
                 StreamAutoPlayMode.FIRST_STREAM
             } else {
@@ -1854,7 +1887,7 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
             val searchSettled = CompletableDeferred<Unit>()
 
             fun trySelectStream(data: List<AddonStreams>): Stream? {
-                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder)
+                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder, preferredServerNames)
                 val allStreams = orderedStreams.flatMap { it.streams }
                 return StreamAutoPlaySelector.selectAutoPlayStream(
                     streams = allStreams,
@@ -1876,7 +1909,7 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
 
             fun tryBingeGroupOnly(data: List<AddonStreams>): Stream? {
                 if (currentStreamBingeGroup == null || !playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) return null
-                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder)
+                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder, preferredServerNames)
                 val allStreams = orderedStreams.flatMap { it.streams }
                 return StreamAutoPlaySelector.selectAutoPlayStream(
                     streams = allStreams,
