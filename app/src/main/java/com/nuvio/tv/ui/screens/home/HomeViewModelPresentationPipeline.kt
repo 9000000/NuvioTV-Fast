@@ -20,8 +20,6 @@ import com.nuvio.tv.domain.model.TmdbSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -31,11 +29,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-
-private const val TMDB_HERO_ENRICHMENT_CONCURRENCY = 4
 
 private data class CoreLayoutPrefs(
     val layout: HomeLayout,
@@ -1075,104 +1069,7 @@ private fun HomeViewModel.updateCatalogItemArtworkOnly(itemId: String, meta: Met
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     items: List<MetaPreview>,
     settings: TmdbSettings
-): List<MetaPreview> {
-    if (items.isEmpty()) return items
-    val mdbSettings = currentMdbListSettings
-    val mdbEnabled = mdbListRepository.isAvailable(mdbSettings) && mdbSettings.showOnHero
-
-    return coroutineScope {
-        val semaphore = Semaphore(TMDB_HERO_ENRICHMENT_CONCURRENCY)
-
-        items.map { item ->
-            async(Dispatchers.IO) {
-                semaphore.withPermit {
-                    try {
-                        val tmdbDeferred = async {
-                            val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return@async null
-                            tmdbId.toIntOrNull()?.let { numericId ->
-                                runCatching { tmdbService.tmdbToImdb(numericId, item.apiType) }
-                            }
-                            tmdbMetadataService.fetchEnrichment(
-                                tmdbId = tmdbId,
-                                contentType = item.type,
-                                language = settings.language
-                            )
-                        }
-                        // MdbListRatingsLoader auto-batches concurrent calls within a 50ms window,
-                        // so per-item getRatingsForMeta calls are efficiently grouped.
-                        val mdbDeferred = if (mdbEnabled) async {
-                            runCatching {
-                                mdbListRepository.getRatingsForMeta(
-                                    meta = com.nuvio.tv.domain.model.Meta(
-                                        id = item.id, type = item.type, name = item.name,
-                                        poster = item.poster, posterShape = item.posterShape,
-                                        background = item.background, logo = item.logo,
-                                        description = item.description, releaseInfo = item.releaseInfo,
-                                        imdbRating = item.imdbRating, genres = item.genres,
-                                        runtime = item.runtime, director = item.director,
-                                        cast = emptyList(), videos = emptyList(),
-                                        country = item.country, awards = null,
-                                        language = item.language, links = item.links
-                                    ),
-                                    fallbackItemId = item.id,
-                                    fallbackItemType = item.apiType
-                                )
-                            }.getOrNull()
-                        } else null
-
-                        val enrichment = tmdbDeferred.await()
-                        val mdbResult = mdbDeferred?.await()
-
-                        var enriched = item
-
-                        // Attach full MDBList ratings (already filtered by user settings in repository).
-                        if (mdbResult != null) {
-                            enriched = enriched.copy(
-                                mdbListRatings = mdbResult.ratings,
-                                mdbListRatingOrder = mdbSettings.ratingOrder,
-                                imdbRating = mdbResult.ratings.imdb?.toFloat() ?: enriched.imdbRating
-                            )
-                        }
-
-                        if (enrichment == null) return@withPermit enriched
-
-                        if (settings.useArtwork) {
-                            enriched = enriched.copy(
-                                background = enrichment.backdrop ?: enriched.background,
-                                logo = enrichment.logo ?: enriched.logo,
-                                poster = enrichment.poster ?: enriched.poster
-                            )
-                        }
-
-                        if (settings.useBasicInfo) {
-                            enriched = enriched.copy(
-                                name = enrichment.localizedTitle ?: enriched.name,
-                                description = enrichment.description ?: enriched.description,
-                                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else enriched.genres,
-                                imdbRating = enriched.imdbRating
-                            )
-                        }
-
-                        if (settings.useDetails) {
-                            enriched = enriched.copy(
-                                runtime = enrichment.runtimeMinutes?.toString() ?: enriched.runtime,
-                                status = enrichment.status ?: enriched.status,
-                                ageRating = enrichment.ageRating ?: enriched.ageRating,
-                                country = enrichment.countries?.joinToString(", ") ?: enriched.country,
-                                language = enrichment.language ?: enriched.language
-                            )
-                        }
-
-                        enriched
-                    } catch (e: Exception) {
-                        Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
-                        item
-                    }
-                }
-            }
-        }.awaitAll()
-    }
-}
+): List<MetaPreview> = metaPreviewEnricher.enrich(items, settings, currentMdbListSettings)
 
 internal fun HomeViewModel.replaceGridHeroItemsPipeline(
     gridItems: List<GridItem>,
