@@ -804,7 +804,7 @@ internal fun SettingsActionRow(
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
     enabled: Boolean = true,
-    trailingIcon: ImageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+    trailingIcon: ImageVector? = Icons.AutoMirrored.Filled.KeyboardArrowRight,
     titleTrailingIcon: ImageVector? = null,
     titleTrailingIconTint: Color = NuvioTheme.colors.TextPrimary,
     leadingIcon: ImageVector? = null,
@@ -902,13 +902,15 @@ internal fun SettingsActionRow(
                 )
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
-            Icon(
-                imageVector = trailingIcon,
-                contentDescription = null,
-                tint = NuvioTheme.colors.TextTertiary.copy(alpha = contentAlpha),
-                modifier = Modifier.size(18.dp)
-            )
+            if (trailingIcon != null) {
+                Spacer(modifier = Modifier.width(10.dp))
+                Icon(
+                    imageVector = trailingIcon,
+                    contentDescription = null,
+                    tint = NuvioTheme.colors.TextTertiary.copy(alpha = contentAlpha),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

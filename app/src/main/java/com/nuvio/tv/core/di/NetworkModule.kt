@@ -43,6 +43,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import com.nuvio.tv.core.network.IPv4FirstDns
+import com.nuvio.tv.core.network.NoDelaySocketFactory
 import com.nuvio.tv.core.diagnostics.SentryNetworkBreadcrumbInterceptor
 import java.io.File
 import java.security.SecureRandom
@@ -104,6 +105,7 @@ object NetworkModule {
     fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient {
         return OkHttpClient.Builder()
             .dns(IPv4FirstDns())
+            .socketFactory(NoDelaySocketFactory)
             // Raise per-host concurrency so search fan-out across many catalogs on the same
             // addon host isn't serialized at OkHttp's default of 5; cap global in-flight
             // below the default 64 to bound peak response buffering on low-RAM boxes.
@@ -175,6 +177,7 @@ object NetworkModule {
     @Named("customServerAuth")
     fun provideCustomServerAuthHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .dns(IPv4FirstDns())
+        .socketFactory(NoDelaySocketFactory)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .addInterceptor { chain ->
@@ -197,6 +200,7 @@ object NetworkModule {
     fun provideDirectDebridOkHttpClient(): OkHttpClient =
         OkHttpClient.Builder()
             .dns(IPv4FirstDns())
+            .socketFactory(NoDelaySocketFactory)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor { chain ->
@@ -215,6 +219,7 @@ object NetworkModule {
     @Named("simkl")
     fun provideSimklOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .dns(IPv4FirstDns())
+        .socketFactory(NoDelaySocketFactory)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()

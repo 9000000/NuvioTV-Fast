@@ -7,11 +7,18 @@ import androidx.media3.common.util.UnstableApi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.data.local.DeviceLocalPlayerPreferences
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.Dv7HandlingMode
+import com.nuvio.tv.data.local.SurroundFormatMode
+import com.nuvio.tv.data.local.SurroundChannelTarget
+import com.nuvio.tv.data.local.DeniedCodecHandling
+import com.nuvio.tv.ui.screens.player.PlayerTunnelAvSyncPolicy
+import com.nuvio.tv.ui.screens.player.iec.PlatformIecAudioTrackFactory
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.PlayerPreference
@@ -148,12 +155,76 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setMaintainOriginalAudioOnDownmix(enabled)
     }
 
+    private val _iecProbeFeedback = MutableSharedFlow<IecProbeFeedback>(extraBufferCapacity = 4)
+    val iecProbeFeedback: SharedFlow<IecProbeFeedback> = _iecProbeFeedback
+
     suspend fun setTunnelingEnabled(enabled: Boolean) {
         playerSettingsDataStore.setTunnelingEnabled(enabled)
+        PlayerTunnelAvSyncPolicy.resetMemo()
     }
 
     suspend fun setForceOpticalPassthrough(enabled: Boolean) {
         playerSettingsDataStore.setForceOpticalPassthrough(enabled)
+    }
+
+    suspend fun setUseSystemPassthrough(enabled: Boolean) {
+        playerSettingsDataStore.setUseSystemPassthrough(enabled)
+    }
+
+    fun resetIecPassthroughProbe() {
+        _iecProbeFeedback.tryEmit(IecProbeFeedback.STARTED)
+        PlatformIecAudioTrackFactory.resetIec61937Probe { usable ->
+            _iecProbeFeedback.tryEmit(
+                if (usable) IecProbeFeedback.AVAILABLE else IecProbeFeedback.UNAVAILABLE
+            )
+        }
+    }
+
+    suspend fun setSurroundFormatMode(mode: SurroundFormatMode) {
+        playerSettingsDataStore.setSurroundFormatMode(mode)
+    }
+
+    suspend fun setAllowAc3Passthrough(enabled: Boolean) {
+        playerSettingsDataStore.setAllowAc3Passthrough(enabled)
+    }
+
+    suspend fun setAllowEac3Passthrough(enabled: Boolean) {
+        playerSettingsDataStore.setAllowEac3Passthrough(enabled)
+    }
+
+    suspend fun setAllowTruehdPassthrough(enabled: Boolean) {
+        playerSettingsDataStore.setAllowTruehdPassthrough(enabled)
+    }
+
+    suspend fun setAllowDtsPassthrough(enabled: Boolean) {
+        playerSettingsDataStore.setAllowDtsPassthrough(enabled)
+    }
+
+    suspend fun setAllowDtshdPassthrough(enabled: Boolean) {
+        playerSettingsDataStore.setAllowDtshdPassthrough(enabled)
+    }
+
+    suspend fun setTranscodeDeniedToAc3(enabled: Boolean) {
+        playerSettingsDataStore.setDeniedCodecHandling(
+            if (enabled) DeniedCodecHandling.TRANSCODE_AC3 else DeniedCodecHandling.DECODE_PCM
+        )
+    }
+
+    suspend fun forgetLearnedAudioRejections() {
+        playerSettingsDataStore.clearLearnedAudioRejections()
+    }
+
+    suspend fun forgetTunnelStalls() {
+        PlayerTunnelAvSyncPolicy.resetMemo()
+        playerSettingsDataStore.clearTunnelDeadAudioClasses()
+    }
+
+    suspend fun setSurroundChannelTarget(target: SurroundChannelTarget) {
+        playerSettingsDataStore.setSurroundChannelTarget(target)
+    }
+
+    suspend fun setSurroundTvArcSoundbar(enabled: Boolean) {
+        playerSettingsDataStore.setSurroundTvArcSoundbar(enabled)
     }
 
     suspend fun setSkipSilence(enabled: Boolean) {
@@ -651,3 +722,5 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSubtitleFont(com.nuvio.tv.data.local.SubtitleFontOption.DEFAULT)
     }
 }
+
+enum class IecProbeFeedback { STARTED, AVAILABLE, UNAVAILABLE }

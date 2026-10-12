@@ -2315,13 +2315,15 @@ private class SubtitleOffsetRenderersFactory(
         onFfmpegAudioRendererChanged(ffmpegRenderers.firstOrNull())
     }
 }
-private fun FfmpegAudioRenderer.applyDownmixSettings(
+internal fun FfmpegAudioRenderer.applyDownmixSettings(
     downmixEnabled: Boolean,
     audioOutputChannels: com.nuvio.tv.data.local.AudioOutputChannels,
     downmixNormalizationEnabled: Boolean,
-    forceOpticalPassthrough: Boolean
+    forceOpticalPassthrough: Boolean,
+    deniedTranscodeMimes: Set<String> = emptySet()
 ) {
     setForceOpticalPassthrough(forceOpticalPassthrough)
+    setDeniedTranscodeMimes(deniedTranscodeMimes)
     if (downmixEnabled) {
         setAudioOutputChannels(
             audioOutputChannels.ffmpegLayoutName,
@@ -2332,6 +2334,18 @@ private fun FfmpegAudioRenderer.applyDownmixSettings(
         setAudioOutputChannels(null, 0)
         setDownmixNormalizationEnabled(false)
     }
+}
+
+internal fun surroundTargetToOutputChannels(
+    channels: Int,
+    fallback: com.nuvio.tv.data.local.AudioOutputChannels
+): com.nuvio.tv.data.local.AudioOutputChannels = when (channels) {
+    2 -> com.nuvio.tv.data.local.AudioOutputChannels.CHANNELS_2_0
+    3 -> com.nuvio.tv.data.local.AudioOutputChannels.CHANNELS_2_1
+    4 -> com.nuvio.tv.data.local.AudioOutputChannels.CHANNELS_3_1
+    6 -> com.nuvio.tv.data.local.AudioOutputChannels.CHANNELS_5_1
+    8 -> com.nuvio.tv.data.local.AudioOutputChannels.CHANNELS_7_1
+    else -> fallback
 }
 
 private class CueNormalizingTextOutput(
@@ -2769,7 +2783,7 @@ private fun PlayerRuntimeController.recordFirstFrameDiagnostics(
         // setting rather than to the back buffer guard.
         val shrinkBudgetForDv7 = keepZeroForDv7 && budgetManaged
         if (shrinkBudgetForDv7) {
-            val effectiveConversionMb = (MemoryBudget.conversionBudgetMb - currentParallelChunkOverheadMb)
+            val effectiveConversionMb = (MemoryBudget.conversionBudgetMb(currentManagedBudgetMb) - currentParallelChunkOverheadMb)
                 .coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
             lc.setBudgetBytesOverride(
                 effectiveConversionMb.toLong() * 1024L * 1024L
@@ -2783,7 +2797,7 @@ private fun PlayerRuntimeController.recordFirstFrameDiagnostics(
                     "managed=$budgetManaged " +
                     "parallelOverheadMb=$currentParallelChunkOverheadMb " +
                     "budgetMb=${when {
-                        shrinkBudgetForDv7 -> (MemoryBudget.conversionBudgetMb - currentParallelChunkOverheadMb).coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
+                        shrinkBudgetForDv7 -> (MemoryBudget.conversionBudgetMb(currentManagedBudgetMb) - currentParallelChunkOverheadMb).coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
                         budgetManaged -> (MemoryBudget.budgetMb - currentParallelChunkOverheadMb).coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
                         else -> (MemoryBudget.effectiveBufferMb(playerSettings.bufferSettings.targetBufferSizeMb) - currentParallelChunkOverheadMb).coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
                     }} " +

@@ -1,8 +1,11 @@
 package com.nuvio.tv.ui.screens.settings
 
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.upstream.DefaultAllocatorNative
+import com.nuvio.tv.core.player.BufferSizing
 import com.nuvio.tv.data.local.BufferSettings
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.ui.screens.player.NuvioExoPlayerPerformanceHelper
 
 /**
  * Shared memory budget constants and helpers for buffer + parallel connection settings.
@@ -20,20 +23,38 @@ object MemoryBudget {
     // The buffer allocator is on the Java heap; on low-RAM reserve a slice for the UI/decoder/caches
     // and give the rest to the buffer (a flat % of max heap overcommits and starves them).
     private const val LOW_HEAP_RESERVE_MB = 210L
+    // Not the native arena's chunk size, so the probe leaves the shared arena alone.
+    private const val NATIVE_PROBE_BYTES = 4096
 
     // Conversion overhead tracks the video rather than the device, so these only hold back a margin;
     // high-RAM keeps a larger one because it still retains a back buffer during conversion.
     private const val LOW_RAM_CONVERSION_RATIO = 0.95f
     private const val HIGH_RAM_CONVERSION_RATIO = 0.75f
 
+    /** ParallelRangeDataSource schedules maxAhead = parallelConnections + 1 chunks concurrently */
+    // Matches ParallelRangeDataSource: the session holds up to
+    // connections + 2 chunks on low-RAM devices (connections + 4 on high-RAM;
+    // the extra headroom is deliberately not advertised so the enforcement
+    // maths stays conservative).
     private const val BUFFER_OVERHEAD = 2
+
+    // ParallelRangeDataSource's live prefetch window is clamped to at most
+    // 4*connections chunks (sized from a device-RAM budget). The DISPLAYED memory
+    // estimate uses this upper bound so the "estimated usage" warning over-estimates
+    // rather than under-estimates, the safe direction for a guard.
+    // These clamp multiples are the SINGLE SOURCE OF TRUTH for the deep-path
+    // window, shared by the runtime depth (PlayerMediaSourceFactory delegates to
+    // prefetchDepthChunks below) and the displayed estimate, so the two can never
+    // drift. bufferCount and the enforcement maths (maxChunkMb / maxBufferMb / enforce)
+    // are deliberately left on the conservative connections+2 accounting so the slider
+    // maxima are unchanged.
     private const val PREFETCH_DEPTH_LOWER_MULTIPLE = 2
     private const val PREFETCH_DEPTH_UPPER_MULTIPLE = 4
 
     const val MIN_CONNECTIONS = 2
     const val MAX_CONNECTIONS = 4
     const val MIN_CHUNK_MB = 8
-    const val MAX_CHUNK_MB = 128
+    const val MAX_CHUNK_MB = 32
     // Low-RAM devices (1-2 GB class): the session's protected set (playhead
     // window + tail moov chunks + pinned side chunks) puts the worst-case
     // retained floor at roughly connections + 10 chunks on a scatter-heavy
@@ -60,27 +81,42 @@ object MemoryBudget {
     /** True when the app heap is below the high-RAM threshold (Fire TV / TV-stick class). */
     val isLowRamTier: Boolean = maxHeapMb < HIGH_HEAP_THRESHOLD_MB
 
-    // Pre-cap ratio budget, before the low-RAM reserve trims it below.
-    private val rawBudgetMb: Int =
-        (maxHeapMb * (if (isLowRamTier) LOW_HEAP_RATIO else HIGH_HEAP_RATIO)).toInt()
+    // The custom buffers and the parallel chunks use native memory whenever the engine's allocator
+    // library loads, so the budget then follows device RAM like the native engine does.
+    val offHeapBuffers: Boolean = runCatching {
+        DefaultAllocatorNative.createAllocation(NATIVE_PROBE_BYTES)
+            ?.also(DefaultAllocatorNative::freeAllocation) != null
+    }.getOrDefault(false)
 
-    // The flat reserve above collapses the budget on small heaps, so hold a floor that still leaves
-    // the smallest devices half their heap.
-    private val minPlaybackBudgetMb: Int =
-        MIN_PLAYBACK_BUDGET_MB.coerceAtMost((maxHeapMb / 2).toInt()).coerceAtLeast(MIN_BUFFER_MB)
+    val budgetMb: Int = budgetMbFor(offHeapBuffers, NuvioExoPlayerPerformanceHelper.getRamFromMemInfo(), maxHeapMb)
 
-    val budgetMb: Int =
-        if (isLowRamTier)
-            rawBudgetMb.coerceAtMost((maxHeapMb - LOW_HEAP_RESERVE_MB).toInt()).coerceAtLeast(minPlaybackBudgetMb)
-        else rawBudgetMb
+    internal fun budgetMbFor(offHeap: Boolean, deviceRamBytes: Long, maxHeapMb: Long): Int {
+        if (offHeap) return NuvioExoPlayerPerformanceHelper.safeNativeMemoryLimitMbForRam(deviceRamBytes)
+        val lowRam = maxHeapMb < HIGH_HEAP_THRESHOLD_MB
+        // Pre-cap ratio budget, before the low-RAM reserve trims it below.
+        val rawBudgetMb = (maxHeapMb * (if (lowRam) LOW_HEAP_RATIO else HIGH_HEAP_RATIO)).toInt()
+        if (!lowRam) return rawBudgetMb
+        // The flat reserve collapses the budget on small heaps, so hold a floor that still leaves
+        // the smallest devices half their heap.
+        val minPlaybackBudgetMb =
+            MIN_PLAYBACK_BUDGET_MB.coerceAtMost((maxHeapMb / 2).toInt()).coerceAtLeast(MIN_BUFFER_MB)
+        return rawBudgetMb.coerceAtMost((maxHeapMb - LOW_HEAP_RESERVE_MB).toInt()).coerceAtLeast(minPlaybackBudgetMb)
+    }
 
-    val conversionBudgetMb: Int =
+    // budgetMb is the most the settings allow; the managed budget uses the box's automatic size instead.
+    val autoBudgetMb: Int = autoBudgetMbFor(offHeapBuffers, NuvioExoPlayerPerformanceHelper.getRamFromMemInfo(), budgetMb)
+
+    internal fun autoBudgetMbFor(offHeap: Boolean, deviceRamBytes: Long, budgetMb: Int): Int =
+        if (offHeap) BufferSizing.autoBufferMbForRam(deviceRamBytes).coerceAtMost(budgetMb) else budgetMb
+
+    fun conversionBudgetMb(budgetMb: Int): Int =
         (budgetMb * (if (isLowRamTier) LOW_RAM_CONVERSION_RATIO else HIGH_RAM_CONVERSION_RATIO)).toInt()
             .coerceAtMost(budgetMb).coerceAtLeast(MIN_BUFFER_MB)
 
     fun effectiveBufferMb(stored: Int): Int =
         if (stored > 0) stored else defaultBufferSizeMb
 
+    /** Number of chunk-sized buffers alive concurrently */
     fun bufferCount(connectionCount: Int): Int =
         connectionCount + BUFFER_OVERHEAD
 
@@ -90,6 +126,13 @@ object MemoryBudget {
     fun totalUsageMb(bufferMb: Int, connectionCount: Int, chunkSizeMb: Int, parallelEnabled: Boolean): Int =
         bufferMb + if (parallelEnabled) parallelOverheadMb(connectionCount, chunkSizeMb) else 0
 
+    /**
+     * Deep-path prefetch depth, the SINGLE SOURCE OF TRUTH shared by the runtime
+     * (PlayerMediaSourceFactory.computePrefetchDepthChunks delegates here) and the
+     * displayed memory estimate. Spend the safe
+     * native budget minus the SampleQueue reserve on chunks, divide by chunk size, clamp
+     * to [2*connections, 4*connections].
+     */
     fun prefetchDepthChunks(
         connections: Int,
         chunkSizeMb: Int,
@@ -105,6 +148,88 @@ object MemoryBudget {
             connections * PREFETCH_DEPTH_UPPER_MULTIPLE
         )
     }
+
+    // Assessment-sweep cell budgeting
+    //
+    // A sweep cell's true memory ceiling is the tester's prefetch WINDOW, not
+    // connections x chunk: ParallelRangeDataSource may hold up to its prefetch
+    // depth in live chunks (plus the memory-tiered session-cap headroom). An
+    // unconditional connections*4 window would give a 3 conn / 64 MB cell a
+    // ceiling near 1 GB on a box with a 250 MB budget.
+    //
+    // SWEEP_BUDGET_FRACTION reserves headroom for the app's own native use
+    // while a sweep runs; SWEEP_CELL_MAX_CONCURRENT_MB is the absolute cap on
+    // the nominal concurrent-download footprint (connections x chunk) on ANY
+    // device: 3 x 64 MB never runs, on the 4 GB tier included. Both are
+    // estimates, tunable like the trade constants.
+    private const val SWEEP_BUDGET_FRACTION = 0.75
+    const val SWEEP_CELL_MAX_CONCURRENT_MB = 128
+
+    /**
+     * Prefetch depth (in chunks) a sweep cell may run with on this device, or
+     * null when the cell must NOT be scheduled at all. Null when either the
+     * nominal concurrent footprint (connections x chunk) exceeds
+     * [SWEEP_CELL_MAX_CONCURRENT_MB], or the budget-derived depth falls below
+     * ParallelRangeDataSource's own floor of connections + 1: a window that
+     * small cannot be honoured, so the cell cannot be memory-bounded.
+     * Single source of truth: the sweep's ladder gate and the tester's window
+     * both use this value, so the gate can never drift from the allocation.
+     */
+    fun sweepCellPrefetchDepth(
+        connections: Int,
+        chunkSizeMb: Int,
+        safeNativeLimitMb: Int
+    ): Int? {
+        val chunkMb = chunkSizeMb.coerceAtLeast(1)
+        if (connections * chunkMb > SWEEP_CELL_MAX_CONCURRENT_MB) return null
+        val budgetMb = (safeNativeLimitMb * SWEEP_BUDGET_FRACTION).toInt()
+        val depth = (budgetMb / chunkMb)
+            .coerceAtMost(connections * PREFETCH_DEPTH_UPPER_MULTIPLE)
+        return depth.takeIf { it >= connections + 1 }
+    }
+
+    /**
+     * Parallel overhead for the DISPLAYED memory-usage estimate only. Rather than
+     * always assuming the 4*connections upper clamp (which over-states usage whenever
+     * the device budget clamps the window lower, and makes the per-step deltas look
+     * inflated), this computes the ACTUAL depth the runtime will use via
+     * [prefetchDepthChunks], plus the session's live-chunk headroom (depth + 2 on
+     * low-RAM, depth + 4 on high-RAM, mirroring
+     * ParallelRangeDataSource.sessionChunkCap). When the deep path is inactive
+     * (performance mode off, or MP4 session mode) the runtime window is connections + 1
+     * and the estimate says so. Unlike [parallelOverheadMb] (which underpins the slider
+     * maxima and must stay conservative), this is display-only.
+     */
+    fun displayParallelOverheadMb(
+        connectionCount: Int,
+        chunkSizeMb: Int,
+        safeNativeLimitMb: Int,
+        reserveBufferMb: Int,
+        deepPathActive: Boolean,
+    ): Int {
+        val depth = if (deepPathActive) {
+            prefetchDepthChunks(connectionCount, chunkSizeMb, safeNativeLimitMb, reserveBufferMb)
+        } else {
+            connectionCount + 1
+        }
+        val sessionHeadroom = if (isLowRamTier) 2 else 4
+        return (depth + sessionHeadroom) * chunkSizeMb
+    }
+
+    /** Total usage for the DISPLAYED estimate: buffer plus the exact parallel overhead. */
+    fun displayTotalUsageMb(
+        bufferMb: Int,
+        connectionCount: Int,
+        chunkSizeMb: Int,
+        parallelEnabled: Boolean,
+        safeNativeLimitMb: Int,
+        deepPathActive: Boolean,
+    ): Int =
+        bufferMb + if (parallelEnabled) {
+            displayParallelOverheadMb(connectionCount, chunkSizeMb, safeNativeLimitMb, bufferMb, deepPathActive)
+        } else {
+            0
+        }
 
     /** Hard chunk-size ceiling for this device tier; binds everywhere, including performance mode. */
     val tierMaxChunkMb: Int = if (isLowRamTier) LOW_RAM_MAX_CHUNK_MB else MAX_CHUNK_MB

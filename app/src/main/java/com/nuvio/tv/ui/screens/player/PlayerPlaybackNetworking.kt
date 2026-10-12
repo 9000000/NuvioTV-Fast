@@ -5,6 +5,8 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import com.nuvio.tv.core.network.IPv4FirstDns
+import com.nuvio.tv.core.network.NoDelaySocketFactory
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import java.net.HttpURLConnection
 import java.net.URL
@@ -47,6 +49,7 @@ internal object PlayerPlaybackNetworking {
             maxRequestsPerHost = 32
         }
         OkHttpClient.Builder()
+            .socketFactory(NoDelaySocketFactory)
             .dispatcher(dispatcher)
             .dns(IPv4FirstDns())
             .eventListenerFactory(PlaybackConnectionEvents)
@@ -72,6 +75,7 @@ internal object PlayerPlaybackNetworking {
             maxRequestsPerHost = 32
         }
         OkHttpClient.Builder()
+            .socketFactory(NoDelaySocketFactory)
             .dispatcher(dispatcher)
             .dns(IPv4FirstDns())
             .eventListenerFactory(PlaybackConnectionEvents)
@@ -233,4 +237,12 @@ internal object PlayerPlaybackNetworking {
             range?.let { setRequestProperty("Range", it) }
         }
     }
+
+    // The chunk client also uses the mutable extension cookie jar. Until its cookie version can
+    // be bound to a warm entry, fall through to normal playback for these authenticated sources.
+    internal fun canReusePrewarmFor(url: String, resolvedUrl: String = url): Boolean =
+        listOf(url, resolvedUrl).all { value ->
+            val parsed = value.toHttpUrlOrNull()
+            parsed != null && com.nuvio.tv.NuvioApplication.extensionCookieJar.loadForRequest(parsed).isEmpty()
+        }
 }

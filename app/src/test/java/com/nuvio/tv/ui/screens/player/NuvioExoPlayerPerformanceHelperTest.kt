@@ -25,7 +25,8 @@ class NuvioExoPlayerPerformanceHelperTest {
         every { helperSpy.getDevicePhysicalRamBytes(any()) } returns 0L
 
         assertEquals("Unknown", helperSpy.getFriendlyRamLabel(context))
-        assertEquals(200, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(250, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(325, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -37,7 +38,8 @@ class NuvioExoPlayerPerformanceHelperTest {
         every { helperSpy.getDevicePhysicalRamBytes(any()) } returns (0.9 * gb).toLong()
 
         assertEquals("1 GB", helperSpy.getFriendlyRamLabel(context))
-        assertEquals(100, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(150, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(180, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -50,6 +52,7 @@ class NuvioExoPlayerPerformanceHelperTest {
 
         assertEquals("1.5 GB", helperSpy.getFriendlyRamLabel(context))
         assertEquals(200, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(250, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -61,7 +64,8 @@ class NuvioExoPlayerPerformanceHelperTest {
         every { helperSpy.getDevicePhysicalRamBytes(any()) } returns (1.7 * gb).toLong()
 
         assertEquals("2 GB", helperSpy.getFriendlyRamLabel(context))
-        assertEquals(200, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(250, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(325, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -74,6 +78,7 @@ class NuvioExoPlayerPerformanceHelperTest {
 
         assertEquals("3 GB", helperSpy.getFriendlyRamLabel(context))
         assertEquals(500, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(650, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -86,6 +91,7 @@ class NuvioExoPlayerPerformanceHelperTest {
 
         assertEquals("4 GB", helperSpy.getFriendlyRamLabel(context))
         assertEquals(1000, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(1200, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -98,6 +104,7 @@ class NuvioExoPlayerPerformanceHelperTest {
 
         assertEquals("6 GB", helperSpy.getFriendlyRamLabel(context))
         assertEquals(1600, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(2000, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -110,6 +117,7 @@ class NuvioExoPlayerPerformanceHelperTest {
 
         assertEquals("8 GB", helperSpy.getFriendlyRamLabel(context))
         assertEquals(2000, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(2500, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -122,6 +130,7 @@ class NuvioExoPlayerPerformanceHelperTest {
 
         assertEquals("12 GB", helperSpy.getFriendlyRamLabel(context))
         assertEquals(2000, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(2500, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -133,7 +142,8 @@ class NuvioExoPlayerPerformanceHelperTest {
         every { helperSpy.getDevicePhysicalRamBytes(any()) } returns (14.8 * gb).toLong()
 
         assertEquals("16 GB", helperSpy.getFriendlyRamLabel(context))
-        assertEquals(2000, helperSpy.getSafeNativeMemoryLimitMb(context)) // Adjusted to 2000 (was 2048 in original code but our update resolved it, wait! Let's check original code. Original code was 2000, wait, our test was 2048, let's look: assertEquals(2048, ...). Let's keep 2048 or whatever was there. Wait! In NuvioExoPlayerPerformanceHelper.kt line 196: 'else -> 2000'. Wait, in our modified helper, we have 'else -> 2000'. Let's check if the test fails if we use 2048. Yes, let's verify.)
+        assertEquals(2000, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(2500, helperSpy.getWarningNativeMemoryLimitMb(context))
     }
 
     @Test
@@ -181,34 +191,89 @@ class NuvioExoPlayerPerformanceHelperTest {
     }
 
     @Test
-    fun `test buildLoadControl deducts chunkOverheadMb from targetBufferSizeMb`() {
+    fun `native load control retains the full configured sample buffer target`() {
         val enabledField = NuvioExoPlayerPerformanceHelper::class.java.getDeclaredField("enabled")
         enabledField.isAccessible = true
-        enabledField.setBoolean(NuvioExoPlayerPerformanceHelper, true)
-        NuvioExoPlayerPerformanceHelper.targetBufferSizeMb = 250
-
-        // Overhead = 96 MB -> target should be 250 - 96 = 154 MB
-        val loadControl = NuvioExoPlayerPerformanceHelper.buildLoadControl(chunkOverheadMb = 96)
-        val targetBufferBytesField = androidx.media3.exoplayer.DefaultLoadControl::class.java.getDeclaredField("targetBufferBytesOverwrite")
-        targetBufferBytesField.isAccessible = true
-        val targetBytes = targetBufferBytesField.getInt(loadControl)
-
-        assertEquals(154 * 1024 * 1024, targetBytes)
+        val oldEnabled = enabledField.getBoolean(NuvioExoPlayerPerformanceHelper)
+        val oldTarget = NuvioExoPlayerPerformanceHelper.targetBufferSizeMb
+        try {
+            enabledField.setBoolean(NuvioExoPlayerPerformanceHelper, true)
+            NuvioExoPlayerPerformanceHelper.targetBufferSizeMb = 250
+            val loadControl = NuvioExoPlayerPerformanceHelper.buildLoadControl()
+            val targetField = androidx.media3.exoplayer.DefaultLoadControl::class.java
+                .getDeclaredField("targetBufferBytesOverwrite")
+            targetField.isAccessible = true
+            assertEquals(250 * 1024 * 1024, targetField.getInt(loadControl))
+        } finally {
+            NuvioExoPlayerPerformanceHelper.targetBufferSizeMb = oldTarget
+            enabledField.setBoolean(NuvioExoPlayerPerformanceHelper, oldEnabled)
+        }
     }
 
     @Test
-    fun `test buildLoadControl respects MIN_BUFFER_MB floor`() {
-        val enabledField = NuvioExoPlayerPerformanceHelper::class.java.getDeclaredField("enabled")
-        enabledField.isAccessible = true
-        enabledField.setBoolean(NuvioExoPlayerPerformanceHelper, true)
-        NuvioExoPlayerPerformanceHelper.targetBufferSizeMb = 50
+    fun `automatic size per box, with the settings limits unchanged`() {
+        val helperSpy = spyk(NuvioExoPlayerPerformanceHelper)
+        val context = mockk<Context>()
+        every { helperSpy.getDevicePhysicalRamBytes(any()) } returns (1.9 * gb).toLong()
+        assertEquals(150, helperSpy.getAutoBufferMb(context))
+        assertEquals(250, helperSpy.getSafeNativeMemoryLimitMb(context))
+        assertEquals(325, helperSpy.getWarningNativeMemoryLimitMb(context))
+        every { helperSpy.getDevicePhysicalRamBytes(any()) } returns (3.8 * gb).toLong()
+        assertEquals(1000, helperSpy.getAutoBufferMb(context))
+    }
 
-        // Overhead = 100 MB -> 50 - 100 = -50 -> coerceAtLeast MIN_BUFFER_MB (25 MB)
-        val loadControl = NuvioExoPlayerPerformanceHelper.buildLoadControl(chunkOverheadMb = 100)
-        val targetBufferBytesField = androidx.media3.exoplayer.DefaultLoadControl::class.java.getDeclaredField("targetBufferBytesOverwrite")
-        targetBufferBytesField.isAccessible = true
-        val targetBytes = targetBufferBytesField.getInt(loadControl)
+    @Test
+    fun `free memory lowers only an automatic target`() {
+        val mb = 1024L * 1024L
+        val tight = com.nuvio.tv.core.player.BufferSizing.FreeMemory(425 * mb, 130 * mb, false)
+        NuvioExoPlayerPerformanceHelper.targetIsAutomatic = true
+        NuvioExoPlayerPerformanceHelper.targetBufferSizeMb = 150
+        NuvioExoPlayerPerformanceHelper.sizeTargetFromFreeMemory(tight, 96, 0)
+        assertEquals(50, NuvioExoPlayerPerformanceHelper.targetBufferSizeMb)
 
-        assertEquals(com.nuvio.tv.ui.screens.settings.MemoryBudget.MIN_BUFFER_MB * 1024 * 1024, targetBytes)
+        NuvioExoPlayerPerformanceHelper.targetIsAutomatic = false
+        NuvioExoPlayerPerformanceHelper.targetBufferSizeMb = 300
+        NuvioExoPlayerPerformanceHelper.sizeTargetFromFreeMemory(tight, 96, 0)
+        assertEquals(300, NuvioExoPlayerPerformanceHelper.targetBufferSizeMb)
+        NuvioExoPlayerPerformanceHelper.targetIsAutomatic = true
+    }
+
+    @Test
+    fun `custom playback buffers on a small sized target get a back buffer that leaves 5 s ahead`() {
+        val helper = NuvioExoPlayerPerformanceHelper
+        val mb = 1024L * 1024L
+        val playerId = androidx.media3.exoplayer.analytics.PlayerId("test")
+        val enabledField = helper::class.java.getDeclaredField("enabled").apply { isAccessible = true }
+        val oldEnabled = enabledField.getBoolean(helper)
+        val old = listOf(helper.targetBufferSizeMb, helper.minBufferMs, helper.maxBufferMs, helper.backBufferMs)
+        val oldAutomatic = helper.targetIsAutomatic
+        try {
+            enabledField.setBoolean(helper, true)
+            // Custom playback buffers on, Managed memory budget on, 2 GB box: 200 s minimum, 12 s back buffer.
+            helper.minBufferMs = 200_000
+            helper.maxBufferMs = 280_000
+            helper.backBufferMs = 12_000
+            helper.targetIsAutomatic = true
+            helper.targetBufferSizeMb = 150
+            helper.sizeTargetFromFreeMemory(com.nuvio.tv.core.player.BufferSizing.FreeMemory(600 * mb, 130 * mb, false), 96, 0)
+            assertEquals(62, helper.targetBufferSizeMb)
+            assertEquals(1_200_000L, helper.buildLoadControl().getBackBufferDurationUs(playerId))
+            assertEquals(1_200, helper.builtBackBufferMs)
+
+            helper.targetBufferSizeMb = 150
+            helper.sizeTargetFromFreeMemory(com.nuvio.tv.core.player.BufferSizing.FreeMemory(425 * mb, 130 * mb, false), 96, 0)
+            assertEquals(50, helper.targetBufferSizeMb)
+            assertEquals(0L, helper.buildLoadControl().getBackBufferDurationUs(playerId))
+
+            helper.targetBufferSizeMb = 1000
+            assertEquals(12_000_000L, helper.buildLoadControl().getBackBufferDurationUs(playerId))
+        } finally {
+            helper.targetBufferSizeMb = old[0]
+            helper.minBufferMs = old[1]
+            helper.maxBufferMs = old[2]
+            helper.backBufferMs = old[3]
+            helper.targetIsAutomatic = oldAutomatic
+            enabledField.setBoolean(helper, oldEnabled)
+        }
     }
 }

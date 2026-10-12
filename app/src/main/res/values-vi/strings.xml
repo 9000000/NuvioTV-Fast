@@ -3507,4 +3507,15 @@
     <string name="autosync_toast_failed_no_reference">Đồng bộ thất bại: video này không có phụ đề nhúng sẵn để so sánh.</string>
     <string name="autosync_toast_failed_unsupported">Đồng bộ thất bại: Tự động đồng bộ không hỗ trợ đồng bộ định dạng phụ đề này.</string>
     <string name="autosync_label_synced">Đã tự động đồng bộ</string>
+
+    <!-- Player Startup Watchdog Errors -->
+    <string name="player_error_startup_timeout">Không thể phát - bộ giải mã video có thể không phản hồi. Khởi động lại thiết bị thường sẽ khắc phục lỗi này. Nhấn quay lại để thử lại hoặc chọn luồng phát khác.</string>
+    <string name="player_error_startup_video_track_unsupported">Không thể phát - thiết bị này không hỗ trợ định dạng video của luồng phát này. Vui lòng quay lại và chọn luồng khác.</string>
+    <string name="player_error_startup_no_stream_data">Không thể phát - luồng phát không truyền dữ liệu kịp thời. Nguồn phát có thể bị chậm hoặc không khả dụng. Vui lòng thử lại hoặc chọn luồng khác.</string>
+
+    <!-- Network Diagnostic Run Strings -->
+    <string name="network_test_busy">Một kiểm tra mạng khác đang chạy hoặc đang hoàn tất. Vui lòng thử lại sau.</string>
+    <string name="network_test_playback_active">Vui lòng dừng phát trước khi chạy kiểm tra tốc độ.</string>
+    <string name="diagnostic_run_timed_out">Kiểm tra so sánh đã vượt quá giới hạn 2 phút. Kết quả chưa hoàn tất; không có đề xuất nào được tạo.</string>
+    <string name="diagnostic_run_payload_limit">Kiểm tra so sánh đã đạt giới hạn dung lượng cho phép. Kết quả chưa hoàn tất; không có đề xuất nào được tạo.</string>
 </resources>
