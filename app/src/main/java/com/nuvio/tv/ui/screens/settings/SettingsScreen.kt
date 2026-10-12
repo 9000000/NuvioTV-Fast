@@ -133,7 +133,6 @@ private const val SETTINGS_RAIL_FOCUS_RETRY_WINDOW_MS = 200L
  * first time the rail takes focus the mark reads as set and the restoration is skipped.
  */
 private const val NO_RAIL_FALLBACK = -1L
-private const val SETTINGS_TAB_FOCUS_SELECT_DELAY_MS = 140L
 private const val SETTINGS_DETAIL_ANIM_IN_DURATION_MS = 200
 private const val SETTINGS_DETAIL_ANIM_OUT_DURATION_MS = 180
 
@@ -439,23 +438,6 @@ fun SettingsScreen(
                 }
             }
 
-            var focusedTabCategory by remember { mutableStateOf<SettingsCategory?>(null) }
-            val selectFocusedTab: (SettingsCategory) -> Unit = { category ->
-                if (selectedCategory != category) {
-                    if (category == SettingsCategory.INTEGRATION) {
-                        integrationSection = IntegrationSettingsSection.Hub
-                    }
-                    allowDetailAutofocus = false
-                    selectedCategory = category
-                }
-            }
-
-            LaunchedEffect(focusedTabCategory) {
-                val category = focusedTabCategory ?: return@LaunchedEffect
-                delay(SETTINGS_TAB_FOCUS_SELECT_DELAY_MS)
-                selectFocusedTab(category)
-            }
-
             if (isHorizonStyle) {
                 var topBarCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
                 var focusedTabBounds by remember { mutableStateOf<Rect?>(null) }
@@ -532,7 +514,6 @@ fun SettingsScreen(
                                         railRestoringCategory = null
                                     }
                                     if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
-                                        focusedTabCategory?.let(selectFocusedTab)
                                         allowDetailAutofocus = true
                                     }
                                     false
@@ -566,9 +547,6 @@ fun SettingsScreen(
                                                 railFocusCategoryName = section.category.name
                                             } else if (restoringTo == null) {
                                                 railFocusCategoryName = section.category.name
-                                            }
-                                            if (section.destination == SettingsSectionDestination.Inline) {
-                                                focusedTabCategory = section.category
                                             }
                                         },
                                         onFocusedTabPositioned = { tabCoordinates ->
@@ -690,16 +668,8 @@ fun SettingsScreen(
                                 }
                                 val toDetailKey = if (isRtl) Key.DirectionLeft else Key.DirectionRight
                                 if (event.type == KeyEventType.KeyDown && event.key == toDetailKey) {
-                                    val pendingSection = focusedTabCategory
-                                        ?.takeIf { it != selectedCategory || !allowDetailAutofocus }
-                                        ?.let { category -> visibleSections.firstOrNull { it.category == category } }
-                                    if (pendingSection != null) {
-                                        onSectionClick(pendingSection)
-                                        true
-                                    } else {
-                                        allowDetailAutofocus = true
-                                        false
-                                    }
+                                    allowDetailAutofocus = true
+                                    false
                                 } else {
                                     false
                                 }
@@ -726,9 +696,6 @@ fun SettingsScreen(
                                             railFocusCategoryName = section.category.name
                                         } else if (restoringTo == null) {
                                             railFocusCategoryName = section.category.name
-                                        }
-                                        if (section.destination == SettingsSectionDestination.Inline) {
-                                            focusedTabCategory = section.category
                                         }
                                     },
                                     title = section.title,
