@@ -3,6 +3,7 @@ package com.nuvio.tv.core.di
 import android.content.Context
 import android.util.Log
 import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.core.network.NoDelaySocketFactory
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.data.remote.api.AniSkipApi
 import com.nuvio.tv.data.remote.api.AnimeSkipApi
@@ -43,7 +44,6 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import com.nuvio.tv.core.network.IPv4FirstDns
-import com.nuvio.tv.core.network.NoDelaySocketFactory
 import com.nuvio.tv.core.diagnostics.SentryNetworkBreadcrumbInterceptor
 import java.io.File
 import java.security.SecureRandom

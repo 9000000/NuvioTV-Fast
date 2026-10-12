@@ -49,9 +49,9 @@ internal object PlayerPlaybackNetworking {
             maxRequestsPerHost = 32
         }
         OkHttpClient.Builder()
-            .socketFactory(NoDelaySocketFactory)
             .dispatcher(dispatcher)
             .dns(IPv4FirstDns())
+            .socketFactory(NoDelaySocketFactory)
             .eventListenerFactory(PlaybackConnectionEvents)
             .sslSocketFactory(sslContext.socketFactory, trustAllManager)
             .hostnameVerifier(playbackHostnameVerifier)
@@ -75,9 +75,9 @@ internal object PlayerPlaybackNetworking {
             maxRequestsPerHost = 32
         }
         OkHttpClient.Builder()
-            .socketFactory(NoDelaySocketFactory)
             .dispatcher(dispatcher)
             .dns(IPv4FirstDns())
+            .socketFactory(NoDelaySocketFactory)
             .eventListenerFactory(PlaybackConnectionEvents)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)

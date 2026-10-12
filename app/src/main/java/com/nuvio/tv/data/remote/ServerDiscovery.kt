@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.remote
 
 import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.core.network.NoDelaySocketFactory
 import com.nuvio.tv.domain.model.ServerCapabilities
 import com.nuvio.tv.domain.model.ServerConfiguration
 import java.io.ByteArrayOutputStream
@@ -137,6 +138,7 @@ internal object ServerDiscoveryPolicy {
 @Singleton
 class ServerDiscoveryService @Inject constructor() {
     private val client = OkHttpClient.Builder()
+        .socketFactory(NoDelaySocketFactory)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .callTimeout(15, TimeUnit.SECONDS)
