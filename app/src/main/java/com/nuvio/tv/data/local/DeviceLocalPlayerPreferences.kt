@@ -43,6 +43,18 @@ class DeviceLocalPlayerPreferences @Inject constructor(
     private val tunneledSurfaceFillKey = booleanPreferencesKey("tunneled_surface_fill")
     private val playerStatsHudButtonEnabledKey = booleanPreferencesKey("player_stats_hud_enabled")
     private val playerStatsHudActiveKey = booleanPreferencesKey("player_stats_hud_active")
+    private val tunnelFrameReportDecodersKey = androidx.datastore.preferences.core.stringSetPreferencesKey("tunnel_frame_report_decoders")
+
+    /** Video decoders (with the firmware) seen reporting tunnelled frames on this box. */
+    val tunnelFrameReportDecoders: Flow<Set<String>> = store.data.map { prefs ->
+        prefs[tunnelFrameReportDecodersKey] ?: emptySet()
+    }
+
+    suspend fun addTunnelFrameReportDecoder(key: String) {
+        store.edit { prefs ->
+            prefs[tunnelFrameReportDecodersKey] = (prefs[tunnelFrameReportDecodersKey] ?: emptySet()) + key
+        }
+    }
 
     val aspectMode: Flow<AspectMode> = store.data.map { prefs ->
         prefs[aspectModeKey]?.let {

@@ -122,10 +122,15 @@ class PlayerRuntimeController(
         internal const val SWITCH_TRACE_ENABLED = false
         internal const val TRACK_FRAME_RATE_GRACE_MS = 1500L
         internal const val FIRST_FRAME_TIMEOUT_MS = 12_000L
+        internal const val TUNNEL_AV_SYNC_CHECK_MS = 1_000L
+        internal const val TUNNEL_AV_SYNC_STALL_MS = 5_000L
+        internal const val TUNNEL_AV_SYNC_NO_FRAME_MS = 8_000L
         // Stall watchdog: re-seeks past the buffered edge if bufferedPosition stops
         // advancing during STATE_BUFFERING. Fires before OkHttp's readTimeout.
         internal const val STALL_WATCHDOG_THRESHOLD_MS = 15_000L
         internal const val STALL_WATCHDOG_POLL_INTERVAL_MS = 1_000L
+        internal const val STARTUP_WATCHDOG_TIMEOUT_MS = 20_000L
+        internal const val STARTUP_WATCHDOG_CEILING_MS = 60_000L
         internal const val MAX_TIMEOUT_RECOVERY_ATTEMPTS = 2
         internal const val ADDON_SUBTITLE_TRACK_ID_PREFIX = "nuvio-addon-sub:"
     }
@@ -438,6 +443,7 @@ class PlayerRuntimeController(
     internal var seekProgressSyncJob: Job? = null
     internal var frameRateProbeJob: Job? = null
     internal var frameRateProbeToken: Long = 0L
+    internal val afrPreflightGate = AfrPreflightGate()
     internal var hideAspectRatioIndicatorJob: Job? = null
     internal var hideStreamSourceIndicatorJob: Job? = null
     internal var hidePlayerEngineSwitchInfoJob: Job? = null
@@ -664,6 +670,28 @@ class PlayerRuntimeController(
     // Streams where manual Convert-to-DV8.1 mode 2 failed to play, so the next
     // attempt is forced to libdovi mode 1 before falling back to HDR10 base layer.
     internal val dv7Mode1ForcedStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val preferFfmpegAudioStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val tunnelingDisabledStreamUrls: MutableSet<String> = mutableSetOf()
+    internal var tunnelStallStrike: PlayerTunnelAvSyncPolicy.StallStrike? = null
+    internal var surroundResolveInputs: SurroundResolveInputs? = null
+    internal var lastAppliedSurroundResolve: SurroundResolveResult? = null
+    internal var lastAppliedSurroundHdmi: AudioChainProbe.HdmiPlugSnapshot? = null
+    internal var currentAudioPassthroughPolicy: com.nuvio.tv.core.player.AudioPassthroughPolicy? = null
+    internal val deadSourceStreamUrls: MutableSet<String> = mutableSetOf()
+    internal var deadSourceFailoverCount: Int = 0
+    internal var knownAudioOutputDeviceIds: Set<Int> = emptySet()
+    internal var passthroughReturnCheckJob: Job? = null
+    internal val passthroughReturnRebuilds: MutableMap<String, Int> = mutableMapOf()
+    internal var playbackRecoveryJob: Job? = null
+    internal var lastOutputChangeForTunnelMs: Long = 0L
+    internal var tunnelAvSyncWatchdogJob: Job? = null
+    internal var bufferMemoryKeeper: com.nuvio.tv.core.player.BufferMemoryKeeper? = null
+    internal var currentManagedBudgetMb: Int = com.nuvio.tv.ui.screens.settings.MemoryBudget.autoBudgetMb
+    internal var losslessAudioDefaultAppliedForStream: Boolean = false
+    internal var persistedAudioPreferenceSeenForStream: Boolean = false
+    internal var startupWatchdogJob: Job? = null
+    internal val nativeVideoSelection = PlayerNativeVideoSelection()
+    internal var tunnelDeadClockSignature: String? = null
     internal val vc1TrackSelectionBypassStreamUrls: MutableSet<String> = mutableSetOf()
     internal val safeAudioForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal val audioDisabledForcedStreamUrls: MutableSet<String> = mutableSetOf()
@@ -672,7 +700,10 @@ class PlayerRuntimeController(
     internal var isExperimentalDv7ToDv81ActiveForCurrentPlayback: Boolean = false
     internal var isVc1TrackSelectionBypassActiveForCurrentPlayback: Boolean = false
     internal var isSafeAudioModeActiveForCurrentPlayback: Boolean = false
+    internal var isTunnelingActiveForCurrentPlayback: Boolean = false
     internal var isAudioDisabledForCurrentPlayback: Boolean = false
+    internal var currentAudioPathDescription: String? = null
+    internal var isAudioOutputBypassing: Boolean = false
     internal var hasAttemptedDv7ToDv81ForCurrentPlayback: Boolean = false
     internal var dv7ToDv81BridgeVersionForCurrentPlayback: String? = null
     internal var dv7ToDv81LastProbeReasonForCurrentPlayback: String? = null
@@ -827,4 +858,36 @@ internal fun PlayerRuntimeController.logSwitchTrace(
         PlayerRuntimeController.SWITCH_TRACE_TAG,
         "sid=$switchTraceSessionId seq=$sequence stage=$stage engine=$currentInternalPlayerEngine streamToken=$streamToken $message"
     )
+}
+
+internal fun PlayerRuntimeController.noteOutputChangeForTunnelWatch() {
+    lastOutputChangeForTunnelMs = android.os.SystemClock.elapsedRealtime()
+}
+
+internal fun PlayerRuntimeController.saveAudioRefusalEvidence() {
+    scope.launch {
+        playerSettingsDataStore.saveAudioRefusalEvidence(AudioRejectionReverifier.ledger.evidenceSnapshot())
+    }
+}
+
+internal fun PlayerRuntimeController.scheduleOwnedPlaybackRecovery(
+    positionMs: Long,
+    delayMs: Long,
+    awaitOutputFor: Int? = null
+) {
+    val url = currentStreamUrl
+    val headers = currentHeaders.toMap()
+    val paused = userPausedManually
+    val position = _uiState.value.pendingSeekPosition ?: positionMs.coerceAtLeast(0L)
+    cancelStartupWatchdog()
+    showRecoveryOverlay()
+    playbackRecoveryJob?.cancel()
+    playbackRecoveryJob = scope.launch {
+        releasePlayer(flushPlaybackState = false)
+        if (delayMs > 0L) kotlinx.coroutines.delay(delayMs)
+        if (currentStreamUrl != url) return@launch
+        _uiState.update { it.copy(pendingSeekPosition = position, error = null) }
+        playbackRecoveryJob = null
+        initializePlayer(url, headers, startPaused = paused)
+    }
 }

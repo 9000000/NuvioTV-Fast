@@ -368,12 +368,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             if (settings.frameRateMatchingMode == FrameRateMatchingMode.OFF) {
                 frameRateProbeJob?.cancel()
                 _uiState.update {
-                    it.copy(
-                        detectedFrameRateRaw = 0f,
-                        detectedFrameRate = 0f,
-                        detectedFrameRateSource = null,
-                        afrProbeRunning = false
-                    )
+                    it.clearFrameRateDetection().copy(afrProbeRunning = false)
                 }
             }
 
@@ -763,14 +758,182 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithVc1TrackSelectionBypa
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
+internal fun PlayerRuntimeController.retryCurrentStreamWithoutTunneling(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
+internal fun PlayerRuntimeController.retryCurrentStreamKeepingTunneling(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
 internal fun PlayerRuntimeController.cancelFirstFrameWatchdog() {
     firstFrameWatchdogJob?.cancel()
     firstFrameWatchdogJob = null
 }
 
+internal fun PlayerRuntimeController.cancelTunnelAvSyncWatchdog() {
+    tunnelAvSyncWatchdogJob?.cancel()
+    tunnelAvSyncWatchdogJob = null
+}
+
 internal fun PlayerRuntimeController.cancelStallWatchdog() {
     stallWatchdogJob?.cancel()
     stallWatchdogJob = null
+}
+
+internal fun PlayerRuntimeController.cancelStartupWatchdog() {
+    startupWatchdogJob?.cancel()
+    startupWatchdogJob = null
+}
+
+/**
+ * Startup watchdog: armed when the stream starts loading, disarmed at first
+ * frame (real onRenderedFirstFrame or the tunneled synthetic first frame at READY)
+ * and on stream reset/reinit. Fires once if no frame has rendered inside
+ * [PlayerRuntimeController.STARTUP_WATCHDOG_TIMEOUT_MS] and surfaces an actionable
+ * error instead of an infinite spinner. Deliberately does NOT auto-retry: the known
+ * trigger is the vendor Codec2 service wedging during decoder allocation, where a
+ * reinit just hangs again; the honest remedy is telling the user (a device restart
+ * clears the wedge). Exo engine path only, matching the arm site.
+ */
+internal fun PlayerRuntimeController.scheduleStartupWatchdog() {
+    cancelStartupWatchdog()
+    startupWatchdogJob = scope.launch {
+        val armedAtMs = System.currentTimeMillis()
+        var lastBufferedAheadMs = 0L
+        var lastPositionMs = _exoPlayer?.currentPosition ?: 0L
+        var videoRestarted = false
+        val slowStart = SlowStartServer.matches(currentStreamUrl)
+        while (isActive) {
+            delay(PlayerRuntimeController.STARTUP_WATCHDOG_TIMEOUT_MS)
+            if (hasRenderedFirstFrame) return@launch
+            val livePlayer = _exoPlayer ?: return@launch
+            val elapsedMs = System.currentTimeMillis() - armedAtMs
+            val bufferedAheadMs = livePlayer.totalBufferedDuration.coerceAtLeast(0L)
+            val positionMs = livePlayer.currentPosition
+            val ceilingMs =
+                if (slowStart) SlowStartServer.STARTUP_CEILING_MS else PlayerRuntimeController.STARTUP_WATCHDOG_CEILING_MS
+            val step = StartupWatchdogDecision.next(
+                elapsedMs = elapsedMs,
+                intervalMs = PlayerRuntimeController.STARTUP_WATCHDOG_TIMEOUT_MS,
+                ceilingMs = ceilingMs,
+                slowStart = slowStart,
+                bufferedAheadMs = bufferedAheadMs,
+                lastBufferedAheadMs = lastBufferedAheadMs,
+                ready = livePlayer.playbackState == Player.STATE_READY,
+                playing = livePlayer.isPlaying,
+                positionMs = positionMs,
+                lastPositionMs = lastPositionMs,
+                videoRestarted = videoRestarted,
+                tracksRead = hasScannedTextTracksOnce,
+                hasVideoTrack = currentStreamHasVideoTrack,
+                videoSelected = currentVideoTrackSelected,
+            )
+            lastPositionMs = positionMs
+            when (step) {
+                StartupWatchdogDecision.Step.WaitForData -> {
+                    Log.w(
+                        PlayerRuntimeController.TAG,
+                        "STARTUP_WATCHDOG: no data ${elapsedMs}ms after starting_stream from a server that may still " +
+                            "be preparing it; waiting (ceiling=${SlowStartServer.STARTUP_CEILING_MS}ms)"
+                    )
+                    continue
+                }
+                StartupWatchdogDecision.Step.Extend -> {
+                    Log.w(
+                        PlayerRuntimeController.TAG,
+                        "STARTUP_WATCHDOG: no first frame ${elapsedMs}ms after starting_stream " +
+                            "but buffered-ahead growing (${lastBufferedAheadMs}ms -> ${bufferedAheadMs}ms); " +
+                            "extending (ceiling=${ceilingMs}ms)"
+                    )
+                    com.nuvio.tv.core.util.TtffTrace.mark("startup_watchdog_extended")
+                    lastBufferedAheadMs = bufferedAheadMs
+                    continue
+                }
+                StartupWatchdogDecision.Step.RestartVideo -> {
+                    videoRestarted = true
+                    Log.w(
+                        PlayerRuntimeController.TAG,
+                        "STARTUP_WATCHDOG: playing without a picture ${elapsedMs}ms after starting_stream " +
+                            "(pos=$positionMs bufferedAheadMs=$bufferedAheadMs); seeking in place to restart the video"
+                    )
+                    com.nuvio.tv.core.util.TtffTrace.mark("startup_watchdog_video_restart")
+                    livePlayer.seekTo(positionMs)
+                    continue
+                }
+                is StartupWatchdogDecision.Step.Fire -> Unit
+            }
+            val stateName = when (livePlayer.playbackState) {
+                Player.STATE_IDLE -> "IDLE"
+                Player.STATE_BUFFERING -> "BUFFERING"
+                Player.STATE_READY -> "READY"
+                Player.STATE_ENDED -> "ENDED"
+                else -> livePlayer.playbackState.toString()
+            }
+            val fireReason = (step as StartupWatchdogDecision.Step.Fire).reason
+            val fireMessage = when (fireReason) {
+                "video_track_unsupported" ->
+                    context.getString(com.nuvio.tv.R.string.player_error_startup_video_track_unsupported)
+                "tracks_not_read", "no_video_track", "no_data_buffered" ->
+                    context.getString(com.nuvio.tv.R.string.player_error_startup_no_stream_data)
+                else ->
+                    context.getString(com.nuvio.tv.R.string.player_error_startup_timeout)
+            }
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "STARTUP_WATCHDOG: no first frame ${elapsedMs}ms " +
+                    "after starting_stream (state=$stateName bufferedAheadMs=${bufferedAheadMs} " +
+                    "pos=${livePlayer.currentPosition} reason=$fireReason " +
+                    "scannedTracks=$hasScannedTextTracksOnce hasVideoTrack=$currentStreamHasVideoTrack " +
+                    "videoSelected=$currentVideoTrackSelected); " +
+                    "surfacing error"
+            )
+            com.nuvio.tv.core.util.TtffTrace.mark("startup_watchdog_fired")
+            _uiState.update {
+                if (it.error == null) {
+                    it.copy(
+                        error = fireMessage,
+                        showLoadingOverlay = false
+                    )
+                } else {
+                    it
+                }
+            }
+            return@launch
+        }
+    }
+}
+
+/**
+ * The startup watchdog deliberately does not stop the player, so a
+ * slow-but-healthy start can render its first frame after the watchdog has
+ * already surfaced the startup-timeout error, leaving a stale error screen
+ * over running playback. The rendered frame is
+ * ground truth: retract exactly that error. Any other error (a real decode
+ * failure racing the frame) is left untouched.
+ */
+internal fun PlayerRuntimeController.retractStartupTimeoutErrorAfterFirstFrame() {
+    val startupWatchdogMessages = setOf(
+        context.getString(com.nuvio.tv.R.string.player_error_startup_timeout),
+        context.getString(com.nuvio.tv.R.string.player_error_startup_video_track_unsupported),
+        context.getString(com.nuvio.tv.R.string.player_error_startup_no_stream_data),
+    )
+    var retracted = false
+    _uiState.update {
+        if (it.error != null && it.error in startupWatchdogMessages) {
+            retracted = true
+            it.copy(error = null)
+        } else {
+            it
+        }
+    }
+    if (retracted) {
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "STARTUP_WATCHDOG: first frame rendered after fire; retracting startup-timeout error"
+        )
+        com.nuvio.tv.core.util.TtffTrace.mark("startup_watchdog_retracted")
+    }
 }
 
 /** Tiny skip past the buffered edge to force Media3 to cancel the in-flight Range request. */
@@ -910,12 +1073,181 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
     }
 }
 
+internal fun PlayerRuntimeController.maybeScheduleTunnelAvSyncWatchdog() {
+    if (!isTunnelingActiveForCurrentPlayback) return
+    if (_exoPlayer?.isTunnelingEnabled != true) return
+    if (nativeVideoSelection.isSelected) return
+    if (!currentStreamHasVideoTrack) return
+    if (tunnelingDisabledStreamUrls.contains(currentStreamUrl)) return
+    if (tunnelAvSyncWatchdogJob?.isActive == true) return
+
+    tunnelAvSyncWatchdogJob = scope.launch {
+        var lastPositionMs: Long? = null
+        var stalledMs = 0L
+        var readyMs = 0L
+        var firstReadyPositionMs: Long? =
+            PlayerTunnelAvSyncPolicy.strikeForStream(currentStreamUrl, tunnelStallStrike)?.firstReadyPositionMs
+        var pendingDeadClockMemo: Pair<String, String>? = null
+        while (isActive) {
+            delay(PlayerRuntimeController.TUNNEL_AV_SYNC_CHECK_MS)
+            val livePlayer = _exoPlayer ?: return@launch
+            val positionMs = livePlayer.currentPosition
+            if (firstReadyPositionMs == null && livePlayer.playbackState == Player.STATE_READY) {
+                firstReadyPositionMs = positionMs
+            }
+            val renderedFrames = livePlayer.videoDecoderCounters
+                ?.also { it.ensureUpdated() }
+                ?.renderedOutputBufferCount
+            val frameReportKey = PlayerTunnelAvSyncPolicy.frameReportKey(
+                android.os.Build.FINGERPRINT,
+                playbackAnalyticsDiagnostics.hudSample().videoDecoderName
+            )
+            if (frameReportKey != null && renderedFrames != null && renderedFrames > 0 &&
+                livePlayer.isTunnelingEnabled && PlayerTunnelAvSyncPolicy.frameReportDecoders.add(frameReportKey)
+            ) {
+                Log.i(PlayerRuntimeController.TAG, "TUNNEL_AV_SYNC: tunnelled frames reported by $frameReportKey")
+                scope.launch { runCatching { deviceLocalPlayerPreferences.addTunnelFrameReportDecoder(frameReportKey) } }
+            }
+            val result = PlayerTunnelAvSyncPolicy.evaluate(
+                PlayerTunnelAvSyncPolicy.Input(
+                    isTunnelingActive = isTunnelingActiveForCurrentPlayback && !nativeVideoSelection.isSelected,
+                    isTunnelingApplied = livePlayer.isTunnelingEnabled,
+                    hasVideoTrack = currentStreamHasVideoTrack,
+                    isReady = livePlayer.playbackState == Player.STATE_READY,
+                    playWhenReady = livePlayer.playWhenReady,
+                    userPausedManually = userPausedManually,
+                    positionMs = positionMs,
+                    bufferedPositionMs = livePlayer.bufferedPosition,
+                    lastPositionMs = lastPositionMs,
+                    stalledMs = stalledMs,
+                    intervalMs = PlayerRuntimeController.TUNNEL_AV_SYNC_CHECK_MS,
+                    stallThresholdMs = PlayerRuntimeController.TUNNEL_AV_SYNC_STALL_MS,
+                    renderedOutputBufferCount = renderedFrames,
+                    frameReportsTrusted = frameReportKey != null &&
+                        frameReportKey in PlayerTunnelAvSyncPolicy.frameReportDecoders,
+                    readyMs = readyMs,
+                    noFrameThresholdMs = PlayerRuntimeController.TUNNEL_AV_SYNC_NO_FRAME_MS,
+                    tunnelingAlreadyDisarmed = tunnelingDisabledStreamUrls.contains(currentStreamUrl),
+                )
+            )
+            lastPositionMs = positionMs
+            stalledMs = result.stalledMs
+            readyMs = result.readyMs
+            when (result.decision) {
+                PlayerTunnelAvSyncPolicy.Decision.Stop -> return@launch
+                PlayerTunnelAvSyncPolicy.Decision.None -> Unit
+                PlayerTunnelAvSyncPolicy.Decision.DisableTunnelingAndRebuild -> {
+                    val audioClass = playbackSpeedAwareAudioSink?.currentTunnelAudioClass
+                    val audioLabel = audioClass ?: "unknown"
+                    val response = PlayerTunnelAvSyncPolicy.stallResponse(
+                        result.reason, currentStreamUrl, tunnelStallStrike
+                    )
+                    if (response == PlayerTunnelAvSyncPolicy.StallResponse.ReloadKeepingTunnel) {
+                        tunnelStallStrike = PlayerTunnelAvSyncPolicy.StallStrike(currentStreamUrl, firstReadyPositionMs)
+                        Log.w(
+                            PlayerRuntimeController.TAG,
+                            "TUNNEL_AV_SYNC: position frozen at ${positionMs}ms for ${stalledMs}ms under " +
+                                "tunnelling (audio=$audioLabel); first stall in this play; reloading with tunnelling kept"
+                        )
+                        queuePlaybackRawEventLine(
+                            "tunnel_av_sync_reload_keep_tunneling stalledMs=$stalledMs positionMs=$positionMs " +
+                                "audioClass=$audioLabel reason=position-frozen"
+                        )
+                        retryCurrentStreamKeepingTunneling(positionMs)
+                        return@launch
+                    }
+                    val remembered = PlayerTunnelAvSyncPolicy.remembersStall(
+                        android.os.SystemClock.elapsedRealtime(),
+                        lastOutputChangeForTunnelMs
+                    )
+                    if (result.reason == PlayerTunnelAvSyncPolicy.Reason.PositionFrozen) {
+                        if (!remembered) {
+                            Log.i(
+                                PlayerRuntimeController.TAG,
+                                "TUNNEL_AV_SYNC: freeze right after a display or audio output change; not remembered"
+                            )
+                        }
+                        if (audioClass != null && remembered) {
+                            PlayerTunnelAvSyncPolicy.deadAudioClasses.add(audioClass)
+                            val signature = tunnelDeadClockSignature
+                            if (signature != null && positionMs == firstReadyPositionMs) {
+                                pendingDeadClockMemo = audioClass to signature
+                            }
+                        }
+                        Log.w(
+                            PlayerRuntimeController.TAG,
+                            "TUNNEL_AV_SYNC: position frozen at ${positionMs}ms for ${stalledMs}ms under " +
+                                "tunnelling (audio=$audioLabel); disabling tunnelling for this stream"
+                        )
+                        queuePlaybackRawEventLine(
+                            "tunnel_av_sync_disable_tunneling stalledMs=$stalledMs positionMs=$positionMs " +
+                                "audioClass=$audioLabel reason=position-frozen"
+                        )
+                    } else {
+                        Log.w(
+                            PlayerRuntimeController.TAG,
+                            "TUNNEL_AV_SYNC: no tunnelled video frame rendered after ${readyMs}ms at " +
+                                "position ${positionMs}ms (audio=$audioLabel); disabling tunnelling for this stream"
+                        )
+                        queuePlaybackRawEventLine(
+                            "tunnel_av_sync_disable_tunneling readyMs=$readyMs positionMs=$positionMs " +
+                                "audioClass=$audioLabel reason=no-rendered-frames"
+                        )
+                    }
+                    tunnelingDisabledStreamUrls.add(currentStreamUrl)
+                    val rebuiltFrom = livePlayer
+                    retryCurrentStreamWithoutTunneling(positionMs)
+                    pendingDeadClockMemo?.let { (memoClass, signature) ->
+                        persistDeadClockMemoWhenRebuildPlays(memoClass, signature, currentStreamUrl, rebuiltFrom)
+                    }
+                    return@launch
+                }
+            }
+        }
+    }
+}
+
+private fun PlayerRuntimeController.persistDeadClockMemoWhenRebuildPlays(
+    audioClass: String,
+    signature: String,
+    streamUrl: String,
+    rebuiltFrom: Player
+) {
+    scope.launch {
+        var lastPositionMs: Long? = null
+        var playedMs = 0L
+        repeat(PlayerTunnelAvSyncPolicy.MEMO_CONFIRM_SAMPLES) {
+            delay(PlayerRuntimeController.TUNNEL_AV_SYNC_CHECK_MS)
+            if (isReleasingPlayer || currentStreamUrl != streamUrl) return@launch
+            val player = _exoPlayer ?: return@repeat
+            if (player === rebuiltFrom || player.playbackState != Player.STATE_READY) return@repeat
+            val positionMs = player.currentPosition
+            lastPositionMs?.let { last ->
+                playedMs += PlayerTunnelAvSyncPolicy.memoAdvanceMs(
+                    last, positionMs, PlayerRuntimeController.TUNNEL_AV_SYNC_CHECK_MS
+                )
+            }
+            lastPositionMs = positionMs
+            if (PlayerTunnelAvSyncPolicy.memoConfirmed(playedMs)) {
+                playerSettingsDataStore.recordTunnelDeadAudioClass(audioClass, signature)
+                Log.i(
+                    PlayerRuntimeController.TAG,
+                    "TUNNEL_AV_SYNC: dead-clock memo persisted class=$audioClass (untunnelled rebuild playing)"
+                )
+                return@launch
+            }
+        }
+    }
+}
+
 internal fun PlayerRuntimeController.handleVc1PlaybackFailure(errorMessage: String? = null) {
     val displayMessage = errorMessage?.takeIf { it.isNotBlank() }
         ?: _exoPlayer?.playerError?.toDisplayMessage(context)
         ?: return
     cancelFirstFrameWatchdog()
+    cancelTunnelAvSyncWatchdog()
     cancelStallWatchdog()
+    cancelStartupWatchdog()
     cancelStableProgressReset()
     errorRetryJob?.cancel()
     errorRetryJob = null
@@ -943,7 +1275,9 @@ internal fun PlayerRuntimeController.scheduleDeferredPlayerReinitialize(
     clearResumeProgress: Boolean = false
 ) {
     cancelFirstFrameWatchdog()
+    cancelTunnelAvSyncWatchdog()
     cancelStallWatchdog()
+    cancelStartupWatchdog()
     if (clearResumeProgress) {
         pendingResumeProgress = null
     }

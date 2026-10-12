@@ -1828,12 +1828,7 @@ internal fun PlayerRuntimeController.startFrameRateProbe(
     frameRateProbeJob?.cancel()
     _uiState.update { state ->
         if (!preserveCurrentDetection) {
-            state.copy(
-                detectedFrameRateRaw = 0f,
-                detectedFrameRate = 0f,
-                detectedFrameRateSource = null,
-                afrProbeRunning = false
-            )
+            state.clearFrameRateDetection().copy(afrProbeRunning = false)
         } else {
             state.copy(afrProbeRunning = false)
         }

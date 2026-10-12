@@ -321,7 +321,6 @@ fun PlayerScreen(
                 viewModel.hideControls()
             } else if (uiState.showControls) {
                 restoreStreamInfoFocus = true
-                viewModel.onEvent(PlayerEvent.OnShowMoreDialog)
             }
             hideControlsAfterStreamInfo = false
         } else if (uiState.showPauseOverlay) {
@@ -556,8 +555,8 @@ fun PlayerScreen(
             subtitleTimingConsumeNextConfirmKeyUp = false
         }
     }
-    LaunchedEffect(uiState.showStreamInfoOverlay, uiState.showControls, uiState.showMoreDialog) {
-        if (!uiState.showStreamInfoOverlay && uiState.showControls && uiState.showMoreDialog && restoreStreamInfoFocus) {
+    LaunchedEffect(uiState.showStreamInfoOverlay, uiState.showControls) {
+        if (!uiState.showStreamInfoOverlay && uiState.showControls && restoreStreamInfoFocus) {
             delay(250)
             runCatching { streamInfoFocusRequester.requestFocus() }
             restoreStreamInfoFocus = false
@@ -914,7 +913,6 @@ fun PlayerScreen(
                                     viewModel.hideControls()
                                 } else if (uiState.showControls) {
                                     restoreStreamInfoFocus = true
-                                    viewModel.onEvent(PlayerEvent.OnShowMoreDialog)
                                 }
                                 hideControlsAfterStreamInfo = false
                             } else {
@@ -2595,17 +2593,7 @@ private fun PlayerControlsOverlay(
                                     onFocused = onResetHideTimer
                                 )
                             }
-                            ControlButton(
-                                icon = Icons.Default.Info,
-                                contentDescription = stringResource(R.string.cd_stream_info),
-                                onClick = {
-                                    onShowStreamInfo()
-                                },
-                                focusRequester = streamInfoFocusRequester,
-                                upFocusRequester = progressUpTarget,
-                                onDownKey = onHideControls,
-                                onFocused = onResetHideTimer
-                            )
+
                             if (uiState.playbackIssueReportsEnabled) {
                                 ReportControlButton(
                                     reportId = uiState.playbackIssueReportId,

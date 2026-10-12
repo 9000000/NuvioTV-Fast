@@ -804,7 +804,7 @@ internal fun SettingsActionRow(
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
     enabled: Boolean = true,
-    trailingIcon: ImageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+    trailingIcon: ImageVector? = Icons.AutoMirrored.Filled.KeyboardArrowRight,
     titleTrailingIcon: ImageVector? = null,
     titleTrailingIconTint: Color = NuvioTheme.colors.TextPrimary,
     leadingIcon: ImageVector? = null,
@@ -902,13 +902,15 @@ internal fun SettingsActionRow(
                 )
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
-            Icon(
-                imageVector = trailingIcon,
-                contentDescription = null,
-                tint = NuvioTheme.colors.TextTertiary.copy(alpha = contentAlpha),
-                modifier = Modifier.size(18.dp)
-            )
+            if (trailingIcon != null) {
+                Spacer(modifier = Modifier.width(10.dp))
+                Icon(
+                    imageVector = trailingIcon,
+                    contentDescription = null,
+                    tint = NuvioTheme.colors.TextTertiary.copy(alpha = contentAlpha),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
@@ -1023,7 +1025,8 @@ internal fun <T> SettingsMultiChoiceDialog(
     onDismiss: () -> Unit,
     subtitle: String? = null,
     width: Dp = 520.dp,
-    maxHeight: Dp = 420.dp
+    maxHeight: Dp = 420.dp,
+    maxSelections: Int? = null
 ) {
     val focusRequester = remember { FocusRequester() }
     val selected = remember(selectedValues) { mutableStateListOf<T>().also { it.addAll(selectedValues) } }
@@ -1067,7 +1070,7 @@ internal fun <T> SettingsMultiChoiceDialog(
                             onClick = {
                                 if (isSelected) {
                                     selected.remove(option.value)
-                                } else {
+                                } else if (maxSelections == null || selected.size < maxSelections) {
                                     selected.add(option.value)
                                 }
                             },

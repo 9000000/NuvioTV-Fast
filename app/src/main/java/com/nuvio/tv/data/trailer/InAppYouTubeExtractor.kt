@@ -67,7 +67,11 @@ internal data class StreamCandidate(
     // Only meaningful for audio candidates: false means this format is an
     // alternate-language dub track, not the video's original/default audio.
     // Always true for video/progressive candidates, so it never affects them.
-    val isDefaultAudioTrack: Boolean = true
+    val isDefaultAudioTrack: Boolean = true,
+    // Adaptive video only: the format's codecs string (e.g. "av01.0.12M.10"), null when unknown,
+    // and whether it is HDR (PQ or HLG).
+    val codecs: String? = null,
+    val isHdr: Boolean = false
 )
 
 internal enum class PlaybackSourceKind {
@@ -153,12 +157,18 @@ private val CLIENTS = listOf(
 )
 
 @Singleton
-class InAppYouTubeExtractor @Inject constructor() {
+class InAppYouTubeExtractor internal constructor(
+    private val canDecodeVideo: (codecs: String, width: Int, height: Int, fps: Int) -> Boolean
+) {
+    @Inject
+    constructor() : this(VideoDecoderSupport::canDecode)
+
     private val gson = Gson()
 
     private val httpClient by lazy {
         OkHttpClient.Builder()
             .dns(com.nuvio.tv.core.network.IPv4FirstDns())
+            .socketFactory(com.nuvio.tv.core.network.NoDelaySocketFactory)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
@@ -417,7 +427,9 @@ class InAppYouTubeExtractor @Inject constructor() {
                             height = height,
                             width = (format.numberValue("width") ?: 0.0).toInt(),
                             fps = fps,
-                            ext = if (mimeType.contains("webm")) "webm" else "mp4"
+                            ext = if (mimeType.contains("webm")) "webm" else "mp4",
+                            codecs = videoCodecsParam(mimeType),
+                            isHdr = isHdrFormat(format)
                         )
                     } else if (hasAudio) {
                         val bitrate = format.numberValue("bitrate")
@@ -491,9 +503,12 @@ class InAppYouTubeExtractor @Inject constructor() {
         }
 
         val bestProgressive = sortCandidates(progressive).firstOrNull()
-        val bestVideo = pickBestForClient(capVideoHeight(adaptiveVideo, maxVideoHeight), PREFERRED_SEPARATE_CLIENT)
+        val bestVideo = pickBestForClient(
+            capVideoHeight(playableVideo(adaptiveVideo), maxVideoHeight),
+            PREFERRED_SEPARATE_CLIENT
+        )
         if (bestVideo != null) {
-            Log.d(TAG, "Adaptive video: ${bestVideo.width}x${bestVideo.height} itag=${bestVideo.itag} (maxHeight=$maxVideoHeight)")
+            Log.d(TAG, "Adaptive video: ${bestVideo.width}x${bestVideo.height} itag=${bestVideo.itag} codecs=${bestVideo.codecs} (maxHeight=$maxVideoHeight)")
         }
         val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
 
@@ -767,6 +782,31 @@ class InAppYouTubeExtractor @Inject constructor() {
         }
     }
 
+    /**
+     * Drops the streams the trailer player can't show, which it would play as audio over a black
+     * screen:
+     *  - HDR. Trailers render through a TextureView, which has no HDR output, and the SHIELD's
+     *    VP9 decoder fails outright on YouTube's 10-bit HDR streams. YouTube also serves an SDR
+     *    version, so nothing is lost.
+     *  - Codecs, profiles or sizes this device has no decoder for, such as 4K AV1 on most TV boxes.
+     * When none is left, the adaptive source is skipped and the HLS manifest or a progressive file
+     * is used instead.
+     */
+    internal fun playableVideo(items: List<StreamCandidate>): List<StreamCandidate> =
+        items.filter { candidate ->
+            if (candidate.isHdr) return@filter false
+            val codecs = candidate.codecs ?: return@filter true
+            canDecodeVideo(codecs, candidate.width, candidate.height, candidate.fps)
+        }
+
+    /** HDR by its transfer function (PQ or HLG), or by YouTube's "HDR" quality label. */
+    private fun isHdrFormat(format: Map<*, *>): Boolean {
+        val transfer = format.mapValue("colorInfo")?.stringValue("transferCharacteristics").orEmpty()
+        return transfer.contains("SMPTEST2084") ||
+            transfer.contains("ARIB_STD_B67") ||
+            format.stringValue("qualityLabel").orEmpty().contains("HDR", ignoreCase = true)
+    }
+
     /** Streams within the 16:9 box of [maxHeight], or all of them when none fits. */
     internal fun capVideoHeight(items: List<StreamCandidate>, maxHeight: Int): List<StreamCandidate> {
         if (maxHeight == Int.MAX_VALUE) return items
@@ -830,6 +870,7 @@ class InAppYouTubeExtractor @Inject constructor() {
     private val probeClient by lazy {
         OkHttpClient.Builder()
             .dns(com.nuvio.tv.core.network.IPv4FirstDns())
+            .socketFactory(com.nuvio.tv.core.network.NoDelaySocketFactory)
             .connectTimeout(2, TimeUnit.SECONDS)
             .readTimeout(2, TimeUnit.SECONDS)
             .followRedirects(true)

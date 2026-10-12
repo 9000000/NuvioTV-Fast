@@ -142,19 +142,11 @@ private fun LiveTvContent(
         state.channels.firstOrNull { it.id == state.lastWatchedChannelId }
     }
     val initialPlaylistId = state.lastWatchedPlaylistId ?: lastWatchedChannel?.playlistId
-    val initialGroup = state.lastWatchedGroup ?: lastWatchedChannel?.group
-    val initialFilter = state.lastWatchedFilterType?.let { runCatching { FilterType.valueOf(it) }.getOrNull() }
-        ?: when {
-            !initialGroup.isNullOrBlank() && initialPlaylistId != null -> FilterType.GROUP
-            state.recentChannelIds.isNotEmpty() -> FilterType.RECENT
-            state.favoriteChannelIds.isNotEmpty() -> FilterType.FAVORITES
-            initialPlaylistId != null -> FilterType.PLAYLIST
-            else -> FilterType.RECENT
-        }
+    val initialFilter = FilterType.RECENT
 
-    // Dùng rememberSaveable để nhớ filter đã chọn giữa các lần navigation
+    // Dùng rememberSaveable để nhớ filter đã chọn giữa các lần navigation, mặc định trỏ vào mục Xem gần đây
     var activeFilter by rememberSaveable { mutableStateOf(initialFilter) }
-    var selectedGroup by rememberSaveable { mutableStateOf<String?>(initialGroup) }
+    var selectedGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(initialPlaylistId) }
     var pendingFocusRestore by rememberSaveable { mutableStateOf(true) }
     var hasSynchronizedInitialState by rememberSaveable { mutableStateOf(false) }
@@ -179,29 +171,18 @@ private fun LiveTvContent(
         if (!hasSynchronizedInitialState && state.channels.isNotEmpty()) {
             val targetChannel = state.channels.firstOrNull { it.id == state.lastWatchedChannelId }
             val resolvedPlaylistId = state.lastWatchedPlaylistId ?: targetChannel?.playlistId
-            val resolvedGroup = state.lastWatchedGroup ?: targetChannel?.group
-            val resolvedFilter = state.lastWatchedFilterType?.let { runCatching { FilterType.valueOf(it) }.getOrNull() }
-                ?: when {
-                    !resolvedGroup.isNullOrBlank() && resolvedPlaylistId != null -> FilterType.GROUP
-                    state.recentChannelIds.isNotEmpty() -> FilterType.RECENT
-                    state.favoriteChannelIds.isNotEmpty() -> FilterType.FAVORITES
-                    resolvedPlaylistId != null -> FilterType.PLAYLIST
-                    else -> FilterType.RECENT
-                }
 
             if (resolvedPlaylistId != null) {
                 selectedPlaylistId = resolvedPlaylistId
             }
-            if (resolvedFilter == FilterType.GROUP && resolvedGroup != null) {
-                selectedGroup = resolvedGroup
-            }
-            activeFilter = resolvedFilter
+            activeFilter = FilterType.RECENT
+            selectedGroup = null
             hasSynchronizedInitialState = true
             pendingFocusRestore = true
         }
     }
 
-    // Lắng nghe tín hiệu điều hướng từ Sidebar để trỏ về kênh/chip hiện tại
+    // Lắng nghe tín hiệu điều hướng từ Sidebar để trỏ về mục Xem gần đây
     val resetTrigger by LiveTvRepository.navigationResetEvent.collectAsState()
     var lastHandledResetTrigger by rememberSaveable { mutableStateOf(0L) }
 
@@ -209,6 +190,8 @@ private fun LiveTvContent(
         if (resetTrigger != 0L && resetTrigger != lastHandledResetTrigger) {
             lastHandledResetTrigger = resetTrigger
             showPlaylistDropdown = false
+            activeFilter = FilterType.RECENT
+            selectedGroup = null
             pendingFocusRestore = true
         }
     }
@@ -331,23 +314,22 @@ private fun LiveTvContent(
     }
 
     fun getActiveChipIndex(): Int {
-        val hasRecent = state.recentChannelIds.isNotEmpty() || selectedPlaylistId == null
         return if (selectedPlaylistId == null) {
             when (activeFilter) {
-                FilterType.RECENT -> if (hasRecent) 1 else 0
-                FilterType.FAVORITES -> if (hasRecent) 2 else 1
+                FilterType.RECENT -> 1
+                FilterType.FAVORITES -> 2
                 else -> 0
             }
         } else {
             val isAllSelected = (activeFilter == FilterType.ALL || activeFilter == FilterType.PLAYLIST) && selectedGroup == null
             when {
                 isAllSelected -> 1
-                activeFilter == FilterType.RECENT && hasRecent -> 2
-                activeFilter == FilterType.FAVORITES -> if (hasRecent) 3 else 2
+                activeFilter == FilterType.RECENT -> 2
+                activeFilter == FilterType.FAVORITES -> 3
                 activeFilter == FilterType.GROUP -> {
                     val groupIdx = selectedGroup?.let { allGroups.indexOf(it) } ?: -1
-                    // 1 (dropdown) + 1 (all channels) + (1 if hasRecent else 0) + 1 (favorites)
-                    val baseIndex = 2 + (if (hasRecent) 1 else 0) + 1
+                    // 1 (dropdown) + 1 (all channels) + 1 (recent) + 1 (favorites) = 4
+                    val baseIndex = 4
                     if (groupIdx >= 0) baseIndex + groupIdx else 1
                 }
                 else -> 0
@@ -358,7 +340,6 @@ private fun LiveTvContent(
     // Helper navigate về chip hiện tại với scroll an toàn và fallback
     suspend fun navigateToActiveChip() {
         showPlaylistDropdown = false
-        val hasRecent = state.recentChannelIds.isNotEmpty() || selectedPlaylistId == null
         val targetIndex = getActiveChipIndex()
 
         val targetRequester = when {
@@ -368,7 +349,7 @@ private fun LiveTvContent(
                 else -> playlistDropdownButtonFocusRequester
             }
             (activeFilter == FilterType.ALL || activeFilter == FilterType.PLAYLIST) && selectedGroup == null -> allChipFocusRequester
-            activeFilter == FilterType.RECENT && hasRecent -> recentChipFocusRequester
+            activeFilter == FilterType.RECENT -> recentChipFocusRequester
             activeFilter == FilterType.FAVORITES -> favoritesChipFocusRequester
             activeFilter == FilterType.GROUP -> {
                 selectedGroup?.let { groupChipFocusRequesters.getOrPut(it) { FocusRequester() } } ?: allChipFocusRequester
@@ -398,28 +379,33 @@ private fun LiveTvContent(
         }
     }
 
-    // Tự động cuộn đến đúng chip và trỏ về đúng kênh vừa xem
-    LaunchedEffect(resumeTrigger, displayedChannels.isNotEmpty(), pendingFocusRestore) {
-        if (displayedChannels.isNotEmpty() && (pendingFocusRestore || resumeTrigger > 0L)) {
+    // Tự động cuộn đến đúng chip và trỏ về đúng kênh vừa xem trong mục gần đây
+    LaunchedEffect(resumeTrigger, pendingFocusRestore) {
+        if (pendingFocusRestore || resumeTrigger > 0L) {
             launchingChannelId = null
-            val chipIdx = getActiveChipIndex()
-            runCatching { filterChipsListState.scrollToItem(chipIdx) }
+            if (displayedChannels.isNotEmpty()) {
+                val chipIdx = getActiveChipIndex()
+                runCatching { filterChipsListState.scrollToItem(chipIdx) }
 
-            val targetId = state.lastWatchedChannelId
-            if (targetId != null) {
-                val idx = displayedChannels.indexOfFirst { it.id == targetId }
-                if (idx >= 0) {
-                    gridState.scrollToItem(idx)
-                    var channelFocused = false
-                    for (delayMs in listOf(30L, 60L, 100L, 150L)) {
-                        delay(delayMs)
-                        channelFocused = runCatching {
-                            channelFocusRequesters[targetId]?.requestFocus()
-                            true
-                        }.getOrDefault(false)
-                        if (channelFocused) break
-                    }
-                    if (!channelFocused) {
+                val targetId = state.lastWatchedChannelId?.takeIf { id -> displayedChannels.any { it.id == id } }
+                    ?: displayedChannels.firstOrNull()?.id
+                if (targetId != null) {
+                    val idx = displayedChannels.indexOfFirst { it.id == targetId }
+                    if (idx >= 0) {
+                        gridState.scrollToItem(idx)
+                        var channelFocused = false
+                        for (delayMs in listOf(30L, 60L, 100L, 150L)) {
+                            delay(delayMs)
+                            channelFocused = runCatching {
+                                channelFocusRequesters[targetId]?.requestFocus()
+                                true
+                            }.getOrDefault(false)
+                            if (channelFocused) break
+                        }
+                        if (!channelFocused) {
+                            navigateToActiveChip()
+                        }
+                    } else {
                         navigateToActiveChip()
                     }
                 } else {
@@ -497,22 +483,20 @@ private fun LiveTvContent(
                 }
 
                 // 3. RECENT - Xem gần đây
-                if (state.recentChannelIds.isNotEmpty() || selectedPlaylistId == null) {
-                    item(key = "recent") {
-                        FilterChipItem(
-                            label = stringResource(R.string.livetv_group_recent),
-                            isSelected = activeFilter == FilterType.RECENT,
-                            onClick = {
-                                activeFilter = FilterType.RECENT
-                                selectedGroup = null
-                                showPlaylistDropdown = false
-                                pendingFocusRestore = false
-                                LiveTvStorage.saveLastWatchedFilterType(FilterType.RECENT.name)
-                                LiveTvStorage.saveLastWatchedGroup(null)
-                            },
-                            focusRequester = recentChipFocusRequester
-                        )
-                    }
+                item(key = "recent") {
+                    FilterChipItem(
+                        label = stringResource(R.string.livetv_group_recent),
+                        isSelected = activeFilter == FilterType.RECENT,
+                        onClick = {
+                            activeFilter = FilterType.RECENT
+                            selectedGroup = null
+                            showPlaylistDropdown = false
+                            pendingFocusRestore = false
+                            LiveTvStorage.saveLastWatchedFilterType(FilterType.RECENT.name)
+                            LiveTvStorage.saveLastWatchedGroup(null)
+                        },
+                        focusRequester = recentChipFocusRequester
+                    )
                 }
 
                 // 4. FAVORITES - Kênh yêu thích
