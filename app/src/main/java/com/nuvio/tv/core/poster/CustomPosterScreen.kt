@@ -12,7 +12,9 @@ enum class CustomPosterScreen(val key: String) {
     /** Search results */
     SEARCH("search"),
     /** Detail screen (recommendations, collection items, person/cast credits) */
-    DETAILS("details");
+    DETAILS("details"),
+    /** Android TV Watch Next / launcher recommendations */
+    TV_RECOMMENDATIONS("tv_recommendations");
 
     companion object {
         val ALL: Set<CustomPosterScreen> = entries.toSet()

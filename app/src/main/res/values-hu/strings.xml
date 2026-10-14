@@ -369,6 +369,20 @@
     <string name="appearance_settings_style_subtitle">Válaszd ki, hogyan jelenjenek meg a beállítási képernyők</string>
     <string name="appearance_launcher_artwork">Megjelenés a TV kezdőképernyőjén</string>
     <string name="appearance_launcher_artwork_subtitle">Válaszd ki, hogyan jelenjen meg a Nuvio a TV kezdőképernyőjén</string>
+    <string name="ambient_mode_title">Ambient mód</string>
+    <string name="ambient_mode_subtitle">Borítóképek megjelenítése a katalógusaidból, amíg a TV tétlen</string>
+    <string name="ambient_mode_enabled_subtitle">Háttérképek töltik ki a képernyőt, ha egy ideig nem használod a távirányítót</string>
+    <string name="ambient_mode_timeout">Indítás ennyi idő után</string>
+    <string name="ambient_mode_timeout_subtitle">Mennyi idő elteltével induljon el az Ambient mód</string>
+    <plurals name="ambient_mode_timeout_minutes">
+        <item quantity="one">%1$d perc</item>
+        <item quantity="other">%1$d perc</item>
+    </plurals>
+    <string name="ambient_mode_catalogs">Katalógusok</string>
+    <string name="ambient_mode_catalogs_subtitle">Válassz legfeljebb 3 katalógust, amelyekből a képek származnak</string>
+    <string name="ambient_mode_catalogs_dialog_subtitle">Válassz legfeljebb 3 katalógust</string>
+    <string name="ambient_mode_catalogs_default">Ugyanaz, mint a kiemelt tartalomnál</string>
+    <string name="ambient_mode_catalogs_count">%1$d / %2$d</string>
     <string name="appearance_app_icon_and_banner">Alkalmazásikon és banner</string>
     <string name="appearance_app_icon_and_banner_subtitle">Az alkalmazásikon és a banner módosítása</string>
     <string name="appearance_app_icon_picker_title">Alkalmazásikon és banner kiválasztása</string>
@@ -1074,6 +1088,8 @@
     <string name="layout_trailer_play_in_background_sub">Az előzetes a háttérkép helyén indul el, miközben az oldal látható marad.</string>
     <string name="layout_trailer_pause_on_scroll">Szünet görgetéskor</string>
     <string name="layout_trailer_pause_on_scroll_sub">Az előzetes szünetel, ha lefelé görgetsz, majd folytatódik, amikor visszatérsz az oldal tetejére.</string>
+    <string name="layout_trailer_4k">4K előzetesek</string>
+    <string name="layout_trailer_4k_sub">Előzetesek lejátszása 1080p feletti felbontásban, ha elérhető. Jóval több memóriát használ, ezért 2 GB vagy kevesebb RAM-mal rendelkező eszközökön alapból ki van kapcsolva.</string>
     <string name="layout_detail_group_episodes">Epizódok</string>
     <string name="layout_detail_group_trailers">Előzetesek</string>
     <string name="layout_detail_group_metadata">Metaadatok</string>
@@ -1158,6 +1174,7 @@
     <string name="layout_custom_poster_screen_library">Könyvtár</string>
     <string name="layout_custom_poster_screen_search">Keresés</string>
     <string name="layout_custom_poster_screen_details">Részletek képernyője</string>
+    <string name="layout_custom_poster_screen_tv_recommendations">TV-ajánlások</string>
     <string name="layout_always_show_landscape_clearlogo">Fekvő poszter helyett háttérkép logóval</string>
     <string name="layout_always_show_landscape_clearlogo_sub">A bővítmény fekvő posztere helyett a háttérkép jelenik meg a tartalom logójával.</string>
     <string name="web_custom_poster_title">Egyéni poszterforrás</string>
@@ -3215,8 +3232,6 @@
     <string name="playback_reset_to_default">Visszaállítás alapértelmezettre</string>
     <string name="playback_net_custom">Egyéni hálózati beállítások</string>
     <string name="playback_net_custom_sub">Több párhuzamos kapcsolat használata a progresszív streamek letöltéséhez. Ha ki van kapcsolva, egyetlen kapcsolatot használ.</string>
-    <string name="playback_net_http2">HTTP/2 engedélyezése</string>
-    <string name="playback_net_http2_sub">A HTTP/2 protokoll engedélyezése a kérések egy kapcsolaton belüli párhuzamos kezeléséhez és a gyorsabb kapcsolatfelépítéshez.</string>
     <string name="playback_net_parallel">Párhuzamos kapcsolatok</string>
     <string name="playback_net_parallel_sub">Több kapcsolat párhuzamos használata streamek letöltéséhez. Aktiváld, ha pufferelést tapasztalsz annak ellenére, hogy a letöltési sebességed egyértelműen elegendő.</string>
     <string name="playback_net_connection_count">Kapcsolatok száma</string>

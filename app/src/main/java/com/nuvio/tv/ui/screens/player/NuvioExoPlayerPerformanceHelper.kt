@@ -47,14 +47,6 @@ object NuvioExoPlayerPerformanceHelper {
         java.util.concurrent.TimeUnit.MINUTES
     ).also(com.nuvio.tv.core.network.ServerTrust::closeConnectionsOnWithdrawal)
 
-    private val extraLanePools: List<okhttp3.ConnectionPool> = List(HttpLanes.MAX_LANES - 1) {
-        okhttp3.ConnectionPool(NUVIO_LANE_POOL_MAX_IDLE, 3, java.util.concurrent.TimeUnit.MINUTES)
-            .also(com.nuvio.tv.core.network.ServerTrust::closeConnectionsOnWithdrawal)
-    }
-
-    /** Pool for HTTP/2 lane [index]; lane 0 is [sharedConnectionPool]. */
-    fun lanePool(index: Int): okhttp3.ConnectionPool =
-        if (index == 0) sharedConnectionPool else extraLanePools[index - 1]
 
     // ─── Constants ────────────────────────────────────────────────────────────
     const val DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE = 64 * 1024        // 64 KB
@@ -72,7 +64,6 @@ object NuvioExoPlayerPerformanceHelper {
     // Parallel chunk fetching keeps more sockets alive than the old cap of 8, which was evicting
     // live chunk connections mid playback and forcing cold reopens.
     const val NUVIO_SHARED_POOL_MAX_IDLE = 32
-    const val NUVIO_LANE_POOL_MAX_IDLE = 8
     private const val BACK_BUFFER_TARGET_SHARE_NUM = 1L
     private const val BACK_BUFFER_TARGET_SHARE_DEN = 2L
 
@@ -458,9 +449,13 @@ object NuvioExoPlayerPerformanceHelper {
 
     // ─── Networking ───────────────────────────────────────────────────────────
 
-    /** Shared playback pool, HTTP/1.1 only: HTTP/2 brought no speed for video and many times the garbage. */
+    /**
+     * Puts the given [builder] on the shared connection pool. Playback stays on HTTP/1.1: on
+     * HTTP/2 the player made about as much Java garbage as it downloaded, for no speed gain.
+     */
     fun applyNetworkOptimizations(builder: okhttp3.OkHttpClient.Builder): okhttp3.OkHttpClient.Builder =
-        builder.connectionPool(sharedConnectionPool).protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+        builder.connectionPool(sharedConnectionPool)
+            .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
 
     // ─── Audio Renderer ───────────────────────────────────────────────────────
 

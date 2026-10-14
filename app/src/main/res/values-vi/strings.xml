@@ -3357,8 +3357,6 @@
     <string name="playback_reset_to_default">Đặt lại</string>
     <string name="playback_net_custom">Mạng tùy chỉnh</string>
     <string name="playback_net_custom_sub">Sử dụng nhiều kết nối đồng thời để tải các luồng tiến dần. Khi tắt, chỉ sử dụng một kết nối.</string>
-    <string name="playback_net_http2">Bật HTTP/2</string>
-    <string name="playback_net_http2_sub">Bật giao thức HTTP/2 cho các kết nối mạng, cho phép dồn nhiều yêu cầu và rút ngắn thời gian bắt tay.</string>
     <string name="playback_net_parallel">Kết nối đồng thời</string>
     <string name="playback_net_parallel_sub">Sử dụng nhiều kết nối đồng thời để tải luồng phát. Bật tùy chọn này khi bạn vẫn gặp tình trạng đệm dù tốc độ tải xuống chắc chắn đủ nhanh.</string>
     <string name="playback_net_connection_count">Số lượng kết nối</string>

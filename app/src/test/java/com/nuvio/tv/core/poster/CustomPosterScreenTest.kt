@@ -29,4 +29,13 @@ class CustomPosterScreenTest {
         assertEquals("home,search", stored)
         assertEquals(screens, CustomPosterScreen.fromStorageValue(stored))
     }
+
+    @Test
+    fun tvRecommendationsIsIncludedInDefaultAll() {
+        assertTrue(CustomPosterScreen.TV_RECOMMENDATIONS in CustomPosterScreen.ALL)
+        assertEquals(
+            setOf(CustomPosterScreen.TV_RECOMMENDATIONS),
+            CustomPosterScreen.fromStorageValue("tv_recommendations")
+        )
+    }
 }

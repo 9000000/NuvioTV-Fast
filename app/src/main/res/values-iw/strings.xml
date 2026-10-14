@@ -3240,8 +3240,6 @@
     <string name="playback_reset_to_default">איפוס לברירת מחדל</string>
     <string name="playback_net_custom">הורדה מהירה יותר (מתקדם)</string>
     <string name="playback_net_custom_sub">פתיחת כמה חיבורי אינטרנט במקביל כדי להוריד מהר יותר. כשהאפשרות כבויה, נעשה שימוש בחיבור יחיד.</string>
-    <string name="playback_net_http2">הפעלת HTTP/2</string>
-    <string name="playback_net_http2_sub">הפעלת פרוטוקול HTTP/2 עבור חיבורי רשת, המאפשר ריבוב בקשות וזמני handshake מהירים יותר.</string>
     <string name="playback_net_parallel">חיבורים מקבילים</string>
     <string name="playback_net_parallel_sub">שימוש במספר חיבורים במקביל למשיכת תוכן. אפשר להפעיל אם הסרטון נתקע למרות שמהירות האינטרנט מספיקה - זה יכול לעזור.</string>
     <string name="playback_net_connection_count">מספר חיבורים</string>

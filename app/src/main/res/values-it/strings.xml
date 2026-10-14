@@ -3046,8 +3046,6 @@
 <string name="playback_reset_to_default">Ripristina predefinito</string>
 <string name="playback_net_custom">Rete personalizzata</string>
 <string name="playback_net_custom_sub">Usa più connessioni parallele per recuperare flussi progressivi. Quando è disattivato, viene usata una sola connessione.</string>
-<string name="playback_net_http2">Abilita HTTP/2</string>
-<string name="playback_net_http2_sub">Abilita il protocollo HTTP/2 per le connessioni di rete, consentendo il multiplexing delle richieste e tempi di handshake più rapidi.</string>
 <string name="playback_net_parallel">Connessioni parallele</string>
 <string name="playback_net_parallel_sub">Usa più connessioni in parallelo per recuperare i flussi. Attivalo se hai buffering anche se la tua velocità di download è chiaramente sufficiente.</string>
 <string name="playback_net_connection_count">Numero connessioni</string>
