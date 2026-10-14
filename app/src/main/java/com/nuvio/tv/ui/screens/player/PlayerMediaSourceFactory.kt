@@ -74,6 +74,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     @Volatile private var currentVodCacheResolvedUrl: String? = null
     @Volatile private var currentVodCacheActive: Boolean = false
 
+    // Called on a loader thread with the url a progressive stream opened at after a redirect.
+    @Volatile var onStreamRedirected: ((requestedUrl: String, resolvedUrl: String) -> Unit)? = null
+
     // Takes the caller's context because this factory only holds the application one, which ignores the in-app language.
     fun vodCacheStateLabel(context: Context): String = when {
         currentVodCacheActive ->
@@ -177,8 +180,6 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         cacheKey: String? = null
     ): MediaSource {
         val sanitizedHeaders = sanitizeHeadersForUrl(url, headers)
-        val httpDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, sanitizedHeaders, url)
-
         val resolvedMimeType = mimeTypeOverride ?: inferMimeType(
             url = url,
             filename = filename,
@@ -186,6 +187,19 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         )
         val isHls = resolvedMimeType == MimeTypes.APPLICATION_M3U8
         val isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD
+        val httpDataSourceFactory = if (isHls || isDash) {
+            PlayerPlaybackNetworking.createHttpDataSourceFactory(
+                defaultHeaders = sanitizedHeaders,
+                streamUrl = url,
+                useLongReadTimeout = isLoopbackUrl(url),
+            )
+        } else {
+            PlayerPlaybackNetworking.createDataSourceFactory(
+                context = context,
+                defaultHeaders = sanitizedHeaders,
+                streamUrl = url
+            )
+        }
 
         // Parse possible pipe headers on drmKey: e.g. "https://lic.server|User-Agent=...&Origin=..."
         val (cleanDrmKey, drmPipeHeaders) = if (!drmKey.isNullOrBlank() && drmKey.contains('|')) {
@@ -380,7 +394,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         )
         val useChunkSessionSource = !isTorrServerStream && !isPresignedStream && useParallelConnections && !isHls && !isDash
         parallelStartupPrefetchUnlocked.set(!useChunkSessionSource)
-        val progressiveUpstreamFactory: DataSource.Factory = if (useChunkSessionSource) {
+        val networkProgressiveFactory: DataSource.Factory = if (useChunkSessionSource) {
             val sessionConnections = parallelConnectionCount
             val okHttpFactory = OkHttpDataSource.Factory(playbackHttpClient).apply {
                 setDefaultRequestProperties(sanitizedHeaders)
@@ -410,6 +424,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         } else {
             httpDataSourceFactory
         }
+        val progressiveUpstreamFactory: DataSource.Factory =
+            RedirectReportingDataSource.Factory(networkProgressiveFactory, url) { resolvedUrl ->
+                onStreamRedirected?.invoke(url, resolvedUrl)
+            }
 
         // 2. VOD disk cache (opt-in).
         val useVodCache = !isTorrServerStream && !isPresignedStream && ENABLE_VOD_CACHE && vodCacheEnabled && !isHls && !isDash && shouldUseVodCache(url)

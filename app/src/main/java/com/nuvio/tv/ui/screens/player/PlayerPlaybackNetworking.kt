@@ -191,8 +191,18 @@ internal object PlayerPlaybackNetworking {
         streamUrl: String = "",
         useLongReadTimeout: Boolean = false
     ): DataSource.Factory {
+        val requestHeaders = defaultHeaders.mapNotNull { (rawKey, rawValue) ->
+            val key = rawKey.trim()
+            val value = rawValue.trim()
+            if (key.isEmpty() || value.isEmpty() || key.equals("Range", ignoreCase = true)) {
+                null
+            } else {
+                key to value
+            }
+        }.toMap()
+
         // Auto-apply IPTV headers if needed
-        val effectiveHeaders = IptvHeaderProvider.mergeWithDefaults(streamUrl, defaultHeaders)
+        val effectiveHeaders = IptvHeaderProvider.mergeWithDefaults(streamUrl, requestHeaders)
 
         val client = createHttpClient(effectiveHeaders, useLongReadTimeout)
         val httpFactory = OkHttpDataSource.Factory(client).apply {

@@ -159,24 +159,37 @@ internal fun PlayerRuntimeController.buildSourceRequestKey(type: String, videoId
     return "$type|$videoId|${season ?: -1}|${episode ?: -1}"
 }
 
+private data class SourceStreamsRequest(
+    val type: String,
+    val videoId: String,
+    val season: Int?,
+    val episode: Int?
+)
+
+private fun PlayerRuntimeController.currentSourceStreamsRequest(): SourceStreamsRequest? =
+    if (contentType in listOf("series", "tv") && currentSeason != null && currentEpisode != null) {
+        SourceStreamsRequest(
+            type = contentType ?: return null,
+            videoId = currentVideoId ?: contentId ?: return null,
+            season = currentSeason,
+            episode = currentEpisode
+        )
+    } else {
+        SourceStreamsRequest(
+            type = contentType ?: "movie",
+            videoId = contentId ?: return null,
+            season = null,
+            episode = null
+        )
+    }
+
 internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
     streamRepository.setLocalPluginSearchPaused(false)
-    val type: String
-    val vid: String
-    val seasonArg: Int?
-    val episodeArg: Int?
-
-    if (contentType in listOf("series", "tv") && currentSeason != null && currentEpisode != null) {
-        type = contentType ?: return
-        vid = currentVideoId ?: contentId ?: return
-        seasonArg = currentSeason
-        episodeArg = currentEpisode
-    } else {
-        type = contentType ?: "movie"
-        vid = contentId ?: return
-        seasonArg = null
-        episodeArg = null
-    }
+    val request = currentSourceStreamsRequest() ?: return
+    val type = request.type
+    val vid = request.videoId
+    val seasonArg = request.season
+    val episodeArg = request.episode
 
     val requestKey = buildSourceRequestKey(type = type, videoId = vid, season = seasonArg, episode = episodeArg)
     val state = _uiState.value
@@ -656,15 +669,73 @@ private fun PlayerRuntimeController.applyStreamMetadata(stream: Stream) {
     currentVideoWidth = null
     currentVideoHeight = null
     currentVideoBitrate = null
+    persistBingeGroup(stream.behaviorHints?.bingeGroup)
+}
 
-    // Persist binge group per content so subsequent episode plays
-    // (from CW, Details, or next-episode) can reuse the same source group.
-    val bg = stream.behaviorHints?.bingeGroup
+// Persist binge group per content so subsequent episode plays
+// (from CW, Details, or next-episode) can reuse the same source group.
+private fun PlayerRuntimeController.persistBingeGroup(bingeGroup: String?) {
     val cid = contentId
     if (cid != null) {
         scope.launch(kotlinx.coroutines.NonCancellable) {
-            bingeGroupCacheDataStore.replace(cid, bg)
+            bingeGroupCacheDataStore.replace(cid, bingeGroup)
         }
+    }
+}
+
+/**
+ * Moves the stream metadata onto the release an addon redirected playback to.
+ *
+ * Some addons fail over by redirecting the player to the next stream they listed, and the player
+ * follows that silently, so without this the stream info, the filename hints and the saved link
+ * keep describing the stream that never opened. The target is looked up
+ * only among streams already in memory: a search started here would compete with playback.
+ */
+internal fun PlayerRuntimeController.handleStreamRedirect(requestedUrl: String, resolvedUrl: String) {
+    scope.launch {
+        if (requestedUrl != currentStreamUrl) return@launch
+        val addonName = currentAddonName
+        val target = findRedirectTargetStream(_uiState.value.sourceAllStreams, addonName, requestedUrl, resolvedUrl)
+            ?: currentSourceStreamsRequest()?.let { request ->
+                streamRepository.getCachedStreamsFromAllAddons(
+                    type = request.type,
+                    videoId = request.videoId,
+                    season = request.season,
+                    episode = request.episode
+                )?.let { cached ->
+                    findRedirectTargetStream(cached.flatMap { it.streams }, addonName, requestedUrl, resolvedUrl)
+                }
+            }
+        if (target == null) {
+            Log.d(PlayerRuntimeController.TAG, "Stream redirect matched no listed stream")
+            return@launch
+        }
+        // The lookup suspends, so the user may have switched streams meanwhile.
+        if (requestedUrl != currentStreamUrl) return@launch
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "Stream redirected to another listed release, now showing ${target.name ?: target.addonName}"
+        )
+        currentFilename = target.behaviorHints?.filename
+        currentVideoHash = target.behaviorHints?.videoHash
+        currentVideoSize = target.behaviorHints?.videoSize
+        currentStreamBingeGroup = target.behaviorHints?.bingeGroup
+        currentAddonName = target.addonName
+        currentAddonLogo = target.addonLogo
+        currentStreamDescription = target.description
+        persistBingeGroup(currentStreamBingeGroup)
+        _uiState.update {
+            it.copy(
+                currentStreamName = target.name ?: target.addonName,
+                currentStreamAddonName = target.addonName
+            )
+        }
+        // The saved link points at the release that played, so a resume goes straight to it.
+        val targetRequest = PlayerMediaSourceFactory.normalizePlaybackRequest(
+            target.getStreamUrl() ?: resolvedUrl,
+            currentHeaders
+        )
+        persistSelectedStreamForReuse(stream = target, url = targetRequest.url, headers = targetRequest.headers)
     }
 }
 
