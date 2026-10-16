@@ -1217,6 +1217,7 @@
     <string name="layout_custom_poster_screen_library">Thư viện</string>
     <string name="layout_custom_poster_screen_search">Tìm kiếm</string>
     <string name="layout_custom_poster_screen_details">Màn hình chi tiết</string>
+    <string name="layout_custom_poster_screen_tv_recommendations">Đề xuất TV</string>
 
     <!-- Custom Poster Web Page -->
     <string name="layout_always_show_landscape_clearlogo">Luôn dùng phông nền kèm logo cho poster ngang</string>

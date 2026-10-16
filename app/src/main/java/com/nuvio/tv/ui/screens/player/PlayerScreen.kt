@@ -76,6 +76,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -93,6 +94,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames
 import androidx.compose.ui.platform.LocalContext
@@ -100,6 +104,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -949,6 +954,35 @@ fun PlayerScreen(
         val playerSurfaceShape = RoundedCornerShape(postPlayRecommendationPlayerCornerRadius)
         val playerSurfaceIsFullscreen = !postPlayRecommendationState.isVisible &&
             postPlayRecommendationPlayerWidth >= 0.999f
+        var subtitleControlsClearancePx by remember { mutableFloatStateOf(0f) }
+        var skipClearancePx by remember { mutableFloatStateOf(0f) }
+        var postPlayClearancePx by remember { mutableFloatStateOf(0f) }
+        var seekClearancePx by remember { mutableFloatStateOf(0f) }
+        val subtitleClearanceGapPx = with(LocalDensity.current) { SUBTITLE_CONTROLS_GAP.toPx() }
+        val postPlayOverlayMode = uiState.postPlayMode.takeIf {
+            uiState.error == null &&
+                !postPlayRecommendationState.isVisible &&
+                postPlayRecommendationState.recommendation == null &&
+                !shouldConfirmNextEpisodeOnEnd &&
+                !uiState.showLoadingOverlay &&
+                !uiState.showPauseOverlay &&
+                !uiState.showStreamInfoOverlay &&
+                !uiState.showEpisodesPanel &&
+                !uiState.showSourcesPanel &&
+                !uiState.showAudioOverlay &&
+                !uiState.showSubtitleOverlay &&
+                !uiState.showSubtitleStylePanel &&
+                !uiState.showSubtitleDelayOverlay &&
+                !uiState.showSubtitleTimingDialog &&
+                !uiState.showSpeedDialog &&
+                !uiState.showMoreDialog
+        }
+        val seekOverlayVisible = uiState.showSeekOverlay && !uiState.showControls && uiState.error == null &&
+            !uiState.showLoadingOverlay && !uiState.showPauseOverlay &&
+            !uiState.showSubtitleDelayOverlay && !uiState.showSubtitleTimingDialog &&
+            !uiState.showMoreDialog &&
+            !uiState.isLive
+        val fallbackSubtitleLiftPx = with(LocalDensity.current) { SUBTITLE_CONTROLS_LIFT.toPx() }
         val playerSurfaceModifier = Modifier
             .align(Alignment.TopEnd)
             .padding(end = postPlayRecommendationPlayerPadding, top = postPlayRecommendationPlayerPadding)
@@ -987,6 +1021,16 @@ fun PlayerScreen(
             }
 
             Box(modifier = playerSurfaceModifier) {
+                val subtitleLiftPx = maxOf(
+                    if (uiState.showControls) {
+                        subtitleControlsClearancePx.takeIf { it > 0f } ?: fallbackSubtitleLiftPx
+                    } else {
+                        0f
+                    },
+                    if (skipButtonActuallyVisible) skipClearancePx else 0f,
+                    if (postPlayOverlayMode != null) postPlayClearancePx else 0f,
+                    if (seekOverlayVisible) seekClearancePx else 0f
+                )
                 if (uiState.internalPlayerEngine == InternalPlayerEngine.MVP_PLAYER) {
                     MpvPlayerSurface(
                         viewModel = viewModel,
@@ -994,6 +1038,7 @@ fun PlayerScreen(
                         isBuffering = uiState.isBuffering,
                         aspectMode = uiState.aspectMode,
                         subtitleStyle = uiState.subtitleStyle,
+                        subtitleLiftPx = subtitleLiftPx,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
@@ -1009,6 +1054,7 @@ fun PlayerScreen(
                             useLibass = uiState.useLibass,
                             libassRenderType = uiState.libassRenderType,
                             subtitleStyle = uiState.subtitleStyle,
+                            subtitleLiftPx = subtitleLiftPx,
                             onBindSubtitleView = viewModel::bindExoSubtitleView,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -1249,26 +1295,10 @@ fun PlayerScreen(
                 .align(Alignment.BottomStart)
                 .padding(start = NuvioTheme.spacing.xxl, bottom = skipButtonBottomPadding)
                 .zIndex(2.1f)
+                .reportSubtitleClearance(subtitleClearanceGapPx) { skipClearancePx = it }
         )
         PostPlayOverlay(
-            mode = uiState.postPlayMode.takeIf {
-                uiState.error == null &&
-                    !postPlayRecommendationState.isVisible &&
-                    postPlayRecommendationState.recommendation == null &&
-                    !shouldConfirmNextEpisodeOnEnd &&
-                    !uiState.showLoadingOverlay &&
-                    !uiState.showPauseOverlay &&
-                    !uiState.showStreamInfoOverlay &&
-                    !uiState.showEpisodesPanel &&
-                    !uiState.showSourcesPanel &&
-                    !uiState.showAudioOverlay &&
-                    !uiState.showSubtitleOverlay &&
-                    !uiState.showSubtitleStylePanel &&
-                    !uiState.showSubtitleDelayOverlay &&
-                    !uiState.showSubtitleTimingDialog &&
-                    !uiState.showSpeedDialog &&
-                    !uiState.showMoreDialog
-            },
+            mode = postPlayOverlayMode,
             controlsVisible = uiState.showControls,
             blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
             nextEpisodeFocusRequester = nextEpisodeFocusRequester,
@@ -1280,7 +1310,8 @@ fun PlayerScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 26.dp, bottom = if (uiState.showControls) 122.dp else 30.dp)
-                .zIndex(2.1f),
+                .zIndex(2.1f)
+                .reportSubtitleClearance(subtitleClearanceGapPx) { postPlayClearancePx = it },
         )
 
         // Parental guide overlay (shows when video first starts playing)
@@ -1355,6 +1386,7 @@ fun PlayerScreen(
             PlayerControlsOverlay(
                 uiState = uiState,
                 viewModel = viewModel,
+                onSubtitleClearanceChanged = { subtitleControlsClearancePx = it },
                 playPauseFocusRequester = playPauseFocusRequester,
                 progressBarFocusRequester = progressBarFocusRequester,
                 streamInfoFocusRequester = streamInfoFocusRequester,
@@ -1505,14 +1537,12 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = uiState.showSeekOverlay && !uiState.showControls && uiState.error == null &&
-                !uiState.showLoadingOverlay && !uiState.showPauseOverlay &&
-                !uiState.showSubtitleDelayOverlay && !uiState.showSubtitleTimingDialog &&
-                !uiState.showMoreDialog &&
-                !uiState.isLive,
+            visible = seekOverlayVisible,
             enter = fadeIn(animationSpec = tween(150)),
             exit = fadeOut(animationSpec = tween(150)),
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .reportSubtitleClearance(subtitleClearanceGapPx) { seekClearancePx = it }
         ) {
             SeekOverlayHost(viewModel = viewModel)
         }
@@ -1783,6 +1813,7 @@ private fun MpvPlayerSurface(
     isBuffering: Boolean,
     aspectMode: AspectMode,
     subtitleStyle: SubtitleStyleSettings,
+    subtitleLiftPx: Float,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1827,7 +1858,13 @@ private fun MpvPlayerSurface(
         mpvView.applyAspectMode(aspectMode)
     }
 
-    LaunchedEffect(mpvView, subtitleStyle) {
+    LaunchedEffect(mpvView, subtitleStyle, subtitleLiftPx) {
+        val height = mpvView.height
+        mpvView.subtitleLiftFraction = if (subtitleLiftPx > 0f && height > 0) {
+            (subtitleLiftPx / height).toDouble()
+        } else {
+            0.0
+        }
         mpvView.applySubtitleStyle(subtitleStyle)
     }
 }
@@ -1844,6 +1881,7 @@ private fun ExoPlayerSurface(
     useLibass: Boolean,
     libassRenderType: LibassRenderType,
     subtitleStyle: SubtitleStyleSettings,
+    subtitleLiftPx: Float,
     onBindSubtitleView: (androidx.media3.ui.SubtitleView?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -1853,6 +1891,7 @@ private fun ExoPlayerSurface(
     val latestTunneledSurfaceFill by rememberUpdatedState(tunneledSurfaceFill)
     val latestBindSubtitleView by rememberUpdatedState(onBindSubtitleView)
     val latestSubtitleStyle by rememberUpdatedState(subtitleStyle)
+    val latestSubtitleLiftPx by rememberUpdatedState(subtitleLiftPx)
     val playerView = remember(context, player) {
         PlayerView(context).apply {
             useController = false
@@ -1933,7 +1972,7 @@ private fun ExoPlayerSurface(
                 // Re-apply subtitle style when tracks change so style is applied
                 // even when subtitles are enabled after initial player setup.
                 playerView.post {
-                    playerView.applySubtitleStyleIfNeeded(latestSubtitleStyle, force = true)
+                    playerView.applySubtitleStyleIfNeeded(latestSubtitleStyle, latestSubtitleLiftPx, force = true)
                 }
             }
         }
@@ -1989,8 +2028,8 @@ private fun ExoPlayerSurface(
         )
     }
 
-    LaunchedEffect(playerView, subtitleStyle) {
-        playerView.applySubtitleStyleIfNeeded(subtitleStyle)
+    LaunchedEffect(playerView, subtitleStyle, subtitleLiftPx) {
+        playerView.applySubtitleStyleIfNeeded(subtitleStyle, subtitleLiftPx)
     }
 }
 
@@ -2024,8 +2063,20 @@ private fun PlayerView.syncExoSurfaceLayout(
 
 private data class SubtitleAppliedConfig(
     val style: SubtitleStyleSettings,
-    val isAss: Boolean
+    val isAss: Boolean,
+    val liftPx: Float
 )
+
+private val SUBTITLE_CONTROLS_LIFT = 130.dp
+private val SUBTITLE_CONTROLS_GAP = 8.dp
+
+private fun Modifier.reportSubtitleClearance(gapPx: Float, onClearance: (Float) -> Unit): Modifier =
+    onGloballyPositioned { coordinates ->
+        val rootHeight = coordinates.findRootCoordinates().size.height
+        if (rootHeight > 0 && coordinates.size.height > 0) {
+            onClearance((rootHeight - coordinates.boundsInRoot().top + gapPx).coerceAtLeast(0f))
+        }
+    }
 
 private fun PlayerView.isAssOrSsaSubtitleSelected(): Boolean {
     val currentTracks = player?.currentTracks
@@ -2062,10 +2113,11 @@ private var cachedCustomTypeface: android.graphics.Typeface? = null
 
 private fun PlayerView.applySubtitleStyleIfNeeded(
     subtitleStyle: SubtitleStyleSettings,
+    liftPx: Float,
     force: Boolean = false
 ) {
     val isAss = isAssOrSsaSubtitleSelected()
-    val config = SubtitleAppliedConfig(subtitleStyle, isAss)
+    val config = SubtitleAppliedConfig(subtitleStyle, isAss, liftPx)
     if (!force && getTag(R.id.player_view_subtitle_style_tag) == config) {
         return
     }
@@ -2163,6 +2215,12 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
         post {
             val extraPadding = (height * (subtitleStyle.verticalOffset / 400f)).toInt().coerceAtLeast(0)
             setPadding(paddingLeft, paddingTop, paddingRight, extraPadding)
+            val availableHeight = height - extraPadding
+            if (liftPx > 0f && availableHeight > 0) {
+                setBottomPaddingFraction(
+                    maxOf(bottomPaddingFraction, (liftPx - extraPadding) / availableHeight).coerceIn(0f, 0.5f)
+                )
+            }
         }
     }
 }
@@ -2272,8 +2330,12 @@ private fun PlayerControlsOverlay(
     onHideControls: () -> Unit,
     onBack: () -> Unit,
     reportCodeVisible: Boolean,
-    skipButtonVisible: Boolean = false
+    skipButtonVisible: Boolean = false,
+    onSubtitleClearanceChanged: (Float) -> Unit = {}
 ) {
+    val density = LocalDensity.current
+    val clearanceOffsetPx = with(density) { (NuvioTheme.spacing.xl - SUBTITLE_CONTROLS_GAP).toPx() }
+    val latestClearanceCallback by rememberUpdatedState(onSubtitleClearanceChanged)
     val customPlayPainter = rememberRawSvgPainter(R.raw.ic_player_play)
     val customPausePainter = rememberRawSvgPainter(R.raw.ic_player_pause)
     val customSubtitlePainter = rememberRawSvgPainter(R.raw.ic_player_subtitles)
@@ -2326,6 +2388,13 @@ private fun PlayerControlsOverlay(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
+                .onGloballyPositioned { coordinates ->
+                    val rootHeight = coordinates.findRootCoordinates().size.height
+                    val top = coordinates.boundsInRoot().top
+                    if (rootHeight > 0) {
+                        latestClearanceCallback((rootHeight - top - clearanceOffsetPx).coerceAtLeast(0f))
+                    }
+                }
                 .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl)
         ) {
             val skipIntroVisible = uiState.activeSkipInterval != null

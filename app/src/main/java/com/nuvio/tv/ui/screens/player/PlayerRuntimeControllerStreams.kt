@@ -669,16 +669,16 @@ private fun PlayerRuntimeController.applyStreamMetadata(stream: Stream) {
     currentVideoWidth = null
     currentVideoHeight = null
     currentVideoBitrate = null
-    persistBingeGroup(stream.behaviorHints?.bingeGroup)
+    persistBingeGroup(stream.behaviorHints?.bingeGroup, stream.behaviorHints?.filename, stream.infoHash)
 }
 
 // Persist binge group per content so subsequent episode plays
 // (from CW, Details, or next-episode) can reuse the same source group.
-private fun PlayerRuntimeController.persistBingeGroup(bingeGroup: String?) {
+private fun PlayerRuntimeController.persistBingeGroup(bingeGroup: String?, filename: String? = null, infoHash: String? = null) {
     val cid = contentId
     if (cid != null) {
         scope.launch(kotlinx.coroutines.NonCancellable) {
-            bingeGroupCacheDataStore.replace(cid, bingeGroup)
+            bingeGroupCacheDataStore.replace(cid, bingeGroup, filename, infoHash)
         }
     }
 }
@@ -1986,6 +1986,25 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 if (currentStreamBingeGroup == null || !playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) return null
                 val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder, preferredServerNames)
                 val allStreams = orderedStreams.flatMap { it.streams }
+                // Early: binge group + filename match (most precise)
+                val nextFilename = com.nuvio.tv.core.player.FilenameEpisodeMatcher.buildNextFilename(
+                    filename = currentFilename.orEmpty(),
+                    currentSeason = _uiState.value.currentSeason,
+                    currentEpisode = _uiState.value.currentEpisode ?: 0,
+                    nextSeason = nextVideo.season,
+                    nextEpisode = nextVideo.episode ?: 0
+                ) ?: currentFilename?.takeIf { it.isNotBlank() }
+                if (nextFilename != null) {
+                    val bingeAndFilename = allStreams.firstOrNull { stream ->
+                        !stream.isExternal() &&
+                            stream.behaviorHints?.bingeGroup == currentStreamBingeGroup &&
+                            com.nuvio.tv.core.player.FilenameEpisodeMatcher.matches(
+                                stream.behaviorHints?.filename, nextFilename
+                            )
+                    }
+                    if (bingeAndFilename != null) return bingeAndFilename
+                }
+                // Early fallback: binge group alone
                 return StreamAutoPlaySelector.selectAutoPlayStream(
                     streams = allStreams,
                     mode = effectiveMode,
@@ -1998,6 +2017,24 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                     preferBingeGroupInSelection = true,
                     bingeGroupOnly = true
                 )
+            }
+
+            fun tryFilenameOnly(data: List<AddonStreams>): Stream? {
+                val nextFilename = com.nuvio.tv.core.player.FilenameEpisodeMatcher.buildNextFilename(
+                    filename = currentFilename.orEmpty(),
+                    currentSeason = _uiState.value.currentSeason,
+                    currentEpisode = _uiState.value.currentEpisode ?: 0,
+                    nextSeason = nextVideo.season,
+                    nextEpisode = nextVideo.episode ?: 0
+                ) ?: currentFilename?.takeIf { it.isNotBlank() }
+                    ?: return null
+                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder, preferredServerNames)
+                return orderedStreams.flatMap { it.streams }.firstOrNull { stream ->
+                    !stream.isExternal() &&
+                        com.nuvio.tv.core.player.FilenameEpisodeMatcher.matches(
+                            stream.behaviorHints?.filename, nextFilename
+                        )
+                }
             }
 
             fun recordSelection(candidate: Stream) {
@@ -2046,15 +2083,18 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 withTimeoutOrNull(timeoutMs) { searchSettled.await() }
                 timeoutElapsed = true
                 if (!autoSelectTriggered) {
+                    // Filename match before full select — same release, any binge group.
+                    lastSuccessData?.let { tryFilenameOnly(it)?.let { s -> recordSelection(s) } }
+                }
+                if (!autoSelectTriggered) {
                     val data = lastSuccessData
                     if (data != null) {
-                        // Streams arrived: full select once. If nothing matches,
-                        // respect the timeout and stop (the caller shows the picker).
                         trySelectStream(data)?.let { recordSelection(it) }
                     } else {
-                        // No addon responded yet: keep waiting for the first usable
-                        // result, bounded so we never hang indefinitely.
                         withTimeoutOrNull(timeoutMs) { searchSettled.await() }
+                        if (!autoSelectTriggered) {
+                            lastSuccessData?.let { tryFilenameOnly(it)?.let { s -> recordSelection(s) } }
+                        }
                         if (!autoSelectTriggered) {
                             lastSuccessData?.let { trySelectStream(it)?.let { s -> recordSelection(s) } }
                         }
@@ -2065,11 +2105,17 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 timeoutElapsed = true
                 withTimeoutOrNull(NEXT_EPISODE_HARD_TIMEOUT_MS) { searchSettled.await() }
                 if (!autoSelectTriggered) {
+                    lastSuccessData?.let { tryFilenameOnly(it)?.let { s -> recordSelection(s) } }
+                }
+                if (!autoSelectTriggered) {
                     lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
                 }
                 innerJob.cancel()
             } else {
                 withTimeoutOrNull(NEXT_EPISODE_HARD_TIMEOUT_MS) { searchSettled.await() }
+                if (!autoSelectTriggered) {
+                    lastSuccessData?.let { tryFilenameOnly(it)?.let { s -> recordSelection(s) } }
+                }
                 if (!autoSelectTriggered) {
                     lastSuccessData?.let { data -> trySelectStream(data)?.let { recordSelection(it) } }
                 }

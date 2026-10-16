@@ -92,6 +92,7 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
     allowEngineFailover: Boolean = true
 ) {
     mpvMediaLoadPrepared = true
+    prefetchAutoSyncIndex(url, headers) // AutoSync hook
     _exoPlayer?.release()
     _exoPlayer = null
     trackSelector = null

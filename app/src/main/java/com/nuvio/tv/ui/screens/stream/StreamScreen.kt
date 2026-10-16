@@ -469,6 +469,7 @@ fun StreamScreen(
                             scope.coroutineLaunch {
                                 val playbackInfo = viewModel.resolveStreamForPlayback(stream)
                                 if (playbackInfo != null) {
+                                    viewModel.persistBingeGroupForStream(stream)
                                     pendingRestoreOnResume = true
                                     routePlayback(playbackInfo)
                                     viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)

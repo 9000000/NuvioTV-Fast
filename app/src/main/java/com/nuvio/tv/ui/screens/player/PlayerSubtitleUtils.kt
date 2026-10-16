@@ -237,8 +237,12 @@ internal object PlayerSubtitleUtils {
      * to prevent Media3 SubtitlePainter from drawing colliding lines on top of each other.
      */
     fun mergeOverlappingCues(cues: List<Cue>): List<Cue> {
-        if (cues.size <= 1 || !cues.all { it.bitmap == null && it.line == Cue.DIMEN_UNSET }) {
-            return cues
+        if (cues.size <= 1) return cues
+        val unpositioned = cues.filter { it.bitmap == null && it.line == Cue.DIMEN_UNSET }
+        if (unpositioned.size <= 1) return cues
+        if (unpositioned.size < cues.size) {
+            val positioned = cues.filterNot { it.bitmap == null && it.line == Cue.DIMEN_UNSET }
+            return positioned + mergeOverlappingCues(unpositioned)
         }
         val validTexts = cues.mapNotNull { it.text }.filter { it.isNotBlank() }
         if (validTexts.isEmpty()) return emptyList()
@@ -256,4 +260,22 @@ internal object PlayerSubtitleUtils {
         }
         return listOf(cues[0].buildUpon().setText(mergedText).build())
     }
+
+    fun normalizeBottomCuePosition(cue: Cue): Cue {
+        if (cue.bitmap != null || cue.verticalType != Cue.TYPE_UNSET || cue.line == Cue.DIMEN_UNSET) {
+            return cue
+        }
+        val placedAwayFromBottom = when (cue.lineType) {
+            Cue.LINE_TYPE_FRACTION -> cue.line < BOTTOM_CUE_LINE_FRACTION
+            Cue.LINE_TYPE_NUMBER -> cue.line >= 0f
+            else -> false
+        }
+        if (placedAwayFromBottom) return cue
+        return cue.buildUpon()
+            .setLine(Cue.DIMEN_UNSET, Cue.TYPE_UNSET)
+            .setLineAnchor(Cue.TYPE_UNSET)
+            .build()
+    }
+
+    private const val BOTTOM_CUE_LINE_FRACTION = 0.6f
 }

@@ -2410,7 +2410,7 @@ private class CueNormalizingTextOutput(
         var processed = SubtitleMojibakeSanitizer.sanitizeCue(cue)
         processed = PlayerSubtitleRtlFix.fixCueText(processed, isBuiltInSubtitleProvider())
         if (shouldNormalizeCuePositionProvider()) {
-            processed = normalizeCuePosition(processed)
+            processed = PlayerSubtitleUtils.normalizeBottomCuePosition(processed)
         }
         val currentStyle = subtitleStyleProvider()
         processed = processed.applyOutlineWidth(currentStyle.outlineEnabled, currentStyle.outlineWidth)
@@ -2442,16 +2442,6 @@ private class CueNormalizingTextOutput(
             builder.setBitmapHeight(cue.bitmapHeight * bounds.height())
         }
         return builder.build()
-    }
-
-    private fun normalizeCuePosition(cue: Cue): Cue {
-        if (cue.bitmap != null || cue.verticalType != Cue.TYPE_UNSET || cue.line == Cue.DIMEN_UNSET) {
-            return cue
-        }
-        return cue.buildUpon()
-            .setLine(Cue.DIMEN_UNSET, Cue.TYPE_UNSET)
-            .setLineAnchor(Cue.TYPE_UNSET)
-            .build()
     }
 }
 

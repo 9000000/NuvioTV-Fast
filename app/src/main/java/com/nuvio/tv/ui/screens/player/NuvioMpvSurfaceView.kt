@@ -428,6 +428,8 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         postDelayed(aspectReapplyRunnable, delayMs)
     }
 
+    var subtitleLiftFraction: Double = 0.0
+
     fun applySubtitleStyle(style: SubtitleStyleSettings) {
         if (!initialized) return
         runCatching {
@@ -464,7 +466,12 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             mpv.setPropertyDouble("sub-scale", scale)
             mpv.setPropertyBoolean("sub-bold", style.bold)
             mpv.setPropertyDouble("sub-outline-size", outlineSize)
-            mpv.setPropertyDouble("sub-pos", subPos)
+            val liftedSubPos = if (subtitleLiftFraction > 0.0) {
+                minOf(subPos, 100.0 * (1.0 - subtitleLiftFraction))
+            } else {
+                subPos
+            }
+            mpv.setPropertyDouble("sub-pos", liftedSubPos)
             mpv.setPropertyInt("sub-margin-y", subMarginY)
             mpv.setPropertyDouble("sub-shadow-offset", shadowOffset)
             mpv.setPropertyString("sub-border-style", borderStyle)

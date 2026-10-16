@@ -388,7 +388,8 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
 
     // Preload: start fetching sources for next episode before the button appears.
     if (preloadNextEpisodeSourcesSetting && !nextEpisodePreloadTriggered && state.nextEpisode != null) {
-        val preloadLeadMs = streamAutoPlayTimeoutSecondsSetting.toLong() * 1_000L
+        val preloadLeadMs = maxOf(streamAutoPlayTimeoutSecondsSetting.toLong() * 1_000L, 10_000L)
+            .coerceAtMost(30_000L)
         val shouldPreloadByCard = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
             positionMs = positionMs + preloadLeadMs,
             durationMs = effectiveDuration,
