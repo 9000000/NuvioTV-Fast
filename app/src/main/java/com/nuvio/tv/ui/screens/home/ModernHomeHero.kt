@@ -4,8 +4,6 @@ import com.nuvio.tv.ui.theme.NuvioMotion
 
 import com.nuvio.tv.ui.theme.NuvioTheme
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -374,11 +372,7 @@ private fun HeroTitleContent(
     // Same idea as in HeroTitleBlock: only a flip of the result should recompose this content.
     val latestTrailerPlaying = rememberUpdatedState(trailerPlaying)
     val trailerPlayingValue by remember { derivedStateOf { latestTrailerPlaying.value() } }
-    val metaAlpha by animateFloatAsState(
-        targetValue = if (trailerPlayingValue) 0f else 1f,
-        animationSpec = tween(durationMillis = 480),
-        label = "heroMetaFade"
-    )
+    val metaAlpha = if (trailerPlayingValue) 0f else 1f
     val scaledTitleStyle = remember(headlineLarge, titleScale) {
         headlineLarge.copy(
             fontSize = headlineLarge.fontSize * titleScale,
