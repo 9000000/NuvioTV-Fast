@@ -48,12 +48,21 @@ internal object PlayerSubtitleUtils {
             return "ms"
         }
 
+        if (containsAny("hbs")) {
+            stripPrefixAndNormalizeLanguageCode(tokenized, "hbs")?.let { return it }
+        }
+
         resolveLanguageNameAlias(tokenized)?.let { return it }
 
         // LANGUAGE_OVERRIDES uses pt-BR (mixed case) — normalize to lowercase for consistency
         return LANGUAGE_OVERRIDES[code]?.lowercase()
             ?: LANGUAGE_OVERRIDES[normalizedCode]?.lowercase()
             ?: normalizedCode
+    }
+
+    private fun stripPrefixAndNormalizeLanguageCode(language: String, prefix: String): String? {
+        val stripped = language.replace(prefix,"").trim()
+        return LANGUAGE_OVERRIDES[stripped]?.lowercase()
     }
 
     fun matchesLanguageCode(language: String?, target: String): Boolean {

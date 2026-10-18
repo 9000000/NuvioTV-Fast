@@ -1865,6 +1865,10 @@ internal fun PlayerRuntimeController.cancelNextEpisodePreload() {
 }
 
 internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = false) {
+    if (isPartyControlLocked) {
+        if (userInitiated) partyBlocksControl()
+        return
+    }
     val nextVideo = nextEpisodeVideo ?: return
     val type = contentType ?: return
     nextEpisodePreloadTriggered = false

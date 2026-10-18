@@ -62,12 +62,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -104,6 +107,7 @@ class StreamScreenViewModel @Inject constructor(
     private val torrentModeCoordinator: com.nuvio.tv.core.torrent.TorrentModeCoordinator,
     private val serverStreams: ServerStreams,
     private val serverPlayback: ServerPlayback,
+    party: com.nuvio.tv.core.party.PartyRepository,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -152,6 +156,31 @@ class StreamScreenViewModel @Inject constructor(
         ?.toBooleanStrictOrNull()
         ?: false
     private val streamCacheKey: String = "${contentType.lowercase()}|$videoId"
+    private val partyKey: String = com.nuvio.tv.core.party.partyMediaKey(
+        metaType = contentType,
+        metaId = contentId ?: videoId.substringBefore(":"),
+        season = season,
+        episode = episode
+    )
+
+    val partySource: StateFlow<com.nuvio.tv.core.party.PartySource?> = party.state
+        .map { state -> state.party?.media?.takeIf { it.key == partyKey }?.source }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val sharedStream: StateFlow<SharedStream?> = combine(party.state, party.sharedStream) { state, stream ->
+        val current = state.party
+        if (current == null || current.isHost || stream == null || stream.mediaKey != partyKey) {
+            null
+        } else {
+            SharedStream(
+                hostName = current.member(current.hostMemberId)?.displayName.orEmpty(),
+                stream = stream.toStream()
+            )
+        }
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _uiState = MutableStateFlow(
         StreamScreenUiState(
@@ -1291,7 +1320,7 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
-    suspend fun resolveStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
+    suspend fun resolveStreamForPlayback(stream: Stream, saveLastLink: Boolean = true): StreamPlaybackInfo? {
         stream.serverTarget?.let { target -> return prepareServerStream(stream, target) }
         if (stream.youTubeIdToResolve() != null) {
             return resolveYouTubeStreamForPlayback(stream)
@@ -1303,7 +1332,7 @@ class StreamScreenViewModel @Inject constructor(
         }
         if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
             Log.d(TAG, "resolveStreamForPlayback: no debrid resolve needed, using direct URL")
-            return getStreamForPlayback(stream)
+            return getStreamForPlayback(stream, saveLastLink)
         }
 
         Log.d(TAG, "resolveStreamForPlayback: starting debrid resolve for stream=${stream.name} addon=${stream.addonName}")

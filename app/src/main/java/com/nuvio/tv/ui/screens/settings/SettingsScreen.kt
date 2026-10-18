@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import com.nuvio.tv.ui.screens.party.PartySettingsContent
+import com.nuvio.tv.ui.screens.party.PartyViewModel
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.activity.compose.BackHandler
@@ -35,6 +37,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
@@ -153,6 +156,7 @@ private sealed interface ExperienceModeLoadState {
 private fun settingsSectionSpec(category: SettingsCategory): SettingsSectionSpec = when (category) {
     SettingsCategory.ACCOUNT -> SettingsSectionSpec(category, stringResource(R.string.settings_account), Icons.Default.Person, destination = SettingsSectionDestination.Inline)
     SettingsCategory.PROFILES -> SettingsSectionSpec(category, stringResource(R.string.settings_profiles), Icons.Default.People, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.WATCH_PARTY -> SettingsSectionSpec(category, stringResource(R.string.party_title), Icons.Rounded.Groups, destination = SettingsSectionDestination.Inline)
     SettingsCategory.APPEARANCE -> SettingsSectionSpec(category, stringResource(R.string.appearance_title), Icons.Default.Palette, destination = SettingsSectionDestination.Inline)
     SettingsCategory.LAYOUT -> SettingsSectionSpec(category, stringResource(R.string.settings_layout), Icons.Default.GridView, destination = SettingsSectionDestination.Inline)
     SettingsCategory.CONTENT_DISCOVERY -> SettingsSectionSpec(category, stringResource(R.string.settings_content_discovery), Icons.Default.Explore, destination = SettingsSectionDestination.Inline)
@@ -176,10 +180,13 @@ fun SettingsScreen(
     onNavigateToManageProfiles: () -> Unit = {},
     onNavigateToSupportersContributors: () -> Unit = {},
     onNavigateToLicensesAttributions: () -> Unit = {},
+    onNavigateToWatchParty: () -> Unit = {},
     profileViewModel: ProfileSettingsViewModel = hiltViewModel(),
-    experienceModeViewModel: ExperienceModeSettingsViewModel = hiltViewModel()
+    experienceModeViewModel: ExperienceModeSettingsViewModel = hiltViewModel(),
+    partyViewModel: PartyViewModel = hiltViewModel()
 ) {
     val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsStateWithLifecycle()
+    val isWatchPartyAvailable by partyViewModel.party.available.collectAsStateWithLifecycle()
     val experienceModeState by remember(experienceModeViewModel) {
         experienceModeViewModel.mode.map<ExperienceMode?, ExperienceModeLoadState> {
             ExperienceModeLoadState.Loaded(it)
@@ -199,11 +206,12 @@ fun SettingsScreen(
 
     val isEssentialMode = loadedExperienceMode == ExperienceMode.ESSENTIAL
 
-    val visibleCategories = remember(isPrimaryProfileActive, isEssentialMode) {
+    val visibleCategories = remember(isPrimaryProfileActive, isEssentialMode, isWatchPartyAvailable) {
         visibleSettingsCategories(
             isPrimaryProfile = isPrimaryProfileActive,
             isEssentialMode = isEssentialMode,
-            isDebugBuild = BuildConfig.IS_DEBUG_BUILD
+            isDebugBuild = BuildConfig.IS_DEBUG_BUILD,
+            isWatchPartyAvailable = isWatchPartyAvailable
         )
     }
     val visibleSections = visibleCategories.map { category -> settingsSectionSpec(category) }
@@ -223,6 +231,7 @@ fun SettingsScreen(
             SettingsCategory.APPEARANCE to FocusRequester(),
             SettingsCategory.EXPERIENCE to FocusRequester(),
             SettingsCategory.PROFILES to FocusRequester(),
+            SettingsCategory.WATCH_PARTY to FocusRequester(),
             SettingsCategory.LAYOUT to FocusRequester(),
             SettingsCategory.CONTENT_DISCOVERY to FocusRequester(),
             SettingsCategory.INTEGRATION to FocusRequester(),
@@ -438,6 +447,7 @@ fun SettingsScreen(
                 }
             }
 
+
             if (isHorizonStyle) {
                 var topBarCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
                 var focusedTabBounds by remember { mutableStateOf<Rect?>(null) }
@@ -614,7 +624,8 @@ fun SettingsScreen(
                                 onNavigateToPlugins = onNavigateToPlugins,
                                 onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn,
                                 onNavigateToSupportersContributors = onNavigateToSupportersContributors,
-                                onNavigateToLicensesAttributions = onNavigateToLicensesAttributions
+                                onNavigateToLicensesAttributions = onNavigateToLicensesAttributions,
+                                onNavigateToWatchParty = onNavigateToWatchParty
                             )
                         }
                     }
@@ -753,7 +764,8 @@ fun SettingsScreen(
                         onNavigateToPlugins = onNavigateToPlugins,
                         onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn,
                         onNavigateToSupportersContributors = onNavigateToSupportersContributors,
-                        onNavigateToLicensesAttributions = onNavigateToLicensesAttributions
+                        onNavigateToLicensesAttributions = onNavigateToLicensesAttributions,
+                        onNavigateToWatchParty = onNavigateToWatchParty
                     )
                 }
             }
@@ -781,7 +793,8 @@ private fun SettingsDetailPane(
     onNavigateToPlugins: () -> Unit,
     onNavigateToAuthQrSignIn: () -> Unit,
     onNavigateToSupportersContributors: () -> Unit,
-    onNavigateToLicensesAttributions: () -> Unit
+    onNavigateToLicensesAttributions: () -> Unit,
+    onNavigateToWatchParty: () -> Unit
 ) {
     when (selectedCategory) {
         SettingsCategory.EXPERIENCE -> EssentialAdvancedSettingsContent(
@@ -796,6 +809,14 @@ private fun SettingsDetailPane(
             onManageProfiles = onNavigateToManageProfiles,
             initialFocusRequester = if (allowDetailAutofocus) {
                 contentFocusRequesters[SettingsCategory.PROFILES]
+            } else {
+                null
+            }
+        )
+        SettingsCategory.WATCH_PARTY -> PartySettingsContent(
+            onOpen = onNavigateToWatchParty,
+            initialFocusRequester = if (allowDetailAutofocus) {
+                contentFocusRequesters[SettingsCategory.WATCH_PARTY]
             } else {
                 null
             }
