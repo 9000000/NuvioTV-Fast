@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.foundation.lazy.LazyColumn
@@ -447,7 +448,7 @@ fun StreamScreen(
                     genres = uiState.genres,
                     year = uiState.year,
                     modifier = Modifier
-                        .weight(0.4f)
+                        .weight(0.30f)
                         .fillMaxHeight()
                 )
 
@@ -517,7 +518,7 @@ fun StreamScreen(
                     onExpandStreams = { viewModel.expandFilteredStreamsIfNeeded() },
                     hazeState = streamHazeState,
                     modifier = Modifier
-                        .weight(0.6f)
+                        .weight(0.70f)
                         .fillMaxHeight()
                 )
             }
@@ -705,7 +706,7 @@ private fun LeftContentSection(
         listOfNotNull(genres, year).joinToString(" • ")
     }
     Box(
-        modifier = modifier.padding(start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xl),
+        modifier = modifier.padding(start = NuvioTheme.spacing.xl, end = NuvioTheme.spacing.md),
         contentAlignment = Alignment.CenterStart
     ) {
         Column(
@@ -912,7 +913,7 @@ private fun RightStreamSection(
 
     Column(
         modifier = modifier
-            .padding(top = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl, bottom = NuvioTheme.spacing.xxxl)
+            .padding(top = NuvioTheme.spacing.lg, end = NuvioTheme.spacing.xl, bottom = NuvioTheme.spacing.lg)
     ) {
         val chipRowHeight = NuvioTheme.spacing.huge
 
@@ -942,15 +943,15 @@ private fun RightStreamSection(
         }
 
         if (showSearchField) {
-            Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+            Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
             StreamSearchField(
                 query = searchQuery,
                 onQueryChange = onSearchQueryChange,
-                modifier = Modifier.padding(bottom = NuvioTheme.spacing.sm)
+                modifier = Modifier.padding(bottom = NuvioTheme.spacing.xs)
             )
         }
 
-        Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+        Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
 
         androidx.compose.animation.AnimatedVisibility(
             visible = enter,
@@ -1150,23 +1151,28 @@ private fun StreamSearchField(
         onValueChange = onQueryChange,
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp),
+            .height(40.dp),
         singleLine = true,
-        shape = RoundedCornerShape(NuvioTheme.radii.lg),
+        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+        shape = RoundedCornerShape(NuvioTheme.radii.md),
         placeholder = {
             Text(
                 text = stringResource(R.string.streams_search_placeholder),
                 color = NuvioTheme.colors.TextTertiary,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp)
             )
         },
         trailingIcon = if (query.isNotEmpty()) {
             {
-                IconButton(onClick = { onQueryChange("") }) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier.size(28.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = stringResource(R.string.streams_search_clear),
-                        tint = NuvioTheme.colors.TextTertiary
+                        tint = NuvioTheme.colors.TextTertiary,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
@@ -1354,7 +1360,7 @@ private fun StreamsList(
         state = streamListState,
         modifier = Modifier
             .fillMaxSize()
-            .padding(NuvioTheme.spacing.lg)
+            .padding(NuvioTheme.spacing.sm)
             .onFocusChanged { onFocusChanged(it.hasFocus) }
             .onKeyEvent { event ->
                 if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
@@ -1391,18 +1397,18 @@ private fun StreamsList(
                     else -> false
                 }
             },
-        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
-        contentPadding = PaddingValues(start = NuvioTheme.spacing.sm, end = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.xxl)
+        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs),
+        contentPadding = PaddingValues(start = NuvioTheme.spacing.xs, end = NuvioTheme.spacing.xs, top = NuvioTheme.spacing.xs, bottom = NuvioTheme.spacing.lg)
     ) {
         sharedStream?.let { shared ->
             item(key = "party_shared_stream") {
                 Column(
-                    modifier = Modifier.padding(vertical = NuvioTheme.spacing.xs),
-                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+                    modifier = Modifier.padding(bottom = NuvioTheme.spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)
                 ) {
                     Text(
                         text = stringResource(R.string.party_shared_by, shared.hostName),
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelSmall,
                         color = NuvioTheme.colors.TextSecondary,
                         modifier = Modifier.padding(start = NuvioTheme.spacing.xs)
                     )
@@ -1427,7 +1433,7 @@ private fun StreamsList(
         itemsIndexed(streams, key = { index, _ ->
             streamKeys[index]
         }) { index, stream ->
-            Box(modifier = Modifier.padding(vertical = NuvioTheme.spacing.xs)) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 val isPartySource = partySource?.matches(stream) == true
                 StreamCard(
                     stream = stream,
@@ -1544,13 +1550,13 @@ private fun StreamCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(NuvioTheme.spacing.lg),
+                .padding(horizontal = NuvioTheme.spacing.md, vertical = NuvioTheme.spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 if (hasBadges && badgePlacement == StreamBadgePlacement.TOP) {
                     if (stream.badges.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints?.videoSize != null)) {
@@ -1562,7 +1568,7 @@ private fun StreamCard(
                             focused = isFocused
                         )
                     } else {
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                     }
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xxs))
                 }
@@ -1575,7 +1581,8 @@ private fun StreamCard(
                     Text(
                         text = streamName,
                         modifier = Modifier.weight(1f, fill = false),
-                        style = MaterialTheme.typography.titleMedium.copy(
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 14.sp,
                             textDirection = streamName.contentTextDirection()
                         ),
                         color = NuvioTheme.colors.TextPrimary
@@ -1585,11 +1592,11 @@ private fun StreamCard(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(NuvioTheme.colors.Primary.copy(alpha = 0.2f))
-                                .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = markedLabel,
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = NuvioTheme.colors.Primary
                             )
                         }
@@ -1602,6 +1609,8 @@ private fun StreamCard(
                             text = description,
                             modifier = Modifier.align(description.contentTextDirection().toAbsoluteAlignment()),
                             style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
                                 textDirection = description.contentTextDirection()
                             ),
                             color = NuvioTheme.extendedColors.textSecondary
@@ -1620,7 +1629,7 @@ private fun StreamCard(
                             modifier = Modifier.padding(top = NuvioTheme.spacing.xxs)
                         )
                     } else {
-                        Spacer(modifier = Modifier.height(22.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
@@ -1634,17 +1643,18 @@ private fun StreamCard(
                             model = addonLogoModel,
                             contentDescription = stream.addonName,
                             modifier = Modifier
-                                .size(NuvioTheme.spacing.xxl)
+                                .size(24.dp)
                                 .clip(RoundedCornerShape(NuvioTheme.radii.xs)),
                             contentScale = ContentScale.Fit
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
                         text = stream.addonName,
                         style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.sp,
                             textDirection = stream.addonName.contentTextDirection()
                         ),
                         color = NuvioTheme.extendedColors.textTertiary,
