@@ -77,22 +77,6 @@ private const val SubtitleOffLanguageKey = "__off__"
 private const val SubtitleUnknownLanguageKey = "__unknown__"
 private const val SubtitleFocusTag = "SubtitleFocus"
 
-private val OverlayTextColors = listOf(
-    Color.White,
-    Color(0xFFD9D9D9),
-    Color(0xFFFFD700),
-    Color(0xFF00E5FF),
-    Color(0xFFFF5C5C),
-    Color(0xFF00FF88)
-)
-
-private val OverlayOutlineColors = listOf(
-    Color.Black,
-    Color.White,
-    Color(0xFF00E5FF),
-    Color(0xFFFF5C5C)
-)
-
 private const val RailFadeDurationMs = 120
 
 @Composable
@@ -975,7 +959,7 @@ private fun SubtitleStyleRail(
                     modifier = styleCardModifier
                 ) {
                     ColorChipRow(
-                        colors = OverlayTextColors,
+                        colors = SubtitleTextColorPresets,
                         selectedColor = subtitleStyle.textColor,
                         onMoveLeft = onMoveLeft,
                         focusRequesters = focusRequesters,
@@ -1027,7 +1011,7 @@ private fun SubtitleStyleRail(
                             onClick = { dispatchStyleEvent(PlayerEvent.OnSetSubtitleOutlineEnabled(!subtitleStyle.outlineEnabled)) }
                         )
                         ColorChipRow(
-                            colors = OverlayOutlineColors,
+                            colors = SubtitleOutlineColorPresets,
                             selectedColor = subtitleStyle.outlineColor,
                             enabled = subtitleStyle.outlineEnabled,
                             onMoveLeft = onMoveLeft,
@@ -1803,10 +1787,10 @@ private fun rememberStyleFocusRequesters(): Map<String, FocusRequester> {
             StyleFocusKey.DelaySet,
             StyleFocusKey.Reset
         ).associateWith { FocusRequester() } +
-            OverlayTextColors.associate { color ->
+            SubtitleTextColorPresets.associate { color ->
                 "${StyleFocusKey.TextColorPrefix}:${color.toArgb()}" to FocusRequester()
             } +
-            OverlayOutlineColors.associate { color ->
+            SubtitleOutlineColorPresets.associate { color ->
                 "${StyleFocusKey.OutlineColorPrefix}:${color.toArgb()}" to FocusRequester()
             }
     }

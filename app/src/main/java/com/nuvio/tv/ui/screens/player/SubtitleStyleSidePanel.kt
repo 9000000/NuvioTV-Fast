@@ -56,22 +56,6 @@ import com.nuvio.tv.data.local.SubtitleFontOption
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
-private val PANEL_TEXT_COLORS = listOf(
-    Color.White,
-    Color(0xFFD9D9D9),
-    Color(0xFFFFD700),
-    Color(0xFF00E5FF),
-    Color(0xFFFF5C5C),
-    Color(0xFF00FF88)
-)
-
-private val PANEL_OUTLINE_COLORS = listOf(
-    Color.Black,
-    Color.White,
-    Color(0xFF00E5FF),
-    Color(0xFFFF5C5C)
-)
-
 private val StyleCardWidth = 220.dp
 private val StyleCardHeight = 102.dp
 private val StyleCardGap = NuvioTheme.spacing.md
@@ -231,7 +215,7 @@ internal fun SubtitleStyleSidePanel(
                         verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
-                            PANEL_TEXT_COLORS.forEach { color ->
+                            SubtitleTextColorPresets.forEach { color ->
                                 SubtitleStyleColorChip(
                                     color = color,
                                     isSelected = Color(subtitleStyle.textColor).copy(alpha = 1f).toArgb() == color.copy(alpha = 1f).toArgb(),
@@ -281,7 +265,7 @@ internal fun SubtitleStyleSidePanel(
                                 onClick = { onEvent(PlayerEvent.OnSetSubtitleOutlineEnabled(!subtitleStyle.outlineEnabled)) }
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)) {
-                                PANEL_OUTLINE_COLORS.forEach { color ->
+                                SubtitleOutlineColorPresets.forEach { color ->
                                     SubtitleStyleColorChip(
                                         color = color.copy(alpha = if (subtitleStyle.outlineEnabled) 1f else 0.35f),
                                         isSelected = subtitleStyle.outlineColor == color.toArgb(),

@@ -15,7 +15,6 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import androidx.annotation.RawRes
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -129,8 +128,6 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil3.compose.rememberAsyncImagePainter
-import coil3.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.core.party.PartyAction
@@ -150,6 +147,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.TorrentFilePickerDialog
 import android.text.format.DateFormat
+import com.nuvio.tv.ui.util.rememberRawSvgPainter
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -3594,20 +3592,6 @@ private fun SubtitleDelayOverlay(
             }
         }
     }
-}
-
-@Composable
-private fun rememberRawSvgPainter(@RawRes iconRes: Int): Painter {
-    val context = LocalContext.current
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val sizePx = with(density) { NuvioTheme.spacing.xl.roundToPx() }
-    val request = remember(iconRes, context, sizePx) {
-        ImageRequest.Builder(context)
-            .data(iconRes)
-            .size(sizePx)
-            .build()
-    }
-    return rememberAsyncImagePainter(model = request)
 }
 
 @Composable

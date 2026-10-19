@@ -1796,6 +1796,7 @@ class PlayerSettingsDataStore @Inject constructor(
             "pt-br", "pt_br", "br", "pob" -> "pt-br"
             "pt-pt", "pt_pt", "por" -> "pt"
             "forced", "force", "forc" -> SUBTITLE_LANGUAGE_FORCED
+            "iw", "heb", "hbo" -> "he"
             "zh-cn", "zh_cn" -> "zh-CN"
             "zh-tw", "zh_tw" -> "zh-TW"
             "en-au", "en_au" -> "en-AU"

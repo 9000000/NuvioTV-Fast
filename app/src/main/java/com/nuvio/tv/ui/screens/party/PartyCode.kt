@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +44,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
@@ -66,19 +69,21 @@ internal fun CodeSlots(
     textStyle: TextStyle = MaterialTheme.typography.headlineSmall,
     slotHeight: Dp = 48.dp,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
-    ) {
-        repeat(PARTY_CODE_LENGTH) { index ->
-            CodeSlot(
-                char = code.getOrNull(index),
-                active = index == activeIndex,
-                textStyle = textStyle,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(slotHeight),
-            )
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
+        ) {
+            repeat(PARTY_CODE_LENGTH) { index ->
+                CodeSlot(
+                    char = code.getOrNull(index),
+                    active = index == activeIndex,
+                    textStyle = textStyle,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(slotHeight),
+                )
+            }
         }
     }
 }

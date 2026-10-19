@@ -1006,7 +1006,7 @@ class LayoutSettingsViewModel @Inject constructor(
                 val catalogs = addons.flatMap { addon ->
                     addon.catalogs
                         .filter { catalog ->
-                            !catalog.extra.any { it.name.equals("search", ignoreCase = true) && it.isRequired }
+                            !catalog.isSearchOnlyCatalog()
                         }
                         .map { catalog ->
                             CatalogInfo(
