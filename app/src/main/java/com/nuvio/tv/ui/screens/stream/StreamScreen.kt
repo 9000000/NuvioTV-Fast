@@ -111,6 +111,7 @@ import com.nuvio.tv.ui.components.SourceChipStatus
 import com.nuvio.tv.core.torrent.TorrServerStreamProvider
 import com.nuvio.tv.ui.components.P2pConsentDialog
 import com.nuvio.tv.ui.components.StreamBadgeChips
+import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.components.StreamsSkeletonList
 import com.nuvio.tv.ui.screens.player.LoadingOverlay
 import com.nuvio.tv.ui.screens.player.AddonFilterChips
@@ -1143,49 +1144,211 @@ private fun StreamSearchEmptyState(
 }
 
 @Composable
+private fun StreamSearchDialog(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var tempQuery by remember(query) { mutableStateOf(query) }
+    val inputFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        inputFocusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.streams_search_placeholder),
+        subtitle = stringResource(R.string.settings_stream_search_description),
+        width = 600.dp
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+        ) {
+            Card(
+                onClick = {
+                    inputFocusRequester.requestFocus()
+                    keyboardController?.show()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundElevated,
+                    focusedContainerColor = NuvioTheme.colors.BackgroundElevated
+                ),
+                border = CardDefaults.border(
+                    border = Border(
+                        border = BorderStroke(1.dp, NuvioTheme.colors.Border),
+                        shape = RoundedCornerShape(NuvioTheme.radii.md)
+                    ),
+                    focusedBorder = Border(
+                        border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                        shape = RoundedCornerShape(NuvioTheme.radii.md)
+                    )
+                ),
+                shape = CardDefaults.shape(RoundedCornerShape(NuvioTheme.radii.md)),
+                scale = CardDefaults.scale(focusedScale = 1f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = NuvioTheme.colors.FocusRing,
+                        modifier = Modifier.size(20.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    BasicTextField(
+                        value = tempQuery,
+                        onValueChange = { tempQuery = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(inputFocusRequester),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = NuvioTheme.colors.TextPrimary,
+                            textDirection = TextDirection.Content
+                        ),
+                        cursorBrush = SolidColor(NuvioTheme.colors.FocusRing),
+                        keyboardOptions = KeyboardOptions.Default.copy(
+                            imeAction = ImeAction.Done,
+                            autoCorrectEnabled = false
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                onQueryChange(tempQuery)
+                                keyboardController?.hide()
+                                onDismiss()
+                            }
+                        ),
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (tempQuery.isEmpty()) {
+                                    Text(
+                                        text = stringResource(R.string.streams_search_placeholder),
+                                        color = NuvioTheme.colors.TextTertiary,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+
+                    if (tempQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { tempQuery = "" },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.streams_search_clear),
+                                tint = NuvioTheme.colors.TextTertiary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (tempQuery.isNotEmpty()) {
+                    var isClearFocused by remember { mutableStateOf(false) }
+                    Card(
+                        onClick = {
+                            tempQuery = ""
+                            onQueryChange("")
+                            keyboardController?.hide()
+                            onDismiss()
+                        },
+                        modifier = Modifier.onFocusChanged { isClearFocused = it.isFocused },
+                        colors = CardDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            focusedContainerColor = NuvioTheme.colors.Secondary
+                        ),
+                        shape = CardDefaults.shape(RoundedCornerShape(NuvioTheme.radii.sm)),
+                        scale = CardDefaults.scale(focusedScale = 1.02f)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.streams_search_clear),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isClearFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+
+                var isApplyFocused by remember { mutableStateOf(false) }
+                Card(
+                    onClick = {
+                        onQueryChange(tempQuery)
+                        keyboardController?.hide()
+                        onDismiss()
+                    },
+                    modifier = Modifier.onFocusChanged { isApplyFocused = it.isFocused },
+                    colors = CardDefaults.colors(
+                        containerColor = NuvioTheme.colors.Primary,
+                        focusedContainerColor = NuvioTheme.colors.Primary
+                    ),
+                    border = CardDefaults.border(
+                        focusedBorder = Border(
+                            border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                            shape = RoundedCornerShape(NuvioTheme.radii.sm)
+                        )
+                    ),
+                    shape = CardDefaults.shape(RoundedCornerShape(NuvioTheme.radii.sm)),
+                    scale = CardDefaults.scale(focusedScale = 1.04f)
+                ) {
+                    Text(
+                        text = stringResource(android.R.string.ok),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun StreamSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val textFieldFocusRequester = remember { FocusRequester() }
-    var isEditing by remember { mutableStateOf(false) }
-    var isFocused by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isEditing) {
-        if (isEditing) {
-            textFieldFocusRequester.requestFocus()
-            keyboardController?.show()
-        }
+    if (showDialog) {
+        StreamSearchDialog(
+            query = query,
+            onQueryChange = onQueryChange,
+            onDismiss = { showDialog = false }
+        )
     }
 
     Card(
-        onClick = { isEditing = true },
+        onClick = { showDialog = true },
         modifier = modifier
             .fillMaxWidth()
-            .height(40.dp)
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (!it.isFocused && isEditing) {
-                    isEditing = false
-                    keyboardController?.hide()
-                }
-            }
-            .onKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
-                    if (keyEvent.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
-                        if (isEditing) {
-                            isEditing = false
-                            keyboardController?.hide()
-                            true
-                        } else if (query.isNotEmpty()) {
-                            onQueryChange("")
-                            true
-                        } else false
-                    } else false
-                } else false
-            },
+            .height(40.dp),
         colors = CardDefaults.colors(
             containerColor = NuvioTheme.colors.BackgroundCard.copy(alpha = 0.5f),
             focusedContainerColor = NuvioTheme.colors.BackgroundCard
@@ -1212,77 +1375,24 @@ private fun StreamSearchField(
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
-                tint = if (isFocused || isEditing) NuvioTheme.colors.FocusRing else NuvioTheme.colors.TextTertiary,
+                tint = if (query.isNotEmpty()) NuvioTheme.colors.Primary else NuvioTheme.colors.TextTertiary,
                 modifier = Modifier.size(18.dp)
             )
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            Box(
-                modifier = Modifier.weight(1f),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                if (query.isEmpty() && !isEditing) {
-                    Text(
-                        text = stringResource(R.string.streams_search_placeholder),
-                        color = NuvioTheme.colors.TextTertiary,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
-                    )
-                }
-
-                BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(textFieldFocusRequester)
-                        .onFocusChanged {
-                            if (!it.isFocused && isEditing) {
-                                isEditing = false
-                                keyboardController?.hide()
-                            }
-                        },
-                    enabled = isEditing,
-                    readOnly = !isEditing,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.sp,
-                        color = NuvioTheme.colors.TextPrimary,
-                        textDirection = TextDirection.Content
-                    ),
-                    cursorBrush = SolidColor(if (isEditing) NuvioTheme.colors.FocusRing else Color.Transparent),
-                    keyboardOptions = KeyboardOptions.Default.copy(
-                        imeAction = ImeAction.Done,
-                        autoCorrectEnabled = false
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            isEditing = false
-                            keyboardController?.hide()
-                        }
-                    ),
-                    decorationBox = { innerTextField ->
-                        if (query.isEmpty() && isEditing) {
-                            Text(
-                                text = stringResource(R.string.streams_search_placeholder),
-                                color = NuvioTheme.colors.TextTertiary,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
-                            )
-                        }
-                        innerTextField()
-                    }
-                )
-            }
+            Text(
+                text = if (query.isEmpty()) stringResource(R.string.streams_search_placeholder) else query,
+                color = if (query.isEmpty()) NuvioTheme.colors.TextTertiary else NuvioTheme.colors.TextPrimary,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
 
             if (query.isNotEmpty()) {
                 IconButton(
-                    onClick = {
-                        onQueryChange("")
-                        if (isEditing) {
-                            isEditing = false
-                            keyboardController?.hide()
-                        }
-                    },
+                    onClick = { onQueryChange("") },
                     modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
