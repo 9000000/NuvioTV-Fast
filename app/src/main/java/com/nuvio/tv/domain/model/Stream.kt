@@ -3,6 +3,7 @@ package com.nuvio.tv.domain.model
 import androidx.compose.runtime.Immutable
 import com.nuvio.tv.core.debrid.DebridProviders
 import com.nuvio.tv.data.mediaserver.ServerPlaybackTarget
+import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable
 
 /**
@@ -192,6 +193,16 @@ enum class StreamDebridCacheState {
     UNKNOWN
 }
 
+const val AUDIO_DELAY_MIN_MS = -60000
+const val AUDIO_DELAY_MAX_MS = 60000
+
+/** Normalizes a `behaviorHints.audioDelayMs` value: whole ms, NaN/Infinity dropped, clamped to ±60 s. */
+fun Number?.toStreamAudioDelayMs(): Int? =
+    this?.toDouble()
+        ?.takeIf { it.isFinite() }
+        ?.roundToInt()
+        ?.coerceIn(AUDIO_DELAY_MIN_MS, AUDIO_DELAY_MAX_MS)
+
 @Immutable
 data class StreamBehaviorHints(
     val notWebReady: Boolean?,
@@ -200,7 +211,9 @@ data class StreamBehaviorHints(
     val proxyHeaders: ProxyHeaders?,
     val videoHash: String? = null,
     val videoSize: Long? = null,
-    val filename: String? = null
+    val filename: String? = null,
+    // Extra audio delay for this stream (ms, >0 = audio later), added on top of the user's/device delay.
+    val audioDelayMs: Int? = null
 )
 
 @Immutable
