@@ -61,6 +61,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.border
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1145,55 +1149,96 @@ private fun StreamSearchField(
     modifier: Modifier = Modifier
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
+    var isFocused by remember { mutableStateOf(false) }
 
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(40.dp),
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-        shape = RoundedCornerShape(NuvioTheme.radii.md),
-        placeholder = {
-            Text(
-                text = stringResource(R.string.streams_search_placeholder),
-                color = NuvioTheme.colors.TextTertiary,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp)
+            .height(40.dp)
+            .clip(RoundedCornerShape(NuvioTheme.radii.md))
+            .background(
+                if (isFocused) NuvioTheme.colors.BackgroundCard
+                else NuvioTheme.colors.BackgroundCard.copy(alpha = 0.5f)
             )
-        },
-        trailingIcon = if (query.isNotEmpty()) {
-            {
-                IconButton(
-                    onClick = { onQueryChange("") },
-                    modifier = Modifier.size(28.dp)
+            .border(
+                width = if (isFocused) 1.5.dp else 1.dp,
+                color = if (isFocused) NuvioTheme.colors.FocusRing else NuvioTheme.colors.Border,
+                shape = RoundedCornerShape(NuvioTheme.radii.md)
+            )
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Search,
+            contentDescription = null,
+            tint = if (isFocused) NuvioTheme.colors.FocusRing else NuvioTheme.colors.TextTertiary,
+            modifier = Modifier.size(18.dp)
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { isFocused = it.isFocused }
+                .onKeyEvent { keyEvent ->
+                    if (keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                        if (keyEvent.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                            keyboardController?.hide()
+                            false
+                        } else if (keyEvent.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_BACK && query.isNotEmpty()) {
+                            onQueryChange("")
+                            true
+                        } else false
+                    } else false
+                },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 13.sp,
+                color = NuvioTheme.colors.TextPrimary,
+                textDirection = TextDirection.Content
+            ),
+            cursorBrush = SolidColor(NuvioTheme.colors.FocusRing),
+            keyboardOptions = KeyboardOptions.Default.copy(
+                imeAction = ImeAction.Done,
+                autoCorrectEnabled = false
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { keyboardController?.hide() }
+            ),
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.CenterStart
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.streams_search_clear),
-                        tint = NuvioTheme.colors.TextTertiary,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    if (query.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.streams_search_placeholder),
+                            color = NuvioTheme.colors.TextTertiary,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                        )
+                    }
+                    innerTextField()
                 }
             }
-        } else null,
-        keyboardOptions = KeyboardOptions.Default.copy(
-            imeAction = ImeAction.Done,
-            autoCorrectEnabled = false
-        ),
-        keyboardActions = KeyboardActions(
-            onDone = { keyboardController?.hide() }
-        ),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = NuvioTheme.colors.BackgroundCard,
-            unfocusedContainerColor = NuvioTheme.colors.BackgroundCard.copy(alpha = 0.5f),
-            focusedIndicatorColor = NuvioTheme.colors.FocusRing,
-            unfocusedIndicatorColor = NuvioTheme.colors.Border,
-            focusedTextColor = NuvioTheme.colors.TextPrimary,
-            unfocusedTextColor = NuvioTheme.colors.TextPrimary,
-            cursorColor = NuvioTheme.colors.FocusRing
         )
-    )
+
+        if (query.isNotEmpty()) {
+            IconButton(
+                onClick = { onQueryChange("") },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.streams_search_clear),
+                    tint = NuvioTheme.colors.TextTertiary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
 }
 
 @Composable
