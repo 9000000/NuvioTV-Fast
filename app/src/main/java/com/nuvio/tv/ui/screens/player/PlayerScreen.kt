@@ -2760,84 +2760,54 @@ private fun PlayerControlsOverlay(
                         )
                     }
 
-                    AnimatedVisibility(
-                        visible = uiState.showMoreDialog,
-                        enter = slideInHorizontally(
-                            animationSpec = tween(NuvioMotion.tokens.durations.fast),
-                            initialOffsetX = { it / 2 }
-                        ) + fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
-                        exit = slideOutHorizontally(
-                            animationSpec = tween(160),
-                            targetOffsetX = { it / 2 }
-                        ) + fadeOut(animationSpec = tween(160))
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            ControlButton(
-                                icon = Icons.Default.Speed,
-                                contentDescription = stringResource(R.string.cd_playback_speed),
-                                label = stringResource(R.string.player_btn_speed),
-                                onClick = {
-                                    onShowSpeedDialog()
-                                },
-                                upFocusRequester = progressUpTarget,
-                                onDownKey = onHideControls,
-                                onFocused = onResetHideTimer
-                            )
-                            ControlButton(
-                                icon = Icons.Default.AspectRatio,
-                                iconPainter = customAspectPainter,
-                                contentDescription = stringResource(R.string.cd_aspect_ratio),
-                                label = stringResource(R.string.player_btn_aspect),
-                                onClick = {
-                                    onToggleAspectRatio()
-                                },
-                                upFocusRequester = progressUpTarget,
-                                onDownKey = onHideControls,
-                                onFocused = onResetHideTimer
-                            )
-                            onOpenInExternalPlayer?.let { openInExternalPlayer ->
-                                ControlButton(
-                                    icon = Icons.AutoMirrored.Filled.OpenInNew,
-                                    contentDescription = stringResource(R.string.cd_open_external_player),
-                                    label = stringResource(R.string.player_btn_external),
-                                    onClick = openInExternalPlayer,
-                                    upFocusRequester = progressUpTarget,
-                                    onDownKey = onHideControls,
-                                    onFocused = onResetHideTimer
-                                )
-                            }
-
-                            if (uiState.playbackIssueReportsEnabled) {
-                                ReportControlButton(
-                                    reportId = uiState.playbackIssueReportId,
-                                    showReportId = reportCodeVisible,
-                                    onClick = onReportPlaybackIssue,
-                                    enabled = uiState.playbackIssueReportStatus != PlaybackIssueReportStatus.Sending &&
-                                        uiState.playbackIssueReportStatus != PlaybackIssueReportStatus.Sent,
-                                    upFocusRequester = progressUpTarget,
-                                    onDownKey = onHideControls,
-                                    onFocused = onResetHideTimer
-                                )
-                            }
-                        }
-                    }
-
+                    // Always display all action buttons directly on the control bar
                     ControlButton(
-                        icon = if (uiState.showMoreDialog) {
-                            Icons.AutoMirrored.Filled.KeyboardArrowLeft
-                        } else {
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight
+                        icon = Icons.Default.Speed,
+                        contentDescription = stringResource(R.string.cd_playback_speed),
+                        label = stringResource(R.string.player_btn_speed),
+                        onClick = {
+                            onShowSpeedDialog()
                         },
-                        contentDescription = if (uiState.showMoreDialog) stringResource(R.string.cd_close_more_actions) else stringResource(R.string.cd_more_actions),
-                        label = if (uiState.showMoreDialog) stringResource(R.string.player_btn_less) else stringResource(R.string.player_btn_more),
-                        onClick = onToggleMoreActions,
                         upFocusRequester = progressUpTarget,
                         onDownKey = onHideControls,
                         onFocused = onResetHideTimer
                     )
+                    ControlButton(
+                        icon = Icons.Default.AspectRatio,
+                        iconPainter = customAspectPainter,
+                        contentDescription = stringResource(R.string.cd_aspect_ratio),
+                        label = stringResource(R.string.player_btn_aspect),
+                        onClick = {
+                            onToggleAspectRatio()
+                        },
+                        upFocusRequester = progressUpTarget,
+                        onDownKey = onHideControls,
+                        onFocused = onResetHideTimer
+                    )
+                    onOpenInExternalPlayer?.let { openInExternalPlayer ->
+                        ControlButton(
+                            icon = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = stringResource(R.string.cd_open_external_player),
+                            label = stringResource(R.string.player_btn_external),
+                            onClick = openInExternalPlayer,
+                            upFocusRequester = progressUpTarget,
+                            onDownKey = onHideControls,
+                            onFocused = onResetHideTimer
+                        )
+                    }
+
+                    if (uiState.playbackIssueReportsEnabled) {
+                        ReportControlButton(
+                            reportId = uiState.playbackIssueReportId,
+                            showReportId = reportCodeVisible,
+                            onClick = onReportPlaybackIssue,
+                            enabled = uiState.playbackIssueReportStatus != PlaybackIssueReportStatus.Sending &&
+                                uiState.playbackIssueReportStatus != PlaybackIssueReportStatus.Sent,
+                            upFocusRequester = progressUpTarget,
+                            onDownKey = onHideControls,
+                            onFocused = onResetHideTimer
+                        )
+                    }
                 }
 
                 // Right side - Time display only
