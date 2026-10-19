@@ -4,6 +4,7 @@ data class StreamBadgeSettings(
     val rules: StreamBadgeRules = StreamBadgeRules(),
     val showFileSizeBadges: Boolean = true,
     val showAddonLogo: Boolean = true,
+    val showStreamSearch: Boolean = false,
     val badgePlacement: StreamBadgePlacement = StreamBadgePlacement.BOTTOM
 )
 

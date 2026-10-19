@@ -74,6 +74,14 @@ import androidx.compose.ui.input.key.onKeyEvent
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalDensity
 import com.nuvio.tv.core.party.PartySource
 import com.nuvio.tv.core.party.matches
@@ -149,6 +157,7 @@ fun StreamScreen(
     val streamBadgeSettings by viewModel.streamBadgeSettings.collectAsStateWithLifecycle(
         initialValue = StreamBadgeSettings()
     )
+    var streamSearchQuery by rememberSaveable { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val streamHazeState = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) HazeState() else null
@@ -454,6 +463,9 @@ fun StreamScreen(
                     showAddonLogo = streamBadgeSettings.showAddonLogo,
                     badgePlacement = streamBadgeSettings.badgePlacement,
                     hasBadgeRules = streamBadgeSettings.rules.hasImport,
+                    showSearchField = streamBadgeSettings.showStreamSearch,
+                    searchQuery = streamSearchQuery,
+                    onSearchQueryChange = { streamSearchQuery = it },
                     onAddonFilterSelected = { viewModel.onEvent(StreamScreenEvent.OnAddonFilterSelected(it)) },
                     onRefresh = { viewModel.onEvent(StreamScreenEvent.OnRefresh) },
                     sharedStream = sharedStream,
@@ -789,6 +801,9 @@ private fun RightStreamSection(
     showAddonLogo: Boolean,
     badgePlacement: StreamBadgePlacement,
     hasBadgeRules: Boolean = false,
+    showSearchField: Boolean = false,
+    searchQuery: String = "",
+    onSearchQueryChange: (String) -> Unit = {},
     onAddonFilterSelected: (String?) -> Unit,
     onRefresh: () -> Unit,
     sharedStream: SharedStream?,
@@ -818,7 +833,14 @@ private fun RightStreamSection(
             sourceChips.forEach { if (it.name !in this) add(it.name) }
         }
     }
-    val firstStreamKey = streams.firstOrNull()?.stableKey(0)
+    val searchFilteredStreams = remember(streams, searchQuery, showSearchField) {
+        if (!showSearchField || searchQuery.isBlank()) return@remember streams
+        val terms = searchQuery.trim().lowercase().split(' ').filter { it.isNotEmpty() }
+        if (terms.isEmpty()) return@remember streams
+        streams.filter { it.matchesSearchTerms(terms) }
+    }
+    val isEmptyBecauseOfSearch = showSearchField && searchQuery.isNotBlank() && streams.isNotEmpty() && searchFilteredStreams.isEmpty()
+    val firstStreamKey = searchFilteredStreams.firstOrNull()?.stableKey(0)
     val refreshFocusRequester = remember { FocusRequester() }
     val allFocusRequester = remember { FocusRequester() }
     val addonFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
@@ -919,6 +941,15 @@ private fun RightStreamSection(
             }
         }
 
+        if (showSearchField) {
+            Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+            StreamSearchField(
+                query = searchQuery,
+                onQueryChange = onSearchQueryChange,
+                modifier = Modifier.padding(bottom = NuvioTheme.spacing.sm)
+            )
+        }
+
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
 
         androidx.compose.animation.AnimatedVisibility(
@@ -965,12 +996,15 @@ private fun RightStreamSection(
                             onRetry = onRetry
                         )
                     }
+                    sharedStream == null && isEmptyBecauseOfSearch -> {
+                        StreamSearchEmptyState(onClearSearch = { onSearchQueryChange("") })
+                    }
                     sharedStream == null && streams.isEmpty() -> {
                         EmptyState()
                     }
                     else -> {
                         StreamsList(
-                            streams = streams,
+                            streams = searchFilteredStreams,
                             sharedStream = sharedStream,
                             partySource = partySource,
                             onSharedStreamSelected = onSharedStreamSelected,
@@ -1062,6 +1096,98 @@ private fun ErrorState(
             )
         }
     }
+}
+
+private fun Stream.matchesSearchTerms(terms: List<String>): Boolean {
+    val haystack = buildString {
+        name?.let { append(it).append(' ') }
+        title?.let { append(it).append(' ') }
+        description?.let { append(it).append(' ') }
+        append(addonName).append(' ')
+        behaviorHints?.filename?.let { append(it).append(' ') }
+        badges.forEach { badge -> append(badge.name).append(' ') }
+    }.lowercase()
+    return terms.all { haystack.contains(it) }
+}
+
+@Composable
+private fun StreamSearchEmptyState(
+    onClearSearch: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.padding(NuvioTheme.spacing.xxl)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Warning,
+            contentDescription = null,
+            modifier = Modifier.size(NuvioTheme.spacing.xxxl),
+            tint = NuvioTheme.extendedColors.textSecondary
+        )
+
+        Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+
+        Text(
+            text = stringResource(R.string.streams_search_no_results),
+            style = MaterialTheme.typography.bodyLarge,
+            color = NuvioTheme.extendedColors.textSecondary,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun StreamSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        singleLine = true,
+        shape = RoundedCornerShape(NuvioTheme.radii.lg),
+        placeholder = {
+            Text(
+                text = stringResource(R.string.streams_search_placeholder),
+                color = NuvioTheme.colors.TextTertiary,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        trailingIcon = if (query.isNotEmpty()) {
+            {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.streams_search_clear),
+                        tint = NuvioTheme.colors.TextTertiary
+                    )
+                }
+            }
+        } else null,
+        keyboardOptions = KeyboardOptions.Default.copy(
+            imeAction = ImeAction.Done,
+            autoCorrectEnabled = false
+        ),
+        keyboardActions = KeyboardActions(
+            onDone = { keyboardController?.hide() }
+        ),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = NuvioTheme.colors.BackgroundCard,
+            unfocusedContainerColor = NuvioTheme.colors.BackgroundCard.copy(alpha = 0.5f),
+            focusedIndicatorColor = NuvioTheme.colors.FocusRing,
+            unfocusedIndicatorColor = NuvioTheme.colors.Border,
+            focusedTextColor = NuvioTheme.colors.TextPrimary,
+            unfocusedTextColor = NuvioTheme.colors.TextPrimary,
+            cursorColor = NuvioTheme.colors.FocusRing
+        )
+    )
 }
 
 @Composable

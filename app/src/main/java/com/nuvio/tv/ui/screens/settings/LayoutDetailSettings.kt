@@ -148,6 +148,7 @@ internal fun LayoutStreamsSection(
     streamBadgeUiState: StreamBadgeSettingsUiState,
     onShowFileSizeBadgesChange: (Boolean) -> Unit,
     onShowAddonLogoChange: (Boolean) -> Unit,
+    onShowStreamSearchChange: (Boolean) -> Unit,
     onBadgePlacementSelected: (StreamBadgePlacement) -> Unit,
     onConfigureBadges: () -> Unit
 ) {
@@ -178,6 +179,12 @@ internal fun LayoutStreamsSection(
         subtitle = stringResource(R.string.settings_stream_addon_logo_description),
         checked = streamBadgeUiState.showAddonLogo,
         onToggle = { onShowAddonLogoChange(!streamBadgeUiState.showAddonLogo) }
+    )
+    SettingsToggleRow(
+        title = stringResource(R.string.settings_stream_search_title),
+        subtitle = stringResource(R.string.settings_stream_search_description),
+        checked = streamBadgeUiState.showStreamSearch,
+        onToggle = { onShowStreamSearchChange(!streamBadgeUiState.showStreamSearch) }
     )
 
     if (showPositionDialog) {
