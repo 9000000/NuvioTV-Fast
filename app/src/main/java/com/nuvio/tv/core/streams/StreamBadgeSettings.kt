@@ -5,7 +5,8 @@ data class StreamBadgeSettings(
     val showFileSizeBadges: Boolean = true,
     val showAddonLogo: Boolean = true,
     val showStreamSearch: Boolean = false,
-    val badgePlacement: StreamBadgePlacement = StreamBadgePlacement.BOTTOM
+    val badgePlacement: StreamBadgePlacement = StreamBadgePlacement.BOTTOM,
+    val showInPlayer: Boolean = false
 )
 
 enum class StreamBadgePlacement {

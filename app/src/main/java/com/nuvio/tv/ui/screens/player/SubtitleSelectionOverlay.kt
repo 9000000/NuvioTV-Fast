@@ -87,6 +87,7 @@ internal fun SubtitleSelectionOverlay(
     addonSubtitles: List<Subtitle>,
     selectedAddonSubtitle: Subtitle?,
     subtitleStyle: SubtitleStyleSettings,
+    isEditingHdrStyle: Boolean = false,
     subtitleDelayMs: Int,
     installedSubtitleAddonOrder: List<String>,
     isLoadingAddons: Boolean,
@@ -333,6 +334,7 @@ internal fun SubtitleSelectionOverlay(
                 requestedKey == StyleFocusKey.OutlineWidthIncrease) && !subtitleStyle.outlineEnabled -> {
                 StyleFocusKey.OutlineToggle
             }
+            requestedKey.isHdrBrightnessFocusKey() && !isEditingHdrStyle -> StyleFocusKey.OpacityDecrease
             else -> requestedKey
         }.takeIf { key -> styleRequesters.containsKey(key) } ?: StyleFocusKey.DelaySet
         if (
@@ -437,7 +439,7 @@ internal fun SubtitleSelectionOverlay(
                 pendingStyleFocusKey = null
                 return@LaunchedEffect
             }
-            val targetIndex = styleListIndexForFocusKey(targetKey)
+            val targetIndex = styleListIndexForFocusKey(targetKey, hasHdrBrightnessItem = isEditingHdrStyle)
             repeat(8) { attempt ->
                 styleListState.scrollItemIntoView(targetIndex)
                 Log.d(
@@ -580,6 +582,7 @@ internal fun SubtitleSelectionOverlay(
                 RailFadeIn(visible = styleRailVisible) {
                     SubtitleStyleRail(
                         subtitleStyle = subtitleStyle,
+                        isEditingHdrStyle = isEditingHdrStyle,
                         subtitleDelayMs = subtitleDelayMs,
                         listState = styleListState,
                         onMoveLeft = ::moveFocusBackToOptionRail,
@@ -796,6 +799,7 @@ private fun SubtitleOptionsRail(
 @Composable
 private fun SubtitleStyleRail(
     subtitleStyle: SubtitleStyleSettings,
+    isEditingHdrStyle: Boolean,
     subtitleDelayMs: Int,
     listState: LazyListState,
     onMoveLeft: () -> Unit,
@@ -955,7 +959,11 @@ private fun SubtitleStyleRail(
             }
             item {
                 OverlaySectionCard(
-                    title = stringResource(R.string.subtitle_style_text_color),
+                    title = if (isEditingHdrStyle) {
+                        stringResource(R.string.subtitle_style_text_color_hdr)
+                    } else {
+                        stringResource(R.string.subtitle_style_text_color)
+                    },
                     modifier = styleCardModifier
                 ) {
                     ColorChipRow(
@@ -971,7 +979,11 @@ private fun SubtitleStyleRail(
             }
             item {
                 OverlaySectionCard(
-                    title = stringResource(R.string.subtitle_style_text_opacity),
+                    title = if (isEditingHdrStyle) {
+                        stringResource(R.string.subtitle_style_text_opacity_hdr)
+                    } else {
+                        stringResource(R.string.subtitle_style_text_opacity)
+                    },
                     modifier = styleCardModifier
                 ) {
                     val currentColor = Color(subtitleStyle.textColor)
@@ -993,6 +1005,30 @@ private fun SubtitleStyleRail(
                         incrementFocusKey = StyleFocusKey.OpacityIncrease,
                         onFocusChanged = onStyleFocused
                     )
+                }
+            }
+            if (isEditingHdrStyle) {
+                item {
+                    OverlaySectionCard(
+                        title = stringResource(R.string.subtitle_style_brightness_hdr),
+                        modifier = styleCardModifier
+                    ) {
+                        StepperRow(
+                            value = "${subtitleStyle.hdrBrightness}%",
+                            onDecrease = {
+                                dispatchStyleEvent(PlayerEvent.OnSetSubtitleHdrBrightness(subtitleStyle.hdrBrightness - 10))
+                            },
+                            onIncrease = {
+                                dispatchStyleEvent(PlayerEvent.OnSetSubtitleHdrBrightness(subtitleStyle.hdrBrightness + 10))
+                            },
+                            onMoveLeft = onMoveLeft,
+                            decrementFocusRequester = focusRequesters[StyleFocusKey.HdrBrightnessDecrease],
+                            incrementFocusRequester = focusRequesters[StyleFocusKey.HdrBrightnessIncrease],
+                            decrementFocusKey = StyleFocusKey.HdrBrightnessDecrease,
+                            incrementFocusKey = StyleFocusKey.HdrBrightnessIncrease,
+                            onFocusChanged = onStyleFocused
+                        )
+                    }
                 }
             }
             item {
@@ -1739,6 +1775,8 @@ private object StyleFocusKey {
     const val TextColorPrefix = "text_color"
     const val OpacityDecrease = "opacity_decrease"
     const val OpacityIncrease = "opacity_increase"
+    const val HdrBrightnessDecrease = "hdr_brightness_decrease"
+    const val HdrBrightnessIncrease = "hdr_brightness_increase"
     const val OutlineColorPrefix = "outline_color"
 }
 
@@ -1746,6 +1784,16 @@ private enum class OverlayFocusRail {
     LANGUAGE,
     OPTION,
     STYLE
+}
+
+private fun String.isHdrBrightnessFocusKey(): Boolean =
+    this == StyleFocusKey.HdrBrightnessDecrease || this == StyleFocusKey.HdrBrightnessIncrease
+
+/** The HDR brightness item sits right after opacity, shifting every later item down by one. */
+private fun styleListIndexForFocusKey(focusKey: String, hasHdrBrightnessItem: Boolean): Int {
+    if (focusKey.isHdrBrightnessFocusKey()) return 5
+    val index = styleListIndexForFocusKey(focusKey)
+    return if (hasHdrBrightnessItem && index >= 5) index + 1 else index
 }
 
 private fun styleListIndexForFocusKey(focusKey: String): Int {
@@ -1779,6 +1827,8 @@ private fun rememberStyleFocusRequesters(): Map<String, FocusRequester> {
             StyleFocusKey.Bold,
             StyleFocusKey.OpacityDecrease,
             StyleFocusKey.OpacityIncrease,
+            StyleFocusKey.HdrBrightnessDecrease,
+            StyleFocusKey.HdrBrightnessIncrease,
             StyleFocusKey.OutlineToggle,
             StyleFocusKey.OutlineWidthDecrease,
             StyleFocusKey.OutlineWidthIncrease,

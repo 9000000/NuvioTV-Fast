@@ -172,7 +172,8 @@ private fun LayoutSectionContent(
             onShowAddonLogoChange = viewModel::setShowAddonLogo,
             onShowStreamSearchChange = viewModel::setShowStreamSearch,
             onBadgePlacementSelected = viewModel::setStreamBadgePlacement,
-            onConfigureBadges = viewModel::startStreamBadgeQrMode
+            onConfigureBadges = viewModel::startStreamBadgeQrMode,
+            onShowInPlayerChange = viewModel::setShowBadgesInPlayer
         )
     }
 }
