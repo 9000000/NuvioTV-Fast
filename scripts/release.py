@@ -47,6 +47,8 @@ def get_git_branch():
             cwd=ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True
         )
         branch = res.stdout.strip()
@@ -62,7 +64,9 @@ def get_git_repo_info():
             ["git", "config", "--get", "remote.origin.url"],
             cwd=ROOT,
             capture_output=True,
-            text=True
+            text=True,
+            encoding="utf-8",
+            errors="replace"
         )
         url = res.stdout.strip()
         m = re.search(r"github\.com[/:]([^/]+)/([^/\.]+)(?:\.git)?", url)
@@ -232,7 +236,9 @@ def get_previous_tag(target_version: str = None) -> str | None:
             ["git", "tag", "--sort=-creatordate"],
             cwd=ROOT,
             capture_output=True,
-            text=True
+            text=True,
+            encoding="utf-8",
+            errors="replace"
         )
         tags = [t.strip() for t in res.stdout.splitlines() if t.strip()]
         target_tags = {f"v{target_version}", target_version} if target_version else set()
@@ -251,7 +257,7 @@ def get_git_commit_notes(previous_tag: str | None = None, limit: int = 20) -> li
         else:
             cmd.extend(["-n", str(limit)])
 
-        res = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+        res = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if res.returncode != 0:
             return []
 
