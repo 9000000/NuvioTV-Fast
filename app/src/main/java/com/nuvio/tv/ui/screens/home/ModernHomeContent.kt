@@ -118,10 +118,11 @@ fun ModernHomeContent(
     uiState: HomeUiState,
     modernPresentation: ModernHomePresentationState = ModernHomePresentationState(),
     focusState: HomeScreenFocusState,
-    enrichingItemId: String? = null,
-    lastEnrichedPreview: MetaPreview? = null,
-    enrichedPreviews: Map<String, MetaPreview> = emptyMap(),
-    failedEnrichmentIds: Set<String> = emptySet(),
+    // Read through lambdas: enrichment changes on most focus moves, and taking the values as
+    // parameters recomposed all of the home content each time instead of only the hero state.
+    enrichingItemId: () -> String? = { null },
+    enrichedPreviews: () -> Map<String, MetaPreview> = { emptyMap() },
+    failedEnrichmentIds: () -> Set<String> = { emptySet() },
     trailerPreviewUrls: Map<String, String> = emptyMap(),
     trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -312,8 +313,12 @@ fun ModernHomeContent(
                 metricsHolder.state?.putState("HomeScrolling", scrolling.toString())
             }
     }
-    LaunchedEffect(enrichingItemId) {
-        metricsHolder.state?.putState("HeroEnriching", (enrichingItemId != null).toString())
+    val currentEnrichingItemId by rememberUpdatedState(enrichingItemId)
+    LaunchedEffect(Unit) {
+        snapshotFlow { currentEnrichingItemId() != null }
+            .collect { enriching ->
+                metricsHolder.state?.putState("HeroEnriching", enriching.toString())
+            }
     }
 
     // Both effects restart when the settled selection or scroll state changes. Hosting them in their
@@ -719,9 +724,10 @@ fun ModernHomeContent(
                 derivedStateOf {
                     val activeCarouselItem = activeCarouselItemState.value
                     val activeItemId = activeCarouselItem?.metaPreview?.id
-                    val enrichmentActive = enrichingItemId != null && enrichingItemId == activeItemId
-                    
-                    val enrichedItem = activeItemId?.let { enrichedPreviews[it] }
+                    val enrichingId = enrichingItemId()
+                    val enrichmentActive = enrichingId != null && enrichingId == activeItemId
+
+                    val enrichedItem = activeItemId?.let { enrichedPreviews()[it] }
                     val enrichedHero = if (enrichedItem != null) {
                         HeroPreview(
                             title = enrichedItem.name,
@@ -763,7 +769,7 @@ fun ModernHomeContent(
                     // Exception: if enrichment already failed for this item, show addon data.
                     // Also treat as pending when activeCarouselItem is null (row not yet resolved).
                     val heroEnrichmentEnabled = uiState.heroEnrichmentEnabled
-                    val enrichmentFailed = activeItemId != null && activeItemId in failedEnrichmentIds
+                    val enrichmentFailed = activeItemId != null && activeItemId in failedEnrichmentIds()
                     val effectiveEnrichmentActive = activeCarouselItem == null || enrichmentActive ||
                         (enrichedHero == null && activeItemId != null && heroEnrichmentEnabled && !enrichmentFailed)
                     
@@ -1180,8 +1186,7 @@ fun ModernHomeContent(
             val stableTrailerContentAlphaLambda = remember { { trailerContentAlphaState.value } }
             val stableExpandedTrailerPreviewUrl = remember(heroTrailerUrlsState) { { heroTrailerUrlsState.value.first } }
             val stableExpandedTrailerPreviewAudioUrl = remember(heroTrailerUrlsState) { { heroTrailerUrlsState.value.second } }
-            val stableEnrichedPreviews = remember { androidx.compose.runtime.mutableStateOf(enrichedPreviews.asStable()) }
-                .apply { value = enrichedPreviews.asStable() }
+            val stableEnrichedPreviews = remember(enrichedPreviews) { derivedStateOf { enrichedPreviews().asStable() } }
             val stableTrailerPreviewUrls = remember(trailerPreviewUrls) { trailerPreviewUrls.asStable() }
             val stableTrailerPreviewAudioUrls = remember(trailerPreviewAudioUrls) { trailerPreviewAudioUrls.asStable() }
 
