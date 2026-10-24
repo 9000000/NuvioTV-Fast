@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.data.local.DeviceLocalPlayerPreferences
+import com.nuvio.tv.data.local.LibassRenderScale
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.Dv7HandlingMode
@@ -333,6 +334,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setLibassRenderType(renderType: LibassRenderType) {
         playerSettingsDataStore.setLibassRenderType(renderType)
+    }
+
+    suspend fun setLibassRenderScale(scale: LibassRenderScale) {
+        playerSettingsDataStore.setLibassRenderScale(scale)
     }
 
     suspend fun setSubtitlePreferredLanguage(language: String) {

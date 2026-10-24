@@ -173,7 +173,8 @@ private fun LayoutSectionContent(
             onShowStreamSearchChange = viewModel::setShowStreamSearch,
             onBadgePlacementSelected = viewModel::setStreamBadgePlacement,
             onConfigureBadges = viewModel::startStreamBadgeQrMode,
-            onShowInPlayerChange = viewModel::setShowBadgesInPlayer
+            onShowInPlayerChange = viewModel::setShowBadgesInPlayer,
+            onPlayerBadgeSourceSelected = viewModel::setPlayerBadgeSource
         )
     }
 }

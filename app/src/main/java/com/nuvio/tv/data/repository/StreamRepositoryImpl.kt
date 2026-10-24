@@ -599,15 +599,17 @@ class StreamRepositoryImpl @Inject constructor(
             title = displayTitle,
             url = url,
             addonName = addonName,
+            pluginSourceName = scraper.name,
             addonLogo = null,
             description = buildDescription(this),
-            behaviorHints = if (headers != null || audioDelayMs != null) {
+            behaviorHints = if (headers != null || audioDelayMs != null || audioDelayLanguage != null) {
                 StreamBehaviorHints(
                     notWebReady = null,
                     bingeGroup = null,
                     countryWhitelist = null,
                     proxyHeaders = headers?.let { ProxyHeaders(request = it, response = null) },
-                    audioDelayMs = audioDelayMs
+                    audioDelayMs = audioDelayMs,
+                    audioDelayLanguage = audioDelayLanguage
                 )
             } else {
                 null

@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Search
@@ -145,6 +147,18 @@ fun StreamScreen(
     onAutoPlayResolved: (StreamPlaybackInfo) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val watchProgress by viewModel.watchProgress.collectAsStateWithLifecycle()
+    val resumeProgress = streamResumeProgress(watchProgress, startFromBeginning)
+    val resumePositionMs = resumeProgress?.position?.takeIf { it > 0L }
+    val resumePercent = resumeProgress?.progressPercentage?.takeIf { it > 0f }
+    val resumeText = when {
+        resumePositionMs != null -> stringResource(
+            R.string.stream_resume_from_time,
+            com.nuvio.tv.ui.screens.detail.formatPlaybackTime(resumePositionMs)
+        )
+        resumePercent != null -> stringResource(R.string.stream_resume_from_percent, (resumePercent * 100).toInt())
+        else -> null
+    }
     val sharedStream by viewModel.sharedStream.collectAsStateWithLifecycle()
     val partySource by viewModel.partySource.collectAsStateWithLifecycle()
     val playerPreference by viewModel.playerPreference.collectAsStateWithLifecycle(
@@ -460,6 +474,7 @@ fun StreamScreen(
                 // Right side - Streams container
                 RightStreamSection(
                     isLoading = uiState.isLoading,
+                    resumeText = resumeText,
                     error = uiState.error,
                     streams = uiState.filteredStreams,
                     availableAddons = uiState.availableAddons,
@@ -798,6 +813,7 @@ private fun LeftContentSection(
 @Composable
 private fun RightStreamSection(
     isLoading: Boolean,
+    resumeText: String?,
     error: String?,
     streams: List<Stream>,
     availableAddons: List<String>,
@@ -920,43 +936,6 @@ private fun RightStreamSection(
         modifier = modifier
             .padding(top = NuvioTheme.spacing.lg, end = NuvioTheme.spacing.xl, bottom = NuvioTheme.spacing.lg)
     ) {
-        val chipRowHeight = NuvioTheme.spacing.huge
-
-        // Addon filter chips
-        Box(modifier = Modifier.height(chipRowHeight)) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty()),
-                enter = fadeIn(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300))
-            ) {
-                AddonFilterChips(
-                    addons = availableAddons,
-                    sourceChips = sourceChips,
-                    selectedAddon = selectedAddonFilter,
-                    isStillFetching = sourceChips.any { it.status == SourceChipStatus.LOADING },
-                    onRefresh = {
-                        userMovedFromFirstResult = false
-                        firstResultFocusAssigned = false
-                        onRefresh()
-                    },
-                    onAddonSelected = { onAddonFilterSelected(it) },
-                    externalFocusRequesters = chipFocusRequesters,
-                    externalOrderedNames = orderedAddonNames,
-                    debugTag = "StreamScreen"
-                )
-            }
-        }
-
-        if (showSearchField) {
-            Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
-            StreamSearchField(
-                query = searchQuery,
-                onQueryChange = onSearchQueryChange,
-                modifier = Modifier.padding(bottom = NuvioTheme.spacing.xs)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
 
         androidx.compose.animation.AnimatedVisibility(
             visible = enter,
@@ -967,8 +946,8 @@ private fun RightStreamSection(
                 ),
             exit = fadeOut(animationSpec = tween(120))
         ) {
-            // Content area
-            Box(
+            // Content area – resume pill, addon chips and streams all inside one card
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(NuvioTheme.radii.xl))
@@ -989,52 +968,115 @@ private fun RightStreamSection(
                         } else {
                             NuvioTheme.colors.BackgroundCard.copy(alpha = 0.5f)
                         }
-                    ),
-                contentAlignment = Alignment.Center
+                    )
+                    .padding(NuvioTheme.spacing.lg)
             ) {
-                when {
-                    sharedStream == null && isLoading -> {
-                        LoadingState(showAddonLogo = showAddonLogo)
-                    }
-                    sharedStream == null && error != null -> {
-                        ErrorState(
-                            message = error,
-                            onRetry = onRetry
+                resumeText?.let { text ->
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = NuvioTheme.spacing.sm)
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(NuvioTheme.colors.BackgroundCard)
+                            .border(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border, RoundedCornerShape(20.dp))
+                            .padding(horizontal = NuvioTheme.spacing.lg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = NuvioTheme.colors.TextPrimary
                         )
                     }
-                    sharedStream == null && isEmptyBecauseOfSearch -> {
-                        StreamSearchEmptyState(onClearSearch = { onSearchQueryChange("") })
-                    }
-                    sharedStream == null && streams.isEmpty() -> {
-                        EmptyState()
-                    }
-                    else -> {
-                        StreamsList(
-                            streams = searchFilteredStreams,
-                            sharedStream = sharedStream,
-                            partySource = partySource,
-                            onSharedStreamSelected = onSharedStreamSelected,
-                            onStreamSelected = onStreamSelected,
-                            focusedStreamIndex = focusedStreamIndex,
-                            shouldRestoreFocusedStream = shouldRestoreFocusedStream,
-                            onRestoreFocusedStreamHandled = onRestoreFocusedStreamHandled,
-                            firstStreamFocusRequestId = firstStreamFocusRequestId,
-                            availableAddons = availableAddons,
-                            selectedAddonFilter = selectedAddonFilter,
-                            showFileSizeBadges = showFileSizeBadges,
-                            showAddonLogo = showAddonLogo,
-                            badgePlacement = badgePlacement,
-                            hasBadgeRules = hasBadgeRules,
-                            onAddonFilterSelected = { onAddonFilterSelectedGuarded(it) },
-                            orderedAddonNames = orderedAddonNames,
-                            onRequestChipFocus = { requestChipFocus(it) },
-                            onUserNavigatedFromFirstResult = {
-                                userMovedFromFirstResult = true
+                }
+
+                // Addon filter chips
+                Box(modifier = Modifier.height(NuvioTheme.spacing.huge)) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty()),
+                        enter = fadeIn(animationSpec = tween(300)),
+                        exit = fadeOut(animationSpec = tween(300))
+                    ) {
+                        AddonFilterChips(
+                            addons = availableAddons,
+                            sourceChips = sourceChips,
+                            selectedAddon = selectedAddonFilter,
+                            isStillFetching = sourceChips.any { it.status == SourceChipStatus.LOADING },
+                            onRefresh = {
+                                userMovedFromFirstResult = false
+                                firstResultFocusAssigned = false
+                                onRefresh()
                             },
-                            onFocusedStreamKeyChanged = { focusedStreamKeyInList = it },
-                            onFocusChanged = { listHasFocus = it },
-                            onExpandStreams = onExpandStreams
+                            onAddonSelected = { onAddonFilterSelected(it) },
+                            externalFocusRequesters = chipFocusRequesters,
+                            externalOrderedNames = orderedAddonNames,
+                            debugTag = "StreamScreen"
                         )
+                    }
+                }
+
+                if (showSearchField) {
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                    StreamSearchField(
+                        query = searchQuery,
+                        onQueryChange = onSearchQueryChange,
+                        modifier = Modifier.padding(bottom = NuvioTheme.spacing.xs)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+
+                // Streams / loading / error / empty
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        sharedStream == null && isLoading -> {
+                            LoadingState(showAddonLogo = showAddonLogo)
+                        }
+                        sharedStream == null && error != null -> {
+                            ErrorState(
+                                message = error,
+                                onRetry = onRetry
+                            )
+                        }
+                        sharedStream == null && isEmptyBecauseOfSearch -> {
+                            StreamSearchEmptyState(onClearSearch = { onSearchQueryChange("") })
+                        }
+                        sharedStream == null && streams.isEmpty() -> {
+                            EmptyState()
+                        }
+                        else -> {
+                            StreamsList(
+                                streams = searchFilteredStreams,
+                                sharedStream = sharedStream,
+                                partySource = partySource,
+                                onSharedStreamSelected = onSharedStreamSelected,
+                                onStreamSelected = onStreamSelected,
+                                focusedStreamIndex = focusedStreamIndex,
+                                shouldRestoreFocusedStream = shouldRestoreFocusedStream,
+                                onRestoreFocusedStreamHandled = onRestoreFocusedStreamHandled,
+                                firstStreamFocusRequestId = firstStreamFocusRequestId,
+                                availableAddons = availableAddons,
+                                selectedAddonFilter = selectedAddonFilter,
+                                showFileSizeBadges = showFileSizeBadges,
+                                showAddonLogo = showAddonLogo,
+                                badgePlacement = badgePlacement,
+                                hasBadgeRules = hasBadgeRules,
+                                onAddonFilterSelected = { onAddonFilterSelectedGuarded(it) },
+                                orderedAddonNames = orderedAddonNames,
+                                onRequestChipFocus = { requestChipFocus(it) },
+                                onUserNavigatedFromFirstResult = {
+                                    userMovedFromFirstResult = true
+                                },
+                                onFocusedStreamKeyChanged = { focusedStreamKeyInList = it },
+                                onFocusChanged = { listHasFocus = it },
+                                onExpandStreams = onExpandStreams
+                            )
+                        }
                     }
                 }
             }
@@ -1696,6 +1738,16 @@ private fun StreamCard(
                             )
                         }
                     }
+                }
+
+                stream.pluginSourceName?.takeIf { it.isNotBlank() && it != stream.addonName }?.let { sourceName ->
+                    Text(
+                        text = sourceName,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            textDirection = sourceName.contentTextDirection()
+                        ),
+                        color = NuvioTheme.extendedColors.textSecondary
+                    )
                 }
 
                 streamDescription?.let { description ->

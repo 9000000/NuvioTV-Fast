@@ -505,7 +505,7 @@
     <string name="tracking_trakt_features_title">Tính năng Trakt</string>
     <string name="tracking_trakt_features_subtitle">Lịch sử, đánh giá và đề xuất riêng của Trakt</string>
     <string name="tracking_simkl_features_title">Tính năng Simkl</string>
-    <string name="tracking_simkl_features_subtitle">Cài đặt riêng của Simkl</string>
+    <string name="tracking_simkl_features_subtitle">Cài đặt riêng cho Simkl</string>
     <string name="tracking_simkl_anime_id_title">Tùy chọn anime ID</string>
     <string name="tracking_simkl_anime_id_subtitle">Kiểm soát cách nhận diện các mùa anime. Chọn MAL hoặc Kitsu để hiển thị mỗi mùa dưới dạng một mục riêng thay vì gộp chúng theo một IMDb ID.</string>
     <string name="tracking_simkl_anime_id_imdb">Ưu tiên IMDb</string>
@@ -827,6 +827,9 @@
     <string name="video_section">Video</string>
     <string name="playback_true_black_letterbox">Viền đen tuyệt đối</string>
     <string name="playback_true_black_letterbox_sub">Không phủ màu các viền đen xung quanh hình ảnh để hiển thị HDR đen tuyệt đối. Vui lòng tắt tính năng này nếu xuất hiện vệt sáng trên các viền đen.</string>
+    <string name="playback_chapters_label">Chương</string>
+    <string name="playback_exo_chapters_title">Hiển thị chương (ExoPlayer)</string>
+    <string name="playback_exo_chapters_sub">Đọc các chương của tệp MKV để đánh dấu trên thanh tiến trình và chuyển đổi qua lại giữa chúng. Thực hiện thêm một vài yêu cầu nhỏ khi bắt đầu phát lại. mpv luôn hiển thị các chương.</string>
     <string name="audio_trailer_section">Trailer</string>
     <string name="audio_autoplay_trailers">Tự động phát trailer</string>
     <string name="audio_autoplay_trailers_sub">Tự động phát trailer trên màn hình chi tiết sau một khoảng thời gian không hoạt động</string>
@@ -954,15 +957,8 @@
     <string name="sub_libass">Dùng libass cho phụ đề ASS/SSA</string>
     <string name="sub_libass_sub">Thử nghiệm: kết xuất ASS/SSA nâng cao (kiểu chữ, định vị, hoạt ảnh)</string>
     <string name="sub_libass_mode">Chế độ kết xuất libass</string>
-    <string name="sub_mode_overlay_gl">Lớp phủ OpenGL (Khuyến nghị)</string>
-    <string name="sub_mode_overlay_gl_sub">Chất lượng tốt nhất với hỗ trợ HDR. Kết xuất phụ đề trên một luồng riêng.</string>
-    <string name="sub_mode_overlay_canvas">Lớp phủ Canvas</string>
-    <string name="sub_mode_effects_gl">Hiệu ứng OpenGL</string>
-    <string name="sub_mode_effects_gl_sub">Hỗ trợ hoạt ảnh bằng hiệu ứng Media3. Nhanh hơn Canvas.</string>
-    <string name="sub_mode_effects_canvas">Hiệu ứng Canvas</string>
-    <string name="sub_mode_effects_canvas_sub">Hỗ trợ hoạt ảnh bằng hiệu ứng Media3 với kết xuất Canvas.</string>
-    <string name="sub_mode_standard">Phụ đề tiêu chuẩn</string>
-    <string name="sub_mode_standard_sub">Kết xuất phụ đề cơ bản, không hỗ trợ hoạt ảnh. Tương thích cao nhất.</string>
+    <string name="sub_libass_render_scale">Độ phân giải kết xuất phụ đề</string>
+    <string name="sub_libass_render_scale_sub">Độ phân giải thấp hơn giúp tăng hiệu năng khi xử lý hiệu ứng phụ đề phức tạp nhưng làm giảm độ sắc nét</string>
     <string name="sub_org_none">Không có (thứ tự mặc định)</string>
     <string name="sub_org_by_lang">Theo ngôn ngữ</string>
     <string name="sub_org_by_addon">Theo tiện ích</string>
@@ -1442,7 +1438,10 @@
     <string name="settings_stream_size_badges_title">Nhãn dung lượng</string>
     <string name="settings_stream_size_badges_description">Hiển thị nhãn dung lượng tệp trong kết quả luồng và bảng chọn nguồn phát.</string>
     <string name="settings_stream_badges_in_player_title">Hiển thị trong trình phát</string>
-    <string name="settings_stream_badges_in_player_description">Hiển thị nhãn cho video và âm thanh đang phát bên dưới tiêu đề trình phát.</string>
+    <string name="settings_stream_badges_in_player_description">Hiển thị nhãn cho video và âm thanh đang phát bên dưới tiêu đề trình phát. Cần một bộ nhãn khớp với văn bản thuần túy như 2160p hoặc Atmos.</string>
+    <string name="settings_stream_player_badges_title">Nhãn trình phát</string>
+    <string name="settings_stream_player_badges_description">Chọn bộ nhãn trình phát sử dụng.</string>
+    <string name="settings_stream_player_badges_same">Giống nhãn luồng phát</string>
     <string name="settings_stream_addon_logo_title">Biểu tượng tiện ích</string>
     <string name="settings_stream_addon_logo_description">Hiển thị biểu tượng và tên tiện ích bên cạnh mỗi nguồn phát</string>
     <string name="settings_stream_search_title">Thanh tìm kiếm</string>
@@ -1458,8 +1457,8 @@
     <string name="settings_stream_badge_position_top">Phía trên</string>
     <string name="settings_stream_badge_position_bottom">Phía dưới</string>
     <string name="settings_stream_badge_urls_title">URL nhãn Fusion</string>
-    <string name="settings_stream_badge_urls_description">Nhập tối đa %1$d URL JSON nhãn luồng kiểu Fusion. Bạn có thể cập nhật hoặc xóa từng URL riêng lẻ.</string>
-    <string name="settings_stream_badge_urls_search_description">Quản lý các URL JSON nhãn luồng kiểu Fusion đã nhập.</string>
+    <string name="settings_stream_badge_urls_description">Nhập tối đa %1$d URL JSON nhãn luồng phát kiểu Fusion. Bạn có thể cập nhật hoặc xóa từng URL riêng lẻ.</string>
+    <string name="settings_stream_badge_urls_search_description">Quản lý các URL JSON nhãn luồng phát kiểu Fusion đã nhập.</string>
     <string name="settings_fusion_badges_summary">%1$d/%2$d URL • %3$d nhãn Fusion đang hoạt động</string>
     <string name="settings_fusion_badges_empty">Không có URL nhãn Fusion đã nhập</string>
     <string name="settings_fusion_badge_url_label">URL JSON nhãn Fusion</string>
@@ -1895,7 +1894,6 @@
     <string name="parental_severity_mild">Nhẹ</string>
     <string name="player_ends_at">Kết thúc lúc %1$s</string>
     <string name="player_live_watched">TRỰC TIẾP  %1$s</string>
-    <string name="player_via">qua %1$s</string>
     <!-- Season/episode code shown in player UI (e.g. S01E02). %1$d = season, %2$d = episode. -->
     <string name="season_episode_format">M%1$d T%2$d</string>
     <string name="player_subtitle_delay">Độ trễ phụ đề</string>
@@ -2615,7 +2613,6 @@
     <string name="player_error_failed_start_torrent">Không thể khởi động torrent: %1$s</string>
 
     <!-- Playback subtitle settings -->
-    <string name="sub_mode_overlay_canvas_sub">Hỗ trợ HDR khi kết xuất bằng vùng vẽ. Có thể làm nghẽn luồng giao diện người dùng.</string>
 
     <string name="ratings_season_label">M%1$d</string>
     <string name="ratings_episode_label">T%1$d</string>
@@ -2627,6 +2624,10 @@
     <string name="cd_sources">Nguồn</string>
     <string name="cd_switch_player_engine">Chuyển lõi trình phát</string>
     <string name="cd_episodes">Tập phim</string>
+    <string name="player_chapter_number">Chương %1$d</string>
+    <string name="player_chapters">Chương</string>
+    <string name="player_chapters_title">Chương (%1$d)</string>
+    <string name="player_chapter_remaining">Còn lại %1$s</string>
     <string name="cd_playback_speed">Tốc độ phát lại</string>
     <string name="cd_aspect_ratio">Tỷ lệ khung hình</string>
     <string name="cd_open_external_player">Mở bằng trình phát ngoài</string>
@@ -3554,4 +3555,6 @@
     <string name="network_test_playback_active">Vui lòng dừng phát trước khi chạy kiểm tra tốc độ.</string>
     <string name="diagnostic_run_timed_out">Kiểm tra so sánh đã vượt quá giới hạn 2 phút. Kết quả chưa hoàn tất; không có đề xuất nào được tạo.</string>
     <string name="diagnostic_run_payload_limit">Kiểm tra so sánh đã đạt giới hạn dung lượng cho phép. Kết quả chưa hoàn tất; không có đề xuất nào được tạo.</string>
+<string name="stream_resume_from_time">Xem tiếp từ %1$s</string>
+    <string name="stream_resume_from_percent">Xem tiếp từ %1$d%%</string>
 </resources>
