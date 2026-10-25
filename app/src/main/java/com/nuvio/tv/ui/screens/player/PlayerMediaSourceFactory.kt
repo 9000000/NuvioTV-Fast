@@ -502,6 +502,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val mediaSource = when {
             isHls && !forceDefaultFactory -> HlsMediaSource.Factory(httpDataSourceFactory)
                 .setAllowChunklessPreparation(true)
+                .setPlaylistParserFactory(com.nuvio.tv.features.livetv.LenientHlsPlaylistParserFactory())
                 .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .apply {
                     if (drmSessionManagerProvider != null) {

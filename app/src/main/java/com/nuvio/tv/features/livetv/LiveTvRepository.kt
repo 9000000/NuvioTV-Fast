@@ -31,6 +31,11 @@ internal val liveTvHttpClient: OkHttpClient by lazy {
         .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
+        .apply {
+            ForgivingTls.trustManager?.let { tm ->
+                ForgivingTls.socketFactory?.let { sslSocketFactory(it, tm) }
+            }
+        }
         .build()
 }
 

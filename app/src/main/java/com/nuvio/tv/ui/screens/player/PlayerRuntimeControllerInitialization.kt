@@ -528,21 +528,21 @@ internal fun PlayerRuntimeController.initializePlayer(
                 val budgetBytes = budgetMbEffective.toLong() * 1024L * 1024L
                 // Build with the user's back buffer so seek-back works immediately, except on a heap
                 // bound device, where the load control would hold it for the whole session.
-                configuredBackBufferMs = bufferSettings.backBufferDurationMs
-                val backBufferMsAtBuild = if (libdoviConversionActive && MemoryBudget.isLowRamTier) {
+                configuredBackBufferMs = if (isLiveTv) 0 else bufferSettings.backBufferDurationMs
+                val backBufferMsAtBuild = if (isLiveTv || (libdoviConversionActive && MemoryBudget.isLowRamTier)) {
                     0
                 } else {
                     configuredBackBufferMs
                 }
                 Log.i(
                     PlayerRuntimeController.TAG,
-                    "BUFFER_GATE: engine=exo-custom master=on " +
+                    "BUFFER_GATE: engine=exo-custom master=on isLiveTv=$isLiveTv " +
                             "lowRam=${MemoryBudget.isLowRamTier} " +
                             "allowLarge=${playerSettings.allowLargeTargetBuffer} " +
                             "dv7conv=$libdoviConversionActive " +
                             "managed=$budgetManaged " +
                             "parallelOverheadMb=$parallelOverheadMb " +
-                            "backBufferMsAtBuild=$backBufferMsAtBuild (set=$configuredBackBufferMs, lowered to 0 only for real DV7) " +
+                            "backBufferMsAtBuild=$backBufferMsAtBuild (set=$configuredBackBufferMs, lowered to 0 only for real DV7/LiveTv) " +
                             "budgetMb=$budgetMbEffective host=${url.safeHost()}"
                 )
                 effectiveBackBufferDurationMs = backBufferMsAtBuild
@@ -555,31 +555,37 @@ internal fun PlayerRuntimeController.initializePlayer(
                 // Both engines report through the same sampler, so whichever built last owns it.
                 NuvioExoPlayerPerformanceHelper.liveAllocator = allocator
                 BitrateAwareLoadControl(
-                    minBufferMs = bufferSettings.minBufferMs,
-                    maxBufferMs = bufferSettings.maxBufferMs,
-                    bufferForPlaybackMs = bufferSettings.bufferForPlaybackMs,
-                    bufferForPlaybackAfterRebufferMs = bufferSettings.bufferForPlaybackAfterRebufferMs,
+                    minBufferMs = if (isLiveTv) 3_000 else bufferSettings.minBufferMs,
+                    maxBufferMs = if (isLiveTv) 8_000 else bufferSettings.maxBufferMs,
+                    bufferForPlaybackMs = if (isLiveTv) 1_000 else bufferSettings.bufferForPlaybackMs,
+                    bufferForPlaybackAfterRebufferMs = if (isLiveTv) 1_500 else bufferSettings.bufferForPlaybackAfterRebufferMs,
                     // Allow buffering past the byte budget until the minimum time threshold is
                     // met. Without this, high-bitrate remux files (e.g. 100+ Mbps UHD MKV with
                     // multiple audio tracks) exhaust the 500MB byte cap in <5s of content before
                     // minBufferMs is satisfied, leaving ExoPlayer stuck in STATE_BUFFERING.
                     prioritizeTimeOverSizeThresholds = true,
                     backBufferDurationMs = backBufferMsAtBuild,
-                    retainBackBufferFromKeyframe = true,
+                    retainBackBufferFromKeyframe = !isLiveTv,
                     budgetBytes = budgetBytes,
                     allocator = allocator
                 ).also { currentBitrateAwareLoadControl = it }
             } else {
                 // Stock LoadControl: DefaultLoadControl configured with 1.5s back buffer so 1s rewind doesn't clear buffer.
-                effectiveBackBufferDurationMs = 1_500
+                effectiveBackBufferDurationMs = if (isLiveTv) 0 else 1_500
                 currentBitrateAwareLoadControl = null
                 Log.i(
                     PlayerRuntimeController.TAG,
-                    "BUFFER_GATE: engine=exo-stock master=off; DefaultLoadControl " +
-                            "(1.5s back buffer, no VOD cache) host=${url.safeHost()}"
+                    "BUFFER_GATE: engine=exo-stock master=off isLiveTv=$isLiveTv; DefaultLoadControl " +
+                            "(${effectiveBackBufferDurationMs}ms back buffer, no VOD cache) host=${url.safeHost()}"
                 )
                 DefaultLoadControl.Builder()
-                    .setBackBuffer(1_500, /* retainBackBufferFromKeyframe = */ true)
+                    .setBufferDurationsMs(
+                        if (isLiveTv) 3_000 else DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                        if (isLiveTv) 8_000 else 70_000,
+                        if (isLiveTv) 1_000 else DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                        if (isLiveTv) 1_500 else 5_000
+                    )
+                    .setBackBuffer(effectiveBackBufferDurationMs, /* retainBackBufferFromKeyframe = */ !isLiveTv)
                     .build()
             }
             _loadControl = loadControl
@@ -589,13 +595,13 @@ internal fun PlayerRuntimeController.initializePlayer(
             // first frame, since the stream content is not known here.
             mediaSourceFactory.bufferEngineEnabled = playerSettings.bufferEngineEnabled
             mediaSourceFactory.bufferBudgetManaged = playerSettings.bufferBudgetManaged
-            mediaSourceFactory.vodCacheEnabled = playerSettings.vodCacheEnabled
+            mediaSourceFactory.vodCacheEnabled = playerSettings.vodCacheEnabled && !isLiveTv
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
             mediaSourceFactory.nativeEngineEnabled = playerSettings.nuvioPerformanceModeEnabled
 
             mediaSourceFactory.nuvioPerformanceModeEnabled = playerSettings.nuvioPerformanceModeEnabled
-            if (playerSettings.parallelNetworkEnabled && !isTorrentStream) {
+            if (playerSettings.parallelNetworkEnabled && !isTorrentStream && !isLiveTv) {
                 mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
                 mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount
                 mediaSourceFactory.parallelChunkSizeKb = playerSettings.parallelChunkSizeKb
@@ -819,9 +825,21 @@ internal fun PlayerRuntimeController.initializePlayer(
             }
 
             // ── Extractors & DV Hook ──
+            val tsExtractorFlags = if (isLiveTv) {
+                DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS or
+                        DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
+                        DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+            } else {
+                DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS
+            }
+            val tsTimestampSearchBytes = if (isLiveTv) {
+                500 * TsExtractor.TS_PACKET_SIZE
+            } else {
+                1500 * TsExtractor.TS_PACKET_SIZE
+            }
             val extractorsFactory = DefaultExtractorsFactory()
-                .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
-                .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+                .setTsExtractorFlags(tsExtractorFlags)
+                .setTsExtractorTimestampSearchBytes(tsTimestampSearchBytes)
 
             // Manual Convert-to-DV8.1 uses mode 2; if a prior attempt at this stream
             // failed to play, force mode 1 this time (before the HDR10 fallback).

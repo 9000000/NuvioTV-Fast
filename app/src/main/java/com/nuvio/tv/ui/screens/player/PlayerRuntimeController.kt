@@ -189,6 +189,8 @@ class PlayerRuntimeController(
     internal val headersJson: String? = navigationArgs.headersJson
     internal val contentId: String? = navigationArgs.contentId
     internal val contentType: String? = navigationArgs.contentType
+    internal val isLiveTv: Boolean
+        get() = contentType.equals("livetv", ignoreCase = true)
     internal val contentName: String? = navigationArgs.contentName
     internal val poster: String? = navigationArgs.poster
     internal val backdrop: String? = navigationArgs.backdrop
