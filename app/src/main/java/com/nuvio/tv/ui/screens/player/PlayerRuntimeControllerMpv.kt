@@ -41,6 +41,7 @@ internal fun PlayerRuntimeController.attachMpvView(view: NuvioMpvSurfaceView?) {
         view.applyAspectMode(_uiState.value.aspectMode)
         view.setPaused(false)
         applyPendingMpvSeekIfNeeded(view)
+        installMpvMediaSession()
         hasRenderedFirstFrame = false
         endDetectionArmed = false
         mpvEofSeenClear = false
@@ -96,11 +97,7 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
     _exoPlayer?.release()
     _exoPlayer = null
     trackSelector = null
-    try {
-        currentMediaSession?.release()
-    } catch (_: Exception) {
-    }
-    currentMediaSession = null
+    releaseMediaSession()
     notifyAudioSessionUpdate(false)
 
     val view = mpvView
@@ -159,6 +156,7 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
         view.applyAspectMode(_uiState.value.aspectMode)
         view.setPaused(false)
         applyPendingMpvSeekIfNeeded(view)
+        installMpvMediaSession()
 
         hasRenderedFirstFrame = false
         endDetectionArmed = false
@@ -228,14 +226,8 @@ internal fun PlayerRuntimeController.pauseForLifecycle() {
     // Mark we're in background so onPlayerError can defer recovery to onResume.
     isInBackground = true
 
-    // Release the MediaSession so the system doesn't route media commands
-    // (play/pause, audio focus) to this player while the app is in the background.
-    try {
-        currentMediaSession?.release()
-        currentMediaSession = null
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
+    // Release the session while backgrounded so Bluetooth controls cannot resume playback.
+    releaseMediaSession()
 
     // Mark as user-paused so autoplay logic doesn't resume playback.
     userPausedManually = true
@@ -278,20 +270,19 @@ internal fun PlayerRuntimeController.resumeForLifecycle() {
         return
     }
 
+    if (isUsingMpvEngine()) {
+        installMpvMediaSession()
+        return
+    }
+
     val player = _exoPlayer
-    if (player != null && !isUsingMpvEngine()) {
+    if (player != null) {
         // Restore automatic audio focus handling that was disabled in pauseForLifecycle().
         player.setAudioAttributes(player.audioAttributes, true)
 
         // Re-create the MediaSession so media controls work in the foreground.
-        if (currentMediaSession == null) {
-            try {
-                currentMediaSession = androidx.media3.session.MediaSession.Builder(context, SafeMediaSessionPlayer(player)).build()
-                updateMediaSessionMetadata()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        if (currentMediaSession == null) runCatching { installExoMediaSession(player) }
+            .onFailure { it.printStackTrace() }
     }
 }
 

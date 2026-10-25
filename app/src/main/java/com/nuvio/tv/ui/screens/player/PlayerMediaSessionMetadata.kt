@@ -2,7 +2,10 @@ package com.nuvio.tv.ui.screens.player
 
 import android.net.Uri
 import android.util.Log
+import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
 
 /**
  * Builds a [MediaMetadata] from the current playback information so that
@@ -60,7 +63,7 @@ internal fun PlayerRuntimeController.buildMediaSessionMetadata(): MediaMetadata 
  * - When TMDB enrichment updates the title / artwork
  */
 internal fun PlayerRuntimeController.updateMediaSessionMetadata() {
-    val session = currentMediaSession ?: return
+    if (currentMediaSession == null) return
     val metadata = buildMediaSessionMetadata()
     val mediaId = currentFilename?.takeIf { it.isNotBlank() }
     try {
@@ -84,6 +87,7 @@ internal fun PlayerRuntimeController.updateMediaSessionMetadata() {
             // DefaultMediaSourceFactory.createMediaSource requires one, so setMediaItem threw
             // every time. The metadata is applied on the next call, once the real item exists.
         }
+        mpvMediaSessionPlayer?.refresh()
         Log.d(
             PlayerRuntimeController.TAG,
             "MediaSession metadata updated: title=${metadata.title}, " +
@@ -92,4 +96,79 @@ internal fun PlayerRuntimeController.updateMediaSessionMetadata() {
     } catch (e: Exception) {
         Log.w(PlayerRuntimeController.TAG, "Failed to update MediaSession metadata", e)
     }
+}
+
+/** Releases the current engine's session and its mpv facade, if any. */
+internal fun PlayerRuntimeController.releaseMediaSession() {
+    runCatching { currentMediaSession?.release() }
+    currentMediaSession = null
+    runCatching { mpvMediaSessionPlayer?.release() }
+    mpvMediaSessionPlayer = null
+}
+
+internal fun PlayerRuntimeController.installExoMediaSession(player: ExoPlayer) {
+    releaseMediaSession()
+    if (player.canAdvertiseSession()) {
+        currentMediaSession = MediaSession.Builder(context, SafeMediaSessionPlayer(player)).build()
+        updateMediaSessionMetadata()
+    }
+}
+
+/** Creates the foreground-only MediaSession used by Bluetooth and other Android media controls. */
+internal fun PlayerRuntimeController.installMpvMediaSession() {
+    if (!isUsingMpvEngine() || isInBackground || mpvView == null || currentStreamUrl.isBlank()) return
+    if (currentMediaSession != null && mpvMediaSessionPlayer != null) {
+        mpvMediaSessionPlayer?.refresh()
+        return
+    }
+    releaseMediaSession()
+    val sessionPlayer = MpvMediaSessionPlayer(
+        snapshotProvider = ::mpvMediaSessionSnapshot,
+        commandTarget = object : MpvMediaSessionCommandTarget {
+            override fun setPlayWhenReady(playWhenReady: Boolean) {
+                if (!isUsingMpvEngine() || isInBackground) return
+                if (isPlaybackCurrentlyPlaying() != playWhenReady) {
+                    // MediaSession commands should behave like ExoPlayer's session controls:
+                    // change playback without treating the button press as an in-player gesture.
+                    onEvent(PlayerEvent.OnPlayPause, showPlaybackControls = false)
+                }
+            }
+
+            override fun seekTo(positionMs: Long) {
+                if (!isUsingMpvEngine() || isInBackground) return
+                onEvent(PlayerEvent.OnSeekTo(positionMs))
+            }
+        }
+    )
+    mpvMediaSessionPlayer = sessionPlayer
+    currentMediaSession = MediaSession.Builder(context, sessionPlayer).build()
+    updateMediaSessionMetadata()
+}
+
+internal fun PlayerRuntimeController.refreshMpvMediaSession() {
+    mpvMediaSessionPlayer?.refresh()
+}
+
+private fun PlayerRuntimeController.mpvMediaSessionSnapshot(): MpvMediaSessionSnapshot {
+    val view = mpvView
+    val positionMs = view?.currentPositionMs()?.coerceAtLeast(0L) ?: 0L
+    val durationMs = view?.durationMs()?.coerceAtLeast(0L) ?: 0L
+    val bufferedPositionMs = positionMs + ((view?.demuxerCacheDurationSec() ?: 0.0) * 1_000.0).toLong()
+    val metadata = buildMediaSessionMetadata()
+    val mediaId = currentFilename?.takeIf { it.isNotBlank() } ?: currentStreamUrl
+    return MpvMediaSessionSnapshot(
+        mediaId = mediaId,
+        mediaItem = MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setMediaMetadata(metadata)
+            .build(),
+        durationMs = durationMs,
+        positionMs = positionMs,
+        bufferedPositionMs = bufferedPositionMs,
+        isPlaying = view?.isPlayingNow() == true,
+        isBuffering = _uiState.value.isBuffering,
+        isEnded = _uiState.value.playbackEnded,
+        isSeekable = view?.isLiveStreamNow() != true,
+        speed = _uiState.value.playbackSpeed,
+    )
 }
