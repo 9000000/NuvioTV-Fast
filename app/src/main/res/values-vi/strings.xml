@@ -2666,6 +2666,12 @@
     <string name="cd_remove">Xóa</string>
     <string name="cd_preview">Xem trước</string>
     <string name="cd_test">Kiểm tra</string>
+    <string name="cd_enable_scraper">Bật %1$s</string>
+    <string name="cd_enable_addon">Bật %1$s</string>
+    <string name="cd_color_swatch">Màu %1$s</string>
+    <string name="cd_emoji_option">Biểu tượng cảm xúc %1$s</string>
+    <string name="cd_trailer_controls">Nút điều khiển trailer</string>
+    <string name="cd_seek_bar">Thanh tua</string>
     <string name="cd_unlink">Hủy liên kết</string>
     <string name="cd_nuvio_logo">NuvioTV</string>
     <string name="cd_trakt_logo">Logo Trakt</string>

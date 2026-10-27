@@ -106,6 +106,14 @@ import androidx.compose.ui.layout.onPlaced
 import com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -473,6 +481,22 @@ fun PlayerScreen(
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
                     viewModel.pauseForLifecycle()
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    // This back stack entry also stops when the player is navigated away from or
+                    // exited, where the normal release has to run; only act when the app itself
+                    // left the foreground.
+                    val hostActivity = context as? androidx.activity.ComponentActivity
+                    if (
+                        hostActivity != null &&
+                        isAppBackgroundStop(
+                            isFinishing = hostActivity.isFinishing,
+                            isChangingConfigurations = hostActivity.isChangingConfigurations,
+                            hostState = hostActivity.lifecycle.currentState
+                        )
+                    ) {
+                        viewModel.releaseForBackground()
+                    }
                 }
                 Lifecycle.Event.ON_RESUME -> {
                     // Re-create the MediaSession so media controls work in foreground.
@@ -3307,6 +3331,7 @@ private fun ProgressBar(
     chapters: List<PlayerChapter> = emptyList()
 ) {
     val accentBrush = NuvioTheme.palette.accentBrush()
+    val seekBarLabel = stringResource(R.string.cd_seek_bar)
     val progress = if (duration > 0) {
         (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
     } else 0f
@@ -3350,6 +3375,10 @@ private fun ProgressBar(
                 if (it.isFocused) onFocused?.invoke()
             }
             .focusable()
+            .semantics {
+                contentDescription = seekBarLabel
+                progressBarRangeInfo = ProgressBarRangeInfo(progress, 0f..1f)
+            }
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
                     when (keyEvent.nativeKeyEvent.keyCode) {
@@ -4036,7 +4065,9 @@ private fun ErrorOverlay(
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = NuvioTheme.spacing.xxl)
+                modifier = Modifier
+                    .padding(horizontal = NuvioTheme.spacing.xxl)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
             )
 
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
@@ -4057,7 +4088,9 @@ private fun ErrorOverlay(
                         else -> Color.White.copy(alpha = 0.7f)
                     },
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = NuvioTheme.spacing.xxl)
+                    modifier = Modifier
+                        .padding(horizontal = NuvioTheme.spacing.xxl)
+                        .semantics { liveRegion = LiveRegionMode.Polite }
                 )
             }
 

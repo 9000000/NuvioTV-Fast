@@ -106,6 +106,15 @@ internal val SettingsZenRowShape = RoundedCornerShape(12.dp)
 internal val SettingsHorizonRowShape = RoundedCornerShape(10.dp)
 internal val SettingsHorizonGroupShape = RoundedCornerShape(16.dp)
 
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
+internal fun settingsGroupShape(): RoundedCornerShape =
+    if (isFlatSettingsStyle()) {
+        SettingsHorizonGroupShape
+    } else {
+        RoundedCornerShape(SettingsSecondaryCardRadius)
+    }
+
 /**
  * Marks a row that holds several options side by side. Without it, moving into the row uses a
  * geometric search and lands on whichever option sits nearest the full width row above, which is
@@ -380,6 +389,11 @@ internal fun SettingsRailButton(
                     isFocused = nowFocused
                     if (nowFocused) onFocused()
                 }
+            }
+            .semantics {
+                contentDescription = title
+                role = Role.Tab
+                this.selected = isSelected
             },
         colors = CardDefaults.colors(
             containerColor = when {
@@ -409,12 +423,7 @@ internal fun SettingsRailButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = SettingsRailItemHeight)
-                .clearAndSetSemantics {
-                    contentDescription = title
-                    role = Role.Tab
-                    this.selected = isSelected
-                },
+                .heightIn(min = SettingsRailItemHeight),
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
@@ -466,6 +475,7 @@ internal fun SettingsRailButton(
                     FocusMarqueeText(
                         text = title,
                         focused = isFocused,
+                        modifier = Modifier.clearAndSetSemantics {},
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = if (isSelected || isFocused) FontWeight.SemiBold else FontWeight.Medium
                         ),
@@ -517,6 +527,10 @@ internal fun SettingsTopBarTab(
     Card(
         onClick = onClick,
         modifier = appliedModifier
+            .semantics {
+                role = Role.Tab
+                this.selected = isSelected
+            }
             .onGloballyPositioned { coordinates ->
                 tabCoordinates = coordinates
                 if (isFocused) onFocusedTabPositioned?.invoke(coordinates)
@@ -675,7 +689,7 @@ internal fun SettingsGroupCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(SettingsHorizonGroupShape)
+                    .clip(settingsGroupShape())
                     .background(NuvioTheme.colors.BackgroundCard.copy(alpha = 0.55f))
                     .padding(NuvioTheme.spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
@@ -686,12 +700,12 @@ internal fun SettingsGroupCard(
         SettingsUiStyle.CLASSIC -> Column(
             modifier = modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(SettingsSecondaryCardRadius))
+                .clip(settingsGroupShape())
                 .background(NuvioTheme.colors.BackgroundCard)
                 .border(
                     width = NuvioTheme.spacing.hairline,
                     color = NuvioTheme.colors.Border,
-                    shape = RoundedCornerShape(SettingsSecondaryCardRadius)
+                    shape = settingsGroupShape()
                 )
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -969,7 +983,11 @@ internal fun <T> SettingsSingleChoiceDialog(
                         onClick = { onOptionSelected(option.value) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .then(if (index == focusedIndex) Modifier.focusRequester(focusRequester) else Modifier),
+                            .then(if (index == focusedIndex) Modifier.focusRequester(focusRequester) else Modifier)
+                            .semantics {
+                                role = Role.RadioButton
+                                this.selected = isSelected
+                            },
                         colors = CardDefaults.colors(
                             containerColor = if (isSelected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
                             focusedContainerColor = NuvioTheme.colors.FocusBackground
@@ -1011,7 +1029,7 @@ internal fun <T> SettingsSingleChoiceDialog(
                                 Spacer(modifier = Modifier.width(NuvioTheme.spacing.md))
                                 Icon(
                                     imageVector = Icons.Default.Check,
-                                    contentDescription = stringResource(R.string.cd_selected),
+                                    contentDescription = null,
                                     tint = NuvioTheme.colors.Primary,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -1084,7 +1102,11 @@ internal fun <T> SettingsMultiChoiceDialog(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .then(if (index == firstSelectedIndex) Modifier.focusRequester(focusRequester) else Modifier),
+                                .then(if (index == firstSelectedIndex) Modifier.focusRequester(focusRequester) else Modifier)
+                                .semantics {
+                                    role = Role.Checkbox
+                                    toggleableState = if (isSelected) ToggleableState.On else ToggleableState.Off
+                                },
                             colors = CardDefaults.colors(
                                 containerColor = if (isSelected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
                                 focusedContainerColor = NuvioTheme.colors.FocusBackground
@@ -1118,7 +1140,7 @@ internal fun <T> SettingsMultiChoiceDialog(
                                     Spacer(modifier = Modifier.width(NuvioTheme.spacing.md))
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = stringResource(R.string.cd_selected),
+                                        contentDescription = null,
                                         tint = NuvioTheme.colors.Primary,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -1185,7 +1207,8 @@ internal fun SettingsChoiceChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onFocused: () -> Unit = {}
+    onFocused: () -> Unit = {},
+    multiSelect: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val zen = isFlatSettingsStyle()
@@ -1197,6 +1220,14 @@ internal fun SettingsChoiceChip(
             if (isFocused != nowFocused) {
                 isFocused = nowFocused
                 if (nowFocused) onFocused()
+            }
+        }.semantics {
+            if (multiSelect) {
+                role = Role.Checkbox
+                toggleableState = if (selected) ToggleableState.On else ToggleableState.Off
+            } else {
+                role = Role.RadioButton
+                this.selected = selected
             }
         },
         colors = CardDefaults.colors(

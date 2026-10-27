@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
@@ -84,8 +85,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -279,6 +278,7 @@ fun AddonManagerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(NuvioTheme.colors.Background)
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -356,47 +356,47 @@ fun AddonManagerScreen(
                                 ) {
                                     Box(modifier = Modifier.padding(NuvioTheme.spacing.md)) {
                                         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                                        BasicTextField(
-                                            value = uiState.installUrl,
-                                            onValueChange = viewModel::onInstallUrlChange,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .focusRequester(textFieldFocusRequester)
-                                                .onFocusChanged {
-                                                    if (!it.isFocused && isEditing) {
+                                            BasicTextField(
+                                                value = uiState.installUrl,
+                                                onValueChange = viewModel::onInstallUrlChange,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .focusRequester(textFieldFocusRequester)
+                                                    .onFocusChanged {
+                                                        if (!it.isFocused && isEditing) {
+                                                            isEditing = false
+                                                            keyboardController?.hide()
+                                                        }
+                                                    },
+                                                singleLine = true,
+                                                keyboardOptions = KeyboardOptions(
+                                                    keyboardType = KeyboardType.Uri,
+                                                    imeAction = ImeAction.Done
+                                                ),
+                                                keyboardActions = KeyboardActions(
+                                                    onDone = {
+                                                        viewModel.installAddon()
                                                         isEditing = false
                                                         keyboardController?.hide()
+                                                        installButtonFocusRequester.requestFocus()
                                                     }
-                                                },
-                                            singleLine = true,
-                                            keyboardOptions = KeyboardOptions(
-                                                keyboardType = KeyboardType.Uri,
-                                                imeAction = ImeAction.Done
-                                            ),
-                                            keyboardActions = KeyboardActions(
-                                                onDone = {
-                                                    viewModel.installAddon()
-                                                    isEditing = false
-                                                    keyboardController?.hide()
-                                                    installButtonFocusRequester.requestFocus()
+                                                ),
+                                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                    color = NuvioTheme.colors.TextPrimary,
+                                                textDirection = TextDirection.Content
+                                                ),
+                                                cursorBrush = SolidColor(if (isEditing) NuvioTheme.colors.Primary else Color.Transparent),
+                                                decorationBox = { innerTextField ->
+                                                    if (uiState.installUrl.isEmpty()) {
+                                                        Text(
+                                                            text = stringResource(R.string.addon_install_placeholder),
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = NuvioTheme.colors.TextTertiary
+                                                        )
+                                                    }
+                                                    innerTextField()
                                                 }
-                                            ),
-                                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
-                                            ),
-                                            cursorBrush = SolidColor(if (isEditing) NuvioTheme.colors.Primary else Color.Transparent),
-                                            decorationBox = { innerTextField ->
-                                                if (uiState.installUrl.isEmpty()) {
-                                                    Text(
-                                                        text = stringResource(R.string.addon_install_placeholder),
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = NuvioTheme.colors.TextTertiary
-                                                    )
-                                                }
-                                                innerTextField()
-                                            }
-                                        )
+                                            )
                                         }
                                     }
                                 }
@@ -540,9 +540,8 @@ fun AddonManagerScreen(
             }
         }
 
-        // QR Code overlay — Popup renders above the entire screen
-        if (uiState.isQrModeActive) {
-            Popup(properties = PopupProperties(focusable = true)) {
+        if (uiState.isQrModeActive || uiState.pendingChange != null) {
+            if (uiState.isQrModeActive) {
                 QrCodeOverlay(
                     qrBitmap = uiState.qrCodeBitmap,
                     serverUrl = uiState.serverUrl,
@@ -551,18 +550,13 @@ fun AddonManagerScreen(
                     hasPendingChange = uiState.pendingChange != null
                 )
             }
-        }
 
-        // Confirmation dialog overlay
-        if (uiState.pendingChange != null) {
-            Popup(properties = PopupProperties(focusable = true)) {
-                uiState.pendingChange?.let { pending ->
-                    ConfirmAddonChangesDialog(
-                        pendingChange = pending,
-                        onConfirm = viewModel::confirmPendingChange,
-                        onReject = viewModel::rejectPendingChange
-                    )
-                }
+            uiState.pendingChange?.let { pending ->
+                ConfirmAddonChangesDialog(
+                    pendingChange = pending,
+                    onConfirm = viewModel::confirmPendingChange,
+                    onReject = viewModel::rejectPendingChange
+                )
             }
         }
 
@@ -924,7 +918,8 @@ internal fun QrCodeOverlay(
     instruction: String,
     onClose: () -> Unit,
     hasPendingChange: Boolean = false,
-    qrSize: Dp = 220.dp
+    qrSize: Dp = 220.dp,
+    modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
 
@@ -937,7 +932,7 @@ internal fun QrCodeOverlay(
     BackHandler { onClose() }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
@@ -1419,6 +1414,9 @@ private fun AddonCardContent(
                 }
             }
             if (!isReadOnly) {
+                // The card carries the name as visible text, but the toggle is its own node, so
+                // without this a screen reader hears only "switch, on".
+                val toggleLabel = stringResource(R.string.cd_enable_addon, addon.displayName)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm),
                     verticalAlignment = Alignment.CenterVertically
@@ -1429,6 +1427,7 @@ private fun AddonCardContent(
                             .focusRequester(toggleFocusRequester ?: remember { FocusRequester() })
                             .semantics {
                                 role = Role.Switch
+                                contentDescription = toggleLabel
                                 toggleableState = if (addon.enabled) ToggleableState.On else ToggleableState.Off
                             },
                         colors = ClickableSurfaceDefaults.colors(

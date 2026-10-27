@@ -741,7 +741,7 @@ fun ContinueWatchingCard(
                 } else {
                     AsyncImage(
                         model = imageRequest,
-                        contentDescription = titleText,
+                        contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(cwClipShape)
@@ -893,7 +893,7 @@ private fun WideCardContent(
             } else {
                 AsyncImage(
                     model = imageRequest,
-                    contentDescription = titleText,
+                    contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
                         .then(if (shouldBlur) Modifier.blur(12.dp) else Modifier),

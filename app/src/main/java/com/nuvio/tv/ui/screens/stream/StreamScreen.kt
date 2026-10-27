@@ -1788,7 +1788,9 @@ private fun StreamCard(
                     if (addonLogoModel != null) {
                         AsyncImage(
                             model = addonLogoModel,
-                            contentDescription = stream.addonName,
+                            // Decorative: the addon name is announced by the sibling Text below,
+                            // so naming the logo too would duplicate it in the merged card.
+                            contentDescription = null,
                             modifier = Modifier
                                 .size(24.dp)
                                 .clip(RoundedCornerShape(NuvioTheme.radii.xs)),
