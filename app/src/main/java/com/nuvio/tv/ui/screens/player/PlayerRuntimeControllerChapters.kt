@@ -12,6 +12,7 @@ internal fun PlayerRuntimeController.refreshMpvChapters(view: NuvioMpvSurfaceVie
     if (chapters.isEmpty()) return
     mpvChaptersStreamUrl = currentStreamUrl
     _uiState.update { it.copy(chapters = chapters) }
+    applyChapterSkipIntervals(chapters)
 }
 
 /**
@@ -58,6 +59,9 @@ internal fun PlayerRuntimeController.dismissChaptersPanel() {
  * ExoPlayer does not read Matroska chapters, so they are read from the file once its first frame
  * is shown (on the first READY when tunneled, which never reports a rendered frame), when the
  * extra requests no longer compete with starting playback.
+ *
+ * Chapters are always loaded for skip intro detection even when the chapters UI is disabled.
+ * The [exoChaptersEnabled] setting only controls whether chapters appear in the UI panel.
  */
 internal fun PlayerRuntimeController.loadExoChapters() {
     exoChapterLoadJob?.cancel()
@@ -65,9 +69,23 @@ internal fun PlayerRuntimeController.loadExoChapters() {
     val url = currentStreamUrl
     val headers = currentHeaders
     exoChapterLoadJob = scope.launch {
-        if (!playerSettingsDataStore.playerSettings.first().exoChaptersEnabled) return@launch
         val chapters = MatroskaChapterLoader.load(url, headers)
         if (chapters.isEmpty() || isUsingMpvEngine() || currentStreamUrl != url) return@launch
-        _uiState.update { it.copy(chapters = chapters) }
+        val showInUi = playerSettingsDataStore.playerSettings.first().exoChaptersEnabled
+        _uiState.update { it.copy(chapters = if (showInUi) chapters else emptyList()) }
+        applyChapterSkipIntervals(chapters)
     }
+}
+
+/**
+ * Merge chapter-derived skip intervals with existing API intervals.
+ * API intervals have priority per category (opening/ending/recap).
+ * Chapter intervals fill in categories that the API did not provide.
+ */
+internal fun PlayerRuntimeController.applyChapterSkipIntervals(chapters: List<PlayerChapter>) {
+    if (!skipIntroEnabled) return
+    val durationMs = _playbackTimeline.value.duration.takeIf { it > 0L } ?: return
+    val chapterIntervals = ChapterSkipIntervals.fromChapters(chapters, durationMs)
+    if (chapterIntervals.isEmpty()) return
+    skipIntervals = mergeSkipIntervals(skipIntervals, chapterIntervals)
 }
