@@ -481,7 +481,7 @@ object LiveTvRepository {
                 DynamicHostFallback.registerWorkingHost(playlistSourceUrl)
             }
 
-            // 1. Smart DNS Fallback via DynamicHostFallback (zero hardcoded domains)
+            // 1. Smart DNS Fallback via DynamicHostFallback (zero hardcoded domains, memory-only)
             var currentUrl = DynamicHostFallback.normalizeUrlWithFallback(
                 url = initialUrl,
                 preferredFallbackHost = playlistSourceUrl?.let {
@@ -489,24 +489,25 @@ object LiveTvRepository {
                 }
             )
 
-            // If fallback changed nothing, also try DNS resolution check
-            if (currentUrl == initialUrl) {
-                val streamHost = runCatching { URL(initialUrl).host }.getOrNull()
-                if (!streamHost.isNullOrBlank()) {
-                    val isResolvable = runCatching {
-                        java.net.InetAddress.getByName(streamHost) != null
-                    }.getOrDefault(false)
-                    if (!isResolvable) {
-                        val fallback = DynamicHostFallback.getFallbackHost(streamHost)
-                        if (!fallback.isNullOrBlank()) {
-                            currentUrl = initialUrl.replaceFirst(streamHost, fallback)
-                        }
-                    }
-                }
-            }
+            // 2. Fast Startup (như Mobile): Nếu URL tĩnh đã có extension chuẩn (.m3u8, .mpd, .ts, .flv, .mp4, .mkv)
+            // và không phải dynamic gateway script (.php, .ashx, /get...), trả về ngay lập tức (0ms)!
+            // DNS resolution sẽ được IPv4FirstDns & ExoPlayer xử lý tự nhiên khi phát, loại bỏ hoàn toàn blocking delay.
+            val hasStaticExtension = currentUrl.contains(".m3u8", ignoreCase = true) ||
+                currentUrl.contains(".mpd", ignoreCase = true) ||
+                currentUrl.contains(".ts", ignoreCase = true) ||
+                currentUrl.contains(".flv", ignoreCase = true) ||
+                currentUrl.contains(".mp4", ignoreCase = true) ||
+                currentUrl.contains(".mkv", ignoreCase = true)
 
-            // 2. Early return for known static extensions (avoid unnecessary network probe)
-            if (!DynamicHostFallback.isDynamicLiveStreamUrl(currentUrl) && currentUrl == initialUrl) {
+            val isDynamicUrl = currentUrl.contains(".php", ignoreCase = true) ||
+                currentUrl.contains(".ashx", ignoreCase = true) ||
+                currentUrl.contains(".asp", ignoreCase = true) ||
+                currentUrl.contains(".aspx", ignoreCase = true) ||
+                currentUrl.contains(".jsp", ignoreCase = true) ||
+                currentUrl.contains("/get", ignoreCase = true) ||
+                !hasStaticExtension
+
+            if (!isDynamicUrl) {
                 val type = when {
                     currentUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
                     currentUrl.contains(".mpd", ignoreCase = true) -> "mpd"
@@ -519,15 +520,16 @@ object LiveTvRepository {
                 return@withContext StreamResolutionResult(currentUrl, type)
             }
 
-            // 3. Dynamic Stream Resolver: follow redirects and detect MIME from server
+            // 3. Dynamic Stream Resolver: chỉ dành cho link thực sự động (.php, /get, không rõ extension)
+            // Cần follow redirects và dò MIME từ server với timeout ngắn (1500ms) để không gây khựng giao diện
             var redirectCount = 0
             var detectedType: String? = null
             while (redirectCount < 5) {
                 val connection = (URL(currentUrl).openConnection() as? HttpURLConnection) ?: break
                 connection.instanceFollowRedirects = false
                 headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
-                connection.connectTimeout = 3000
-                connection.readTimeout = 3000
+                connection.connectTimeout = 1500
+                connection.readTimeout = 1500
                 try {
                     val code = connection.responseCode
                     val contentType = connection.contentType?.lowercase()
