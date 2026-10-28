@@ -6,6 +6,7 @@ import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.StartupSyncPreferences
+import com.nuvio.tv.data.local.effectivePluginProfileId
 import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.repository.AddonRepositoryImpl
 import com.nuvio.tv.data.repository.LibraryRepositoryImpl
@@ -75,7 +76,19 @@ class StartupSyncService @Inject constructor(
     private var startupPullJob: Job? = null
     private var activityPullJob: Job? = null
     private var periodicSurfacePullJob: Job? = null
-    private var pluginSyncJob: Job? = null
+    private val pluginSyncGenerationLock = Any()
+    private var pluginSyncGeneration = 0
+    private val pluginSyncScheduler = PluginSyncScheduler(
+        scope = scope,
+        onReplace = {
+            synchronized(pluginSyncGenerationLock) { pluginSyncGeneration++ }
+        },
+        currentGeneration = {
+            synchronized(pluginSyncGenerationLock) { pluginSyncGeneration }
+        }
+    ) { profileId, generation ->
+        pullPlugins(profileId, generation)
+    }
     private var lastPulledKey: String? = null
     private var lastPulledIncludedProfileSettings: Boolean = false
     private var lastPulledAtMs: Long = 0L
@@ -110,8 +123,7 @@ class StartupSyncService @Inject constructor(
                         activityPullJob = null
                         periodicSurfacePullJob?.cancel()
                         periodicSurfacePullJob = null
-                        pluginSyncJob?.cancel()
-                        pluginSyncJob = null
+                        pluginSyncScheduler.cancel()
                         lastPulledKey = null
                         lastPulledIncludedProfileSettings = false
                         lastPulledAtMs = 0L
@@ -209,7 +221,7 @@ class StartupSyncService @Inject constructor(
             Log.i(TAG, "Realtime surface pull requested profile=$profileId surface=$surface")
             when (surface) {
                 "addons" -> pullRealtimeAddons(profileId)
-                "plugins" -> pullRealtimePlugins(profileId)
+                "plugins" -> enqueuePluginSync()
                 "library" -> pullNuvioLibrary(profileId)
                 "watch_progress" -> {
                     syncWatchProgressDelta(
@@ -425,6 +437,7 @@ class StartupSyncService @Inject constructor(
                     )
                 }
             }
+            if (isActive) enqueuePluginSync()
         }
         return true
     }
@@ -486,10 +499,6 @@ class StartupSyncService @Inject constructor(
             libraryRepository.isSyncingFromRemote = false
             Log.e(TAG, "Startup sync failed", e)
             return Result.failure(e)
-        } finally {
-            // Plugin repos download every scraper before they return. Keep that off the
-            // path that publishes addons, library and watch progress.
-            if (coroutineContext.isActive) enqueuePluginSync()
         }
     }
 
@@ -634,20 +643,24 @@ class StartupSyncService @Inject constructor(
 
     /**
      * Plugin reconcile downloads each repository before it returns, so it runs after the
-     * startup pull has already published addons and watch state. A second call while a
-     * download is in progress is ignored.
+     * startup pull has already published addons and watch state. The same effective profile
+     * is pulled once more when a request arrives during the download. A different effective
+     * profile cancels that download and starts its own. Profiles that use primary plugins
+     * share profile 1.
      */
-    fun enqueuePluginSync() {
+    private fun enqueuePluginSync() {
         if (!authManager.isAuthenticated) return
-        synchronized(this) {
-            if (pluginSyncJob?.isActive == true) return
-            pluginSyncJob = scope.launch { pullPlugins() }
-        }
+        val active = profileManager.activeProfile
+        val profileId = effectivePluginProfileId(
+            usesPrimaryPlugins = active?.usesPrimaryPlugins == true,
+            activeProfileId = profileManager.activeProfileId.value
+        )
+        pluginSyncScheduler.enqueue(profileId)
     }
 
-    private suspend fun pullPlugins() {
+    private suspend fun pullPlugins(profileId: Int, generation: Int) {
         if (!authManager.isAuthenticated) return
-        val profileId = profileManager.activeProfileId.value
+        pluginManager.discardPendingSync()
         pluginManager.isSyncingFromRemote = true
         try {
             val remotePlugins = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
@@ -661,8 +674,15 @@ class StartupSyncService @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull plugins from remote, keeping local cache", e)
         } finally {
-            pluginManager.isSyncingFromRemote = false
-            pluginManager.flushPendingSync()
+            val ownsPull = synchronized(pluginSyncGenerationLock) { pluginSyncGeneration == generation }
+            if (ownsPull) {
+                pluginManager.isSyncingFromRemote = false
+                if (coroutineContext.isActive) {
+                    pluginManager.flushPendingSync()
+                } else {
+                    pluginManager.discardPendingSync()
+                }
+            }
         }
     }
 
@@ -690,23 +710,6 @@ class StartupSyncService @Inject constructor(
             false
         } finally {
             libraryRepository.isSyncingFromRemote = false
-        }
-    }
-
-    private suspend fun pullRealtimePlugins(profileId: Int) {
-        pluginManager.isSyncingFromRemote = true
-        try {
-            val remotePlugins = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
-            pluginManager.reconcileWithRemoteRepoUrls(
-                remotePlugins = remotePlugins,
-                removeMissingLocal = true
-            )
-            Log.d(TAG, "Realtime plugins pull reconciled ${remotePlugins.size} repos for profile $profileId")
-        } catch (e: Exception) {
-            Log.e(TAG, "Realtime plugins pull failed profile=$profileId", e)
-        } finally {
-            pluginManager.isSyncingFromRemote = false
-            pluginManager.flushPendingSync()
         }
     }
 
