@@ -108,6 +108,8 @@ private fun PlayerRuntimeController.tryComputeChapterSkipIntervals(): Boolean {
     if (skipChaptersComputedForDuration == durationMs) return false
     skipChaptersComputedForDuration = durationMs
     chapterSkipIntervals = ChapterSkipIntervals.fromChapters(chapters, durationMs)
+    skipChaptersComputedForDuration = durationMs
+    chapterSkipIntervals = ChapterSkipIntervals.fromChapters(chapters, durationMs)
     recomputeMergedSkipIntervals()
     return true
 }

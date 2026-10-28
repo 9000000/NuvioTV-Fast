@@ -479,11 +479,12 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
     if (active != null) {
         val targetsPostCredits = active.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs()) != null
         if (currentActive != active || targetsPostCredits != _uiState.value.activeSkipTargetsPostCredits) {
+            val keepDismissed = currentActive != null && currentActive.type == active.type
             lastActiveSkipType = active.type
             _uiState.update { it.copy(
                 activeSkipInterval = active,
                 activeSkipTargetsPostCredits = targetsPostCredits,
-                skipIntervalDismissed = false
+                skipIntervalDismissed = if (keepDismissed) it.skipIntervalDismissed else false
             ) }
         }
         val segmentType = AutoSkipSegmentType.fromSkipIntervalType(active.type)
@@ -498,7 +499,20 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
             skipInterval(active)
         }
     } else if (currentActive != null) {
-        _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = false) }
+        // When the same segment type exists in the updated list but the position is briefly
+        // outside its range (e.g. chapter recap starts 1s later than the API recap it replaced),
+        // swap to the new interval to keep the button visible without flickering.
+        val replacement = skipIntervals.firstOrNull { it.type == currentActive.type }
+        if (replacement != null) {
+            val targetsPostCredits = replacement.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs()) != null
+            _uiState.update { it.copy(
+                activeSkipInterval = replacement,
+                activeSkipTargetsPostCredits = targetsPostCredits,
+                skipIntervalDismissed = it.skipIntervalDismissed
+            ) }
+        } else {
+            _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = false) }
+        }
     }
 }
 
