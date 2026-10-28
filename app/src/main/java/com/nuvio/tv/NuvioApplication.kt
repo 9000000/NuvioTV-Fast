@@ -18,8 +18,6 @@ import coil3.request.crossfade
 import coil3.request.allowHardware
 import coil3.request.allowRgb565
 import coil3.bitmapFactoryMaxParallelism
-import coil3.util.DebugLogger
-import coil3.util.Logger
 
 import okio.Path.Companion.toOkioPath
 import com.nuvio.tv.core.diagnostics.SentryInitializer
@@ -110,24 +108,6 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 .connectTimeout(4, TimeUnit.SECONDS)
                 .readTimeout(5, TimeUnit.SECONDS)
                 .callTimeout(8, TimeUnit.SECONDS)
-                .apply {
-                    if (BuildConfig.DEBUG) {
-                        addInterceptor { chain ->
-                            val request = chain.request()
-                            val response = chain.proceed(request)
-                            if (response.code >= 400) {
-                                val online = ImageConnectivityChecker(this@NuvioApplication).isOnline()
-                                android.util.Log.e(
-                                    "NuvioImage",
-                                    "online=$online ${response.code} ${response.message} " +
-                                        "cc=${request.header("Cache-Control")} " +
-                                        "server=${response.header("Server")} ${request.url}",
-                                )
-                            }
-                            response
-                        }
-                    }
-                }
                 .addInterceptor { chain ->
                     try {
                         chain.proceed(chain.request())
@@ -196,11 +176,6 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
             .allowHardware(false)
             .allowRgb565(imagePerformancePreferences.rgb565Enabled)
             .bitmapFactoryMaxParallelism(4)
-            .apply {
-                if (BuildConfig.DEBUG) {
-                    logger(DebugLogger(Logger.Level.Debug))
-                }
-            }
             .build()
     }
 }
