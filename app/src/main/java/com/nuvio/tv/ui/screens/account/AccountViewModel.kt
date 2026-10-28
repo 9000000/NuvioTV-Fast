@@ -734,14 +734,6 @@ class AccountViewModel @Inject constructor(
             val profileId = profileManager.activeProfileId.value
             profileSettingsSyncService.pullCurrentProfileFromRemote()
             providerCredentialSyncService.syncFromRemote(profileId).getOrElse { throw it }
-            pluginManager.isSyncingFromRemote = true
-            val remotePlugins = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
-            pluginManager.reconcileWithRemoteRepoUrls(
-                remotePlugins = remotePlugins,
-                removeMissingLocal = true
-            )
-            pluginManager.isSyncingFromRemote = false
-            pluginManager.flushPendingSync()
 
             addonRepository.isSyncingFromRemote = true
             val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
@@ -806,6 +798,14 @@ class AccountViewModel @Inject constructor(
                     watchedItemsSyncService.pushToRemote(profileId)
                 }
             }
+            pluginManager.isSyncingFromRemote = true
+            val remotePlugins = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
+            pluginManager.reconcileWithRemoteRepoUrls(
+                remotePlugins = remotePlugins,
+                removeMissingLocal = true
+            )
+            pluginManager.isSyncingFromRemote = false
+            pluginManager.flushPendingSync()
             return Result.success(Unit)
         } catch (e: Exception) {
             pluginManager.isSyncingFromRemote = false
