@@ -126,7 +126,6 @@ internal fun mergeSkipIntervals(
     }
     val uncategorized = (chapterIntervals + apiIntervals)
         .filter { skipIntervalCategory(it.type) == null }
-        .distinctBy { it.type + ":" + it.provider }
     return chosen.values.toList() + uncategorized
 }
 

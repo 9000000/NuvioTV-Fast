@@ -1000,6 +1000,8 @@ internal fun PlayerRuntimeController.switchToSourceStream(
             isTorrentStream = false
         )
     }
+    clearChapterSkipState()
+    recomputeMergedSkipIntervals()
     showStreamSourceIndicator(stream)
     resetPostPlayOverlayState(clearEpisode = false)
 
@@ -1114,6 +1116,8 @@ private fun PlayerRuntimeController.switchToTorrentSourceStream(
             isTorrentStream = true
         )
     }
+    clearChapterSkipState()
+    recomputeMergedSkipIntervals()
     applyStreamMetadata(stream)
     currentFilename = stream.behaviorHints?.filename
     showStreamSourceIndicator(stream)

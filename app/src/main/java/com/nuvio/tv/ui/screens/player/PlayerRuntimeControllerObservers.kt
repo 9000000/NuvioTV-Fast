@@ -490,6 +490,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     skipIntervals = emptyList()
                     apiSkipIntervals = emptyList()
                     chapterSkipIntervals = emptyList()
+                    skipChaptersComputedForDuration = 0L
                     skipIntroFetchedKey = null
                     autoSkippedIntervalKeys.clear()
                     _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
