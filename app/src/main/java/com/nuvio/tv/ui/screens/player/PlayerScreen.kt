@@ -1806,6 +1806,9 @@ fun PlayerScreen(
                     onSeasonSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeSeasonSelected(it)) },
                     onAddonFilterSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeAddonFilterSelected(it)) },
                     onEpisodeSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeSelected(it)) },
+                    onEpisodeManualPlay = {
+                        viewModel.onEvent(PlayerEvent.OnEpisodeSelected(it, manualSelection = true))
+                    },
                     onStreamSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeStreamSelected(it)) },
                     modifier = Modifier.align(Alignment.CenterEnd)
                 )
