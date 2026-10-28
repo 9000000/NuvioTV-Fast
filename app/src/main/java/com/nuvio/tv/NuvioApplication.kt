@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.StrictMode
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import coil3.annotation.ExperimentalCoilApi
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
@@ -17,6 +18,8 @@ import coil3.request.crossfade
 import coil3.request.allowHardware
 import coil3.request.allowRgb565
 import coil3.bitmapFactoryMaxParallelism
+import coil3.util.DebugLogger
+import coil3.util.Logger
 
 import okio.Path.Companion.toOkioPath
 import com.nuvio.tv.core.diagnostics.SentryInitializer
@@ -25,6 +28,7 @@ import com.nuvio.tv.core.runtime.PluginRuntimeHooks
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.core.sync.androidtv.AndroidTvChannelSyncService
 import com.nuvio.tv.core.network.IPv4FirstDns
+import com.nuvio.tv.core.network.ImageConnectivityChecker
 import com.nuvio.tv.core.network.NoDelaySocketFactory
 import com.nuvio.tv.data.local.ImagePerformancePreferences
 import com.nuvio.tv.data.local.SentrySettingsDataStore
@@ -92,6 +96,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         LocaleCache.localeTag = tag ?: ""
     }
 
+    @OptIn(ExperimentalCoilApi::class)
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         val imageOkHttpClient by lazy {
             val imageDispatcher = okhttp3.Dispatcher().apply {
@@ -105,6 +110,24 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 .connectTimeout(4, TimeUnit.SECONDS)
                 .readTimeout(5, TimeUnit.SECONDS)
                 .callTimeout(8, TimeUnit.SECONDS)
+                .apply {
+                    if (BuildConfig.DEBUG) {
+                        addInterceptor { chain ->
+                            val request = chain.request()
+                            val response = chain.proceed(request)
+                            if (response.code >= 400) {
+                                val online = ImageConnectivityChecker(this@NuvioApplication).isOnline()
+                                android.util.Log.e(
+                                    "NuvioImage",
+                                    "online=$online ${response.code} ${response.message} " +
+                                        "cc=${request.header("Cache-Control")} " +
+                                        "server=${response.header("Server")} ${request.url}",
+                                )
+                            }
+                            response
+                        }
+                    }
+                }
                 .addInterceptor { chain ->
                     try {
                         chain.proceed(chain.request())
@@ -139,6 +162,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                                 imageLoaderProvider = imageLoaderRef,
                             )
                         },
+                        connectivityChecker = { ImageConnectivityChecker(this@NuvioApplication) },
                     )
                 )
             }
@@ -172,6 +196,11 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
             .allowHardware(false)
             .allowRgb565(imagePerformancePreferences.rgb565Enabled)
             .bitmapFactoryMaxParallelism(4)
+            .apply {
+                if (BuildConfig.DEBUG) {
+                    logger(DebugLogger(Logger.Level.Debug))
+                }
+            }
             .build()
     }
 }
