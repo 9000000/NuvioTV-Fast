@@ -1625,6 +1625,8 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
 
     playbackStartedForParentalGuide = false
     skipIntervals = emptyList()
+    chapterSkipIntervals = emptyList()
+    apiSkipIntervals = emptyList()
     skipIntroFetchedKey = null
     lastActiveSkipType = null
     autoSkippedIntervalKeys.clear()
@@ -1739,6 +1741,8 @@ private fun PlayerRuntimeController.switchToEpisodeStreamCommon(
 
     playbackStartedForParentalGuide = false
     skipIntervals = emptyList()
+    chapterSkipIntervals = emptyList()
+    apiSkipIntervals = emptyList()
     skipIntroFetchedKey = null
     lastActiveSkipType = null
     autoSkippedIntervalKeys.clear()

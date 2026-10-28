@@ -60,8 +60,9 @@ internal fun PlayerRuntimeController.dismissChaptersPanel() {
  * is shown (on the first READY when tunneled, which never reports a rendered frame), when the
  * extra requests no longer compete with starting playback.
  *
- * Chapters are always loaded for skip intro detection even when the chapters UI is disabled.
- * The [exoChaptersEnabled] setting only controls whether chapters appear in the UI panel.
+ * Chapters are loaded when the chapters UI is enabled OR skip intro is enabled.
+ * The [exoChaptersEnabled] setting controls only the UI panel; skip intro uses chapters
+ * independently.
  */
 internal fun PlayerRuntimeController.loadExoChapters() {
     exoChapterLoadJob?.cancel()
@@ -69,23 +70,39 @@ internal fun PlayerRuntimeController.loadExoChapters() {
     val url = currentStreamUrl
     val headers = currentHeaders
     exoChapterLoadJob = scope.launch {
+        val settings = playerSettingsDataStore.playerSettings.first()
+        if (!settings.exoChaptersEnabled && !skipIntroEnabled) return@launch
         val chapters = MatroskaChapterLoader.load(url, headers)
         if (chapters.isEmpty() || isUsingMpvEngine() || currentStreamUrl != url) return@launch
-        val showInUi = playerSettingsDataStore.playerSettings.first().exoChaptersEnabled
-        _uiState.update { it.copy(chapters = if (showInUi) chapters else emptyList()) }
+        if (settings.exoChaptersEnabled) {
+            _uiState.update { it.copy(chapters = chapters) }
+        }
         applyChapterSkipIntervals(chapters)
     }
 }
 
 /**
- * Merge chapter-derived skip intervals with existing API intervals.
- * API intervals have priority per category (opening/ending/recap).
- * Chapter intervals fill in categories that the API did not provide.
+ * Store chapter-derived skip intervals and recompute the merged result.
+ * If the duration is not yet known, the chapters are stored and intervals will be
+ * computed once [recomputeChapterSkipIntervalsIfNeeded] is called when duration updates.
  */
 internal fun PlayerRuntimeController.applyChapterSkipIntervals(chapters: List<PlayerChapter>) {
     if (!skipIntroEnabled) return
+    val durationMs = _playbackTimeline.value.duration.takeIf { it > 0L }
+    if (durationMs != null) {
+        chapterSkipIntervals = ChapterSkipIntervals.fromChapters(chapters, durationMs)
+    }
+    recomputeMergedSkipIntervals()
+}
+
+/**
+ * Retry chapter skip interval computation when the duration becomes known.
+ * Called from the playback tick when the timeline duration changes from 0 to a real value.
+ */
+internal fun PlayerRuntimeController.recomputeChapterSkipIntervalsIfNeeded() {
+    if (chapterSkipIntervals.isNotEmpty()) return
+    val chapters = _uiState.value.chapters.takeIf { it.size >= 2 } ?: return
     val durationMs = _playbackTimeline.value.duration.takeIf { it > 0L } ?: return
-    val chapterIntervals = ChapterSkipIntervals.fromChapters(chapters, durationMs)
-    if (chapterIntervals.isEmpty()) return
-    skipIntervals = mergeSkipIntervals(skipIntervals, chapterIntervals)
+    chapterSkipIntervals = ChapterSkipIntervals.fromChapters(chapters, durationMs)
+    if (chapterSkipIntervals.isNotEmpty()) recomputeMergedSkipIntervals()
 }

@@ -487,6 +487,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             if (!skipIntroEnabled) {
                 if (skipIntervals.isNotEmpty() || _uiState.value.activeSkipInterval != null) {
                     skipIntervals = emptyList()
+                    apiSkipIntervals = emptyList()
+                    chapterSkipIntervals = emptyList()
                     skipIntroFetchedKey = null
                     autoSkippedIntervalKeys.clear()
                     _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
@@ -494,6 +496,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             } else {
                 if (!wasEnabled || skipIntroFetchedKey == null) {
                     _uiState.update { it.copy(skipIntervalDismissed = false) }
+                    // Re-apply chapter intervals if available
+                    if (chapterSkipIntervals.isNotEmpty()) recomputeMergedSkipIntervals()
                     fetchSkipIntervals(contentId, currentSeason, currentEpisode)
                 }
             }
@@ -613,7 +617,7 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
     if (!skipIntroEnabled) return
     if (id.isNullOrBlank()) return
 
-    // Prefer videoId over contentId — videoId carries the season/episode-specific ID
+    // Prefer videoId over contentId - videoId carries the season/episode-specific ID
     val effectiveId = currentVideoId?.takeIf { it.isNotBlank() } ?: id
 
     if (contentType.equals("movie", ignoreCase = true)) {
@@ -621,9 +625,10 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         if (skipIntroFetchedKey == key) return
         skipIntroFetchedKey = key
         scope.launch {
-            skipIntervals = withTimeoutOrNull(15_000L) {
+            val api = withTimeoutOrNull(15_000L) {
                 skipIntroRepository.getMovieSkipIntervals(id, effectiveId)
             } ?: emptyList()
+            setApiSkipIntervals(api)
         }
         return
     }
@@ -643,9 +648,10 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         skipIntroFetchedKey = key
         val imdbId = id?.takeIf { it.startsWith("tt") } ?: metaImdbId
         scope.launch {
-            skipIntervals = withTimeoutOrNull(15_000L) {
+            val api = withTimeoutOrNull(15_000L) {
                 skipIntroRepository.getSkipIntervalsForMal(malId, malEpisode, imdbId = imdbId, imdbSeason = season, imdbEpisode = episode)
             } ?: emptyList()
+            setApiSkipIntervals(api)
         }
         return
     }
@@ -660,9 +666,10 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         skipIntroFetchedKey = key
         val imdbId = id?.takeIf { it.startsWith("tt") } ?: metaImdbId
         scope.launch {
-            skipIntervals = withTimeoutOrNull(15_000L) {
+            val api = withTimeoutOrNull(15_000L) {
                 skipIntroRepository.getSkipIntervalsForKitsu(kitsuId, kitsuEpisode, imdbId = imdbId, imdbSeason = season, imdbEpisode = episode)
             } ?: emptyList()
+            setApiSkipIntervals(api)
         }
         return
     }
@@ -675,10 +682,23 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
     skipIntroFetchedKey = key
 
     scope.launch {
-        skipIntervals = withTimeoutOrNull(15_000L) {
+        val api = withTimeoutOrNull(15_000L) {
             skipIntroRepository.getSkipIntervals(imdbId, season, episode)
         } ?: emptyList()
+        setApiSkipIntervals(api)
     }
+}
+
+/** Store API results and recompute the merged skipIntervals. */
+private fun PlayerRuntimeController.setApiSkipIntervals(api: List<SkipInterval>) {
+    apiSkipIntervals = api
+    recomputeMergedSkipIntervals()
+}
+
+/** Recompute the merged skipIntervals from chapters (priority) + API (gap-fill). */
+internal fun PlayerRuntimeController.recomputeMergedSkipIntervals() {
+    val isMovie = contentType.equals("movie", ignoreCase = true)
+    skipIntervals = mergeSkipIntervals(apiSkipIntervals, chapterSkipIntervals, isMovie = isMovie)
 }
 
 internal fun PlayerRuntimeController.tryApplyPendingResumeProgress(player: Player) {

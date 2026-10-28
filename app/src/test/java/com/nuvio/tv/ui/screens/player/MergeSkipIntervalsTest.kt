@@ -80,6 +80,24 @@ class MergeSkipIntervalsTest {
     }
 
     @Test
+    fun `movie mode prefers API entirely when it has data`() {
+        val api = listOf(
+            interval("movie-credits", 5400.0, 5700.0, "introdb"),
+            interval("post-credits", 5700.0, 5800.0, "introdb")
+        )
+        val chapters = listOf(interval("outro", 5400.0, 6000.0, "chapters"))
+        val merged = mergeSkipIntervals(api, chapters, isMovie = true)
+        assertEquals(api, merged)
+    }
+
+    @Test
+    fun `movie mode falls back to chapters when API is empty`() {
+        val chapters = listOf(interval("outro", 5400.0, 6000.0, "chapters"))
+        val merged = mergeSkipIntervals(emptyList(), chapters, isMovie = true)
+        assertEquals(chapters, merged)
+    }
+
+    @Test
     fun `full merge with all categories`() {
         val api = listOf(
             interval("intro", 85.0, 175.0, "introdb"),
