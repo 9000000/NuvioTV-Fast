@@ -1,7 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
 import com.nuvio.tv.data.repository.SkipInterval
-import com.nuvio.tv.data.repository.SkipIntroRepository.segmentCategory
+import com.nuvio.tv.data.repository.segmentCategory
 
 /**
  * Derive skip intervals from container chapters (MKV/Matroska).
