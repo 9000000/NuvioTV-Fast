@@ -497,8 +497,6 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             } else {
                 if (!wasEnabled || skipIntroFetchedKey == null) {
                     _uiState.update { it.copy(skipIntervalDismissed = false) }
-                    // Re-apply chapter intervals if available
-                    if (chapterSkipIntervals.isNotEmpty()) recomputeMergedSkipIntervals()
                     fetchSkipIntervals(contentId, currentSeason, currentEpisode)
                 }
             }

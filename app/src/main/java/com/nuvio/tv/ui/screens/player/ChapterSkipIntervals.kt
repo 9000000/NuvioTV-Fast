@@ -26,7 +26,7 @@ internal object ChapterSkipIntervals {
     // e.g. "OP", "OP 2", "Opening", "Opening Credits", but NOT "The Opening Scene".
     private val OPENING_PATTERN = Regex("^\\s*(op(ening)?)(\\s*(credits|theme))?\\s*\\d*\\s*$", RegexOption.IGNORE_CASE)
     private val ENDING_PATTERN = Regex("^\\s*(ed|ending)(\\s*(credits|theme))?\\s*\\d*\\s*$", RegexOption.IGNORE_CASE)
-    private val CREDITS_PATTERN = Regex("^\\s*credits\\s*$", RegexOption.IGNORE_CASE)
+    private val CREDITS_PATTERN = Regex("^\\s*(end|closing)?\\s*credits\\s*$", RegexOption.IGNORE_CASE)
     private val RECAP_PATTERN = Regex("^\\s*(recap|previously(\\s+on.*)?)\\s*$", RegexOption.IGNORE_CASE)
     private val INTRO_PATTERN = Regex("^\\s*intro\\s*$", RegexOption.IGNORE_CASE)
 
@@ -124,7 +124,9 @@ internal fun mergeSkipIntervals(
         val category = skipIntervalCategory(interval.type) ?: continue
         chosen.putIfAbsent(category, interval)
     }
-    val uncategorized = apiIntervals.filter { skipIntervalCategory(it.type) == null }
+    val uncategorized = (chapterIntervals + apiIntervals)
+        .filter { skipIntervalCategory(it.type) == null }
+        .distinctBy { it.type + ":" + it.provider }
     return chosen.values.toList() + uncategorized
 }
 
