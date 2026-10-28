@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
 import com.nuvio.tv.data.repository.SkipInterval
+import com.nuvio.tv.data.repository.SkipIntroRepository.segmentCategory
 
 /**
  * Derive skip intervals from container chapters (MKV/Matroska).
@@ -117,21 +118,14 @@ internal fun mergeSkipIntervals(
     if (isMovie && apiIntervals.isNotEmpty()) return apiIntervals
     val chosen = LinkedHashMap<String, SkipInterval>()
     for (interval in chapterIntervals) {
-        val category = skipIntervalCategory(interval.type) ?: continue
+        val category = segmentCategory(interval.type) ?: continue
         chosen.putIfAbsent(category, interval)
     }
     for (interval in apiIntervals) {
-        val category = skipIntervalCategory(interval.type) ?: continue
+        val category = segmentCategory(interval.type) ?: continue
         chosen.putIfAbsent(category, interval)
     }
     val uncategorized = (chapterIntervals + apiIntervals)
-        .filter { skipIntervalCategory(it.type) == null }
+        .filter { segmentCategory(it.type) == null }
     return chosen.values.toList() + uncategorized
-}
-
-internal fun skipIntervalCategory(type: String): String? = when (type.lowercase()) {
-    "intro", "op", "mixed-op" -> "opening"
-    "outro", "ed", "mixed-ed", "credits", "ending" -> "ending"
-    "recap" -> "recap"
-    else -> null
 }
