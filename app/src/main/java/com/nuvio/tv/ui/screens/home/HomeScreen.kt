@@ -644,14 +644,11 @@ private fun ModernHomeRoute(
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsStateWithLifecycle()
     val modernPresentation by viewModel.modernHomePresentation.collectAsStateWithLifecycle()
-    // Passed down as State reads, not values: enrichment changes on most focus moves, and reading it
+    // Passed down as State, not values: enrichment changes on most focus moves, and reading it
     // here recomposed all of the home content for each one.
-    val enrichingItemIdState = viewModel.enrichingItemId.collectAsStateWithLifecycle()
-    val enrichedPreviewsState = viewModel.enrichedPreviews.collectAsStateWithLifecycle()
-    val failedEnrichmentIdsState = viewModel.failedEnrichmentIds.collectAsStateWithLifecycle()
-    val enrichingItemId = remember(enrichingItemIdState) { { enrichingItemIdState.value } }
-    val enrichedPreviews = remember(enrichedPreviewsState) { { enrichedPreviewsState.value } }
-    val failedEnrichmentIds = remember(failedEnrichmentIdsState) { { failedEnrichmentIdsState.value } }
+    val enrichingItemId = viewModel.enrichingItemId.collectAsStateWithLifecycle()
+    val enrichedPreviews = viewModel.enrichedPreviews.collectAsStateWithLifecycle()
+    val failedEnrichmentIds = viewModel.failedEnrichmentIds.collectAsStateWithLifecycle()
     val requestTrailerPreview = remember(viewModel) {
         { itemId: String, title: String, releaseInfo: String?, apiType: String ->
             viewModel.requestTrailerPreview(itemId, title, releaseInfo, apiType)
