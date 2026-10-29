@@ -596,6 +596,7 @@ internal fun PlayerRuntimeController.seekPlaybackTo(
             view.setSubtitleDelayMs(mpvSubtitleDelayMs(_uiState.value.subtitleDelayMs))
             view.setAudioDelayMs(_uiState.value.audioDelayMs)
         }
+        refreshMpvMediaSession()
     } else {
         _exoPlayer?.let { player ->
             if (NuvioExoPlayerPerformanceHelper.enabled) {
@@ -635,6 +636,7 @@ internal fun PlayerRuntimeController.setPlaybackPaused(paused: Boolean) {
     if (isUsingMpvEngine()) {
         mpvView?.setPaused(paused)
         _uiState.update { it.copy(isPlaying = !paused) }
+        refreshMpvMediaSession()
     } else {
         _exoPlayer?.let { player ->
             if (paused) player.pause() else player.play()

@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -19,7 +20,8 @@ class MpvMediaSessionPlayerTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val target = RecordingTarget()
             val player = MpvMediaSessionPlayer(
-                snapshotProvider = { snapshot() },
+                // A playing snapshot extrapolates position, making the exact assertion time-dependent.
+                snapshotProvider = { snapshot().copy(isPlaying = false) },
                 commandTarget = target
             )
 
@@ -58,6 +60,77 @@ class MpvMediaSessionPlayerTest {
         }
     }
 
+    @Test
+    fun externalPauseRefreshNotifiesListenersAndAllowsOnePlayRequest() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        var currentSnapshot = snapshot()
+        val target = RecordingTarget { playWhenReady ->
+            currentSnapshot = currentSnapshot.copy(isPlaying = playWhenReady)
+        }
+        val playWhenReadyChanges = mutableListOf<Boolean>()
+        lateinit var player: MpvMediaSessionPlayer
+
+        instrumentation.runOnMainSync {
+            player = MpvMediaSessionPlayer(
+                snapshotProvider = { currentSnapshot },
+                commandTarget = target
+            )
+            assertTrue(player.isPlaying)
+            player.addListener(object : Player.Listener {
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    playWhenReadyChanges += playWhenReady
+                }
+            })
+
+            // The app pauses mpv directly, without a command through the adapter or a progress tick.
+            currentSnapshot = currentSnapshot.copy(isPlaying = false)
+            player.refresh()
+
+            assertFalse(player.playWhenReady)
+            assertFalse(player.isPlaying)
+            assertEquals(2_000L, player.currentPosition)
+            assertEquals(listOf(false), playWhenReadyChanges)
+            assertTrue(target.playWhenReadyCalls.isEmpty())
+            assertTrue(target.seekCalls.isEmpty())
+        }
+
+        // Let elapsed time advance without blocking the player's main thread.
+        SystemClock.sleep(50L)
+        instrumentation.runOnMainSync {
+            assertEquals(2_000L, player.currentPosition)
+            player.play()
+
+            assertEquals(listOf(true), target.playWhenReadyCalls)
+            assertTrue(target.seekCalls.isEmpty())
+            assertTrue(player.isPlaying)
+            assertEquals(listOf(false, true), playWhenReadyChanges)
+            player.release()
+        }
+    }
+
+    @Test
+    fun externalSeekRefreshUpdatesPositionWhilePausedWithoutSendingCommands() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            var currentSnapshot = snapshot().copy(isPlaying = false)
+            val target = RecordingTarget()
+            val player = MpvMediaSessionPlayer(
+                snapshotProvider = { currentSnapshot },
+                commandTarget = target
+            )
+            assertEquals(2_000L, player.currentPosition)
+
+            currentSnapshot = currentSnapshot.copy(positionMs = 6_000L)
+            player.refresh()
+
+            assertEquals(6_000L, player.currentPosition)
+            assertFalse(player.playWhenReady)
+            assertFalse(player.isPlaying)
+            assertTrue(target.playWhenReadyCalls.isEmpty())
+            assertTrue(target.seekCalls.isEmpty())
+            player.release()
+        }
+    }
+
     private fun snapshot(isSeekable: Boolean = true) = MpvMediaSessionSnapshot(
         mediaId = "stream-id",
         mediaItem = MediaItem.Builder()
@@ -74,12 +147,15 @@ class MpvMediaSessionPlayerTest {
         speed = 1f,
     )
 
-    private class RecordingTarget : MpvMediaSessionCommandTarget {
+    private class RecordingTarget(
+        private val onSetPlayWhenReady: (Boolean) -> Unit = {},
+    ) : MpvMediaSessionCommandTarget {
         val playWhenReadyCalls = mutableListOf<Boolean>()
         val seekCalls = mutableListOf<Long>()
 
         override fun setPlayWhenReady(playWhenReady: Boolean) {
             playWhenReadyCalls += playWhenReady
+            onSetPlayWhenReady(playWhenReady)
         }
 
         override fun seekTo(positionMs: Long) {
