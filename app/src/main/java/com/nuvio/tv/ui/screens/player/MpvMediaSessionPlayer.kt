@@ -46,6 +46,7 @@ internal class MpvMediaSessionPlayer(
         val commandsBuilder = Player.Commands.Builder()
             .addAll(
                 Player.COMMAND_PLAY_PAUSE,
+                Player.COMMAND_RELEASE,
                 Player.COMMAND_GET_CURRENT_MEDIA_ITEM,
                 Player.COMMAND_GET_TIMELINE,
                 Player.COMMAND_GET_MEDIA_ITEMS_METADATA,
@@ -107,6 +108,9 @@ internal class MpvMediaSessionPlayer(
         refresh()
         return immediateVoidFuture()
     }
+
+    // Only release the Media3 facade; the controller owns mpv's lifetime.
+    override fun handleRelease(): ListenableFuture<Void> = immediateVoidFuture()
 
     /** Media3 declares a non-null Java [Void] generic while Guava exposes it as nullable to Kotlin. */
     @Suppress("UNCHECKED_CAST")

@@ -131,6 +131,39 @@ class MpvMediaSessionPlayerTest {
         }
     }
 
+    @Test
+    fun releaseStopsForwardingAndRefreshesWithoutChangingMpvPlayback() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            var snapshotReads = 0
+            val target = RecordingTarget()
+            val player = MpvMediaSessionPlayer(
+                snapshotProvider = {
+                    snapshotReads++
+                    snapshot()
+                },
+                commandTarget = target
+            )
+            assertTrue(player.isPlaying)
+            assertTrue(player.isCommandAvailable(Player.COMMAND_RELEASE))
+
+            player.release()
+            val readsAfterRelease = snapshotReads
+            assertEquals(Player.STATE_IDLE, player.playbackState)
+            assertFalse(player.isPlaying)
+
+            player.pause()
+            player.play()
+            player.seekTo(6_000L)
+            player.refresh()
+            player.release()
+
+            assertTrue(target.playWhenReadyCalls.isEmpty())
+            assertTrue(target.seekCalls.isEmpty())
+            assertEquals(readsAfterRelease, snapshotReads)
+            assertEquals(Player.STATE_IDLE, player.playbackState)
+        }
+    }
+
     private fun snapshot(isSeekable: Boolean = true) = MpvMediaSessionSnapshot(
         mediaId = "stream-id",
         mediaItem = MediaItem.Builder()

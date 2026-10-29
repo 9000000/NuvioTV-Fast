@@ -116,33 +116,38 @@ internal fun PlayerRuntimeController.installExoMediaSession(player: ExoPlayer) {
 
 /** Creates the foreground-only MediaSession used by Bluetooth and other Android media controls. */
 internal fun PlayerRuntimeController.installMpvMediaSession() {
-    if (!isUsingMpvEngine() || isInBackground || mpvView == null || currentStreamUrl.isBlank()) return
-    if (currentMediaSession != null && mpvMediaSessionPlayer != null) {
-        mpvMediaSessionPlayer?.refresh()
-        return
-    }
-    releaseMediaSession()
-    val sessionPlayer = MpvMediaSessionPlayer(
-        snapshotProvider = ::mpvMediaSessionSnapshot,
-        commandTarget = object : MpvMediaSessionCommandTarget {
-            override fun setPlayWhenReady(playWhenReady: Boolean) {
-                if (!isUsingMpvEngine() || isInBackground) return
-                if (isPlaybackCurrentlyPlaying() != playWhenReady) {
-                    // MediaSession commands should behave like ExoPlayer's session controls:
-                    // change playback without treating the button press as an in-player gesture.
-                    onEvent(PlayerEvent.OnPlayPause, showPlaybackControls = false)
+    runCatching {
+        if (!isUsingMpvEngine() || isInBackground || mpvView == null || currentStreamUrl.isBlank()) return
+        if (currentMediaSession != null && mpvMediaSessionPlayer != null) {
+            mpvMediaSessionPlayer?.refresh()
+            return
+        }
+        releaseMediaSession()
+        val sessionPlayer = MpvMediaSessionPlayer(
+            snapshotProvider = ::mpvMediaSessionSnapshot,
+            commandTarget = object : MpvMediaSessionCommandTarget {
+                override fun setPlayWhenReady(playWhenReady: Boolean) {
+                    if (!isUsingMpvEngine() || isInBackground) return
+                    if (isPlaybackCurrentlyPlaying() != playWhenReady) {
+                        // MediaSession commands should behave like ExoPlayer's session controls:
+                        // change playback without treating the button press as an in-player gesture.
+                        onEvent(PlayerEvent.OnPlayPause, showPlaybackControls = false)
+                    }
+                }
+
+                override fun seekTo(positionMs: Long) {
+                    if (!isUsingMpvEngine() || isInBackground) return
+                    onEvent(PlayerEvent.OnSeekTo(positionMs))
                 }
             }
-
-            override fun seekTo(positionMs: Long) {
-                if (!isUsingMpvEngine() || isInBackground) return
-                onEvent(PlayerEvent.OnSeekTo(positionMs))
-            }
-        }
-    )
-    mpvMediaSessionPlayer = sessionPlayer
-    currentMediaSession = MediaSession.Builder(context, sessionPlayer).build()
-    updateMediaSessionMetadata()
+        )
+        mpvMediaSessionPlayer = sessionPlayer
+        currentMediaSession = MediaSession.Builder(context, sessionPlayer).build()
+        updateMediaSessionMetadata()
+    }.onFailure { error ->
+        releaseMediaSession()
+        Log.w(PlayerRuntimeController.TAG, "Failed to install MPV MediaSession", error)
+    }
 }
 
 internal fun PlayerRuntimeController.refreshMpvMediaSession() {
