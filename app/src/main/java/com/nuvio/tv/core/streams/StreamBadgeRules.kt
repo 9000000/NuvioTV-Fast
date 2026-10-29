@@ -198,6 +198,8 @@ internal object StreamBadgeRulesParser {
 }
 
 internal object StreamBadgeMatcher {
+    private val WHITESPACE_PATTERN = Regex("\\s+")
+
     fun compile(rules: StreamBadgeRules): List<CompiledStreamBadgeFilter> {
         if (!rules.hasImport) return emptyList()
         return rules.normalized().imports.filter { it.isActive }.flatMap { import ->
@@ -263,15 +265,68 @@ internal object StreamBadgeMatcher {
     fun matchedBadges(candidates: List<String>, filters: List<CompiledStreamBadgeFilter>): List<StreamBadge> {
         if (filters.isEmpty() || candidates.isEmpty()) return emptyList()
 
+        val normalized = candidates.map { it.replace(WHITESPACE_PATTERN, " ") }
         val matched = linkedMapOf<String, StreamBadge>()
         // Reuse a single Matcher instance per filter across all candidates.
         filters.forEach { filter ->
-            if (matchesAnyCandidateReusable(filter, candidates)) {
+            if (matchesAnyCandidateReusable(filter, normalized)) {
                 val key = filter.badge.dedupeKey()
                 if (key !in matched) matched[key] = filter.badge
             }
         }
         return matched.values.toList()
+    }
+
+    /**
+     * Two-phase badge matching for the player:
+     * 1. Match all filters against [playbackCandidate] (decoder truth) and collect which
+     *    groups got a hit.
+     * 2. Match remaining filters against [metaCandidates] (filename/stream name), skipping
+     *    groups that already matched in phase 1.
+     *
+     * This prevents false badges from filename metadata (e.g. languages or resolution from
+     * a multi-track file) while still allowing release-type badges that the decoder can't
+     * report (WebDL, Remux, etc.).
+     */
+    fun matchedPlayerBadges(
+        playbackCandidate: String?,
+        metaCandidates: List<String>,
+        filters: List<CompiledStreamBadgeFilter>
+    ): List<StreamBadge> {
+        if (filters.isEmpty()) return emptyList()
+        val matched = linkedMapOf<String, StreamBadge>()
+        fun collect(badge: StreamBadge) {
+            val key = badge.dedupeKey()
+            if (key !in matched) matched[key] = badge
+        }
+        // Phase 1: decoder truth.
+        val groupsMatchedByPlayback = mutableSetOf<String>()
+        if (playbackCandidate != null) {
+            val normalized = playbackCandidate.replace(WHITESPACE_PATTERN, " ")
+            for (filter in filters) {
+                if (matchesCandidateReusable(filter, normalized)) {
+                    collect(filter.badge)
+                    if (filter.groupId.isNotBlank()) groupsMatchedByPlayback += filter.groupId
+                }
+            }
+        }
+        // Phase 2: filename/stream name, skipping groups already covered by the decoder.
+        if (metaCandidates.isNotEmpty()) {
+            val metaFilters = if (groupsMatchedByPlayback.isEmpty()) {
+                filters
+            } else {
+                filters.filter { it.groupId.isBlank() || it.groupId !in groupsMatchedByPlayback }
+            }
+            if (metaFilters.isNotEmpty()) {
+                for (badge in matchedBadges(metaCandidates, metaFilters)) {
+                    collect(badge)
+                }
+            }
+        }
+        // Restore the pack's filter order so PlayerBadges (which truncates from the right)
+        // does not push a high-priority badge to the end just because it matched in phase 2.
+        val filterOrder = filters.withIndex().associate { (i, f) -> f.badge.dedupeKey() to i }
+        return matched.values.sortedBy { filterOrder[it.dedupeKey()] ?: Int.MAX_VALUE }
     }
 
     fun matchedBadgesPooled(
@@ -316,6 +371,17 @@ internal object StreamBadgeMatcher {
             firstMatch != null -> listOf(firstMatch!!)
             else -> emptyList()
         }
+    }
+
+    private fun matchesCandidateReusable(
+        filter: CompiledStreamBadgeFilter,
+        candidate: String
+    ): Boolean {
+        val hint = filter.literalHint
+        if (hint != null && !containsIgnoreCase(candidate, hint)) return false
+        val matcher = filter.threadLocalMatcher.get() ?: return false
+        matcher.reset(candidate)
+        return matcher.find()
     }
 
     private fun matchesAnyCandidateReusable(
@@ -378,7 +444,7 @@ internal object StreamBadgeMatcher {
             parsed?.group,
             stream.addonName
         )
-            .map { it.trim() }
+            .map { it.replace(WHITESPACE_PATTERN, " ").trim() }
             .filter { it.isNotBlank() }
             .distinct()
 

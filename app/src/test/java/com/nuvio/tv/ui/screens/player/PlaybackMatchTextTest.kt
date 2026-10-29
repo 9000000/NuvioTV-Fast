@@ -4,6 +4,8 @@ import com.nuvio.tv.core.streams.StreamBadgeFilter
 import com.nuvio.tv.core.streams.StreamBadgeImport
 import com.nuvio.tv.core.streams.StreamBadgeMatcher
 import com.nuvio.tv.core.streams.StreamBadgeRules
+import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -92,32 +94,72 @@ class PlaybackMatchTextTest {
 
     @Test
     fun `DTS-HD MA not triggered by German label`() {
-        val info = PlayerMediaInfo(
-            audioCodec = "DTS-HD",
-            audioProfiles = listOf("DTS-HD"),
-            audioChannels = 8
-        )
-        val text = playbackMatchText(info, listOf("ger", "German"))
-        assertFalse("DTS-HD MA should not appear for German DTS-HD HRA", text.contains("DTS-HD MA"))
-        assertTrue("DTS-HD should still appear", text.contains("DTS-HD"))
+        // Real ExoPlayer input: DTS-HD HRA track with German label.
+        // Before fix: "German" contains "ma", producing a false DTS-HD MA profile.
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.AUDIO_DTS_HD)
+            .setLabel("German DTS-HD HRA 7.1")
+            .build()
+        val profiles = exoAudioProfiles(format)
+        assertFalse("DTS-HD MA should not appear for German DTS-HD HRA", profiles.contains("DTS-HD MA"))
+        assertTrue("DTS-HD should appear", profiles.contains("DTS-HD"))
+    }
+
+    @Test
+    fun `DTS-HD Master Audio label produces MA profile`() {
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.AUDIO_DTS_HD)
+            .setLabel("English DTS-HD Master Audio 7.1")
+            .build()
+        val profiles = exoAudioProfiles(format)
+        assertTrue("DTS-HD MA should appear for Master Audio label", profiles.contains("DTS-HD MA"))
     }
 
     @Test
     fun `DTS-HD MA and DTS-X both appear`() {
-        val info = PlayerMediaInfo(
-            audioCodec = "DTS",
-            audioProfiles = listOf("DTS-HD MA", "DTS:X"),
-            audioChannels = 8
-        )
-        val text = playbackMatchText(info, emptyList())
-        assertTrue("DTS-HD MA should appear", text.contains("DTS-HD MA"))
-        assertTrue("DTS:X should appear", text.contains("DTS:X"))
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.AUDIO_DTS_HD)
+            .setLabel("DTS-HD MA DTS:X 7.1")
+            .build()
+        val profiles = exoAudioProfiles(format)
+        assertTrue("DTS-HD MA should appear", profiles.contains("DTS-HD MA"))
+        assertTrue("DTS:X should appear", profiles.contains("DTS:X"))
     }
 
     @Test
-    fun `PCM variants map to PCM`() {
-        val info = PlayerMediaInfo(audioCodec = "PCM")
-        val text = playbackMatchText(info, emptyList())
-        assertTrue(text.contains("PCM"))
+    fun `pcm_s24le maps to PCM via mpv`() {
+        val info = mpvMediaInfo { name ->
+            when (name) {
+                "current-tracks/audio/codec" -> "pcm_s24le"
+                else -> null
+            }
+        }
+        assertEquals("PCM", info.audioCodec)
+    }
+
+    @Test
+    fun `group exclusion skips filename language when decoder matches`() {
+        val langGroup = "Language"
+        val sourceGroup = "Source"
+        val playerFilters = StreamBadgeMatcher.compile(
+            StreamBadgeRules(
+                imports = listOf(
+                    StreamBadgeImport(
+                        sourceUrl = "https://example.com/badges.json",
+                        filters = listOf(
+                            StreamBadgeFilter(name = "English", pattern = "(?i)\\benglish\\b", imageURL = "eng.png", groupId = langGroup),
+                            StreamBadgeFilter(name = "Polish", pattern = "(?i)\\bpol\\b", imageURL = "pol.png", groupId = langGroup),
+                            StreamBadgeFilter(name = "WebDL", pattern = "(?i)\\bweb[-.]?dl\\b", imageURL = "webdl.png", groupId = sourceGroup)
+                        )
+                    )
+                )
+            )
+        )
+        val playback = "DD+ 5.1 English"
+        val filename = listOf("Movie.POL.ENG.WebDL.mkv")
+        val badges = StreamBadgeMatcher.matchedPlayerBadges(playback, filename, playerFilters).map { it.name }
+        assertTrue("English should appear (decoder match)", "English" in badges)
+        assertFalse("Polish should NOT appear (group covered by decoder)", "Polish" in badges)
+        assertTrue("WebDL should appear (different group)", "WebDL" in badges)
     }
 }

@@ -28,7 +28,6 @@ private fun videoCodecTokens(codec: String?): List<String> = when (codec?.upperc
     null -> emptyList()
     "HEVC" -> listOf("HEVC", "H.265", "H265", "x265")
     "AVC" -> listOf("AVC", "H.264", "H264", "x264")
-    "DOLBY VISION" -> listOf("HEVC", "H.265", "H265", "x265") // HEVC-based DV (profile 5/7/8); AV1-based DV resolves as "AV1"
     else -> listOf(codec)
 }
 
@@ -58,4 +57,32 @@ private fun channelsToken(channels: Int?): String? = when (channels) {
     6 -> "5.1"
     8 -> "7.1"
     else -> null
+}
+
+/**
+ * Refine the decoder-derived playback text with details the decoder cannot report
+ * but that the filename or track label can confirm. Only adds tokens when the decoder
+ * already confirms the base format (e.g. Atmos is only added when E-AC-3 or TrueHD
+ * is already playing).
+ */
+internal fun refinePlaybackText(decoderText: String, metadata: List<String>): String {
+    if (decoderText.isBlank() || metadata.isEmpty()) return decoderText
+    val joined = metadata.joinToString(" ") { it.replace(Regex("\\s+"), " ") }
+    val metaLower = joined.lowercase()
+    val extra = mutableListOf<String>()
+    val hasEac3OrTruehd = decoderText.contains("DD+") || decoderText.contains("DDP")
+        || decoderText.contains("EAC3") || decoderText.contains("TrueHD")
+    if (hasEac3OrTruehd && !decoderText.contains("Atmos") && metaLower.contains("atmos")) {
+        extra += "Atmos"
+    }
+    val hasDtsHd = decoderText.contains("DTS-HD") && !decoderText.contains("DTS-HD MA")
+    if (hasDtsHd && Regex("""\b(ma|master audio)\b""", RegexOption.IGNORE_CASE).containsMatchIn(joined)) {
+        extra += "DTS-HD MA"
+    }
+    if (decoderText.contains("HDR10") && !decoderText.contains("HDR10+")
+        && Regex("\\bhdr10\\+", RegexOption.IGNORE_CASE).containsMatchIn(joined)) {
+        extra += "HDR10+"
+    }
+    if (extra.isEmpty()) return decoderText
+    return "$decoderText ${extra.joinToString(" ")}"
 }
