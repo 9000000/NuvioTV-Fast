@@ -47,7 +47,7 @@ class CustomDefaultTrackNameProvider(resources: Resources) : DefaultTrackNamePro
                 MimeTypes.AUDIO_DTS -> "DTS"
                 MimeTypes.AUDIO_DTS_HD -> "DTS-HD"
                 MimeTypes.AUDIO_DTS_EXPRESS -> "DTS Express"
-                MimeTypes.AUDIO_DTS_UHD_P2 -> "DTS:X"
+                "audio/vnd.dts.uhd;profile=p2" -> "DTS:X"
                 MimeTypes.AUDIO_TRUEHD -> "TrueHD"
                 MimeTypes.AUDIO_AC3 -> "AC-3"
                 MimeTypes.AUDIO_E_AC3 -> "E-AC-3"

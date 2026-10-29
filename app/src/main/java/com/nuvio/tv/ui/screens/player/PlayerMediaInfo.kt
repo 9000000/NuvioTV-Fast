@@ -62,7 +62,7 @@ private fun exoAudioProfiles(audio: Format?): List<String> {
     return buildList {
         if (combined.contains("atmos") || mime == MimeTypes.AUDIO_E_AC3_JOC.lowercase()) add("Atmos")
         if (combined.contains("dts:x") || combined.contains("dtsx")
-            || mime == MimeTypes.AUDIO_DTS_UHD_P2) add("DTS:X")
+            || mime == "audio/vnd.dts.uhd;profile=p2") add("DTS:X")
         if ((combined.contains("dts-hd") || codecs.startsWith("dtsh") || codecs.startsWith("dtsl"))
             && Regex("\\bma\\b", RegexOption.IGNORE_CASE).containsMatchIn(combined)) add("DTS-HD MA")
         else if (combined.contains("dts-hd") || codecs.startsWith("dtsh") || codecs.startsWith("dtsl")) add("DTS-HD")
