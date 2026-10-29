@@ -174,7 +174,8 @@ private fun PlayerRuntimeController.mpvMediaSessionSnapshot(): MpvMediaSessionSn
         isPlaying = view?.isPlayingNow() == true,
         isBuffering = _uiState.value.isBuffering,
         isEnded = _uiState.value.playbackEnded,
-        isSeekable = view?.isLiveStreamNow() != true,
+        // External seek controls must also respect the app's live-content policy.
+        isSeekable = !_playbackTimeline.value.isLive && view?.isLiveStreamNow() != true,
         speed = _uiState.value.playbackSpeed,
     )
 }
