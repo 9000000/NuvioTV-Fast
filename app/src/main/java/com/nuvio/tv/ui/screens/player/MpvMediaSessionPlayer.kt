@@ -99,13 +99,11 @@ internal class MpvMediaSessionPlayer(
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<Void> {
         commandTarget.setPlayWhenReady(playWhenReady)
-        refresh()
         return immediateVoidFuture()
     }
 
     override fun handleSeek(mediaItemIndex: Int, positionMs: Long, command: Int): ListenableFuture<Void> {
         if (mediaItemIndex == 0) commandTarget.seekTo(positionMs.coerceAtLeast(0L))
-        refresh()
         return immediateVoidFuture()
     }
 
