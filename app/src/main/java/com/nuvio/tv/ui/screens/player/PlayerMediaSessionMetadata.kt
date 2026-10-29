@@ -155,7 +155,8 @@ private fun PlayerRuntimeController.mpvMediaSessionSnapshot(): MpvMediaSessionSn
     val durationMs = view?.durationMs()?.coerceAtLeast(0L) ?: 0L
     val bufferedPositionMs = positionMs + ((view?.demuxerCacheDurationSec() ?: 0.0) * 1_000.0).toLong()
     val metadata = buildMediaSessionMetadata()
-    val mediaId = currentFilename?.takeIf { it.isNotBlank() } ?: currentStreamUrl
+    // Match ExoPlayer's default ID without publishing potentially sensitive stream URLs.
+    val mediaId = currentFilename?.takeIf { it.isNotBlank() } ?: MediaItem.DEFAULT_MEDIA_ID
     return MpvMediaSessionSnapshot(
         mediaId = mediaId,
         mediaItem = MediaItem.Builder()
