@@ -59,7 +59,7 @@ class PlaybackMatchTextTest {
 
     @Test
     fun `reads atmos from mpv audio profile`() {
-        val info = PlayerMediaInfo(audioCodec = "TrueHD", audioProfile = "Dolby TrueHD + Dolby Atmos")
+        val info = PlayerMediaInfo(audioCodec = "TrueHD", audioProfiles = listOf("Dolby TrueHD + Dolby Atmos"))
         assertEquals(listOf("Atmos"), matchedNames(info))
     }
 
@@ -86,5 +86,36 @@ class PlaybackMatchTextTest {
     @Test
     fun `shows nothing before playback info loads`() {
         assertEquals(emptyList<String>(), matchedNames(PlayerMediaInfo()))
+    }
+
+    @Test
+    fun `DTS-HD MA not triggered by German label`() {
+        val info = PlayerMediaInfo(
+            audioCodec = "DTS-HD",
+            audioProfiles = listOf("DTS-HD"),
+            audioChannels = 8
+        )
+        val text = playbackMatchText(info, listOf("ger", "German"))
+        assertEquals(false, text.contains("DTS-HD MA"), "DTS-HD MA should not appear for German DTS-HD HRA")
+        assertEquals(true, text.contains("DTS-HD"), "DTS-HD should still appear")
+    }
+
+    @Test
+    fun `DTS-HD MA and DTS-X both appear`() {
+        val info = PlayerMediaInfo(
+            audioCodec = "DTS",
+            audioProfiles = listOf("DTS-HD MA", "DTS:X"),
+            audioChannels = 8
+        )
+        val text = playbackMatchText(info, emptyList())
+        assertEquals(true, text.contains("DTS-HD MA"), "DTS-HD MA should appear")
+        assertEquals(true, text.contains("DTS:X"), "DTS:X should appear")
+    }
+
+    @Test
+    fun `PCM variants map to PCM`() {
+        val info = PlayerMediaInfo(audioCodec = "PCM")
+        val text = playbackMatchText(info, emptyList())
+        assertEquals(true, text.contains("PCM"))
     }
 }

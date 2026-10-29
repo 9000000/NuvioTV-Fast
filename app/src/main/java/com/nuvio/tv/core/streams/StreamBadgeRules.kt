@@ -222,7 +222,8 @@ internal object StreamBadgeMatcher {
                     // Extract a short literal hint from the pattern for fast pre-screening.
                     // If the candidate doesn't contain this literal (case-insensitive),
                     // we skip the expensive regex entirely.
-                    literalHint = extractLiteralHint(filter.pattern)
+                    literalHint = extractLiteralHint(filter.pattern),
+                    groupId = filter.groupId
                 )
             }
         }
@@ -393,7 +394,8 @@ class CompiledStreamBadgeFilter(
     val name: String,
     val badge: StreamBadge,
     val pattern: Pattern,
-    val literalHint: String?
+    val literalHint: String?,
+    val groupId: String = ""
 ) {
     /**
      * Per-thread reusable Matcher. [Matcher.reset] is called before each use

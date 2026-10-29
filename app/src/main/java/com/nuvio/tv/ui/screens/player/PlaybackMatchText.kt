@@ -7,7 +7,7 @@ internal fun playbackMatchText(info: PlayerMediaInfo, languages: List<String>): 
     if ("HDR10" in info.hdr) addAll(listOf("HDR", "HDR10"))
     if ("HLG" in info.hdr) addAll(listOf("HDR", "HLG"))
     (info.bitDepth ?: 10.takeIf { info.hdr.isNotEmpty() })?.let { add("${it}bit") }
-    addAll(audioTokens(info.audioCodec, info.audioProfile))
+    addAll(audioTokens(info.audioCodec, info.audioProfiles))
     channelsToken(info.audioChannels)?.let(::add)
     addAll(languages)
 }.distinct().joinToString(" ")
@@ -26,14 +26,15 @@ private fun resolutionTokens(info: PlayerMediaInfo): List<String> {
 
 private fun videoCodecTokens(codec: String?): List<String> = when (codec?.uppercase()) {
     null -> emptyList()
-    "HEVC", "DOLBY VISION" -> listOf("HEVC", "H.265", "H265", "x265")
+    "HEVC" -> listOf("HEVC", "H.265", "H265", "x265")
     "AVC" -> listOf("AVC", "H.264", "H264", "x264")
+    "DOLBY VISION" -> listOf("HEVC", "H.265", "H265", "x265") // HEVC-based DV (profile 5/7/8); AV1-based DV resolves as "AV1"
     else -> listOf(codec)
 }
 
-private fun audioTokens(codec: String?, profile: String?): List<String> {
+private fun audioTokens(codec: String?, profiles: List<String>): List<String> {
     val label = codec?.uppercase() ?: return emptyList()
-    val profileLabel = profile.orEmpty().uppercase()
+    val profileLabels = profiles.map { it.uppercase() }
     return buildList {
         when {
             label.startsWith("E-AC-3") -> addAll(listOf("DD+", "DDP", "EAC3"))
@@ -41,13 +42,13 @@ private fun audioTokens(codec: String?, profile: String?): List<String> {
             label == "AC-4" -> addAll(listOf("AC-4", "AC4"))
             label.startsWith("DTS") -> {
                 add("DTS")
-                if (label.contains("HD") || profileLabel.contains("DTS-HD")) add("DTS-HD")
-                if (profileLabel.contains("MA")) add("DTS-HD MA")
-                if (profileLabel.contains("DTS:X")) add("DTS:X")
+                if (label.contains("HD") || profileLabels.any { it.contains("DTS-HD") }) add("DTS-HD")
+                if (profileLabels.any { it.contains("MA") }) add("DTS-HD MA")
+                if (profileLabels.any { it.contains("DTS:X") }) add("DTS:X")
             }
             else -> add(codec)
         }
-        if (label.endsWith("JOC") || profileLabel.contains("ATMOS")) add("Atmos")
+        if (label.endsWith("JOC") || profileLabels.any { it.contains("ATMOS") }) add("Atmos")
     }
 }
 

@@ -9,7 +9,7 @@ data class PlayerMediaInfo(
     val videoWidth: Int? = null,
     val videoHeight: Int? = null,
     val audioCodec: String? = null,
-    val audioProfile: String? = null,
+    val audioProfiles: List<String> = emptyList(),
     val audioChannels: Int? = null,
     val hdr: List<String> = emptyList(),
     val bitDepth: Int? = null
@@ -28,7 +28,7 @@ internal fun mpvMediaInfo(property: (String) -> String?): PlayerMediaInfo =
         videoWidth = property("video-params/w")?.toIntOrNull()?.takeIf { it > 0 },
         videoHeight = property("video-params/h")?.toIntOrNull()?.takeIf { it > 0 },
         audioCodec = property("current-tracks/audio/codec")?.let(::mpvCodecLabel),
-        audioProfile = property("current-tracks/audio/codec-profile"),
+        audioProfiles = listOfNotNull(property("current-tracks/audio/codec-profile")),
         audioChannels = property("audio-params/channel-count")?.toIntOrNull()?.takeIf { it > 0 },
         hdr = buildList {
             if (!property("current-tracks/video/dolby-vision-profile").isNullOrBlank()) add("DV")
@@ -43,27 +43,29 @@ internal fun mpvMediaInfo(property: (String) -> String?): PlayerMediaInfo =
 private fun exoMediaInfo(video: Format?, audio: Format?): PlayerMediaInfo =
     PlayerMediaInfo(
         videoCodec = CustomDefaultTrackNameProvider.formatNameFromMime(video?.sampleMimeType)
-            ?: CustomDefaultTrackNameProvider.formatNameFromMime(video?.codecs),
+            ?: video?.codecs?.let { MimeTypes.getVideoMediaMimeType(it) }?.let(CustomDefaultTrackNameProvider::formatNameFromMime),
         videoWidth = video?.width?.takeIf { it > 0 },
         videoHeight = video?.height?.takeIf { it > 0 },
         audioCodec = CustomDefaultTrackNameProvider.formatNameFromMime(audio?.sampleMimeType),
-        audioProfile = exoAudioProfile(audio),
+        audioProfiles = exoAudioProfiles(audio),
         audioChannels = audio?.channelCount?.takeIf { it > 0 },
         hdr = video?.hdrFormats().orEmpty(),
         bitDepth = video?.exoBitDepth()
     )
 
-private fun exoAudioProfile(audio: Format?): String? {
-    if (audio == null) return null
+private fun exoAudioProfiles(audio: Format?): List<String> {
+    if (audio == null) return emptyList()
+    val mime = audio.sampleMimeType.orEmpty().lowercase()
     val codecs = audio.codecs.orEmpty().lowercase()
     val label = audio.label.orEmpty().lowercase()
     val combined = "$codecs $label"
-    return when {
-        combined.contains("atmos") || codecs.contains("joc") -> "Atmos"
-        combined.contains("dts:x") || combined.contains("dtsx") -> "DTS:X"
-        combined.contains("dts-hd") && combined.contains("ma") -> "DTS-HD MA"
-        combined.contains("dts-hd") || combined.contains("dtshd") -> "DTS-HD"
-        else -> null
+    return buildList {
+        if (combined.contains("atmos") || mime == MimeTypes.AUDIO_E_AC3_JOC.lowercase()) add("Atmos")
+        if (combined.contains("dts:x") || combined.contains("dtsx")
+            || mime == MimeTypes.AUDIO_DTS_UHD_P2) add("DTS:X")
+        if ((combined.contains("dts-hd") || codecs.startsWith("dtsh") || codecs.startsWith("dtsl"))
+            && Regex("\\bma\\b", RegexOption.IGNORE_CASE).containsMatchIn(combined)) add("DTS-HD MA")
+        else if (combined.contains("dts-hd") || codecs.startsWith("dtsh") || codecs.startsWith("dtsl")) add("DTS-HD")
     }
 }
 
@@ -72,6 +74,7 @@ private fun Format.hdrFormats(): List<String> = buildList {
     // Dolby Vision: mime type or codecs string (dual-layer DV has HEVC mime but dvhe/dav1 codecs)
     if (sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION
         || lowerCodecs.contains("dvhe") || lowerCodecs.contains("dvh1")
+        || lowerCodecs.contains("dvav")
         || lowerCodecs.contains("dav1") || lowerCodecs.contains("dva1")
     ) {
         add("DV")
@@ -91,7 +94,8 @@ private fun Format.exoBitDepth(): Int? {
     val c = codecs.orEmpty().lowercase()
     return when {
         c.startsWith("hev1.2.") || c.startsWith("hvc1.2.") -> 10
-        c.contains("dvhe") || c.contains("dvh1") -> 10 // DV is always 10-bit
+        c.contains("dvhe") || c.contains("dvh1") || c.contains("dvav")
+            || c.contains("dav1") || c.contains("dva1") -> 10 // DV is always 10-bit
         else -> null
     }
 }
@@ -103,7 +107,7 @@ private fun mpvBitDepth(pixelFormat: String): Int? = when {
 }
 
 private fun mpvCodecLabel(codec: String): String? =
-    when (codec.trim().lowercase()) {
+    when (val c = codec.trim().lowercase()) {
         "" -> null
         "h264" -> "AVC"
         "ac3" -> "AC-3"
@@ -111,11 +115,9 @@ private fun mpvCodecLabel(codec: String): String? =
         "truehd" -> "TrueHD"
         "opus" -> "Opus"
         "vorbis" -> "Vorbis"
-        "aac" -> "AAC"
-        "mp3" -> "MP3"
-        "flac" -> "FLAC"
-        "alac" -> "ALAC"
-        "pcm" -> "PCM"
         "dts" -> "DTS"
-        else -> codec.trim().uppercase()
+        else -> when {
+            c.startsWith("pcm") -> "PCM"
+            else -> codec.trim().uppercase()
+        }
     }
