@@ -5,6 +5,8 @@ import com.nuvio.tv.core.streams.StreamBadgeImport
 import com.nuvio.tv.core.streams.StreamBadgeMatcher
 import com.nuvio.tv.core.streams.StreamBadgeRules
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaybackMatchTextTest {
@@ -96,8 +98,8 @@ class PlaybackMatchTextTest {
             audioChannels = 8
         )
         val text = playbackMatchText(info, listOf("ger", "German"))
-        assertEquals(false, text.contains("DTS-HD MA"), "DTS-HD MA should not appear for German DTS-HD HRA")
-        assertEquals(true, text.contains("DTS-HD"), "DTS-HD should still appear")
+        assertFalse("DTS-HD MA should not appear for German DTS-HD HRA", text.contains("DTS-HD MA"))
+        assertTrue("DTS-HD should still appear", text.contains("DTS-HD"))
     }
 
     @Test
@@ -108,14 +110,14 @@ class PlaybackMatchTextTest {
             audioChannels = 8
         )
         val text = playbackMatchText(info, emptyList())
-        assertEquals(true, text.contains("DTS-HD MA"), "DTS-HD MA should appear")
-        assertEquals(true, text.contains("DTS:X"), "DTS:X should appear")
+        assertTrue("DTS-HD MA should appear", text.contains("DTS-HD MA"))
+        assertTrue("DTS:X should appear", text.contains("DTS:X"))
     }
 
     @Test
     fun `PCM variants map to PCM`() {
         val info = PlayerMediaInfo(audioCodec = "PCM")
         val text = playbackMatchText(info, emptyList())
-        assertEquals(true, text.contains("PCM"))
+        assertTrue(text.contains("PCM"))
     }
 }
