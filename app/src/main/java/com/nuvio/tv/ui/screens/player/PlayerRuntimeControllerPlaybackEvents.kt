@@ -1447,10 +1447,12 @@ fun PlayerRuntimeController.onEvent(
             updatePlaybackTimeline(currentPosition = target)
             scheduleProgressSyncAfterSeek()
             publishPartyPlayback(positionMs = target)
-            if (_uiState.value.showControls) {
-                showControlsTemporarily()
-            } else {
-                showSeekOverlayTemporarily()
+            if (showPlaybackControls) {
+                if (_uiState.value.showControls) {
+                    showControlsTemporarily()
+                } else {
+                    showSeekOverlayTemporarily()
+                }
             }
         }
         is PlayerEvent.OnSkipChapter -> {

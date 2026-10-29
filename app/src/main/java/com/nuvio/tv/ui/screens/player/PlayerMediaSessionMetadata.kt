@@ -137,7 +137,7 @@ internal fun PlayerRuntimeController.installMpvMediaSession() {
 
                 override fun seekTo(positionMs: Long) {
                     if (!isUsingMpvEngine() || isInBackground) return
-                    onEvent(PlayerEvent.OnSeekTo(positionMs))
+                    onEvent(PlayerEvent.OnSeekTo(positionMs), showPlaybackControls = false)
                 }
             }
         )
