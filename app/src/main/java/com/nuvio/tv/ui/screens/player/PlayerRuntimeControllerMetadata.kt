@@ -4,6 +4,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.AutoSkipSegmentType
 import com.nuvio.tv.data.repository.SkipInterval
+import com.nuvio.tv.data.repository.segmentCategory
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Stream
@@ -479,7 +480,8 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
     if (active != null) {
         val targetsPostCredits = active.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs()) != null
         if (currentActive != active || targetsPostCredits != _uiState.value.activeSkipTargetsPostCredits) {
-            val keepDismissed = currentActive != null && currentActive.type == active.type
+            val keepDismissed = currentActive != null &&
+                segmentCategory(currentActive.type) == segmentCategory(active.type)
             lastActiveSkipType = active.type
             _uiState.update { it.copy(
                 activeSkipInterval = active,
@@ -504,7 +506,7 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
         // later start time. The 2s tolerance covers the typical 1s "Scene 1" -> "Recap" gap.
         val positionSec = positionMs / 1000.0
         val replacement = skipIntervals.firstOrNull {
-            it.type == currentActive.type &&
+            segmentCategory(it.type) == segmentCategory(currentActive.type) &&
                 positionSec < it.startTime &&
                 it.startTime - positionSec <= 2.0
         }
