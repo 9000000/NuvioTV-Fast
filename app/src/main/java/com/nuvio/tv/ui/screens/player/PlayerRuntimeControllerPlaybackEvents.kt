@@ -2086,8 +2086,7 @@ internal fun PlayerRuntimeController.buildStreamInfoData(): StreamInfoData {
     val videoHeight = matchedFormat?.height?.takeIf { it > 0 } ?: activeVideoFormat?.height?.takeIf { it > 0 } ?: currentVideoHeight
     val videoBitrate = activeVideoFormat?.bitrate?.takeIf { it > 0 } ?: currentVideoBitrate
     val videoCodec = activeVideoFormat?.let { format ->
-        CustomDefaultTrackNameProvider.formatNameFromMime(format.sampleMimeType)
-            ?: CustomDefaultTrackNameProvider.formatNameFromMime(format.codecs)
+        CustomDefaultTrackNameProvider.resolveCodecName(format.sampleMimeType, format.codecs)
     } ?: currentVideoCodec
 
     return StreamInfoData(
