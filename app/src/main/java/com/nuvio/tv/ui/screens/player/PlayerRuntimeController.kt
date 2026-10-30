@@ -528,6 +528,10 @@ class PlayerRuntimeController(
     internal var backgroundCrashSavedPositionMs: Long = 0L
 
     internal var skipIntervals: List<SkipInterval> = emptyList()
+    internal var chapterSkipIntervals: List<SkipInterval> = emptyList()
+    internal var apiSkipIntervals: List<SkipInterval> = emptyList()
+    internal var skipDetectionChapters: List<PlayerChapter> = emptyList()
+    internal var skipChaptersComputedForDuration: Long = 0L
     internal var skipIntroEnabled: Boolean = true
     internal var parentalGuideEnabled: Boolean = false
     internal var autoSkipSegmentTypes: Set<AutoSkipSegmentType> = emptySet()
