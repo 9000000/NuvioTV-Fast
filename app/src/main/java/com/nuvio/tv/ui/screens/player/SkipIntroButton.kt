@@ -89,7 +89,7 @@ fun SkipIntroButton(
     val progress = remember { Animatable(1f) }
 
     // Reset auto-hide and progress when interval changes
-    LaunchedEffect(interval?.startTime, interval?.type) {
+    LaunchedEffect(interval?.type) {
         autoHidden = false
         manuallyDismissed = false
         progress.snapTo(0f)
