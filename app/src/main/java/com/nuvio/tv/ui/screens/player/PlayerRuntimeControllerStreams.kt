@@ -283,7 +283,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                             filteredStreams
                         }
                         it.copy(
-                            isLoadingSourceStreams = false,
+                            isLoadingSourceStreams = true,
                             sourceAllStreams = badgePreserved,
                             sourceFilteredStreams = paginatedStreams,
                             sourceAvailableAddons = mergedAvailableAddons,
@@ -319,6 +319,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
             }
         }
         sourceStreamsFetchCompleted = true
+        _uiState.update { it.copy(isLoadingSourceStreams = false) }
         markRemainingSourceChipsAsError()
     }
 }
