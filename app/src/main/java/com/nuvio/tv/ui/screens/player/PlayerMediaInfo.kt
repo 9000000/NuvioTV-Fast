@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.player
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
 
 data class PlayerMediaInfo(
     val videoCodec: String? = null,
@@ -71,6 +72,7 @@ private fun exoVideoCodec(video: Format?): String? {
 
 private val DTS_HD_MA_LABEL = Regex("""\b(ma|master audio)\b""")
 
+@OptIn(UnstableApi::class)
 internal fun exoAudioProfiles(audio: Format?): List<String> {
     if (audio == null) return emptyList()
     val mime = audio.sampleMimeType.orEmpty().lowercase()
@@ -80,7 +82,7 @@ internal fun exoAudioProfiles(audio: Format?): List<String> {
     return buildList {
         if (combined.contains("atmos")) add("Atmos")
         if (combined.contains("dts:x") || combined.contains("dtsx")
-            || mime == "audio/vnd.dts.uhd;profile=p2") add("DTS:X")
+            || mime == MimeTypes.AUDIO_DTS_X) add("DTS:X")
         val isDtsHd = combined.contains("dts-hd") || combined.contains("dtshd")
             || codecs.startsWith("dtsh") || codecs.startsWith("dtsl")
         if (codecs.startsWith("dtsl") || (isDtsHd && DTS_HD_MA_LABEL.containsMatchIn(combined))) add("DTS-HD MA")

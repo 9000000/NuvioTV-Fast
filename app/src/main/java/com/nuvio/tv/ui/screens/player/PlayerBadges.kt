@@ -40,8 +40,8 @@ internal fun rememberPlayerBadges(viewModel: PlayerViewModel, uiState: PlayerUiS
     // Keep candidates separate so regex lookaheads in one don't bleed into another.
     // Collapse whitespace so \n in stream names doesn't break single-line regex patterns.
     val metaCandidates = listOfNotNull(
-        streamFilename?.collapseWhitespace(),
-        uiState.currentStreamName?.collapseWhitespace()
+        streamFilename?.trim()?.takeIf { it.isNotBlank() },
+        uiState.currentStreamName?.trim()?.takeIf { it.isNotBlank() }
     )
     // Refine decoder text with details the decoder can't report (Atmos in MKV, DTS-HD MA vs HRA,
     // HDR10+) before group exclusion runs, so those badges aren't lost.
@@ -51,11 +51,6 @@ internal fun rememberPlayerBadges(viewModel: PlayerViewModel, uiState: PlayerUiS
             .filter { it.imageURL.isNotBlank() }
     }
 }
-
-private val WHITESPACE = Regex("\\s+")
-
-private fun String.collapseWhitespace(): String? =
-    replace(WHITESPACE, " ").trim().takeIf { it.isNotBlank() }
 
 @Composable
 internal fun PlayerBadges(

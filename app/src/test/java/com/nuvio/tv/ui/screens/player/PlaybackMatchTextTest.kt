@@ -162,4 +162,48 @@ class PlaybackMatchTextTest {
         assertFalse("Polish should NOT appear (group covered by decoder)", "Polish" in badges)
         assertTrue("WebDL should appear (different group)", "WebDL" in badges)
     }
+
+    @Test
+    fun `refine adds Atmos from filename when decoder has EAC3`() {
+        val decoder = "DD+ DDP EAC3 5.1"
+        val refined = refinePlaybackText(decoder, listOf("Movie.2160p.DDP5.1.Atmos.mkv"))
+        assertTrue("Atmos should be added", refined.contains("Atmos"))
+    }
+
+    @Test
+    fun `refine adds DTS-X from filename when decoder has DTS-HD`() {
+        val decoder = "DTS DTS-HD 7.1"
+        val refined = refinePlaybackText(decoder, listOf("Movie.2160p.DTS-X.mkv"))
+        assertTrue("DTS:X should be added", refined.contains("DTS:X"))
+    }
+
+    @Test
+    fun `refine does not add Atmos without matching base codec`() {
+        val decoder = "AAC 2.0"
+        val refined = refinePlaybackText(decoder, listOf("Movie.Atmos.mkv"))
+        assertFalse("Atmos should NOT be added without EAC3/TrueHD", refined.contains("Atmos"))
+    }
+
+    @Test
+    fun `order restored to pack filter order with shared imageURL`() {
+        val filters = StreamBadgeMatcher.compile(
+            StreamBadgeRules(
+                imports = listOf(
+                    StreamBadgeImport(
+                        sourceUrl = "https://example.com/badges.json",
+                        filters = listOf(
+                            StreamBadgeFilter(name = "Remux", pattern = "(?i)\\bremux\\b", imageURL = "remux.png"),
+                            StreamBadgeFilter(name = "HEVC", pattern = "(?i)\\bhevc\\b", imageURL = "hevc.png"),
+                            StreamBadgeFilter(name = "HEVC-alt", pattern = "(?i)\\bh\\.?265\\b", imageURL = "hevc.png")
+                        )
+                    )
+                )
+            )
+        )
+        // HEVC matches decoder (phase 1), Remux matches filename (phase 2).
+        // Pack order is Remux first, so result should keep Remux before HEVC.
+        val badges = StreamBadgeMatcher.matchedPlayerBadges("HEVC 2160p", listOf("Movie.Remux.mkv"), filters)
+        assertEquals("Remux", badges[0].name)
+        assertEquals("HEVC", badges[1].name)
+    }
 }
