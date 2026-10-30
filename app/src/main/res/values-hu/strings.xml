@@ -919,15 +919,6 @@
     <string name="sub_libass">Libass használata ASS/SSA feliratokhoz</string>
     <string name="sub_libass_sub">Kísérleti: fejlett ASS/SSA-megjelenítés stílusokkal, pozicionálással és animációkkal</string>
     <string name="sub_libass_mode">Libass megjelenítési mód</string>
-    <string name="sub_mode_overlay_gl">OpenGL réteg (Ajánlott)</string>
-    <string name="sub_mode_overlay_gl_sub">A legjobb minőség HDR támogatással. Külön szálon futó megjelenítés.</string>
-    <string name="sub_mode_overlay_canvas">Canvas réteg</string>
-    <string name="sub_mode_effects_gl">OpenGL effektek</string>
-    <string name="sub_mode_effects_gl_sub">Media3 effektekkel támogatott animáció. Gyorsabb, mint a Canvas.</string>
-    <string name="sub_mode_effects_canvas">Canvas effektek</string>
-    <string name="sub_mode_effects_canvas_sub">Media3 effektek animáció-támogatással, Canvas megjelenítéssel.</string>
-    <string name="sub_mode_standard">Standard megjelenítés</string>
-    <string name="sub_mode_standard_sub">Alapszintű megjelenítés animációk nélkül. Legjobb kompatibilitás.</string>
     <string name="sub_org_none">Nincs (alapértelmezett sorrend)</string>
     <string name="sub_org_by_lang">Nyelv szerint</string>
     <string name="sub_org_by_addon">Bővítmény szerint</string>
@@ -1856,7 +1847,6 @@
     <string name="parental_severity_mild">Enyhe</string>
     <string name="player_ends_at">Befejezés: %1$s</string>
     <string name="player_live_watched">ÉLŐ  %1$s</string>
-    <string name="player_via">forrás: %1$s</string>
     <!-- Season/episode code shown in player UI (e.g. S01E02). %1$d = season, %2$d = episode. -->
     <string name="season_episode_format">S%1$d E%2$d</string>
     <string name="player_subtitle_delay">Felirat késleltetése</string>
@@ -2521,7 +2511,6 @@
     <string name="player_error_failed_start_torrent">Nem sikerült elindítani a torrentet: %1$s</string>
 
     <!-- Playback subtitle settings -->
-    <string name="sub_mode_overlay_canvas_sub">HDR támogatás canvas megjelenítéssel. Blokkolhatja a felhasználói felület szálát.</string>
 
     <string name="ratings_season_label">S%1$d</string>
     <string name="ratings_episode_label">E%1$d</string>

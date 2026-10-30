@@ -35,7 +35,7 @@ internal fun PlayerRuntimeController.attachMpvView(view: NuvioMpvSurfaceView?) {
             secondary = _uiState.value.subtitleStyle.secondaryPreferredLanguage
         )
         view.applySubtitleStyle(_uiState.value.effectiveSubtitleStyle)
-        view.setSubtitleDelayMs(_uiState.value.subtitleDelayMs)
+        view.setSubtitleDelayMs(mpvSubtitleDelayMs(_uiState.value.subtitleDelayMs))
         view.applyBluetoothAudioRoute(currentAudioOutputRoute?.isBluetooth == true)
         view.setAudioDelayMs(_uiState.value.audioDelayMs)
         view.applyAspectMode(_uiState.value.aspectMode)
@@ -153,7 +153,7 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
             secondary = _uiState.value.subtitleStyle.secondaryPreferredLanguage
         )
         view.applySubtitleStyle(_uiState.value.effectiveSubtitleStyle)
-        view.setSubtitleDelayMs(_uiState.value.subtitleDelayMs)
+        view.setSubtitleDelayMs(mpvSubtitleDelayMs(_uiState.value.subtitleDelayMs))
         view.applyBluetoothAudioRoute(currentAudioOutputRoute?.isBluetooth == true)
         view.setAudioDelayMs(_uiState.value.audioDelayMs)
         view.applyAspectMode(_uiState.value.aspectMode)
@@ -258,6 +258,34 @@ internal fun PlayerRuntimeController.pauseForLifecycle() {
         player.pause()
     }
 }
+
+/**
+ * Frees the hardware decoder once the app is no longer visible, so the next foreground app gets
+ * it without a forced reclaim. Uses the same release and paused rebuild on resume as a decoder
+ * that was reclaimed while in the background.
+ */
+internal fun PlayerRuntimeController.releaseForBackground() {
+    if (isUsingMpvEngine() || pendingBackgroundCrashRecovery) return
+    val player = _exoPlayer ?: return
+    if (currentStreamUrl.isEmpty()) return
+    backgroundCrashSavedPositionMs = if (_uiState.value.isLive) 0L else player.currentPosition.coerceAtLeast(0L)
+    // Pausing while buffering fires no isPlaying change, so neither the pause save nor the pause
+    // scrobble ran; do both while the player still reports a position.
+    saveWatchProgress()
+    emitPauseScrobbleForCurrentProgress()
+    pendingBackgroundCrashRecovery = true
+    errorRetryJob?.cancel()
+    releasePlayer(flushPlaybackState = false)
+}
+
+/** True when a player ON_STOP means the app left the foreground, not an in-app navigation or exit. */
+internal fun isAppBackgroundStop(
+    isFinishing: Boolean,
+    isChangingConfigurations: Boolean,
+    hostState: androidx.lifecycle.Lifecycle.State
+): Boolean = !isFinishing &&
+    !isChangingConfigurations &&
+    !hostState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
 
 internal fun PlayerRuntimeController.resumeForLifecycle() {
     isInBackground = false
@@ -542,7 +570,7 @@ internal fun PlayerRuntimeController.applyPendingMpvSeekIfNeeded(
     if (!canSeekNow) return
 
     view.seekToMs(target)
-    view.setSubtitleDelayMs(state.subtitleDelayMs)
+    view.setSubtitleDelayMs(mpvSubtitleDelayMs(state.subtitleDelayMs))
     view.setAudioDelayMs(state.audioDelayMs)
     if (state.pendingSeekPosition != target) {
         _uiState.update { it.copy(pendingSeekPosition = target) }
@@ -602,7 +630,7 @@ internal fun PlayerRuntimeController.seekPlaybackTo(
         mpvView?.let { view ->
             if (exact) view.seekToMsExact(positionMs) else view.seekToMs(positionMs)
             // Keep subtitle/audio delay sticky during FF/RW seeks.
-            view.setSubtitleDelayMs(_uiState.value.subtitleDelayMs)
+            view.setSubtitleDelayMs(mpvSubtitleDelayMs(_uiState.value.subtitleDelayMs))
             view.setAudioDelayMs(_uiState.value.audioDelayMs)
         }
     } else {

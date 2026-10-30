@@ -7,7 +7,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.R
 import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
-import com.nuvio.tv.data.local.LibassRenderType
+import com.nuvio.tv.data.local.LibassRenderScale
+import com.nuvio.tv.data.local.LibassRenderMode
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.SubtitleLanguageOption
@@ -192,10 +193,23 @@ internal fun PlaybackSubtitlesSection(
     )
     if (settings.useLibass) {
         SettingsActionRow(
-            title = stringResource(R.string.sub_libass_mode),
-            subtitle = null,
-            value = libassRenderTypeOptions().firstOrNull { it.value == settings.libassRenderType }?.title,
-            onClick = { onOpenDialog(PlaybackDialog.LIBASS_RENDER_TYPE) }
+            title = stringResource(R.string.sub_libass_render_mode),
+            subtitle = if (settings.effectiveTunnelingEnabled)
+                stringResource(R.string.sub_libass_render_mode_tunneled_sub)
+            else
+                stringResource(R.string.sub_libass_render_mode_sub),
+            value = if (settings.effectiveTunnelingEnabled)
+                libassRenderModeLabel(LibassRenderMode.OVERLAY)
+            else
+                libassRenderModeLabel(settings.libassRenderMode),
+            onClick = { onOpenDialog(PlaybackDialog.LIBASS_RENDER_MODE) },
+            enabled = !settings.effectiveTunnelingEnabled
+        )
+        SettingsActionRow(
+            title = stringResource(R.string.sub_libass_render_scale),
+            subtitle = stringResource(R.string.sub_libass_render_scale_sub),
+            value = settings.libassRenderScale.label,
+            onClick = { onOpenDialog(PlaybackDialog.LIBASS_RENDER_SCALE) }
         )
     }
 }
@@ -209,33 +223,10 @@ internal fun subtitleLanguageLabel(style: SubtitleStyleSettings): String = when 
 }
 
 @Composable
-private fun libassRenderTypeOptions(): List<SettingsPickerOption<LibassRenderType>> = listOf(
-    SettingsPickerOption(
-        LibassRenderType.OVERLAY_OPEN_GL,
-        stringResource(R.string.sub_mode_overlay_gl),
-        stringResource(R.string.sub_mode_overlay_gl_sub)
-    ),
-    SettingsPickerOption(
-        LibassRenderType.OVERLAY_CANVAS,
-        stringResource(R.string.sub_mode_overlay_canvas),
-        stringResource(R.string.sub_mode_overlay_canvas_sub)
-    ),
-    SettingsPickerOption(
-        LibassRenderType.EFFECTS_OPEN_GL,
-        stringResource(R.string.sub_mode_effects_gl),
-        stringResource(R.string.sub_mode_effects_gl_sub)
-    ),
-    SettingsPickerOption(
-        LibassRenderType.EFFECTS_CANVAS,
-        stringResource(R.string.sub_mode_effects_canvas),
-        stringResource(R.string.sub_mode_effects_canvas_sub)
-    ),
-    SettingsPickerOption(
-        LibassRenderType.CUES,
-        stringResource(R.string.sub_mode_standard),
-        stringResource(R.string.sub_mode_standard_sub)
-    )
-)
+private fun libassRenderModeLabel(mode: LibassRenderMode): String = when (mode) {
+    LibassRenderMode.VIDEO_EFFECT -> stringResource(R.string.sub_libass_render_mode_video_effect)
+    LibassRenderMode.OVERLAY -> stringResource(R.string.sub_libass_render_mode_overlay)
+}
 
 @Composable
 internal fun SubtitleSettingsDialogs(
@@ -312,17 +303,42 @@ internal fun SubtitleSettingsDialogs(
             },
             onDismiss = onDismiss
         )
-        PlaybackDialog.LIBASS_RENDER_TYPE -> SettingsSingleChoiceDialog(
-            title = stringResource(R.string.sub_libass_mode),
-            options = libassRenderTypeOptions(),
-            selectedValue = settings.libassRenderType,
-            onOptionSelected = { renderType ->
-                onUpdate { setLibassRenderType(renderType) }
+        PlaybackDialog.LIBASS_RENDER_SCALE -> SettingsSingleChoiceDialog(
+            title = stringResource(R.string.sub_libass_render_scale),
+            options = LibassRenderScale.entries.map { scale ->
+                SettingsPickerOption(
+                    scale,
+                    scale.label,
+                    null
+                )
+            },
+            selectedValue = settings.libassRenderScale,
+            onOptionSelected = { scale ->
+                onUpdate { setLibassRenderScale(scale) }
                 onDismiss()
             },
-            onDismiss = onDismiss,
-            width = 480.dp,
-            maxHeight = 380.dp
+            onDismiss = onDismiss
+        )
+        PlaybackDialog.LIBASS_RENDER_MODE -> SettingsSingleChoiceDialog(
+            title = stringResource(R.string.sub_libass_render_mode),
+            options = listOf(
+                SettingsPickerOption(
+                    LibassRenderMode.OVERLAY,
+                    stringResource(R.string.sub_libass_render_mode_overlay),
+                    stringResource(R.string.sub_libass_render_mode_overlay_sub)
+                ),
+                SettingsPickerOption(
+                    LibassRenderMode.VIDEO_EFFECT,
+                    stringResource(R.string.sub_libass_render_mode_video_effect),
+                    stringResource(R.string.sub_libass_render_mode_video_effect_sub)
+                )
+            ),
+            selectedValue = settings.libassRenderMode,
+            onOptionSelected = { mode ->
+                onUpdate { setLibassRenderMode(mode) }
+                onDismiss()
+            },
+            onDismiss = onDismiss
         )
         else -> Unit
     }

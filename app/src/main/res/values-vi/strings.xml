@@ -487,7 +487,7 @@
     <string name="tracking_trakt_features_title">Tính năng Trakt</string>
     <string name="tracking_trakt_features_subtitle">Lịch sử, đánh giá và đề xuất riêng của Trakt</string>
     <string name="tracking_simkl_features_title">Tính năng Simkl</string>
-    <string name="tracking_simkl_features_subtitle">Cài đặt riêng của Simkl</string>
+    <string name="tracking_simkl_features_subtitle">Cài đặt riêng cho Simkl</string>
     <string name="tracking_simkl_anime_id_title">Tùy chọn anime ID</string>
     <string name="tracking_simkl_anime_id_subtitle">Kiểm soát cách nhận diện các mùa anime. Chọn MAL hoặc Kitsu để hiển thị mỗi mùa dưới dạng một mục riêng thay vì gộp chúng theo một IMDb ID.</string>
     <string name="tracking_simkl_anime_id_imdb">Ưu tiên IMDb</string>
@@ -920,15 +920,8 @@
     <string name="sub_libass">Dùng libass cho phụ đề ASS/SSA</string>
     <string name="sub_libass_sub">Thử nghiệm: kết xuất ASS/SSA nâng cao (kiểu chữ, định vị, hoạt ảnh)</string>
     <string name="sub_libass_mode">Chế độ kết xuất libass</string>
-    <string name="sub_mode_overlay_gl">Lớp phủ OpenGL (Khuyến nghị)</string>
-    <string name="sub_mode_overlay_gl_sub">Chất lượng tốt nhất với hỗ trợ HDR. Kết xuất phụ đề trên một luồng riêng.</string>
-    <string name="sub_mode_overlay_canvas">Lớp phủ Canvas</string>
-    <string name="sub_mode_effects_gl">Hiệu ứng OpenGL</string>
-    <string name="sub_mode_effects_gl_sub">Hỗ trợ hoạt ảnh bằng hiệu ứng Media3. Nhanh hơn Canvas.</string>
-    <string name="sub_mode_effects_canvas">Hiệu ứng Canvas</string>
-    <string name="sub_mode_effects_canvas_sub">Hỗ trợ hoạt ảnh bằng hiệu ứng Media3 với kết xuất Canvas.</string>
-    <string name="sub_mode_standard">Phụ đề tiêu chuẩn</string>
-    <string name="sub_mode_standard_sub">Kết xuất phụ đề cơ bản, không hỗ trợ hoạt ảnh. Tương thích cao nhất.</string>
+    <string name="sub_libass_render_scale">Độ phân giải kết xuất phụ đề</string>
+    <string name="sub_libass_render_scale_sub">Độ phân giải thấp hơn giúp tăng hiệu năng khi xử lý hiệu ứng phụ đề phức tạp nhưng làm giảm độ sắc nét</string>
     <string name="sub_org_none">Không có (thứ tự mặc định)</string>
     <string name="sub_org_by_lang">Theo ngôn ngữ</string>
     <string name="sub_org_by_addon">Theo tiện ích</string>
@@ -1864,7 +1857,6 @@
     <string name="parental_severity_mild">Nhẹ</string>
     <string name="player_ends_at">Kết thúc lúc %1$s</string>
     <string name="player_live_watched">TRỰC TIẾP  %1$s</string>
-    <string name="player_via">qua %1$s</string>
     <!-- Season/episode code shown in player UI (e.g. S01E02). %1$d = season, %2$d = episode. -->
     <string name="season_episode_format">M%1$d T%2$d</string>
     <string name="player_subtitle_delay">Độ trễ phụ đề</string>
@@ -2529,7 +2521,6 @@
     <string name="player_error_failed_start_torrent">Không thể khởi động torrent: %1$s</string>
 
     <!-- Playback subtitle settings -->
-    <string name="sub_mode_overlay_canvas_sub">Hỗ trợ HDR khi kết xuất bằng vùng vẽ. Có thể làm nghẽn luồng giao diện người dùng.</string>
 
     <string name="ratings_season_label">M%1$d</string>
     <string name="ratings_episode_label">T%1$d</string>
@@ -2566,6 +2557,12 @@
     <string name="cd_remove">Xóa</string>
     <string name="cd_preview">Xem trước</string>
     <string name="cd_test">Kiểm tra</string>
+    <string name="cd_enable_scraper">Bật %1$s</string>
+    <string name="cd_enable_addon">Bật %1$s</string>
+    <string name="cd_color_swatch">Màu %1$s</string>
+    <string name="cd_emoji_option">Biểu tượng cảm xúc %1$s</string>
+    <string name="cd_trailer_controls">Nút điều khiển trailer</string>
+    <string name="cd_seek_bar">Thanh tua</string>
     <string name="cd_unlink">Hủy liên kết</string>
     <string name="cd_nuvio_logo">NuvioTV</string>
     <string name="cd_trakt_logo">Logo Trakt</string>
