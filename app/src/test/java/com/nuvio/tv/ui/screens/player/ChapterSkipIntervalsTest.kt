@@ -144,21 +144,21 @@ class ChapterSkipIntervalsTest {
     fun `Post-Credits Scene chapter is excluded`() {
         val chapters = chapters(
             0L to "Movie",
-            5_400_000L to "Credits",
+            5_520_000L to "Credits",
             5_700_000L to "Post-Credits Scene"
         )
         val movieDuration = 6_000_000L
         val intervals = ChapterSkipIntervals.fromChapters(chapters, movieDuration)
         assertTrue(intervals.none { it.startTime == 5_700.0 })
-        // "Credits" should still be matched
-        assertTrue(intervals.any { it.type == "outro" && it.startTime == 5_400.0 })
+        // "Credits" should still be matched (180s < 240s max)
+        assertTrue(intervals.any { it.type == "outro" && it.startTime == 5_520.0 })
     }
 
     @Test
     fun `Mid-Credits chapter is excluded`() {
         val chapters = chapters(
             0L to "Movie",
-            5_400_000L to "Credits",
+            5_520_000L to "Credits",
             5_600_000L to "Mid-Credits Scene",
             5_700_000L to "More Credits"
         )

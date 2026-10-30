@@ -64,13 +64,15 @@ internal object ChapterSkipIntervals {
         }
 
         return resolved.mapNotNull { c ->
-            val skipType = c.type?.skipIntervalType ?: return@mapNotNull null
+            val type = c.type ?: return@mapNotNull null
+            // Post-credits scenes are classified but excluded from skip intervals.
+            if (type == ChapterType.POST_CREDITS) return@mapNotNull null
+            val skipType = type.skipIntervalType
             val startSec = c.chapter.startMs / 1000.0
             val endSec = c.endMs / 1000.0
             val duration = endSec - startSec
             if (duration < MIN_DURATION_SEC) return@mapNotNull null
-            // Max duration limit for OP/ED/recap, but not post-credits
-            if (c.type != ChapterType.POST_CREDITS && duration > MAX_DURATION_SEC) return@mapNotNull null
+            if (duration > MAX_DURATION_SEC) return@mapNotNull null
             SkipInterval(
                 startTime = startSec,
                 endTime = endSec,
