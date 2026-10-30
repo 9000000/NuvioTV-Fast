@@ -2124,7 +2124,7 @@ private fun normalizeOverlayLanguageKey(language: String?): String {
     if (language.isNullOrBlank()) return SubtitleUnknownLanguageKey
     val normalized = PlayerSubtitleUtils.normalizeLanguageCode(language)
     return when (normalized) {
-        "pt-br", "es-419" -> normalized
+        "pt-br", "es-419", "sr-me" -> normalized
         else -> normalized
             .substringBefore('-')
             .substringBefore('_')
@@ -2144,7 +2144,7 @@ private fun normalizeOverlayLanguageKeyForTrack(track: TrackInfo): String {
         trackId = track.trackId
     )
     return when (variant) {
-        "pt-br", "es-419" -> variant
+        "pt-br", "es-419", "sr-me" -> variant
         else -> variant
             .substringBefore('-')
             .substringBefore('_')

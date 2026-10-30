@@ -479,11 +479,12 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
     if (active != null) {
         val targetsPostCredits = active.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs()) != null
         if (currentActive != active || targetsPostCredits != _uiState.value.activeSkipTargetsPostCredits) {
+            val keepDismissed = currentActive != null && currentActive.type == active.type
             lastActiveSkipType = active.type
             _uiState.update { it.copy(
                 activeSkipInterval = active,
                 activeSkipTargetsPostCredits = targetsPostCredits,
-                skipIntervalDismissed = false
+                skipIntervalDismissed = if (keepDismissed) it.skipIntervalDismissed else false
             ) }
         }
         val segmentType = AutoSkipSegmentType.fromSkipIntervalType(active.type)
@@ -498,7 +499,24 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
             skipInterval(active)
         }
     } else if (currentActive != null) {
-        _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = false) }
+        // When the same segment type exists just ahead (within 2s), swap to keep the button
+        // visible during the brief gap when chapters replace an API interval with a slightly
+        // later start time. The 2s tolerance covers the typical 1s "Scene 1" -> "Recap" gap.
+        val positionSec = positionMs / 1000.0
+        val replacement = skipIntervals.firstOrNull {
+            it.type == currentActive.type &&
+                positionSec < it.startTime &&
+                it.startTime - positionSec <= 2.0
+        }
+        if (replacement != null) {
+            val targetsPostCredits = replacement.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs()) != null
+            _uiState.update { it.copy(
+                activeSkipInterval = replacement,
+                activeSkipTargetsPostCredits = targetsPostCredits
+            ) }
+        } else {
+            _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = false) }
+        }
     }
 }
 

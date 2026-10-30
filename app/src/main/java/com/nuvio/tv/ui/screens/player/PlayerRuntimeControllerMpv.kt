@@ -177,6 +177,8 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
                 showChaptersPanel = false
             )
         }
+        clearChapterSkipState()
+        recomputeMergedSkipIntervals()
         cancelPauseOverlay()
         startProgressUpdates()
         startWatchProgressSaving()

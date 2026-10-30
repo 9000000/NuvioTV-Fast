@@ -77,6 +77,7 @@ import com.nuvio.tv.data.local.Dv7HandlingMode
 import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nuvio.tv.data.local.InternalPlayerEngine
+import com.nuvio.tv.data.local.LibassRenderMode
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.repository.PlaybackIssueErrorInput
 import com.nuvio.tv.domain.model.Subtitle
@@ -668,7 +669,8 @@ internal fun PlayerRuntimeController.initializePlayer(
             _uiState.update {
                 it.copy(
                     useLibass = useLibass,
-                    libassRenderType = playerSettings.libassRenderType
+                    libassRenderType = playerSettings.libassRenderType,
+                    libassRenderMode = playerSettings.effectiveLibassRenderMode
                 )
             }
             // ── Track Selector Setup ──
@@ -1070,6 +1072,28 @@ internal fun PlayerRuntimeController.initializePlayer(
             _loadControl = loadControl
             activePlayerUsesLibass = useLibass
             libassPipelineSwitchInFlight = false
+
+            if (useLibass) {
+                _exoPlayer?.getAssHandlerCompat()?.let { handler ->
+                    // Apply video effects only when an ASS track has been detected for
+                    // this stream. On first init, no tracks are known yet so effects are
+                    // skipped. When tracks scan finds ASS, the player is rebuilt and this
+                    // code runs again with hasDetectedAssSsaTrackForCurrentStream == true.
+                    // This avoids DVFP overhead on non-ASS content.
+                    val shouldApplyEffects = hasDetectedAssSsaTrackForCurrentStream &&
+                        playerSettings.effectiveLibassRenderMode != LibassRenderMode.OVERLAY
+                    if (shouldApplyEffects) {
+                        val effect = com.nuvio.tv.libass.media.effect.AssVideoEffectAsync(handler)
+                        activeAssVideoEffect = effect
+                        _exoPlayer?.setVideoEffects(listOf(effect))
+                    } else {
+                        activeAssVideoEffect = null
+                    }
+                    // Propagate any saved subtitle delay to libass.
+                    handler.subtitleDelayUs = subtitleDelayUs.get() + streamSubtitleDelayUs.get()
+                    handler.audioDelayUs = audioDelayUs.get()
+                }
+            }
 
             _exoPlayer?.apply {
                 val audioAttributes = AudioAttributes.Builder()

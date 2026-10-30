@@ -1013,6 +1013,8 @@ internal fun PlayerRuntimeController.switchToSourceStream(
             isTorrentStream = false
         )
     }
+    clearChapterSkipState()
+    recomputeMergedSkipIntervals()
     showStreamSourceIndicator(stream)
     resetPostPlayOverlayState(clearEpisode = false)
 
@@ -1127,6 +1129,8 @@ private fun PlayerRuntimeController.switchToTorrentSourceStream(
             isTorrentStream = true
         )
     }
+    clearChapterSkipState()
+    recomputeMergedSkipIntervals()
     applyStreamMetadata(stream)
     currentFilename = stream.behaviorHints?.filename
     showStreamSourceIndicator(stream)
@@ -1656,6 +1660,8 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
 
     playbackStartedForParentalGuide = false
     skipIntervals = emptyList()
+    apiSkipIntervals = emptyList()
+    clearChapterSkipState()
     skipIntroFetchedKey = null
     lastActiveSkipType = null
     autoSkippedIntervalKeys.clear()
@@ -1770,6 +1776,8 @@ private fun PlayerRuntimeController.switchToEpisodeStreamCommon(
 
     playbackStartedForParentalGuide = false
     skipIntervals = emptyList()
+    apiSkipIntervals = emptyList()
+    clearChapterSkipState()
     skipIntroFetchedKey = null
     lastActiveSkipType = null
     autoSkippedIntervalKeys.clear()
