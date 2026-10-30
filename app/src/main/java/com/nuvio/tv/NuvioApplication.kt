@@ -7,8 +7,6 @@ import android.os.Build
 import android.os.StrictMode
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
-import coil3.annotation.ExperimentalCoilApi
-import coil3.network.ConnectivityChecker
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
@@ -28,6 +26,7 @@ import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.core.sync.androidtv.AndroidTvChannelSyncService
 import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.network.NoDelaySocketFactory
+import com.nuvio.tv.core.network.imageNetworkFetcherFactory
 import com.nuvio.tv.data.local.ImagePerformancePreferences
 import com.nuvio.tv.data.local.SentrySettingsDataStore
 import com.nuvio.tv.data.mediaserver.ServerUserStateProjection
@@ -94,7 +93,6 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         LocaleCache.localeTag = tag ?: ""
     }
 
-    @OptIn(ExperimentalCoilApi::class)
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         val imageOkHttpClient by lazy {
             val imageDispatcher = okhttp3.Dispatcher().apply {
@@ -134,7 +132,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 }
                 add(SvgDecoder.Factory())
                 add(
-                    coil3.network.okhttp.OkHttpNetworkFetcherFactory(
+                    imageNetworkFetcherFactory(
                         callFactory = { imageOkHttpClient },
                         cacheStrategy = {
                             StaleWhileRevalidateCacheStrategy(
@@ -142,11 +140,6 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                                 imageLoaderProvider = imageLoaderRef,
                             )
                         },
-                        // The default checker only looks at the active network. A DNS VPN
-                        // without NET_CAPABILITY_INTERNET makes Coil send only-if-cached,
-                        // and this client has no HTTP cache, so OkHttp answers HTTP 504.
-                        // A real offline miss fails at DNS just as fast, so always try.
-                        connectivityChecker = { ConnectivityChecker.ONLINE },
                     )
                 )
             }
