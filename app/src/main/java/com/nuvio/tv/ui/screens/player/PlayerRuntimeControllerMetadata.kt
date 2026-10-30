@@ -499,18 +499,20 @@ internal fun PlayerRuntimeController.updateActiveSkipInterval(positionMs: Long) 
             skipInterval(active)
         }
     } else if (currentActive != null) {
-        // When the same segment type exists but the position is briefly before its start
-        // (e.g. chapter recap starts 1s later than the API recap it replaced),
-        // swap to the new interval to keep the button visible. But only if the position
-        // hasn't passed the segment's end - otherwise the user has moved past it.
+        // When the same segment type exists just ahead (within 2s), swap to keep the button
+        // visible during the brief gap when chapters replace an API interval with a slightly
+        // later start time. The 2s tolerance covers the typical 1s "Scene 1" -> "Recap" gap.
         val positionSec = positionMs / 1000.0
-        val replacement = skipIntervals.firstOrNull { it.type == currentActive.type && positionSec < it.endTime }
-        if (replacement != null && positionSec < replacement.startTime) {
+        val replacement = skipIntervals.firstOrNull {
+            it.type == currentActive.type &&
+                positionSec < it.startTime &&
+                it.startTime - positionSec <= 2.0
+        }
+        if (replacement != null) {
             val targetsPostCredits = replacement.followingPostCreditsScene(skipIntervals, currentPlaybackDurationMs()) != null
             _uiState.update { it.copy(
                 activeSkipInterval = replacement,
-                activeSkipTargetsPostCredits = targetsPostCredits,
-                skipIntervalDismissed = it.skipIntervalDismissed
+                activeSkipTargetsPostCredits = targetsPostCredits
             ) }
         } else {
             _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = false) }
