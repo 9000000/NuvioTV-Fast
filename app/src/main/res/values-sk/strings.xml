@@ -3376,6 +3376,12 @@
     <string name="ambient_mode_enabled_subtitle">Fill the screen with backdrops after a period with no remote input</string>
     <string name="ambient_mode_timeout">Spustiť po</string>
     <string name="ambient_mode_timeout_subtitle">Ako dlho čakať na spustenie ambientného režimu</string>
+    <plurals name="ambient_mode_timeout_minutes">
+        <item quantity="one">%1$d minúta</item>
+        <item quantity="few">%1$d minúty</item>
+        <item quantity="many">%1$d minút</item>
+        <item quantity="other">%1$d minút</item>
+    </plurals>
     <string name="ambient_mode_catalogs">Katalógy</string>
     <string name="ambient_mode_catalogs_subtitle">Vyberte až 3 katalógy, z ktorých sa budú čerpať obrázky</string>
     <string name="ambient_mode_catalogs_dialog_subtitle">Vyberte až 3 katalógy</string>
