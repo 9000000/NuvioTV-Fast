@@ -21,14 +21,13 @@ internal object ChapterSkipIntervals {
     private const val PROVIDER = "chapters"
 
     private const val MIN_DURATION_SEC = 5.0
-    private const val MAX_OPENING_DURATION_SEC = 240.0 // 4 minutes max for OP/recap
-    private const val MAX_ENDING_DURATION_SEC = 600.0 // 10 minutes max for ED/credits
+    private const val MAX_DURATION_SEC = 240.0 // 4 minutes max for OP/ED/recap
 
     // Strict: title must be essentially the label, optionally followed by a number.
     // e.g. "OP", "OP 2", "Opening", "Opening Credits", but NOT "The Opening Scene".
     private val OPENING_PATTERN = Regex("^\\s*(op(ening)?)(\\s*(credits|theme))?\\s*\\d*\\s*$", RegexOption.IGNORE_CASE)
     private val ENDING_PATTERN = Regex("^\\s*(ed|ending)(\\s*(credits|theme))?\\s*\\d*\\s*$", RegexOption.IGNORE_CASE)
-    private val CREDITS_PATTERN = Regex("^\\s*credits\\s*$", RegexOption.IGNORE_CASE)
+    private val CREDITS_PATTERN = Regex("^\\s*(end|closing)?\\s*credits\\s*$", RegexOption.IGNORE_CASE)
     private val RECAP_PATTERN = Regex("^\\s*(recap|previously(\\s+on.*)?)\\s*$", RegexOption.IGNORE_CASE)
     private val INTRO_PATTERN = Regex("^\\s*intro\\s*$", RegexOption.IGNORE_CASE)
 
@@ -65,13 +64,15 @@ internal object ChapterSkipIntervals {
         }
 
         return resolved.mapNotNull { c ->
-            val skipType = c.type?.skipIntervalType ?: return@mapNotNull null
+            val type = c.type ?: return@mapNotNull null
+            // Post-credits scenes are classified but excluded from skip intervals.
+            if (type == ChapterType.POST_CREDITS) return@mapNotNull null
+            val skipType = type.skipIntervalType
             val startSec = c.chapter.startMs / 1000.0
             val endSec = c.endMs / 1000.0
             val duration = endSec - startSec
             if (duration < MIN_DURATION_SEC) return@mapNotNull null
-            if ((c.type == ChapterType.OPENING || c.type == ChapterType.RECAP) && duration > MAX_OPENING_DURATION_SEC) return@mapNotNull null
-            if (c.type == ChapterType.ENDING && duration > MAX_ENDING_DURATION_SEC) return@mapNotNull null
+            if (duration > MAX_DURATION_SEC) return@mapNotNull null
             SkipInterval(
                 startTime = startSec,
                 endTime = endSec,
@@ -93,12 +94,12 @@ internal object ChapterSkipIntervals {
         return null
     }
 
-    private enum class ChapterType(val skipIntervalType: String?) {
+    private enum class ChapterType(val skipIntervalType: String) {
         OPENING("intro"),
         ENDING("outro"),
         RECAP("recap"),
         INTRO("intro"),
-        POST_CREDITS(null),
+        POST_CREDITS("post-credits"),
     }
 
     private data class ClassifiedChapter(

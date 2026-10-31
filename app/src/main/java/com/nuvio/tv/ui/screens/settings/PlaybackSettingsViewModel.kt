@@ -413,6 +413,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSubtitleHdrBrightness(brightness)
     }
 
+    suspend fun setSubtitleHdrDimPlayerControls(enabled: Boolean) {
+        playerSettingsDataStore.setSubtitleHdrDimPlayerControls(enabled)
+    }
+
     suspend fun setSubtitleOrganizationMode(mode: SubtitleOrganizationMode) {
         playerSettingsDataStore.setSubtitleOrganizationMode(mode)
     }

@@ -1,30 +1,16 @@
 package com.nuvio.tv.ui.screens.player
 
-import android.graphics.RectF
-import io.mockk.every
-import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LibassOverlayGeometryTest {
 
-    private fun rectF(l: Float, t: Float, r: Float, b: Float): RectF {
-        val rect = mockk<RectF>()
-        rect.left = l
-        rect.top = t
-        rect.right = r
-        rect.bottom = b
-        every { rect.width() } returns (r - l)
-        every { rect.height() } returns (b - t)
-        return rect
-    }
-
     @Test
     fun margins_forLetterboxedCinemaVideo_areTopAndBottomBars() {
         assertEquals(
             LibassOverlayMargins(top = 140, bottom = 140, left = 0, right = 0),
-            libassOverlayMargins(1920, 1080, rectF(0f, 140f, 1920f, 940f))
+            libassOverlayMargins(1920, 1080, 0f, 140f, 1920f, 940f)
         )
     }
 
@@ -32,7 +18,7 @@ class LibassOverlayGeometryTest {
     fun margins_forPillarboxedFourByThreeVideo_areLeftAndRightBars() {
         assertEquals(
             LibassOverlayMargins(top = 0, bottom = 0, left = 240, right = 240),
-            libassOverlayMargins(1920, 1080, rectF(240f, 0f, 1680f, 1080f))
+            libassOverlayMargins(1920, 1080, 240f, 0f, 1680f, 1080f)
         )
     }
 
@@ -40,7 +26,7 @@ class LibassOverlayGeometryTest {
     fun margins_forFullOverlay_areZero() {
         assertEquals(
             LibassOverlayMargins(top = 0, bottom = 0, left = 0, right = 0),
-            libassOverlayMargins(1920, 1080, rectF(0f, 0f, 1920f, 1080f))
+            libassOverlayMargins(1920, 1080, 0f, 0f, 1920f, 1080f)
         )
     }
 
@@ -48,7 +34,7 @@ class LibassOverlayGeometryTest {
     fun margins_forCroppedVideo_areSigned() {
         assertEquals(
             LibassOverlayMargins(top = -60, bottom = -60, left = 0, right = 0),
-            libassOverlayMargins(1920, 1080, rectF(0f, -60f, 1920f, 1140f))
+            libassOverlayMargins(1920, 1080, 0f, -60f, 1920f, 1140f)
         )
     }
 
@@ -56,13 +42,13 @@ class LibassOverlayGeometryTest {
     fun margins_roundFractionalBoundsSymmetrically() {
         assertEquals(
             LibassOverlayMargins(top = 141, bottom = 139, left = 1, right = 0),
-            libassOverlayMargins(1920, 1080, rectF(0.6f, 140.6f, 1919.6f, 940.6f))
+            libassOverlayMargins(1920, 1080, 0.6f, 140.6f, 1919.6f, 940.6f)
         )
     }
 
     @Test
     fun margins_forUnmeasuredOrInvalidBounds_areAbsent() {
-        assertNull(libassOverlayMargins(0, 1080, rectF(0f, 0f, 1920f, 1080f)))
-        assertNull(libassOverlayMargins(1920, 1080, rectF(0f, 0f, 0f, 1080f)))
+        assertNull(libassOverlayMargins(0, 1080, 0f, 0f, 1920f, 1080f))
+        assertNull(libassOverlayMargins(1920, 1080, 0f, 0f, 0f, 1080f))
     }
 }

@@ -271,6 +271,10 @@ data class PlayerUiState(
 
     val editableSubtitleStyle: SubtitleStyleSettings
         get() = subtitleStyle.editableForVideo(isHdrVideo)
+
+    /** Brightness factor for the player controls and menus drawn over the video (1 = undimmed). */
+    val playerControlsBrightness: Float
+        get() = subtitleStyle.playerControlsBrightness(isHdrVideo)
 }
 
 internal fun PlayerUiState.clearFrameRateDetection(): PlayerUiState = copy(
@@ -364,7 +368,7 @@ sealed class PlayerEvent {
     data object OnDismissEpisodesPanel : PlayerEvent()
     data object OnBackFromEpisodeStreams : PlayerEvent()
     data class OnEpisodeSeasonSelected(val season: Int) : PlayerEvent()
-    data class OnEpisodeSelected(val video: Video) : PlayerEvent()
+    data class OnEpisodeSelected(val video: Video, val manualSelection: Boolean = false) : PlayerEvent()
     data object OnReloadEpisodeStreams : PlayerEvent()
     data class OnEpisodeAddonFilterSelected(val addonName: String?) : PlayerEvent()
     data class OnEpisodeStreamSelected(val stream: Stream) : PlayerEvent()
