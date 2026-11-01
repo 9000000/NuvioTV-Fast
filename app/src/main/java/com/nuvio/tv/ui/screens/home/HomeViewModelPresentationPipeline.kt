@@ -585,10 +585,12 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 addEnrichedPreview(item.id, enriched)
             }
             if (_enrichingItemId.value == item.id) setEnrichingItemId(null)
-            // Still prefetch full meta in background for instant detail screen.
-            if (item.id !in backgroundMetaPrefetchedIds) {
-                backgroundMetaPrefetchedIds.add(item.id)
-                viewModelScope.launch {
+            // Debounced full meta prefetch in background to eliminate GC churn and freeze during D-pad navigation.
+            detailMetaPrefetchJob?.cancel()
+            detailMetaPrefetchJob = viewModelScope.launch(Dispatchers.IO) {
+                delay(HomeViewModel.DETAIL_META_PREFETCH_DEBOUNCE_MS)
+                if (item.id !in backgroundMetaPrefetchedIds) {
+                    backgroundMetaPrefetchedIds.add(item.id)
                     metaRepository.getMetaFromAllAddons(
                         type = item.apiType,
                         id = item.id
@@ -709,19 +711,17 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 if (_enrichedPreviews.value[item.id] != preview) addEnrichedPreview(item.id, preview)
             }
 
-            // Always prefetch full meta in background for instant detail screen loading.
-            if (item.id !in backgroundMetaPrefetchedIds) {
-                backgroundMetaPrefetchedIds.add(item.id)
-                viewModelScope.launch {
+            // Debounced prefetch for detail screen & watch progress to prevent GC stalls during browsing.
+            detailMetaPrefetchJob?.cancel()
+            detailMetaPrefetchJob = viewModelScope.launch(Dispatchers.IO) {
+                delay(HomeViewModel.DETAIL_META_PREFETCH_DEBOUNCE_MS)
+                if (item.id !in backgroundMetaPrefetchedIds) {
+                    backgroundMetaPrefetchedIds.add(item.id)
                     metaRepository.getMetaFromAllAddons(
                         type = item.apiType,
                         id = item.id
                     ).first { it !is NetworkResult.Loading }
                 }
-            }
-
-            // Warm up watch progress pipeline so detail screen reads are fast.
-            viewModelScope.launch {
                 watchProgressRepository.getAllEpisodeProgress(item.id.substringBefore(":")).first()
             }
 
@@ -813,16 +813,7 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
                 addEnrichedPreview(item.id, item)
             }
 
-            // Background prefetch for detail screen cache.
-            if (item.id !in backgroundMetaPrefetchedIds) {
-                backgroundMetaPrefetchedIds.add(item.id)
-                viewModelScope.launch {
-                    metaRepository.getMetaFromAllAddons(
-                        type = item.apiType,
-                        id = item.id
-                    ).first { it !is NetworkResult.Loading }
-                }
-            }
+            // Skip background meta prefetch for adjacent items to prevent allocation storm on TV box.
 
         } finally {
             if (pendingAdjacentPrefetchItemId == item.id) {

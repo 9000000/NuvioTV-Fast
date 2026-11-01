@@ -10,7 +10,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalFocusManager
 
-val LocalFastHorizontalNavigationEnabled = compositionLocalOf { false }
+val LocalFastHorizontalNavigationEnabled = compositionLocalOf { true }
 
 /**
  * Throttles D-pad key repeats to prevent HWUI overload and focus jank

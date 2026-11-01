@@ -106,8 +106,9 @@ class HomeViewModel @Inject constructor(
 
         /** How long a home catalog is left alone before a return to Home re-requests it. */
         private const val HOME_CATALOG_REFRESH_TTL_MS = 15L * 60L * 1000L
-        internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
-        internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
+        internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 350L
+        internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 500L
+        internal const val DETAIL_META_PREFETCH_DEBOUNCE_MS = 1200L
         private const val MAX_ENRICHMENT_CACHE_SIZE = 64
         private const val MAX_PREFETCH_CACHE_SIZE = 64
         private const val MAX_CW_CACHE_SIZE = 64
@@ -307,6 +308,7 @@ class HomeViewModel @Inject constructor(
     internal var deferredEnrichItem: MetaPreview? = null
     internal var adjacentItemPrefetchJob: Job? = null
     internal var pendingAdjacentPrefetchItemId: String? = null
+    internal var detailMetaPrefetchJob: Job? = null
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
     internal var movieWatchedBatchJob: Job? = null
     internal var lastMovieWatchedItemKeys: Set<String> = emptySet()
@@ -1045,6 +1047,7 @@ class HomeViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        detailMetaPrefetchJob?.cancel()
         startupAuthNoticeJob?.cancel()
         posterStatusReconcileJob?.cancel()
         movieWatchedBatchJob?.cancel()

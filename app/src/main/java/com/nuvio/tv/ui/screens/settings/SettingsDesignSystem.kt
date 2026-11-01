@@ -429,7 +429,7 @@ internal fun SettingsRailButton(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = if (zen) 14.dp else 18.dp),
+                    .padding(horizontal = if (zen) 14.dp else 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {

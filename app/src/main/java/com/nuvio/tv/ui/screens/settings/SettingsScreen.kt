@@ -646,7 +646,7 @@ fun SettingsScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .width(220.dp)
+                        .width(240.dp)
                         .fillMaxHeight()
                 ) {
                     LazyColumn(

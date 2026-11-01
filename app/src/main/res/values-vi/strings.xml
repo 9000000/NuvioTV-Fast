@@ -1203,7 +1203,7 @@
     <string name="settings_card_depth_surface_cast">Diễn viên</string>
     <string name="settings_card_depth_surface_trailers">Trailer</string>
     <string name="layout_open">Mở</string>
-    <string name="layout_closed">Đã đóng</string>
+    <string name="layout_closed">Thu gọn</string>
     <string name="layout_trailer_location">Vị trí phát trailer (Hiện đại)</string>
     <string name="layout_trailer_location_sub">Chọn nơi phát bản xem trước trailer trong Trang chủ Hiện đại..</string>
     <string name="layout_trailer_expanded_card">Thẻ mở rộng</string>
