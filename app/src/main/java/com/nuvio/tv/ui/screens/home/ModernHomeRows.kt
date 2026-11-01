@@ -5,7 +5,12 @@ package com.nuvio.tv.ui.screens.home
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import android.view.KeyEvent as AndroidKeyEvent
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -112,6 +117,7 @@ import coil3.request.crossfade
 import coil3.request.transformations
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
+import com.nuvio.tv.domain.model.CardDepthStyle
 import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
@@ -819,11 +825,13 @@ internal fun ModernRowSection(
 
         val layoutDirection = LocalLayoutDirection.current
         val isRtl = layoutDirection == LayoutDirection.Rtl
-        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec, rowStartPadding, isRtl) {
+        val animationsEnabled = NuvioTheme.animationsEnabled
+        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec, rowStartPadding, isRtl, animationsEnabled) {
             val parentStartOffsetPx = with(density) { rowStartPadding.roundToPx() }
             @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {
-                override val scrollAnimationSpec: AnimationSpec<Float> = androidx.compose.animation.core.snap()
+                override val scrollAnimationSpec: AnimationSpec<Float> =
+                    if (animationsEnabled) tween(durationMillis = 110, easing = LinearOutSlowInEasing) else snap()
 
                 override fun calculateScrollDistance(
                     offset: Float,
@@ -896,7 +904,11 @@ internal fun ModernRowSection(
                         // Flag prevents isBackdropExpandedLambda from collapsing during this scroll.
                         val overshoot = itemEndExpanded - viewportEnd + with(density) { 15.dp.roundToPx() }
                         isExpansionScrollActive = true
-                        rowListState.scrollBy(overshoot.toFloat())
+                        if (animationsEnabled) {
+                            rowListState.animateScrollBy(overshoot.toFloat())
+                        } else {
+                            rowListState.scrollBy(overshoot.toFloat())
+                        }
                         isExpansionScrollActive = false
                     }
                 }
@@ -1103,6 +1115,7 @@ private fun ModernCarouselCard(
 ) {
     val cardShape = remember(cardCornerRadius) { RoundedCornerShape(cardCornerRadius) }
     val cardDepthStyle = LocalCardDepthStyle.current
+    val animationsEnabled = NuvioTheme.animationsEnabled
     val context = LocalContext.current
     val density = LocalDensity.current
     val expandedCardWidth = if (useLandscapeOverlayTreatment) {
@@ -1118,6 +1131,7 @@ private fun ModernCarouselCard(
     val animatedCardWidthState = if (focusedPosterBackdropExpandEnabled) {
         animateDpAsState(
             targetValue = targetCardWidth,
+            animationSpec = if (animationsEnabled) tween(durationMillis = 110, easing = LinearOutSlowInEasing) else snap(),
             label = "modernCardWidth"
         )
     } else {
@@ -1220,11 +1234,11 @@ private fun ModernCarouselCard(
 
     val revalidationKey = com.nuvio.tv.core.image.rememberImageRevalidationKey(imageUrl)
     var customPosterLoadFailed by remember(imageUrl) { mutableStateOf(false) }
-    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx, revalidationKey) {
+    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx, revalidationKey, animationsEnabled) {
         imageUrl?.let {
             val builder = ImageRequest.Builder(context)
                 .data(it)
-                .crossfade(false)
+                .crossfade(animationsEnabled)
                 .memoryCacheKey("${it}_${requestWidthPx}x${requestHeightPx}_v$revalidationKey")
                 .size(width = requestWidthPx, height = requestHeightPx)
             if (revalidationKey > 0) {
@@ -1253,11 +1267,11 @@ private fun ModernCarouselCard(
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }.coerceAtLeast(1)
     }
 
-    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx) {
+    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, animationsEnabled) {
         effectiveLogoUrl?.let {
             ImageRequest.Builder(context)
                 .data(it)
-                .crossfade(false)
+                .crossfade(animationsEnabled)
                 .memoryCacheKey("${it}_${maxLogoWidthPx}x${logoHeightPx}")
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
@@ -1311,6 +1325,12 @@ private fun ModernCarouselCard(
     val titleStyle = remember(titleMedium) {
         titleMedium.copy(fontWeight = FontWeight.Medium)
     }
+    val targetScale = if (animationsEnabled && isFocused && !isBackdropExpanded && !isFastScrolling) NuvioComponents.tokens.posterCard.focusedScale else 1f
+    val animatedCardScale by animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec = if (animationsEnabled) tween<Float>(durationMillis = 110, easing = LinearOutSlowInEasing) else snap<Float>(),
+        label = "modernCardScale"
+    )
 
     Column(
         modifier = modifier
@@ -1370,9 +1390,8 @@ private fun ModernCarouselCard(
                     false
                 }
                 .graphicsLayer {
-                    val targetScale = if (isFocused && !isBackdropExpanded) NuvioComponents.tokens.posterCard.focusedScale else 1f
-                    scaleX = targetScale
-                    scaleY = targetScale
+                    scaleX = animatedCardScale
+                    scaleY = animatedCardScale
                 },
             shape = cardShape,
             containerColor = backgroundCardColor,
@@ -1386,7 +1405,7 @@ private fun ModernCarouselCard(
                     .nuvioCardDepth(
                         shape = cardShape,
                         surface = CardDepthSurface.POSTERS,
-                        style = cardDepthStyle
+                        style = if (isFastScrolling || !animationsEnabled) cardDepthStyle.copy(enabled = false) else cardDepthStyle
                     )
             ) {
                 val mediaLayerModifier = remember(hasLandscapeLogo) {

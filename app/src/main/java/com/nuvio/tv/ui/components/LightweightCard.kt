@@ -77,10 +77,7 @@ fun LightweightCard(
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
     val pressed by interactionSource.collectIsPressedAsState()
-    val zIndex = animateFloatAsState(
-        targetValue = if (focused) FOCUSED_Z_INDEX else NON_FOCUSED_Z_INDEX,
-        label = "zIndex"
-    )
+    val zIndex = if (focused) FOCUSED_Z_INDEX else NON_FOCUSED_Z_INDEX
     val border = if (focused || pressed) focusedBorder else Border.None
     val glow = if (focused && !pressed) focusedGlow else Glow.None
     val glowColor = if (glow.elevationColor == MaterialTheme.colorScheme.surface) {
@@ -126,9 +123,8 @@ fun LightweightCard(
                     }
                     onLongClick { false }
                 }
-                .graphicsLayer(scaleX = 1f, scaleY = 1f)
                 .then(
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && glow != Glow.None && glowBlurRadiusPx > 0f && glowColor.alpha > 0f) {
                         CardGlowElement(shape, glowBlurRadiusPx, glowColor)
                     } else {
                         Modifier
@@ -137,7 +133,7 @@ fun LightweightCard(
                 .layout { measurable, constraints ->
                     val placeable = measurable.measure(constraints)
                     layout(placeable.width, placeable.height) {
-                        placeable.place(0, 0, zIndex = zIndex.value)
+                        placeable.place(0, 0, zIndex = zIndex)
                     }
                 }
                 .then(if (border != Border.None) CardBorderElement(shape, border) else Modifier)
@@ -147,10 +143,9 @@ fun LightweightCard(
                     clip = true
                 },
             propagateMinConstraints = true
-        ) {
-            Box(modifier = Modifier.graphicsLayer { alpha = 1f }) {
-                Column(content = content)
-            }
+        )
+        {
+            Column(content = content)
         }
     }
 }
@@ -227,6 +222,10 @@ private class CardGlowNode(
     }
 
     override fun ContentDrawScope.draw() {
+        if (glowBlurRadiusPx <= 0f || color.alpha <= 0f) {
+            drawContent()
+            return
+        }
         drawIntoCanvas { canvas ->
             when (val outline = outlineCache.get(shape, size, layoutDirection, this)) {
                 is Outline.Rectangle -> canvas.drawRect(outline.rect, paint)

@@ -3,6 +3,8 @@ package com.nuvio.tv.ui.components
 import com.nuvio.tv.ui.screens.home.shuffleFocusKey
 
 import android.view.KeyEvent as AndroidKeyEvent
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -196,13 +198,16 @@ fun ContinueWatchingSection(
         }
 
         val density = LocalDensity.current
+        val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
         val layoutDirection = LocalLayoutDirection.current
         val isRtl = layoutDirection == LayoutDirection.Rtl
-        val horizontalBringIntoViewSpec = remember(density, isRtl) {
+        val animationsEnabled = NuvioTheme.animationsEnabled
+        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec, isRtl, animationsEnabled) {
             val startPx = with(density) { NuvioTheme.spacing.xxxl.roundToPx() }
             @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {
-                override val scrollAnimationSpec: AnimationSpec<Float> = snap()
+                override val scrollAnimationSpec: AnimationSpec<Float> =
+                    if (animationsEnabled) tween(durationMillis = 110, easing = LinearOutSlowInEasing) else snap()
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
                     val childSize = kotlin.math.abs(size)
                     if (isRtl) {

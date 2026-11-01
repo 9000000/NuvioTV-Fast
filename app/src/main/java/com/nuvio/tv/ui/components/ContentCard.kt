@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.components
 
 import android.view.KeyEvent as AndroidKeyEvent
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -31,6 +32,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -73,9 +76,11 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.ContentType
+import com.nuvio.tv.domain.model.CardDepthStyle
 import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.ui.screens.home.LocalFastScrollActive
 import com.nuvio.tv.ui.theme.NuvioTheme
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -119,6 +124,8 @@ fun ContentCard(
 ) {
     val cardShape = remember(posterCardStyle.cornerRadius) { RoundedCornerShape(posterCardStyle.cornerRadius) }
     val cardDepthStyle = LocalCardDepthStyle.current
+    val isFastScrollingState = LocalFastScrollActive.current
+    val isFastScrolling = isFastScrollingState.value
     val globalLandscape = LocalLandscapePosterMode.current
     val effectivePosterShape = if (globalLandscape) PosterShape.LANDSCAPE else item.posterShape
     val baseCardWidth = when (effectivePosterShape) {
@@ -143,6 +150,7 @@ fun ContentCard(
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val forceOffscreen = LocalGpuOffscreenCompositing.current
+    val animationsEnabled = NuvioTheme.animationsEnabled
 
     LaunchedEffect(isBackdropExpanded) {
         onBackdropExpandedChanged?.invoke(isBackdropExpanded)
@@ -277,7 +285,7 @@ fun ContentCard(
         val imageModel = remember(imageUrl, requestWidthPx, requestHeightPx, revalidationKey) {
             val builder = ImageRequest.Builder(context)
                 .data(imageUrl)
-                .crossfade(false)
+                .crossfade(animationsEnabled)
                 .memoryCacheKey("${imageUrl}_${requestWidthPx}x${requestHeightPx}_v$revalidationKey")
                 .size(width = requestWidthPx, height = requestHeightPx)
             if (revalidationKey > 0) {
@@ -307,6 +315,12 @@ fun ContentCard(
         var logoLoadFailed by remember(item.logo) { mutableStateOf(false) }
         val showExpandedLogo = !item.logo.isNullOrBlank() && !logoLoadFailed
 
+        val targetScale = if (animationsEnabled && isFocused && !isBackdropExpanded && !isFastScrolling) posterCardStyle.focusedScale else 1f
+        val animatedCardScale by animateFloatAsState(
+            targetValue = targetScale,
+            animationSpec = if (animationsEnabled) tween<Float>(durationMillis = 110, easing = LinearOutSlowInEasing) else snap<Float>(),
+            label = "contentCardScale"
+        )
         val bgCardColor = NuvioTheme.colors.BackgroundCard
         val backgroundPainter = remember(bgCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(bgCardColor) }
         val focusRingStyle = NuvioTheme.posterFocusRing
@@ -389,9 +403,8 @@ fun ContentCard(
                     } else Modifier
                 )
                 .graphicsLayer {
-                    val targetScale = if (isFocused && !isBackdropExpanded) posterCardStyle.focusedScale else 1f
-                    scaleX = targetScale
-                    scaleY = targetScale
+                    scaleX = animatedCardScale
+                    scaleY = animatedCardScale
                 }
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
@@ -412,7 +425,7 @@ fun ContentCard(
                     .nuvioCardDepth(
                         shape = cardShape,
                         surface = CardDepthSurface.POSTERS,
-                        style = cardDepthStyle
+                        style = if (isFastScrolling || !animationsEnabled) cardDepthStyle.copy(enabled = false) else cardDepthStyle
                     )
             ) {
                 val isPlaceholderItem = imageUrl == PLACEHOLDER_IMAGE_URL
@@ -461,7 +474,16 @@ fun ContentCard(
                     }
                 }
 
-                val trailerCoverAlpha = if (shouldPlayTrailerPreview && !trailerFirstFrameRendered) 1f else 0f
+                val trailerCoverAlpha = if (shouldPlayTrailerPreview) {
+                    val alpha by animateFloatAsState(
+                        targetValue = if (!trailerFirstFrameRendered) 1f else 0f,
+                        animationSpec = if (animationsEnabled) tween<Float>(durationMillis = 250) else snap<Float>(),
+                        label = "trailerCoverAlpha"
+                    )
+                    alpha
+                } else {
+                    0f
+                }
 
                 if (shouldPlayTrailerPreview) {
                     // Black plate under FIT-mode video so non-16:9 trailers letterbox

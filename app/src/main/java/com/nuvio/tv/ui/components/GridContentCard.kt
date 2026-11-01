@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.components
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import android.view.KeyEvent as AndroidKeyEvent
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -30,6 +31,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -85,6 +90,7 @@ fun GridContentCard(
     val density = LocalDensity.current
     val globalLandscape = LocalLandscapePosterMode.current
     val forceOffscreen = LocalGpuOffscreenCompositing.current
+    val animationsEnabled = NuvioTheme.animationsEnabled
     val effectivePosterShape = if (globalLandscape) PosterShape.LANDSCAPE else item.posterShape
 
     // Derive card height from item's posterShape aspect ratio while keeping width from posterCardStyle.
@@ -111,6 +117,13 @@ fun GridContentCard(
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
+
+    val targetScale = if (animationsEnabled && isFocused) posterCardStyle.focusedScale else 1f
+    val animatedCardScale by animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec = if (animationsEnabled) tween<Float>(durationMillis = 110, easing = LinearOutSlowInEasing) else snap<Float>(),
+        label = "gridCardScale"
+    )
 
     Column(
         modifier = modifier
@@ -183,9 +196,8 @@ fun GridContentCard(
                     false
                 }
                 .graphicsLayer {
-                    val targetScale = if (isFocused) posterCardStyle.focusedScale else 1f
-                    scaleX = targetScale
-                    scaleY = targetScale
+                    scaleX = animatedCardScale
+                    scaleY = animatedCardScale
                 },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
@@ -336,7 +348,7 @@ fun GridContentCard(
                     val logoRequest = remember(item.logo) {
                         ImageRequest.Builder(context)
                             .data(item.logo)
-                            .crossfade(false)
+                            .crossfade(animationsEnabled)
                             .build()
                     }
                     AsyncImage(

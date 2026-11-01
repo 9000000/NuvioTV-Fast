@@ -4,6 +4,9 @@ import com.nuvio.tv.ui.theme.NuvioMotion
 
 import com.nuvio.tv.ui.theme.NuvioTheme
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -126,7 +129,13 @@ internal fun ModernHeroMediaLayer(
 ) {
     val shouldPlay by remember { derivedStateOf { shouldPlayHeroTrailer() } }
     val trailerRendered by remember { derivedStateOf { heroTrailerFirstFrameRendered() } }
-    val transitionProgress = if (shouldPlay && trailerRendered) 1f else 0f
+    val animationsEnabled = NuvioTheme.animationsEnabled
+    val transitionProgressState = animateFloatAsState(
+        targetValue = if (shouldPlay && trailerRendered) 1f else 0f,
+        animationSpec = if (animationsEnabled) tween<Float>(durationMillis = 480) else snap<Float>(),
+        label = "heroBackdropTrailerCrossfadeProgress"
+    )
+    val transitionProgress = transitionProgressState.value
     val localContext = LocalContext.current
 
     // Backdrop URL is managed upstream (heroSceneStateLambda freezes it
@@ -134,8 +143,12 @@ internal fun ModernHeroMediaLayer(
     val rawBackdrop by remember { derivedStateOf { heroBackdrop() } }
     val enriching by remember { derivedStateOf { enrichmentActive() } }
     var displayedBackdrop by remember { mutableStateOf(HeroBackdropState.lastDisplayedUrl ?: heroBackdrop()) }
-    if (rawBackdrop != null && rawBackdrop != displayedBackdrop && !enriching) {
-        displayedBackdrop = rawBackdrop!!
+    LaunchedEffect(rawBackdrop, enriching) {
+        val target = rawBackdrop
+        if (target != null && target != displayedBackdrop && !enriching) {
+            delay(180L)
+            displayedBackdrop = target
+        }
     }
     val imageModel = remember(
         localContext,
@@ -156,17 +169,37 @@ internal fun ModernHeroMediaLayer(
     }
 
     Box(modifier = modifier) {
-        AsyncImage(
-            model = imageModel,
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    alpha = 1f - transitionProgress
-                },
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.TopEnd
-        )
+        if (animationsEnabled) {
+            androidx.compose.animation.Crossfade(
+                targetState = imageModel,
+                animationSpec = tween(durationMillis = 280),
+                label = "heroBackdropCrossfade"
+            ) { model ->
+                AsyncImage(
+                    model = model,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = 1f - transitionProgress
+                        },
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopEnd
+                )
+            }
+        } else {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = 1f - transitionProgress
+                    },
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopEnd
+            )
+        }
         if (shouldPlay) {
             val trailerUrlVal = heroTrailerUrl()
             val playbackKeyVal = heroTrailerPlaybackKey()
@@ -359,12 +392,13 @@ private fun HeroTitleContent(
     val bodyMedium = MaterialTheme.typography.bodyMedium
     val logoMaxWidthPx = remember(density) { with(density) { 220.dp.roundToPx() } }
     val logoHeightPx = remember(density) { with(density) { 100.dp.roundToPx() } }
+    val animationsEnabled = NuvioTheme.animationsEnabled
 
-    val logoModel = remember(context, preview.logo, logoMaxWidthPx, logoHeightPx) {
+    val logoModel = remember(context, preview.logo, logoMaxWidthPx, logoHeightPx, animationsEnabled) {
         preview.logo?.let {
             ImageRequest.Builder(context)
                 .data(it)
-                .crossfade(false)
+                .crossfade(animationsEnabled)
                 .size(width = logoMaxWidthPx, height = logoHeightPx)
                 .build()
         }
@@ -372,7 +406,12 @@ private fun HeroTitleContent(
     // Same idea as in HeroTitleBlock: only a flip of the result should recompose this content.
     val latestTrailerPlaying = rememberUpdatedState(trailerPlaying)
     val trailerPlayingValue by remember { derivedStateOf { latestTrailerPlaying.value() } }
-    val metaAlpha = if (trailerPlayingValue) 0f else 1f
+    val metaAlphaState = animateFloatAsState(
+        targetValue = if (trailerPlayingValue) 0f else 1f,
+        animationSpec = if (animationsEnabled) tween<Float>(durationMillis = 480) else snap<Float>(),
+        label = "heroMetaFade"
+    )
+    val metaAlpha = metaAlphaState.value
     val scaledTitleStyle = remember(headlineLarge, titleScale) {
         headlineLarge.copy(
             fontSize = headlineLarge.fontSize * titleScale,
