@@ -1,3 +1,78 @@
+## [2026-11-01 22:03] - IllegalStateException Cannot call notifyDataSetChanged while RecyclerView is computing layout
+
+- **Type**: Runtime
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt:759`
+- **Agent**: mon
+- **Root Cause**: When submitting new items or updating row config, `rv.post { notifyDataSetChanged() }` executed while `HorizontalGridView` was still in the middle of a layout pass or scroll animation (`rv.isComputingLayout == true`). Android's `RecyclerView` asserts `assertNotInLayoutOrScroll()` and throws `IllegalStateException`.
+- **Error Message**: 
+  ```
+  java.lang.IllegalStateException: Cannot call this method while RecyclerView is computing a layout or scrolling cb.c8{...}, adapter:cb.v8@...
+  	at androidx.recyclerview.widget.RecyclerView.h(SourceFile:22)
+  	at androidx.recyclerview.widget.g0.b(SourceFile:24)
+  	at androidx.recyclerview.widget.f0.notifyDataSetChanged(SourceFile:3)
+  	at androidx.media3.common.m.run(SourceFile:401)
+  ```
+- **Fix Applied**: Implemented `safeNotifyDataSetChanged()` which checks `rv.isComputingLayout || !rv.isAttachedToWindow || rv.scrollState != RecyclerView.SCROLL_STATE_IDLE`. If busy, it safely re-posts via `rv.post`. Also wrapped the call in `try-catch(IllegalStateException)` which safely re-posts if a race occurs. Used for both `submitItems` and `updateConfig`.
+- **Prevention**: Never call `notifyDataSetChanged()` or `notifyItemRangeChanged()` without layout/scroll state checks and try-catch guards in custom RecyclerView adapters.
+- **Status**: Fixed
+
+---
+
+## [2026-11-01 21:45] - FocusFinder NPE getTouchscreenBlocksFocus on Detached View
+
+- **Type**: Runtime
+- **Severity**: Critical
+- **File**: ndroid.view.FocusFinder:137 / pp/src/main/java/com/nuvio/tv/MainActivity.kt:1413
+- **Agent**: mon
+- **Root Cause**: When a card in Leanback was recycled, detached, or had clearFocus() called while having getRootView(): View = this, clearFocus() immediately called 	his.requestFocus(), keeping the view focused even after it was detached from the hierarchy (iew.parent == null). When a subsequent DPAD key event arrived, AndroidComposeView called FocusFinder.findNextFocus(root, currentFocus, direction) with the detached view. In Android 9 (API 28), FocusFinder.getEffectiveRoot() loops with do { ... } while (nextParent instanceof ViewGroup) without checking if ocused.getParent() is null, executing g.getTouchscreenBlocksFocus() on (ViewGroup) null and throwing an NPE.
+- **Error Message**: 
+  `
+  java.lang.NullPointerException: Attempt to invoke virtual method 'boolean android.view.ViewGroup.getTouchscreenBlocksFocus()' on a null object reference
+  	at android.view.FocusFinder.getEffectiveRoot(FocusFinder.java:137)
+  	at android.view.FocusFinder.findNextFocus(FocusFinder.java:98)
+  	at android.view.FocusFinder.findNextFocus(FocusFinder.java:80)
+  	at androidx.compose.ui.platform.AndroidComposeView.v(SourceFile:78)
+  	at c2.r.i(SourceFile:14)
+  	at s8.v0.invoke(SourceFile:111)
+  	at p2.f.a0(SourceFile:10)
+  	at c2.r.f(SourceFile:737)
+  	at androidx.compose.ui.platform.AndroidComposeView.dispatchKeyEvent(SourceFile:67)
+  	at com.nuvio.tv.MainActivity.dispatchKeyEvent(SourceFile:134)
+  `
+- **Fix Applied**: 
+  1. Removed getRootView(): View = this from card 
+oot so clearFocus() naturally delegates to InteropHorizontalGridView instead of re-claiming focus on itself.
+  2. Added OnAttachStateChangeListener to card 
+oot, plus onViewDetachedFromWindow and onViewRecycled in LeanbackRowAdapter to guarantee focus is cleared immediately whenever a card is detached/recycled.
+  3. Added null-parent / detached guards and try-catch for getTouchscreenBlocksFocus in InteropHorizontalGridView.focusSearch().
+  4. Added detached focus sanitizer and try-catch safety shield in MainActivity.dispatchKeyEvent() to intercept the framework NPE and safely reset focus.
+- **Prevention**: Never override getRootView(): View = this on focusable child views, always clear focus when views detach or recycle in custom adapters, and guard activity dispatchKeyEvent against framework traversal bugs on older Android TV versions.
+- **Status**: Fixed
+
+---
+
+## [2026-11-01 21:33] - Coil Size IllegalArgumentException px must be > 0
+
+- **Type**: Runtime / Integration
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt:624`
+- **Agent**: mon
+- **Root Cause**: During the initial layout pass of a newly instantiated row, `cardWidthPx` or `cardHeightPx` can momentarily be `0` before measurement completes. Coil 3's `Dimension.Pixels(px)` requires `require(px > 0) { "px must be > 0." }`, causing an immediate fatal crash on launch.
+- **Error Message**: 
+  ```
+  java.lang.IllegalArgumentException: px must be > 0.
+  	at coil3.size.Dimension$Pixels.<init>(Dimension.kt:18)
+  	at coil3.size.Dimension(Dimension.kt)
+  	at coil3.request.ImageRequest$Builder.size(ImageRequest.kt)
+  	at com.nuvio.tv.ui.screens.home.LeanbackCardViewHolder.bind(LeanbackModernRow.kt:624)
+  ```
+- **Fix Applied**: Wrapped dimensions with `.coerceAtLeast(1)` in `.apply { size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1)) }` so size values are always strictly positive.
+- **Prevention**: Always guard dimension arguments passed to Coil's `size()` builder with `.coerceAtLeast(1)`.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-01 20:37] - performMeasureAndLayout Crash During D-pad Navigation Across Rows
 
 - **Type**: Runtime / Integration
@@ -169,6 +244,36 @@
   4. Implemented 16-Hue-bin histogram scoring in `extractDominantColor`, ensuring large background colors (like Ali G yellow) win over small objects while preserving saturated accents on dark posters.
   5. Cached extracted dominant colors in an LRU cache by `item.key` to instantly glow in the poster's hue upon focus without delay.
 - **Prevention**: Never use `clipOutPath` on a software canvas if curved boundaries are expected outside the path; let overlapping child views handle interior coverage. Always use histogram binning for dominant image color extraction.
+- **Status**: Fixed
+
+---
+
+
+## [2026-11-01 22:39] - Layout state should be one of 100 but it is 10 & GapWorker Crash on Rapid Scroll
+
+- **Type**: Runtime
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt:674`
+- **Agent**: mon
+- **Root Cause**: 
+  1. `LeanbackCardViewHolder.bind()` invoked `adapter.onLoadMore()` directly inside `onBindViewHolder` during `dispatchLayoutStep2` (`STEP_LAYOUT = 2 = 10` in binary). Calling `onLoadMore` triggered ViewModel data fetch and Compose recomposition which mutated the adapter items while RecyclerView was still in the middle of its layout pass.
+  2. `GapWorker` running during the next frame's Choreographer callback called `prefetchPositionWithDeadline`, which asserted `mState.assertLayoutStep(State.STEP_ANIMATIONS = 4 = 100 in binary)` and crashed because `mLayoutStep` was still stuck in `STEP_LAYOUT (10)`.
+  3. `submitItems` updated `items = newItems` immediately even when `rv.isComputingLayout` was true, leaving `getItemCount()` and the layout manager's internal state out of sync.
+- **Error Message**: 
+  ```
+  java.lang.IllegalStateException: Layout state should be one of 100 but it is 10
+  	at androidx.recyclerview.widget.c1.a(SourceFile:41)
+  	at androidx.recyclerview.widget.RecyclerView.o(SourceFile:137)
+  	at androidx.recyclerview.widget.RecyclerView.m(SourceFile:131)
+  	at androidx.recyclerview.widget.f1.run(SourceFile:24)
+  	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:949)
+  ```
+- **Fix Applied**: 
+  1. Disabled `GapWorker` prefetch in `InteropHorizontalGridView` (`layoutManager?.isItemPrefetchEnabled = false`).
+  2. Removed `adapter.onLoadMore()` completely from `onBindViewHolder` / `bind()`.
+  3. Moved `onLoadMore()` trigger to `addOnChildViewHolderSelectedListener` dispatched via `post` when the selected position is within 5 items of the end.
+  4. In `submitItems`, deferred the entire assignment `items = newItems` via `rv.post` if `rv.isComputingLayout || rv.isInLayout` is true.
+- **Prevention**: Never trigger adapter load more or data state mutations inside `onBindViewHolder`; always defer through focus/selection listeners with `post`.
 - **Status**: Fixed
 
 ---

@@ -439,8 +439,15 @@ class LeanbackCardViewHolder(
                     }
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
                         if (bindingAdapterPosition == 0) {
-                            if (adapter.onNavigateLeftOnFirstItem()) {
-                                root.clearFocus()
+                            // Only open sidebar on a fresh single press (repeatCount == 0).
+                            // If holding DPAD_LEFT (repeatCount > 0), safely stop at the first item
+                            // without accidentally bursting into the sidebar drawer.
+                            if (event.repeatCount == 0) {
+                                if (adapter.onNavigateLeftOnFirstItem()) {
+                                    root.clearFocus()
+                                    return@setOnKeyListener true
+                                }
+                            } else {
                                 return@setOnKeyListener true
                             }
                         }
@@ -513,6 +520,9 @@ class LeanbackCardViewHolder(
         showLabels: Boolean,
         isNearEnd: Boolean
     ) {
+        if (currentItem?.key != item.key) {
+            posterImage.setImageDrawable(null)
+        }
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
         val cachedColor = dominantColorCache.get(item.key)
@@ -553,23 +563,22 @@ class LeanbackCardViewHolder(
             progressBar?.visibility = View.GONE
         }
 
-        // Image loading via Coil với Dynamic Color extraction
+        // Image loading via Coil với Dynamic Color extraction & Instant Memory Cache
         val imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
         if (!imageUrl.isNullOrBlank()) {
             val ctx = posterImage.context
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
-                .size((cardWidthPx * 1.5f).toInt(), (cardHeightPx * 1.5f).toInt())
+                .size(cardWidthPx, cardHeightPx)
                 .allowHardware(false)
-                .crossfade(adapter.animationsEnabled())
+                .crossfade(false)
                 .target(
                     object : Target {
                         override fun onStart(placeholder: Image?) {
                             if (placeholder != null) {
                                 posterImage.setImageDrawable(placeholder.asDrawable(ctx.resources))
-                            } else {
-                                posterImage.setImageDrawable(null)
                             }
+                            // Retain previous image while loading to avoid flashing black
                         }
                         override fun onSuccess(result: Image) {
                             posterImage.setImageDrawable(result.asDrawable(ctx.resources))
@@ -609,7 +618,6 @@ class LeanbackCardViewHolder(
     fun unbind() {
         imageDisposable?.dispose()
         imageDisposable = null
-        posterImage.setImageDrawable(null)
         glowView.visibility = View.GONE
         cardContainer.foreground = null
     }
