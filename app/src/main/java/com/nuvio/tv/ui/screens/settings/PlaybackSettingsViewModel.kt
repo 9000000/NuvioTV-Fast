@@ -15,6 +15,7 @@ import com.nuvio.tv.data.local.LibassRenderScale
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.LibassRenderMode
 import com.nuvio.tv.data.local.InternalPlayerEngine
+import com.nuvio.tv.data.local.NightMode
 import com.nuvio.tv.data.local.Dv7HandlingMode
 import com.nuvio.tv.data.local.SurroundFormatMode
 import com.nuvio.tv.data.local.SurroundChannelTarget
@@ -231,6 +232,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setSkipSilence(enabled: Boolean) {
         playerSettingsDataStore.setSkipSilence(enabled)
+    }
+
+    suspend fun setNightMode(mode: NightMode) {
+        playerSettingsDataStore.setNightMode(mode)
     }
 
     suspend fun setRememberAudioDelayPerDevice(enabled: Boolean) {
