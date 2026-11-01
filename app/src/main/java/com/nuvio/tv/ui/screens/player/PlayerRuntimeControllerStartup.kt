@@ -67,32 +67,16 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
         }
         startRemoteTorrServerStatsPolling(effectiveInfoHash, currentStreamUrl)
         scope.launch {
-            var hasStartedPlayback = false
             val finalUrl = awaitRemoteTorrServerPreload(
                 hash = effectiveInfoHash,
-                streamUrl = currentStreamUrl,
-                onNearCompletion = { earlyPlaybackUrl ->
-                    if (!hasStartedPlayback) {
-                        hasStartedPlayback = true
-                        currentStreamUrl = earlyPlaybackUrl
-                        Log.d("PlayerStartup", "Preload near completion; early initializing player to buffer ahead: $earlyPlaybackUrl")
-                        preparePlaybackBeforeStart(
-                            url = earlyPlaybackUrl,
-                            headers = currentHeaders,
-                            loadSavedProgress = !navigationArgs.startFromBeginning
-                        )
-                    }
-                }
+                streamUrl = currentStreamUrl
             )
-            if (!hasStartedPlayback) {
-                hasStartedPlayback = true
-                currentStreamUrl = finalUrl
-                preparePlaybackBeforeStart(
-                    url = finalUrl,
-                    headers = currentHeaders,
-                    loadSavedProgress = !navigationArgs.startFromBeginning
-                )
-            }
+            currentStreamUrl = finalUrl
+            preparePlaybackBeforeStart(
+                url = finalUrl,
+                headers = currentHeaders,
+                loadSavedProgress = !navigationArgs.startFromBeginning
+            )
         }
         return
     }

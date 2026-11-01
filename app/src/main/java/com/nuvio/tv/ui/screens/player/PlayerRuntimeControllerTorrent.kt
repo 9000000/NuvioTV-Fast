@@ -282,6 +282,8 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
         var lastDownloadSpeed = Long.MIN_VALUE
         var lastLoadedSize = Long.MIN_VALUE
         var lastBufferingMessage: String? = null
+        var lastActivePeers = -1
+        var lastConnectedSeeders = -1
         val hasPreloadParam = runCatching {
             val uri = android.net.Uri.parse(streamUrl)
             uri.queryParameterNames.any { it.equals("preload", ignoreCase = true) }
@@ -314,7 +316,9 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                         val changed = message != lastLoadingMessage ||
                             progress != lastLoadingProgress ||
                             stats.downloadSpeed != lastDownloadSpeed ||
-                            stats.loadedSize != lastLoadedSize
+                            stats.loadedSize != lastLoadedSize ||
+                            stats.activePeers != lastActivePeers ||
+                            stats.connectedSeeders != lastConnectedSeeders
                         if (changed) {
                             _uiState.update {
                                 it.copy(
@@ -325,9 +329,9 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                                     loadingMessage = message,
                                     loadingProgress = progress,
                                     torrentDownloadSpeed = stats.downloadSpeed,
-                                    torrentUploadSpeed = 0L,
-                                    torrentPeers = 0,
-                                    torrentSeeds = 0,
+                                    torrentUploadSpeed = stats.uploadSpeed,
+                                    torrentPeers = stats.activePeers,
+                                    torrentSeeds = stats.connectedSeeders,
                                     torrentBufferProgress = progress ?: 0f,
                                     torrentTotalProgress = progress ?: 0f,
                                     torrentBufferingMessage = null,
@@ -339,6 +343,8 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                             lastLoadingProgress = progress
                             lastDownloadSpeed = stats.downloadSpeed
                             lastLoadedSize = stats.loadedSize
+                            lastActivePeers = stats.activePeers
+                            lastConnectedSeeders = stats.connectedSeeders
                         }
                     } else {
                         // When video is playing: turn off loading stats!
@@ -349,7 +355,9 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                         // Avoid redundant state updates during smooth playback
                         if (isBuffering || _uiState.value.torrentBufferingMessage != null) {
                             val changed = rebufferingMessage != lastBufferingMessage ||
-                                stats.downloadSpeed != lastDownloadSpeed
+                                stats.downloadSpeed != lastDownloadSpeed ||
+                                stats.activePeers != lastActivePeers ||
+                                stats.connectedSeeders != lastConnectedSeeders
                             if (changed) {
                                 _uiState.update {
                                     it.copy(
@@ -358,9 +366,9 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                                         showTorrentStats = false,
                                         loadingProgress = null,
                                         torrentDownloadSpeed = stats.downloadSpeed,
-                                        torrentUploadSpeed = 0L,
-                                        torrentPeers = 0,
-                                        torrentSeeds = 0,
+                                        torrentUploadSpeed = stats.uploadSpeed,
+                                        torrentPeers = stats.activePeers,
+                                        torrentSeeds = stats.connectedSeeders,
                                         torrentBufferProgress = 0f,
                                         torrentTotalProgress = 0f,
                                         torrentBufferingMessage = rebufferingMessage,
@@ -372,6 +380,8 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
                                 }
                                 lastBufferingMessage = rebufferingMessage
                                 lastDownloadSpeed = stats.downloadSpeed
+                                lastActivePeers = stats.activePeers
+                                lastConnectedSeeders = stats.connectedSeeders
                             }
                         }
                     }
@@ -395,8 +405,7 @@ internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
 
 internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
     hash: String,
-    streamUrl: String,
-    onNearCompletion: ((playbackUrl: String) -> Unit)? = null
+    streamUrl: String
 ): String {
     val uri = runCatching { android.net.Uri.parse(streamUrl) }.getOrNull()
         ?: return streamUrl
@@ -434,7 +443,6 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
 
     val startTime = System.currentTimeMillis()
     var pollCount = 0
-    var nearCompletionTriggered = false
 
     return try {
         val playbackUrl = withTimeoutOrNull(60_000L) {
@@ -455,22 +463,7 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
 
                 val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
                 if (stats != null) {
-                    // Early buffer handoff: when preload reaches 90% progress (or is ready),
-                    // notify caller so ExoPlayer starts preparing and downloading buffer ahead.
-                    val isNearReady = (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 90 / 100) ||
-                        stats.preloadProgress >= 0.90f ||
-                        stats.isPreloadReady
-
-                    if (isNearReady && !nearCompletionTriggered) {
-                        nearCompletionTriggered = true
-                        Log.d(
-                            TAG,
-                            "Remote TorrServer preload reached 90% (${(stats.preloadProgress * 100).toInt()}%); " +
-                                "requesting player to buffer ahead early!"
-                        )
-                        onNearCompletion?.invoke(playbackTargetUrl)
-                    }
-
+                    // Ready at target preload threshold (95%)
                     if (stats.isPreloadReady) {
                         // User note: when starting, server may already be in active state.
                         // Ensure that on early polls (< 2 seconds), we only accept ready state
@@ -482,7 +475,7 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
                         if (hasSufficientBuffer || elapsedMs >= 2000L || pollCount > 4) {
                             Log.d(
                                 TAG,
-                                "Remote TorrServer preload ready: preloaded=${stats.preloadedBytes}, " +
+                                "Remote TorrServer preload ready (95%): preloaded=${stats.preloadedBytes}, " +
                                     "preloadSize=${stats.preloadSize}, loaded=${stats.loadedSize}, stat=${stats.statString}"
                             )
                             return@withTimeoutOrNull playbackTargetUrl
