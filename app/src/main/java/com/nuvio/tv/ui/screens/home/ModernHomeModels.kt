@@ -396,7 +396,7 @@ internal fun buildContinueWatchingItem(
     val imageUrl = when (item) {
         is ContinueWatchingItem.InProgress -> if (useLandscapePosters) {
             item.customLandscapePoster ?: if (isSeriesType(item.progress.contentType)) {
-                firstNonBlank(item.episodeThumbnail, item.progress.poster, item.progress.backdrop)
+                firstNonBlank(item.episodeThumbnail, item.progress.backdrop, item.progress.poster)
             } else {
                 firstNonBlank(item.progress.backdrop, item.progress.poster)
             }
@@ -409,9 +409,9 @@ internal fun buildContinueWatchingItem(
         }
         is ContinueWatchingItem.NextUp -> if (useLandscapePosters) {
             item.customLandscapePoster ?: if (item.info.hasAired) {
-                firstNonBlank(item.info.thumbnail, item.info.poster, item.info.backdrop)
+                firstNonBlank(item.info.thumbnail, item.info.backdrop, item.info.poster)
             } else {
-                firstNonBlank(item.info.backdrop, item.info.poster, item.info.thumbnail)
+                firstNonBlank(item.info.backdrop, item.info.thumbnail, item.info.poster)
             }
         } else {
             firstNonBlank(item.info.poster, item.info.backdrop, item.info.thumbnail)

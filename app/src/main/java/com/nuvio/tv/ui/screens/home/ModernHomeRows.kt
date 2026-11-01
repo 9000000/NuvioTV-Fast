@@ -497,7 +497,16 @@ internal fun ModernRowSection(
     onBackdropInteraction: () -> Unit,
     onExpandedCatalogFocusKeyChange: (String?) -> Unit,
     sharedPlaceholderShimmerOffsetState: State<Float>?,
-    itemFocusRequesters: StableRef<MutableMap<Int, FocusRequester>> = StableRef(mutableMapOf())
+    itemFocusRequesters: StableRef<MutableMap<Int, FocusRequester>> = StableRef(mutableMapOf()),
+    onNavigateDown: () -> Boolean = { false },
+    onNavigateUp: () -> Boolean = { false },
+    onNavigateLeftOnFirstItem: () -> Boolean = { false },
+    onNavigateBack: () -> Boolean = { false },
+    rowGrids: MutableMap<String, androidx.leanback.widget.HorizontalGridView>? = null,
+    isPendingFocus: Boolean = false,
+    pendingFocusIndex: Int = 0,
+    pendingFocusNonce: Int = 0,
+    onClearPendingFocus: () -> Unit = {}
 ) {
     // Unwrap StableRef wrappers
     @Suppress("NAME_SHADOWING") val focusedItemByRow = focusedItemByRow.value
@@ -914,172 +923,93 @@ internal fun ModernRowSection(
                 }
         }
 
-        CompositionLocalProvider(LocalBringIntoViewSpec provides horizontalBringIntoViewSpec) {
-            val usesPlaceholderShimmer = row.showsPlaceholderShimmer()
-            val placeholderShimmerOffsetState = if (usesPlaceholderShimmer) {
-                sharedPlaceholderShimmerOffsetState
-            } else {
-                null
-            }
+        val isContinueWatchingRow = row.key == MODERN_CONTINUE_WATCHING_ROW_KEY || row.key == MODERN_UPCOMING_ROW_KEY
+        val effectiveCardWidth = when {
+            isContinueWatchingRow -> continueWatchingCardWidth
+            useLandscapePosters -> landscapeCatalogCardWidth
+            else -> portraitCatalogCardWidth
+        }
+        val effectiveCardHeight = when {
+            isContinueWatchingRow -> continueWatchingCardHeight
+            useLandscapePosters -> landscapeCatalogCardHeight
+            else -> portraitCatalogCardHeight
+        }
+        val effectiveCornerRadius = if (isContinueWatchingRow) continueWatchingCornerRadius else posterCardCornerRadius
 
-            LazyRow(
-                state = rowListState,
-                modifier = Modifier
-                    .recompositionHighlighter()
-                    .focusRequester(rowFocusRequester)
-                    .then(
-                        @Suppress("DEPRECATION")
-                        Modifier.focusRestorer {
-                            val savedIdx = rowFocusedIndex.value
-                            itemFocusRequesters[savedIdx]
-                                ?: itemFocusRequesters[0]
-                                ?: FocusRequester.Default
-                        }
-                    )
-                    .focusGroup(),
-                contentPadding = PaddingValues(horizontal = rowStartPadding),
-                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
-            ) {
-                itemsIndexed(
-                    items = row.items.list,
-                    key = { index, item ->
-                        val pinned = pinnedItemKey.value
-                        when {
-                            !pinFirstCard.value -> item.key
-                            pinned != null -> if (item.key == pinned) firstCardKey else item.key
-                            index == 0 -> firstCardKey
-                            else -> item.key
-                        }
-                    },
-                    contentType = { _, item ->
-                        when (val payload = item.payload) {
-                            is ModernPayload.ContinueWatching -> "modern_cw_card"
-                            is ModernPayload.Catalog -> if (payload.itemId.startsWith("__placeholder_")) "placeholder" else payload.itemType
-                            is ModernPayload.CollectionFolder -> "modern_collection_folder_card"
+        LeanbackModernRow(
+            rowKey = row.key,
+            items = row.items.list,
+            cardWidth = effectiveCardWidth,
+            cardHeight = effectiveCardHeight,
+            cornerRadius = effectiveCornerRadius,
+            showLabels = showLabels,
+            animationsEnabled = animationsEnabled,
+            startPadding = rowStartPadding,
+            spacing = NuvioTheme.spacing.md,
+            onItemFocused = { index, item ->
+                onRowItemFocused(row.key, index, isContinueWatchingRow)
+                item.metaPreview?.let { onItemFocus(it) }
+                when (val p = item.payload) {
+                    is ModernPayload.Catalog -> {
+                        if (!p.itemId.startsWith("__placeholder_")) {
+                            onCatalogSelectionFocused(FocusedCatalogSelection(p.focusKey, p))
                         }
                     }
-                ) { index, item ->
-                    val requester = itemFocusRequesters.getOrPut(index) { FocusRequester() }
-                    val isContinueWatchingRow = row.key == MODERN_CONTINUE_WATCHING_ROW_KEY || row.key == MODERN_UPCOMING_ROW_KEY
-                    val onFocused = remember(row.key, index, isContinueWatchingRow) {
-                        {
-                            onRowItemFocused(row.key, index, isContinueWatchingRow)
-                            if (pendingRowFocusKey.value == row.key && (pendingRowFocusIndex.value ?: 0) == index) {
-                                onPendingRowFocusCleared()
-                            }
+                    is ModernPayload.CollectionFolder -> {
+                        onCatalogSelectionFocused(FocusedCatalogSelection(p.focusKey, p))
+                    }
+                    is ModernPayload.ContinueWatching -> Unit
+                }
+            },
+            onItemClick = { item ->
+                when (val p = item.payload) {
+                    is ModernPayload.Catalog -> {
+                        if (!p.itemId.startsWith("__placeholder_")) {
+                            onNavigateToDetail(p.itemId, p.itemType, p.addonBaseUrl)
                         }
                     }
-
-                    // Use derivedStateOf so only the ONE item that becomes/loses
-                    // target status recomposes — not all items in all visible rows.
-                    val isTargetItem by remember(row.key, index) {
-                        derivedStateOf {
-                            val isPending = pendingRowFocusKey.value == row.key &&
-                                (pendingRowFocusIndex.value ?: 0) == index
-                            val isCurrent = isActiveRow() &&
-                                rowFocusedIndex.value == index
-                            isPending || isCurrent
-                        }
+                    is ModernPayload.CollectionFolder -> {
+                        onNavigateToFolderDetail(p.collectionId, p.folderId)
                     }
-
-                    when (val payload = item.payload) {
-                        is ModernPayload.ContinueWatching -> {
-                            ModernContinueWatchingRowItem(
-                                payload = payload,
-                                requester = requester,
-                                isTargetItem = isTargetItem,
-                                cardWidth = continueWatchingCardWidth,
-                                imageHeight = continueWatchingCardHeight,
-                                blurUnwatchedEpisodes = blurUnwatchedEpisodes,
-                                useEpisodeThumbnails = useEpisodeThumbnails,
-                                continueWatchingCardStyle = continueWatchingCardStyle,
-                                continueWatchingCornerRadius = continueWatchingCornerRadius,
-                                onFocused = onFocused,
-                                onContinueWatchingClick = onContinueWatchingClick,
-                                onShowOptions = onContinueWatchingOptions
-                            )
-                        }
-
-                        is ModernPayload.Catalog,
-                        is ModernPayload.CollectionFolder -> {
-                            val nextCatalogItem = row.items.list.getOrNull(index + 1)?.metaPreview
-                            val prevCatalogItem = row.items.list.getOrNull(index - 1)?.metaPreview
-                            val metaPreview = item.metaPreview
-                            val isPlaceholder = payload is ModernPayload.Catalog &&
-                                payload.itemId.startsWith("__placeholder_")
-                            val onLongPress: () -> Unit = when {
-                                payload is ModernPayload.Catalog && metaPreview != null -> remember(metaPreview, payload.addonBaseUrl) {
-                                    {
-                                        onCatalogItemLongPress(metaPreview, payload.addonBaseUrl)
-                                        Unit
-                                    }
-                                }
-                                else -> remember(Unit) { {} }
-                            }
-                            val expandedFocusKey = when (payload) {
-                                is ModernPayload.Catalog -> payload.focusKey
-                                is ModernPayload.CollectionFolder -> payload.focusKey
-                            }
-                            val isBackdropExpandedLambda = remember(
-                                effectiveExpandEnabled,
-                                isRowScrollingState,
-                                expandedCatalogFocusKey,
-                                expandedFocusKey
-                            ) {
-                                {
-                                    effectiveExpandEnabled &&
-                                        (!isRowScrollingState.value || isExpansionScrollActive) &&
-                                        expandedCatalogFocusKey.value == expandedFocusKey
-                                }
-                            }
-                            val placeholderFocusBlock = isPlaceholder && index > 0
-                            Box(modifier = if (placeholderFocusBlock) {
-                                Modifier.focusProperties { canFocus = false }
-                            } else Modifier) {
-                            ModernCatalogRowItem(
-                                item = item,
-                                payload = payload,
-                                requester = requester,
-                                isTargetItem = isTargetItem,
-                                useLandscapePosters = useLandscapePosters,
-                                alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
-                                showLabels = showLabels,
-                                placeholderShimmerOffsetState = placeholderShimmerOffsetState,
-                                posterCardCornerRadius = posterCardCornerRadius,
-                                focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
-                                effectiveExpandEnabled = effectiveExpandEnabled,
-                                effectiveAutoplayEnabled = effectiveAutoplayEnabled,
-                                trailerPlaybackTarget = trailerPlaybackTarget,
-                                isBackdropExpanded = isBackdropExpandedLambda,
-                                expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
-                                expandedTrailerPreviewAudioUrl = expandedTrailerPreviewAudioUrl,
-                                portraitCatalogCardWidth = portraitCatalogCardWidth,
-                                portraitCatalogCardHeight = portraitCatalogCardHeight,
-                                landscapeCatalogCardWidth = landscapeCatalogCardWidth,
-                                landscapeCatalogCardHeight = landscapeCatalogCardHeight,
-                                isCatalogItemWatched = isCatalogItemWatched,
-                                onFocused = onFocused,
-                                onItemFocus = onItemFocus,
-                                onPreloadAdjacentItem = remember(nextCatalogItem, prevCatalogItem, onPreloadAdjacentItem) {
-                                     {
-                                         nextCatalogItem?.let(onPreloadAdjacentItem)
-                                         prevCatalogItem?.let(onPreloadAdjacentItem)
-                                     }
-                                },
-                                onCatalogSelectionFocused = onCatalogSelectionFocused,
-                                onNavigateToDetail = onNavigateToDetail,
-                                onNavigateToFolderDetail = onNavigateToFolderDetail,
-                                onLongPress = onLongPress,
-                                onBackdropInteraction = onBackdropInteraction,
-                                onExpandedCatalogFocusKeyChange = onExpandedCatalogFocusKeyChange,
-                                enrichedPreviews = enrichedPreviews
-                            )
-                            } // Box
-                        }
+                    is ModernPayload.ContinueWatching -> {
+                        onContinueWatchingClick(p.item)
                     }
                 }
-            }
-        }
+            },
+            onItemLongClick = { item ->
+                when (val p = item.payload) {
+                    is ModernPayload.Catalog -> {
+                        item.metaPreview?.let { onCatalogItemLongPress(it, p.addonBaseUrl) }
+                    }
+                    is ModernPayload.ContinueWatching -> {
+                        onContinueWatchingOptions(p.item)
+                    }
+                    else -> Unit
+                }
+            },
+            onLoadMore = {
+                if (canObserveLoadMore) {
+                    val lastRequestedTotal = loadMoreRequestedTotals[row.key]
+                    val total = row.items.list.size
+                    if (row.hasMore && !row.isLoading && lastRequestedTotal != total) {
+                        loadMoreRequestedTotals[row.key] = total
+                        onLoadMoreCatalog(loadMoreCatalogId, loadMoreAddonId, loadMoreApiType)
+                    }
+                }
+            },
+            onNavigateDown = onNavigateDown,
+            onNavigateUp = onNavigateUp,
+            onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem,
+            onNavigateBack = onNavigateBack,
+            rowGrids = rowGrids,
+            isPendingFocus = isPendingFocus,
+            pendingFocusIndex = pendingFocusIndex,
+            pendingFocusNonce = pendingFocusNonce,
+            onClearPendingFocus = onClearPendingFocus,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(rowFocusRequester)
+        )
     }
 }
 

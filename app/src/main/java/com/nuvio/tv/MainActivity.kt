@@ -223,6 +223,7 @@ import kotlinx.coroutines.launch
 
 val LocalSidebarExpanded = compositionLocalOf { false }
 val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
+val LocalOpenSidebar = compositionLocalOf<(() -> Unit)?> { null }
 
 data class SplashBackground(
     val profileColorHex: String? = null,
@@ -1185,7 +1186,7 @@ open class MainActivity : ComponentActivity() {
                         }
                     }
                     val handleExitApp: () -> Unit = {
-                        if (!confirmExitEnabled || backPressedOnce) {
+                        if (backPressedOnce) {
                             finishAffinity()
                             finishAndRemoveTask()
                             if (confirmExitEnabled) {
@@ -1466,13 +1467,14 @@ private fun SidebarFocusRecoveryEffect(
         if (!sidebarOwnsFocus) {
             return@LaunchedEffect
         }
-        if (selectedDrawerRoute != null && drawerItems.any { it.route == selectedDrawerRoute }) {
-            return@LaunchedEffect
+        val targetRoute = selectedDrawerRoute?.takeIf { route -> drawerItems.any { it.route == route } }
+            ?: drawerItems.firstOrNull()?.route
+            ?: return@LaunchedEffect
+        val requester = drawerItemFocusRequesters[targetRoute] ?: return@LaunchedEffect
+        for (i in 0 until 5) {
+            withFrameNanos { }
+            runCatching { requester.requestFocus() }
         }
-        val fallbackRoute = drawerItems.firstOrNull()?.route ?: return@LaunchedEffect
-        val requester = drawerItemFocusRequesters[fallbackRoute] ?: return@LaunchedEffect
-        repeat(2) { withFrameNanos { } }
-        runCatching { requester.requestFocus() }
     }
 }
 
@@ -1528,7 +1530,8 @@ private fun LegacySidebarScaffold(
 
     BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Open) {
         if (longPressBackHeld.value) return@BackHandler
-        onExitApp()
+        drawerState.setValue(DrawerValue.Closed)
+        pendingContentFocusTransfer = true
     }
 
     LaunchedEffect(drawerState.currentValue, pendingContentFocusTransfer) {
@@ -1760,7 +1763,8 @@ private fun LegacySidebarScaffold(
         ) {
             CompositionLocalProvider(
                 LocalSidebarExpanded provides (drawerState.currentValue == DrawerValue.Open),
-                LocalContentFocusRequester provides contentFocusRequester
+                LocalContentFocusRequester provides contentFocusRequester,
+                LocalOpenSidebar provides { pendingSidebarFocusRequest = true; drawerState.setValue(DrawerValue.Open) }
             ) {
                 NuvioNavHost(
                     navController = navController,
@@ -1945,14 +1949,14 @@ private fun ModernSidebarScaffold(
     }
 
     BackHandler(enabled = currentRoute in rootRoutes && !isSidebarExpanded && !sidebarCollapsePending) {
-        isSidebarExpanded = true
-        sidebarCollapsePending = false
-        pendingSidebarFocusRequest = true
+        onExitApp()
     }
 
     BackHandler(enabled = currentRoute in rootRoutes && isSidebarExpanded && !sidebarCollapsePending) {
         if (longPressBackHeld.value) return@BackHandler
-        onExitApp()
+        isSidebarExpanded = false
+        sidebarCollapsePending = false
+        pendingContentFocusTransfer = true
     }
 
     LaunchedEffect(sidebarCollapsePending, isSidebarExpanded, showSidebar) {
@@ -2054,8 +2058,14 @@ private fun ModernSidebarScaffold(
             pendingSidebarFocusRequest = false
             return@LaunchedEffect
         }
-        repeat(2) { withFrameNanos { } }
-        runCatching { requester.requestFocus() }
+        for (i in 0 until 6) {
+            withFrameNanos { }
+            val ok = runCatching {
+                requester.requestFocus()
+                true
+            }.getOrDefault(false)
+            if (ok && focusedDrawerIndex >= 0) break
+        }
         pendingSidebarFocusRequest = false
     }
 
@@ -2155,7 +2165,14 @@ private fun ModernSidebarScaffold(
         ) {
             CompositionLocalProvider(
                 LocalSidebarExpanded provides isSidebarExpanded,
-                LocalContentFocusRequester provides contentFocusRequester
+                LocalContentFocusRequester provides contentFocusRequester,
+                LocalOpenSidebar provides {
+                    isSidebarExpanded = true
+                    sidebarCollapsePending = false
+                    pendingSidebarFocusRequest = true
+                    val initialIdx = drawerItems.indexOfFirst { it.route == selectedDrawerRoute }.takeIf { it >= 0 } ?: 0
+                    focusedDrawerIndex = initialIdx
+                }
             ) {
                 NuvioNavHost(
                     navController = navController,
@@ -2181,6 +2198,23 @@ private fun ModernSidebarScaffold(
                     .onPreviewKeyEvent { keyEvent ->
                         if (!isSidebarExpanded || keyEvent.type != KeyEventType.KeyDown) {
                             return@onPreviewKeyEvent false
+                        }
+                        val collapseKey = if (isRtl) Key.DirectionLeft else Key.DirectionRight
+                        if (keyEvent.key == collapseKey) {
+                            pendingContentFocusTransfer = true
+                            sidebarCollapsePending = true
+                            return@onPreviewKeyEvent true
+                        }
+                        val stayInSidebarKey = if (isRtl) Key.DirectionRight else Key.DirectionLeft
+                        if (keyEvent.key == stayInSidebarKey) {
+                            // Stay within the sidebar, do not let focus escape to the left
+                            return@onPreviewKeyEvent true
+                        }
+                        if (focusedDrawerIndex < 0) {
+                            val targetRoute = selectedDrawerRoute ?: drawerItems.firstOrNull()?.route
+                            if (targetRoute != null) {
+                                runCatching { drawerItemFocusRequesters[targetRoute]?.requestFocus() }
+                            }
                         }
                         when (keyEvent.key) {
                             Key.DirectionUp -> {
@@ -2212,16 +2246,7 @@ private fun ModernSidebarScaffold(
                                 }
                             }
 
-                            Key.DirectionRight, Key.DirectionLeft -> {
-                                val collapseKey = if (isRtl) Key.DirectionLeft else Key.DirectionRight
-                                if (keyEvent.key == collapseKey) {
-                                    pendingContentFocusTransfer = false
-                                    sidebarCollapsePending = true
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
+
 
                             else -> false
                         }

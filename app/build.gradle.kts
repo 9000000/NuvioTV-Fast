@@ -146,8 +146,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1132
-        versionName = "1.2.35"
+        versionCode = 1153
+        versionName = "1.2.56"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -498,6 +498,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.profileinstaller)
     implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("androidx.leanback:leanback:1.0.0")
     implementation(composeBom)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
@@ -529,6 +530,7 @@ dependencies {
 
     // Image Loading
     implementation(libs.coil.compose)
+    implementation("io.coil-kt.coil3:coil:3.3.0")
     implementation(libs.coil.gif)
     implementation(libs.coil.svg)
     implementation(libs.coil.network.okhttp)

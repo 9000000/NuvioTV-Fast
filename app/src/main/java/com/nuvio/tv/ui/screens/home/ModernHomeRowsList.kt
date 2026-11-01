@@ -26,6 +26,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -53,6 +59,7 @@ import coil3.imageLoader
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
+import com.nuvio.tv.LocalSidebarExpanded
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.isPlaceholder
@@ -149,6 +156,8 @@ internal fun ModernHomeRowsList(
     modifier: Modifier = Modifier
 ) {
     // Unwrap StableRef wrappers for internal use (not passed to child composables)
+    val isSidebarExpanded = LocalSidebarExpanded.current
+    val isSidebarExpandedState = rememberUpdatedState(isSidebarExpanded)
     val focusedItemByRowMap = focusedItemByRow.value
     val rowListStatesMap = rowListStates.value
     val loadMoreRequestedTotalsMap = loadMoreRequestedTotals.value
@@ -158,6 +167,21 @@ internal fun ModernHomeRowsList(
 
     val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val stableItemFocusRequestersByRow = remember { mutableMapOf<String, StableRef<MutableMap<Int, FocusRequester>>>() }
+    val rowGrids = remember { mutableMapOf<String, androidx.leanback.widget.HorizontalGridView>() }
+    val coroutineScope = rememberCoroutineScope()
+    var scrollJob by remember { mutableStateOf<Job?>(null) }
+    var localPendingFocusRowKey by remember { mutableStateOf<String?>(null) }
+    var localPendingFocusIndex by remember { mutableIntStateOf(0) }
+    var localPendingFocusNonce by remember { mutableIntStateOf(0) }
+    var targetRowIndexTracker by remember { mutableIntStateOf(0) }
+    var lastNavTimeMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(activeRowKey.value) {
+        val idx = carouselRows.list.indexOfFirst { it.key == activeRowKey.value }
+        if (idx >= 0 && idx != targetRowIndexTracker) {
+            targetRowIndexTracker = idx
+        }
+    }
 
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -280,6 +304,9 @@ internal fun ModernHomeRowsList(
         LocalFastScrollActive provides isFastScrolling,
         LocalVerticalRowsScrolling provides isVerticalRowsScrollingState
     ) {
+        val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
+        val animationsEnabled = NuvioTheme.animationsEnabled
+
         LazyColumn(
             state = verticalRowListState,
             modifier = modifier
@@ -316,53 +343,7 @@ internal fun ModernHomeRowsList(
                         activeItemIndex.value == 0
                     ) return@onPreviewKeyEvent true
                     false
-                }
-                .dpadVerticalFastScroll(
-                    scrollableState = verticalRowListState,
-                    onFastScrollingChanged = onFastScrollingChanged,
-                    shouldHaltForward = {
-                        val info = verticalRowListState.layoutInfo
-                        val lastIdx = carouselRows.list.size - 1
-                        val lastVisible = info.visibleItemsInfo.lastOrNull { it.index == lastIdx }
-                        lastIdx >= 0 && lastVisible != null &&
-                            lastVisible.offset + lastVisible.size <= info.viewportEndOffset
-                    },
-                    resolveVerticalLanding = { sign ->
-                        val layoutInfo = verticalRowListState.layoutInfo
-                        val visibleItems = layoutInfo.visibleItemsInfo
-                        val lastIdx = carouselRows.list.size - 1
-                        val viewportEnd = layoutInfo.viewportEndOffset
-                        val lastRowAtBottom = lastIdx >= 0 &&
-                            visibleItems.lastOrNull { it.index == lastIdx }?.let {
-                                it.offset + it.size <= viewportEnd
-                            } == true
-                        val upwardTopRow: LazyListItemInfo? = if (sign < 0) {
-                            visibleItems.firstOrNull()?.takeIf {
-                                it.offset > -it.size / 2
-                            }
-                        } else null
-                        val targetRowIndex = when {
-                            lastRowAtBottom -> lastIdx
-                            upwardTopRow != null -> upwardTopRow.index
-                            else ->
-                                visibleItems.firstOrNull { it.offset >= 0 }?.index
-                                    ?: visibleItems.firstOrNull()?.index
-                                    ?: verticalRowListState.firstVisibleItemIndex
-                        }
-                        val targetRow = carouselRows.list.getOrNull(targetRowIndex)
-                        if (targetRow == null) null
-                        else {
-                            val savedIdx = (focusedItemByRowMap[targetRow.key] ?: 0)
-                                .coerceIn(0, (targetRow.items.list.size - 1).coerceAtLeast(0))
-                            latestOnActiveRowKeyChange.value(targetRow.key)
-                            latestOnActiveItemIndexChange.value(savedIdx)
-
-                            val targetItemKey = targetRow.items.list.getOrNull(savedIdx)?.key
-                                ?: "${targetRow.key}_$savedIdx"
-                            targetItemKey
-                        }
-                    },
-                ),
+                },
             contentPadding = PaddingValues(bottom = rowsViewportHeight),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xl)
         ) {
@@ -370,7 +351,203 @@ internal fun ModernHomeRowsList(
                 items = carouselRows.list,
                 key = { _, row -> row.key },
                 contentType = { _, row -> row.apiType ?: "modern_home_row" }
-            ) { _, row ->
+            ) { rowIndex, row ->
+                val onNavigateLeftOnFirstItem = remember(openSidebar) {
+                    {
+                        if (openSidebar != null) {
+                            openSidebar()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }
+
+                val onNavigateBack = remember(carouselRows.list, animationsEnabled) {
+                    {
+                        if (isSidebarExpandedState.value) {
+                            false
+                        } else {
+                            val currentActiveRowKey = activeRowKey.value
+                            val currentRowFocusedItem = currentActiveRowKey?.let { focusedItemByRowMap[it] } ?: 0
+                            if (currentRowFocusedItem > 0 && currentActiveRowKey != null) {
+                                focusedItemByRowMap[currentActiveRowKey] = 0
+                                latestOnActiveItemIndexChange.value(0)
+                                val currentGrid = rowGrids[currentActiveRowKey]
+                                if (currentGrid != null) {
+                                    if (animationsEnabled) {
+                                        currentGrid.setSelectedPositionSmooth(0)
+                                    } else {
+                                        currentGrid.setSelectedPosition(0)
+                                    }
+                                    currentGrid.post {
+                                        val vh = currentGrid.findViewHolderForAdapterPosition(0)
+                                        if (vh != null) {
+                                            vh.itemView.requestFocus()
+                                        } else {
+                                            currentGrid.requestFocus()
+                                        }
+                                    }
+                                }
+                                true
+                            } else if (targetRowIndexTracker > 0) {
+                                targetRowIndexTracker = 0
+                                val firstRow = carouselRows.list.firstOrNull()
+                                if (firstRow != null) {
+                                    val targetCardIndex = (focusedItemByRowMap[firstRow.key] ?: 0)
+                                        .coerceIn(0, (firstRow.items.list.size - 1).coerceAtLeast(0))
+                                    latestOnActiveRowKeyChange.value(firstRow.key)
+                                    latestOnActiveItemIndexChange.value(targetCardIndex)
+                                    scrollJob?.cancel()
+                                    scrollJob = coroutineScope.launch {
+                                        if (animationsEnabled) {
+                                            verticalRowListState.animateScrollToItem(0)
+                                        } else {
+                                            verticalRowListState.scrollToItem(0)
+                                        }
+                                    }
+                                    val firstGrid = rowGrids[firstRow.key]
+                                    if (firstGrid != null) {
+                                        if (animationsEnabled) {
+                                            firstGrid.setSelectedPositionSmooth(targetCardIndex)
+                                        } else {
+                                            firstGrid.setSelectedPosition(targetCardIndex)
+                                        }
+                                        firstGrid.post {
+                                            val vh = firstGrid.findViewHolderForAdapterPosition(targetCardIndex)
+                                            if (vh != null) {
+                                                vh.itemView.requestFocus()
+                                            } else {
+                                                firstGrid.requestFocus()
+                                            }
+                                        }
+                                    } else {
+                                        localPendingFocusRowKey = firstRow.key
+                                        localPendingFocusIndex = targetCardIndex
+                                        localPendingFocusNonce++
+                                    }
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                    }
+                }
+
+                val onNavigateDown = remember(carouselRows.list, animationsEnabled) {
+                    {
+                        val now = System.currentTimeMillis()
+                        // Giới hạn tần suất lặp phím khi bấm giữ im (tối thiểu 85ms giữa các hàng)
+                        if (now - lastNavTimeMs < 85L) {
+                            true
+                        } else {
+                            val isRapid = (now - lastNavTimeMs) < 180L
+                            lastNavTimeMs = now
+                            val shouldAnimate = animationsEnabled && !isRapid
+
+                            val currentIdx = targetRowIndexTracker
+                            val nextIdx = currentIdx + 1
+                            if (nextIdx < carouselRows.list.size) {
+                                targetRowIndexTracker = nextIdx
+                                val nextRow = carouselRows.list[nextIdx]
+                                val targetCardIndex = (focusedItemByRowMap[nextRow.key] ?: 0)
+                                    .coerceIn(0, (nextRow.items.list.size - 1).coerceAtLeast(0))
+
+                                latestOnActiveRowKeyChange.value(nextRow.key)
+                                latestOnActiveItemIndexChange.value(targetCardIndex)
+
+                                val nextGrid = rowGrids[nextRow.key]
+                                if (nextGrid != null) {
+                                    if (!shouldAnimate) {
+                                        nextGrid.setSelectedPosition(targetCardIndex)
+                                    } else {
+                                        nextGrid.setSelectedPositionSmooth(targetCardIndex)
+                                    }
+                                    val vh = nextGrid.findViewHolderForAdapterPosition(targetCardIndex)
+                                    if (vh != null) {
+                                        vh.itemView.requestFocus()
+                                    } else {
+                                        nextGrid.requestFocus()
+                                    }
+                                } else {
+                                    localPendingFocusRowKey = nextRow.key
+                                    localPendingFocusIndex = targetCardIndex
+                                    localPendingFocusNonce++
+                                }
+
+                                scrollJob?.cancel()
+                                scrollJob = coroutineScope.launch {
+                                    if (!shouldAnimate) {
+                                        verticalRowListState.scrollToItem(nextIdx)
+                                    } else {
+                                        verticalRowListState.animateScrollToItem(nextIdx)
+                                    }
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                    }
+                }
+
+                val onNavigateUp = remember(carouselRows.list, animationsEnabled) {
+                    {
+                        val now = System.currentTimeMillis()
+                        // Giới hạn tần suất lặp phím khi bấm giữ im (tối thiểu 85ms giữa các hàng)
+                        if (now - lastNavTimeMs < 85L) {
+                            true
+                        } else {
+                            val isRapid = (now - lastNavTimeMs) < 180L
+                            lastNavTimeMs = now
+                            val shouldAnimate = animationsEnabled && !isRapid
+
+                            val currentIdx = targetRowIndexTracker
+                            val prevIdx = currentIdx - 1
+                            if (prevIdx >= 0) {
+                                targetRowIndexTracker = prevIdx
+                                val prevRow = carouselRows.list[prevIdx]
+                                val targetCardIndex = (focusedItemByRowMap[prevRow.key] ?: 0)
+                                    .coerceIn(0, (prevRow.items.list.size - 1).coerceAtLeast(0))
+
+                                latestOnActiveRowKeyChange.value(prevRow.key)
+                                latestOnActiveItemIndexChange.value(targetCardIndex)
+
+                                val prevGrid = rowGrids[prevRow.key]
+                                if (prevGrid != null) {
+                                    if (!shouldAnimate) {
+                                        prevGrid.setSelectedPosition(targetCardIndex)
+                                    } else {
+                                        prevGrid.setSelectedPositionSmooth(targetCardIndex)
+                                    }
+                                    val vh = prevGrid.findViewHolderForAdapterPosition(targetCardIndex)
+                                    if (vh != null) {
+                                        vh.itemView.requestFocus()
+                                    } else {
+                                        prevGrid.requestFocus()
+                                    }
+                                } else {
+                                    localPendingFocusRowKey = prevRow.key
+                                    localPendingFocusIndex = targetCardIndex
+                                    localPendingFocusNonce++
+                                }
+
+                                scrollJob?.cancel()
+                                scrollJob = coroutineScope.launch {
+                                    if (!shouldAnimate) {
+                                        verticalRowListState.scrollToItem(prevIdx)
+                                    } else {
+                                        verticalRowListState.animateScrollToItem(prevIdx)
+                                    }
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                    }
+                }
                 val stableOnContinueWatchingOptions = remember(onContinueWatchingOptions) {
                     { item: ContinueWatchingItem -> onContinueWatchingOptions(item) }
                 }
@@ -439,6 +616,15 @@ internal fun ModernHomeRowsList(
                     pendingRowFocusNonce = pendingRowFocusNonce,
                     onPendingRowFocusCleared = onPendingRowFocusCleared,
                     onRowItemFocused = stableOnRowItemFocused,
+                    onNavigateDown = onNavigateDown,
+                    onNavigateUp = onNavigateUp,
+                    onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem,
+                    onNavigateBack = onNavigateBack,
+                    rowGrids = rowGrids,
+                    isPendingFocus = localPendingFocusRowKey == row.key,
+                    pendingFocusIndex = localPendingFocusIndex,
+                    pendingFocusNonce = localPendingFocusNonce,
+                    onClearPendingFocus = { localPendingFocusRowKey = null },
                     useLandscapePosters = useLandscapePosters,
                     alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
                     showLabels = showLabels,

@@ -6,6 +6,7 @@ import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.R
 import com.nuvio.tv.core.util.withAppLocale
 import com.nuvio.tv.domain.model.CatalogRow
+import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
 import com.nuvio.tv.domain.model.stableItemKey
@@ -20,6 +21,7 @@ internal data class ModernHomePresentationInput(
     val continueWatchingItems: List<ContinueWatchingItem>,
     val upcomingItems: List<ContinueWatchingItem>,
     val useLandscapePosters: Boolean,
+    val continueWatchingCardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
     val showCatalogTypeSuffix: Boolean,
     val showFullReleaseDate: Boolean,
     val showImdbRatings: Boolean,
@@ -42,6 +44,7 @@ internal fun buildModernHomePresentation(
     val strTypeMovie = localizedContext.getString(R.string.type_movie)
     val strTypeSeries = localizedContext.getString(R.string.type_series)
 
+    val isCwLandscape = input.continueWatchingCardStyle != ContinueWatchingCardStyle.POSTER || input.useLandscapePosters
     val rows = buildList {
         val activeCatalogKeys = LinkedHashSet<String>()
         val activeCollectionKeys = LinkedHashSet<String>()
@@ -55,7 +58,7 @@ internal fun buildModernHomePresentation(
                     cache.continueWatchingTitle == strContinueWatching &&
                     cache.continueWatchingAirsDateTemplate == strAirsDate &&
                     cache.continueWatchingUpcomingLabel == strUpcoming &&
-                    cache.continueWatchingUseLandscapePosters == input.useLandscapePosters &&
+                    cache.continueWatchingUseLandscapePosters == isCwLandscape &&
                     cache.continueWatchingShowImdbRatings == input.showImdbRatings
             val continueWatchingRow = if (reuseContinueWatchingRow) {
                 checkNotNull(cache.continueWatchingRow)
@@ -67,7 +70,7 @@ internal fun buildModernHomePresentation(
                     items = input.continueWatchingItems.map { item ->
                         buildContinueWatchingItem(
                             item = item,
-                            useLandscapePosters = input.useLandscapePosters,
+                            useLandscapePosters = isCwLandscape,
                             showImdbRatings = input.showImdbRatings,
                             detailImdbRatingsVisibility = input.detailImdbRatingsVisibility,
                             airsDateTemplate = strAirsDate,
@@ -81,7 +84,7 @@ internal fun buildModernHomePresentation(
             cache.continueWatchingTitle = strContinueWatching
             cache.continueWatchingAirsDateTemplate = strAirsDate
             cache.continueWatchingUpcomingLabel = strUpcoming
-            cache.continueWatchingUseLandscapePosters = input.useLandscapePosters
+            cache.continueWatchingUseLandscapePosters = isCwLandscape
             cache.continueWatchingShowImdbRatings = input.showImdbRatings
             cache.continueWatchingRow = continueWatchingRow
             add(continueWatchingRow)
@@ -97,7 +100,7 @@ internal fun buildModernHomePresentation(
                 cache.upcomingRow != null &&
                     cache.upcomingItems == input.upcomingItems &&
                     cache.upcomingTitle == strUpcomingSectionTitle &&
-                    cache.upcomingUseLandscapePosters == input.useLandscapePosters &&
+                    cache.upcomingUseLandscapePosters == isCwLandscape &&
                     cache.upcomingShowImdbRatings == input.showImdbRatings
             val upcomingRow = if (reuseUpcomingRow) {
                 checkNotNull(cache.upcomingRow)
@@ -109,7 +112,7 @@ internal fun buildModernHomePresentation(
                     items = input.upcomingItems.map { item ->
                         buildContinueWatchingItem(
                             item = item,
-                            useLandscapePosters = input.useLandscapePosters,
+                            useLandscapePosters = isCwLandscape,
                             showImdbRatings = input.showImdbRatings,
                             detailImdbRatingsVisibility = input.detailImdbRatingsVisibility,
                             airsDateTemplate = strAirsDate,
@@ -121,7 +124,7 @@ internal fun buildModernHomePresentation(
             }
             cache.upcomingItems = input.upcomingItems
             cache.upcomingTitle = strUpcomingSectionTitle
-            cache.upcomingUseLandscapePosters = input.useLandscapePosters
+            cache.upcomingUseLandscapePosters = isCwLandscape
             cache.upcomingShowImdbRatings = input.showImdbRatings
             cache.upcomingRow = upcomingRow
             add(upcomingRow)

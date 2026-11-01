@@ -325,6 +325,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     continueWatchingItems = overlay.continueWatchingItems,
                     upcomingItems = overlay.upcomingItems,
                     useLandscapePosters = state.modernLandscapePostersEnabled,
+                    continueWatchingCardStyle = state.continueWatchingCardStyle,
                     showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
                     showFullReleaseDate = state.showFullReleaseDate,
                     showImdbRatings = state.homeImdbRatingsVisibility.showRatings,
