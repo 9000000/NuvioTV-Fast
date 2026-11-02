@@ -375,16 +375,13 @@ internal fun ModernHomeRowsList(
                                 latestOnActiveItemIndexChange.value(0)
                                 val currentGrid = rowGrids[currentActiveRowKey]
                                 if (currentGrid != null) {
-                                    if (animationsEnabled) {
-                                        currentGrid.setSelectedPositionSmooth(0)
-                                    } else {
-                                        currentGrid.setSelectedPosition(0)
-                                    }
                                     currentGrid.post {
-                                        val vh = currentGrid.findViewHolderForAdapterPosition(0)
-                                        if (vh != null) {
-                                            vh.itemView.requestFocus()
-                                        } else {
+                                        if (currentGrid.isAttachedToWindow) {
+                                            if (animationsEnabled) {
+                                                currentGrid.setSelectedPositionSmooth(0)
+                                            } else {
+                                                currentGrid.setSelectedPosition(0)
+                                            }
                                             currentGrid.requestFocus()
                                         }
                                     }
@@ -408,16 +405,13 @@ internal fun ModernHomeRowsList(
                                     }
                                     val firstGrid = rowGrids[firstRow.key]
                                     if (firstGrid != null) {
-                                        if (animationsEnabled) {
-                                            firstGrid.setSelectedPositionSmooth(targetCardIndex)
-                                        } else {
-                                            firstGrid.setSelectedPosition(targetCardIndex)
-                                        }
                                         firstGrid.post {
-                                            val vh = firstGrid.findViewHolderForAdapterPosition(targetCardIndex)
-                                            if (vh != null) {
-                                                vh.itemView.requestFocus()
-                                            } else {
+                                            if (firstGrid.isAttachedToWindow) {
+                                                if (animationsEnabled) {
+                                                    firstGrid.setSelectedPositionSmooth(targetCardIndex)
+                                                } else {
+                                                    firstGrid.setSelectedPosition(targetCardIndex)
+                                                }
                                                 firstGrid.requestFocus()
                                             }
                                         }
@@ -435,7 +429,7 @@ internal fun ModernHomeRowsList(
                     }
                 }
 
-                val onNavigateDown = remember(carouselRows.list, animationsEnabled) {
+                val onNavigateDown = remember(rowIndex, carouselRows.list, animationsEnabled) {
                     {
                         val now = System.currentTimeMillis()
                         // Giới hạn tần suất lặp phím khi bấm giữ im (tối thiểu 85ms giữa các hàng)
@@ -446,8 +440,7 @@ internal fun ModernHomeRowsList(
                             lastNavTimeMs = now
                             val shouldAnimate = animationsEnabled && !isRapid
 
-                            val currentIdx = targetRowIndexTracker
-                            val nextIdx = currentIdx + 1
+                            val nextIdx = rowIndex + 1
                             if (nextIdx < carouselRows.list.size) {
                                 targetRowIndexTracker = nextIdx
                                 val nextRow = carouselRows.list[nextIdx]
@@ -464,12 +457,7 @@ internal fun ModernHomeRowsList(
                                     } else {
                                         nextGrid.setSelectedPositionSmooth(targetCardIndex)
                                     }
-                                    val vh = nextGrid.findViewHolderForAdapterPosition(targetCardIndex)
-                                    if (vh != null) {
-                                        vh.itemView.requestFocus()
-                                    } else {
-                                        nextGrid.requestFocus()
-                                    }
+                                    nextGrid.requestFocus()
                                 } else {
                                     localPendingFocusRowKey = nextRow.key
                                     localPendingFocusIndex = targetCardIndex
@@ -492,7 +480,7 @@ internal fun ModernHomeRowsList(
                     }
                 }
 
-                val onNavigateUp = remember(carouselRows.list, animationsEnabled) {
+                val onNavigateUp = remember(rowIndex, carouselRows.list, animationsEnabled) {
                     {
                         val now = System.currentTimeMillis()
                         // Giới hạn tần suất lặp phím khi bấm giữ im (tối thiểu 85ms giữa các hàng)
@@ -503,8 +491,7 @@ internal fun ModernHomeRowsList(
                             lastNavTimeMs = now
                             val shouldAnimate = animationsEnabled && !isRapid
 
-                            val currentIdx = targetRowIndexTracker
-                            val prevIdx = currentIdx - 1
+                            val prevIdx = rowIndex - 1
                             if (prevIdx >= 0) {
                                 targetRowIndexTracker = prevIdx
                                 val prevRow = carouselRows.list[prevIdx]
@@ -521,12 +508,7 @@ internal fun ModernHomeRowsList(
                                     } else {
                                         prevGrid.setSelectedPositionSmooth(targetCardIndex)
                                     }
-                                    val vh = prevGrid.findViewHolderForAdapterPosition(targetCardIndex)
-                                    if (vh != null) {
-                                        vh.itemView.requestFocus()
-                                    } else {
-                                        prevGrid.requestFocus()
-                                    }
+                                    prevGrid.requestFocus()
                                 } else {
                                     localPendingFocusRowKey = prevRow.key
                                     localPendingFocusIndex = targetCardIndex

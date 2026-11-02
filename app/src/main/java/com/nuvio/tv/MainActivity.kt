@@ -1749,13 +1749,7 @@ private fun LegacySidebarScaffold(
                         keyEvent.type == KeyEventType.KeyDown &&
                         keyEvent.key == openKey
                     ) {
-                        if (focusManager.moveFocus(if (isRtl) FocusDirection.Right else FocusDirection.Left)) {
-                            true
-                        } else {
-                            pendingSidebarFocusRequest = true
-                            drawerState.setValue(DrawerValue.Open)
-                            true
-                        }
+                        focusManager.moveFocus(if (isRtl) FocusDirection.Right else FocusDirection.Left)
                     } else {
                         false
                     }
@@ -2147,14 +2141,7 @@ private fun ModernSidebarScaffold(
                         }
                         val openKey = if (isRtl) Key.DirectionRight else Key.DirectionLeft
                         if (keyEvent.key == openKey) {
-                            if (focusManager.moveFocus(if (isRtl) FocusDirection.Right else FocusDirection.Left)) {
-                                true
-                            } else {
-                                isSidebarExpanded = true
-                                sidebarCollapsePending = false
-                                pendingSidebarFocusRequest = true
-                                true
-                            }
+                            focusManager.moveFocus(if (isRtl) FocusDirection.Right else FocusDirection.Left)
                         } else {
                             false
                         }

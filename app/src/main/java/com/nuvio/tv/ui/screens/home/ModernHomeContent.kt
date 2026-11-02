@@ -275,27 +275,13 @@ fun ModernHomeContent(
     val fullscreenTrailerDismiss = remember { mutableStateOf<(() -> Unit)?>(null) }
     val shouldInterceptBack = remember {
         derivedStateOf {
-            if (!contentHasFocus.value) return@derivedStateOf false
-            if (fullscreenTrailerPlaying.value) return@derivedStateOf true
-            val rowKey = activeRowKey.value ?: return@derivedStateOf false
-            val itemIndex = focusedItemByRow[rowKey] ?: 0
-            itemIndex > 0
+            fullscreenTrailerPlaying.value
         }
     }
     IsolatedReadScope {
         BackHandler(enabled = shouldInterceptBack.value) {
             if (fullscreenTrailerPlaying.value) {
                 fullscreenTrailerDismiss.value?.invoke()
-                return@BackHandler
-            }
-            val rowKey = activeRowKey.value ?: return@BackHandler
-            val listState = rowListStates[rowKey]
-            focusedItemByRow[rowKey] = 0
-            pendingRowFocusKey.value = rowKey
-            pendingRowFocusIndex.value = 0
-            pendingRowFocusNonce.intValue++
-            backScrollScope.launch {
-                listState?.scrollToItem(0, 0)
             }
         }
     }

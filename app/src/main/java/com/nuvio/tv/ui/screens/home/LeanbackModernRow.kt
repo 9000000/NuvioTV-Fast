@@ -15,6 +15,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.os.Build
+import android.os.SystemClock
 import android.text.TextUtils
 import android.util.LruCache
 import android.util.TypedValue
@@ -44,6 +45,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.ColorUtils
 import androidx.leanback.widget.BaseGridView
 import androidx.leanback.widget.HorizontalGridView
+import androidx.leanback.widget.OnChildViewHolderSelectedListener
 import androidx.recyclerview.widget.RecyclerView
 import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
@@ -253,10 +255,60 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     var onNavigateDown: (() -> Boolean)? = null
     var onNavigateUp: (() -> Boolean)? = null
     var onNavigateBack: (() -> Boolean)? = null
+    var onNavigateLeftOnFirstItem: (() -> Boolean)? = null
+    var animationsEnabled: Boolean = true
+
+    private var isHoldingHorizontalKey = false
+    private var isAtItem0 = false
+    private var item0SettledTime = 0L
+    private var hasReleasedLeftKeySinceAt0 = true
+
+    private val rowAdapter: LeanbackRowAdapter?
+        get() = adapter as? LeanbackRowAdapter
 
     init {
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         itemAnimator = null
+        layoutManager?.isItemPrefetchEnabled = false
+
+        addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    rowAdapter?.onScrollSettled()
+                }
+            }
+        })
+
+        addOnChildViewHolderSelectedListener(object : OnChildViewHolderSelectedListener() {
+            override fun onChildViewHolderSelected(
+                parent: RecyclerView,
+                child: RecyclerView.ViewHolder?,
+                position: Int,
+                subposition: Int
+            ) {
+                if (position == 0) {
+                    isAtItem0 = true
+                    item0SettledTime = SystemClock.uptimeMillis()
+                } else {
+                    isAtItem0 = false
+                    hasReleasedLeftKeySinceAt0 = false
+                }
+
+                if (position >= 0 && child != null) {
+                    val item = rowAdapter?.getItem(position)
+                    if (item != null) {
+                        rowAdapter?.onItemFocused?.invoke(position, item)
+                    }
+                }
+
+                val totalCount = rowAdapter?.itemCount ?: 0
+                if (position >= totalCount - 5 && totalCount > 0) {
+                    post {
+                        rowAdapter?.onLoadMore?.invoke()
+                    }
+                }
+            }
+        })
     }
 
     // Always isolate the root view to 'this'.
@@ -295,66 +347,111 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         try {
             super.onLayout(changed, l, t, r, b)
-        } catch (e: IllegalArgumentException) {
-            if (e.message?.contains("performMeasureAndLayout") == true) {
-                // Intercept Compose focus recursion during layout/draw pass safely
-            } else {
-                throw e
-            }
+        } catch (e: Exception) {
+            // Intercept Compose focus recursion or RecyclerView internal layout race conditions safely
         }
     }
 
     override fun removeViewAt(index: Int) {
         try {
             super.removeViewAt(index)
-        } catch (e: IllegalArgumentException) {
-            if (e.message?.contains("performMeasureAndLayout") == true) {
-                // Intercept Compose focus recursion during layout/draw pass safely
-            } else {
-                throw e
-            }
+        } catch (e: Exception) {
         }
     }
 
     override fun removeViews(start: Int, count: Int) {
         try {
             super.removeViews(start, count)
-        } catch (e: IllegalArgumentException) {
-            if (e.message?.contains("performMeasureAndLayout") == true) {
-                // Intercept Compose focus recursion during layout/draw pass safely
-            } else {
-                throw e
-            }
+        } catch (e: Exception) {
         }
     }
 
     override fun removeView(view: View?) {
         try {
             super.removeView(view)
-        } catch (e: IllegalArgumentException) {
-            if (e.message?.contains("performMeasureAndLayout") == true) {
-                // Intercept Compose focus recursion during layout/draw pass safely
-            } else {
-                throw e
-            }
+        } catch (e: Exception) {
         }
     }
 
     override fun removeViewInLayout(view: View?) {
         try {
             super.removeViewInLayout(view)
-        } catch (e: IllegalArgumentException) {
-            if (e.message?.contains("performMeasureAndLayout") == true) {
-                // Intercept Compose focus recursion during layout/draw pass safely
-            } else {
-                throw e
-            }
+        } catch (e: Exception) {
         }
     }
 
+    override fun requestChildRectangleOnScreen(child: View, rect: Rect, immediate: Boolean): Boolean {
+        if (!animationsEnabled) {
+            return super.requestChildRectangleOnScreen(child, rect, true)
+        }
+        return super.requestChildRectangleOnScreen(child, rect, immediate)
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
-        if (event != null && event.action == KeyEvent.ACTION_DOWN) {
+        if (event == null) return false
+
+        if (event.action == KeyEvent.ACTION_UP) {
             when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    if (isHoldingHorizontalKey) {
+                        stopScroll()
+                        isHoldingHorizontalKey = false
+                    }
+                    if (selectedPosition <= 0) {
+                        hasReleasedLeftKeySinceAt0 = true
+                    }
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (isHoldingHorizontalKey) {
+                        stopScroll()
+                        isHoldingHorizontalKey = false
+                    }
+                    return true
+                }
+            }
+        }
+
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val now = SystemClock.uptimeMillis()
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    val currentPos = selectedPosition
+                    if (currentPos <= 0) {
+                        if (hasReleasedLeftKeySinceAt0 && (now - item0SettledTime >= 350L) && event.repeatCount == 0) {
+                            if (onNavigateLeftOnFirstItem?.invoke() == true) {
+                                return true
+                            }
+                        }
+                        stopScroll()
+                        return true
+                    }
+
+                    hasReleasedLeftKeySinceAt0 = false
+                    if (event.repeatCount > 0) {
+                        isHoldingHorizontalKey = true
+                    }
+
+                    if (!animationsEnabled) {
+                        val target = (currentPos - 1).coerceAtLeast(0)
+                        stopScroll()
+                        setSelectedPosition(target)
+                        return true
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (event.repeatCount > 0) {
+                        isHoldingHorizontalKey = true
+                    }
+
+                    if (!animationsEnabled) {
+                        val total = rowAdapter?.itemCount ?: 0
+                        val target = (selectedPosition + 1).coerceAtMost((total - 1).coerceAtLeast(0))
+                        stopScroll()
+                        setSelectedPosition(target)
+                        return true
+                    }
+                }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     if (onNavigateDown?.invoke() == true) return true
                 }
@@ -437,21 +534,6 @@ class LeanbackCardViewHolder(
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         if (adapter.onNavigateUp()) return@setOnKeyListener true
                     }
-                    KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        if (bindingAdapterPosition == 0) {
-                            // Only open sidebar on a fresh single press (repeatCount == 0).
-                            // If holding DPAD_LEFT (repeatCount > 0), safely stop at the first item
-                            // without accidentally bursting into the sidebar drawer.
-                            if (event.repeatCount == 0) {
-                                if (adapter.onNavigateLeftOnFirstItem()) {
-                                    root.clearFocus()
-                                    return@setOnKeyListener true
-                                }
-                            } else {
-                                return@setOnKeyListener true
-                            }
-                        }
-                    }
                     KeyEvent.KEYCODE_BACK -> {
                         if (adapter.onNavigateBack()) return@setOnKeyListener true
                     }
@@ -517,8 +599,7 @@ class LeanbackCardViewHolder(
         cardWidthPx: Int,
         cardHeightPx: Int,
         cornerRadiusPx: Float,
-        showLabels: Boolean,
-        isNearEnd: Boolean
+        showLabels: Boolean
     ) {
         if (currentItem?.key != item.key) {
             posterImage.setImageDrawable(null)
@@ -609,10 +690,6 @@ class LeanbackCardViewHolder(
         } else {
             posterImage.setImageDrawable(null)
         }
-
-        if (isNearEnd) {
-            adapter.onLoadMore()
-        }
     }
 
     fun unbind() {
@@ -640,6 +717,9 @@ class LeanbackRowAdapter(
 ) : RecyclerView.Adapter<LeanbackCardViewHolder>() {
 
     private var items: List<ModernCarouselItem> = emptyList()
+    private var pendingItems: List<ModernCarouselItem>? = null
+
+    fun getItem(position: Int): ModernCarouselItem? = items.getOrNull(position)
 
     fun updateConfig(
         newWidthPx: Int,
@@ -675,14 +755,48 @@ class LeanbackRowAdapter(
     fun submitItems(newItems: List<ModernCarouselItem>) {
         if (items === newItems) return
         if (items.size == newItems.size && items == newItems) return
-        items = newItems
+
         val rv = attachedRecyclerView
-        if (rv != null && (rv.isComputingLayout || !rv.isAttachedToWindow)) {
+        if (rv != null && (rv.isComputingLayout || rv.isInLayout || rv.scrollState != RecyclerView.SCROLL_STATE_IDLE)) {
+            pendingItems = newItems
+            return
+        }
+        pendingItems = null
+        applyItems(newItems)
+    }
+
+    fun onScrollSettled() {
+        val pending = pendingItems ?: return
+        pendingItems = null
+        applyItems(pending)
+    }
+
+    private fun applyItems(newItems: List<ModernCarouselItem>) {
+        val oldItems = items
+        val oldSize = oldItems.size
+        val newSize = newItems.size
+        items = newItems
+
+        val rv = attachedRecyclerView
+        if (rv != null && rv.isComputingLayout) {
             rv.post {
                 if (attachedRecyclerView === rv) {
-                    notifyDataSetChanged()
+                    applyItemsInternal(oldItems, oldSize, newSize, newItems)
                 }
             }
+        } else {
+            applyItemsInternal(oldItems, oldSize, newSize, newItems)
+        }
+    }
+
+    private fun applyItemsInternal(
+        oldItems: List<ModernCarouselItem>,
+        oldSize: Int,
+        newSize: Int,
+        newItems: List<ModernCarouselItem>
+    ) {
+        if (oldSize > 0 && newSize > oldSize && oldItems == newItems.take(oldSize)) {
+            notifyItemRangeInserted(oldSize, newSize - oldSize)
         } else {
             notifyDataSetChanged()
         }
@@ -800,8 +914,7 @@ class LeanbackRowAdapter(
 
     override fun onBindViewHolder(holder: LeanbackCardViewHolder, position: Int) {
         val item = items[position]
-        val isNearEnd = position >= items.size - 4
-        holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels, isNearEnd)
+        holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
     }
 
     override fun onViewRecycled(holder: LeanbackCardViewHolder) {
@@ -884,12 +997,7 @@ fun LeanbackModernRow(
                     } else {
                         gridView.setSelectedPosition(targetIdx)
                     }
-                    val vh = gridView.findViewHolderForAdapterPosition(targetIdx)
-                    if (vh != null) {
-                        vh.itemView.requestFocus()
-                    } else {
-                        gridView.requestFocus()
-                    }
+                    gridView.requestFocus()
                 }
             }
             onClearPendingFocus()
@@ -922,6 +1030,8 @@ fun LeanbackModernRow(
                 this.onNavigateDown = onNavigateDown
                 this.onNavigateUp = onNavigateUp
                 this.onNavigateBack = onNavigateBack
+                this.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
+                this.animationsEnabled = animationsEnabled
                 rowGrids?.put(rowKey, this)
             }
         },
@@ -930,6 +1040,8 @@ fun LeanbackModernRow(
                 gridView.onNavigateDown = onNavigateDown
                 gridView.onNavigateUp = onNavigateUp
                 gridView.onNavigateBack = onNavigateBack
+                gridView.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
+                gridView.animationsEnabled = animationsEnabled
             }
             gridView.setAnimateChildLayout(animationsEnabled)
             adapter.animationsEnabled = { animationsEnabled }
