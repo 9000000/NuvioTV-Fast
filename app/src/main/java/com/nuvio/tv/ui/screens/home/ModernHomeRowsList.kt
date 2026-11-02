@@ -153,9 +153,11 @@ internal fun ModernHomeRowsList(
     onFocusedHeroMediaNonceChange: (Int) -> Unit,
     onExpansionInteractionNonceChange: (Int) -> Unit,
     blockLeftOnFirstExpandedItem: Boolean = false,
+    onUserNavigated: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Unwrap StableRef wrappers for internal use (not passed to child composables)
+    val animationsEnabled = NuvioTheme.animationsEnabled
     val isSidebarExpanded = LocalSidebarExpanded.current
     val isSidebarExpandedState = rememberUpdatedState(isSidebarExpanded)
     val focusedItemByRowMap = focusedItemByRow.value
@@ -175,6 +177,53 @@ internal fun ModernHomeRowsList(
     var localPendingFocusNonce by remember { mutableIntStateOf(0) }
     var targetRowIndexTracker by remember { mutableIntStateOf(0) }
     var lastNavTimeMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(pendingRowFocusNonce.value) {
+        val targetKey = pendingRowFocusKey.value ?: return@LaunchedEffect
+        val targetIdx = pendingRowFocusIndex.value ?: 0
+        localPendingFocusRowKey = targetKey
+        localPendingFocusIndex = targetIdx
+        localPendingFocusNonce++
+
+        val rowIdx = carouselRows.list.indexOfFirst { it.key == targetKey }
+        if (rowIdx >= 0) {
+            targetRowIndexTracker = rowIdx
+            if (verticalRowListState.firstVisibleItemIndex != rowIdx) {
+                scrollJob?.cancel()
+                scrollJob = coroutineScope.launch {
+                    if (animationsEnabled) {
+                        verticalRowListState.animateScrollToItem(rowIdx)
+                    } else {
+                        verticalRowListState.scrollToItem(rowIdx)
+                    }
+                }
+            }
+        }
+        val targetGrid = rowGrids[targetKey]
+        if (targetGrid != null && targetGrid.isAttachedToWindow) {
+            targetGrid.post {
+                if (targetGrid.isAttachedToWindow) {
+                    if (animationsEnabled) {
+                        targetGrid.setSelectedPositionSmooth(targetIdx)
+                    } else {
+                        targetGrid.setSelectedPosition(targetIdx)
+                    }
+                    targetGrid.requestFocus()
+                    val vh = targetGrid.findViewHolderForAdapterPosition(targetIdx)
+                    if (vh != null) {
+                        vh.itemView.requestFocus()
+                    } else {
+                        targetGrid.post {
+                            val deferredVh = targetGrid.findViewHolderForAdapterPosition(targetIdx)
+                            deferredVh?.itemView?.requestFocus()
+                        }
+                    }
+                }
+            }
+            localPendingFocusRowKey = null
+        }
+        onPendingRowFocusCleared()
+    }
 
     LaunchedEffect(activeRowKey.value) {
         val idx = carouselRows.list.indexOfFirst { it.key == activeRowKey.value }
@@ -305,7 +354,6 @@ internal fun ModernHomeRowsList(
         LocalVerticalRowsScrolling provides isVerticalRowsScrollingState
     ) {
         val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
-        val animationsEnabled = NuvioTheme.animationsEnabled
 
         LazyColumn(
             state = verticalRowListState,
@@ -319,6 +367,13 @@ internal fun ModernHomeRowsList(
                 .focusRequester(contentFocusRequester)
                 .focusRestorer { focusRestorerRequester() }
                 .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (event.key) {
+                            Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight, Key.Back -> {
+                                onUserNavigated()
+                            }
+                        }
+                    }
                     val firstRowKey = carouselRows.list.firstOrNull()?.key
                     val lastRowKey = carouselRows.list.lastOrNull()?.key
                     if (event.type == KeyEventType.KeyDown &&
@@ -354,6 +409,7 @@ internal fun ModernHomeRowsList(
             ) { rowIndex, row ->
                 val onNavigateLeftOnFirstItem = remember(openSidebar) {
                     {
+                        onUserNavigated()
                         if (openSidebar != null) {
                             openSidebar()
                             true
@@ -365,6 +421,7 @@ internal fun ModernHomeRowsList(
 
                 val onNavigateBack = remember(carouselRows.list, animationsEnabled) {
                     {
+                        onUserNavigated()
                         if (isSidebarExpandedState.value) {
                             false
                         } else {
@@ -431,6 +488,7 @@ internal fun ModernHomeRowsList(
 
                 val onNavigateDown = remember(rowIndex, carouselRows.list, animationsEnabled) {
                     {
+                        onUserNavigated()
                         val now = System.currentTimeMillis()
                         // Giới hạn tần suất lặp phím khi bấm giữ im (tối thiểu 85ms giữa các hàng)
                         if (now - lastNavTimeMs < 85L) {
@@ -482,6 +540,7 @@ internal fun ModernHomeRowsList(
 
                 val onNavigateUp = remember(rowIndex, carouselRows.list, animationsEnabled) {
                     {
+                        onUserNavigated()
                         val now = System.currentTimeMillis()
                         // Giới hạn tần suất lặp phím khi bấm giữ im (tối thiểu 85ms giữa các hàng)
                         if (now - lastNavTimeMs < 85L) {

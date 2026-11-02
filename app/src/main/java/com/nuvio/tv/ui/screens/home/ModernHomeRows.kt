@@ -514,6 +514,7 @@ internal fun ModernRowSection(
     @Suppress("NAME_SHADOWING") val loadMoreRequestedTotals = loadMoreRequestedTotals.value
     @Suppress("NAME_SHADOWING") val itemFocusRequesters = itemFocusRequesters.value
     val rowKey = row.key
+    val animationsEnabled = NuvioTheme.animationsEnabled
 
     // Per-row derived state: only invalidates when THIS row's focused index
     // changes, not when any other row's index changes in the shared map.
@@ -629,6 +630,28 @@ internal fun ModernRowSection(
                 .coerceIn(0, (row.items.list.size - 1).coerceAtLeast(0))
             if (!rowListState.isScrollInProgress) {
                 runCatching { rowListState.scrollToItem(targetIndex) }
+            }
+            val grid = rowGrids?.get(row.key)
+            if (grid != null && grid.isAttachedToWindow) {
+                grid.post {
+                    if (grid.isAttachedToWindow) {
+                        if (animationsEnabled) {
+                            grid.setSelectedPositionSmooth(targetIndex)
+                        } else {
+                            grid.setSelectedPosition(targetIndex)
+                        }
+                        grid.requestFocus()
+                        val vh = grid.findViewHolderForAdapterPosition(targetIndex)
+                        if (vh != null) {
+                            vh.itemView.requestFocus()
+                        } else {
+                            grid.post {
+                                val deferredVh = grid.findViewHolderForAdapterPosition(targetIndex)
+                                deferredVh?.itemView?.requestFocus()
+                            }
+                        }
+                    }
+                }
             }
         }
 

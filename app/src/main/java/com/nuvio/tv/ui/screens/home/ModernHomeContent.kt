@@ -249,6 +249,7 @@ fun ModernHomeContent(
     val pendingRowFocusIndex = remember { mutableStateOf<Int?>(null) }
     val pendingRowFocusNonce = remember { mutableIntStateOf(0) }
     val restoredFromSavedState = remember { mutableStateOf(false) }
+    val userHasNavigated = remember { mutableStateOf(false) }
     val heroItem = remember {
         val initialHero = carouselRows.list.firstOrNull()?.items?.list?.firstOrNull()?.heroPreview
         mutableStateOf<HeroPreview?>(initialHero)
@@ -478,6 +479,7 @@ fun ModernHomeContent(
         val firstRow = carouselRows.list.firstOrNull()
 
         val resolvedActive = when {
+            !userHasNavigated.value && !focusState.hasSavedFocus -> firstRow
             existingActive != null -> existingActive
             hadActiveRow -> null // Wait for data to reappear
             else -> firstRow     // Initial state
@@ -495,7 +497,7 @@ fun ModernHomeContent(
             heroItem.value = resolvedActive.items.getOrNull(resolvedIndex)?.heroPreview
                 ?: resolvedActive.items.firstOrNull()?.heroPreview
 
-            if (!focusState.hasSavedFocus && !hadActiveRow) {
+            if (!focusState.hasSavedFocus && (!hadActiveRow || !userHasNavigated.value)) {
                 initialAutoSelectedKey = resolvedActive.key
                 pendingRowFocusKey.value = resolvedActive.key
                 pendingRowFocusIndex.value = resolvedIndex
@@ -1251,6 +1253,7 @@ fun ModernHomeContent(
                 onFocusedHeroMediaNonceChange = onFocusedHeroMediaNonceChangeLambda,
                 onExpansionInteractionNonceChange = onExpansionInteractionNonceChangeLambda,
                 blockLeftOnFirstExpandedItem = blockLeftOnFirstExpandedItem,
+                onUserNavigated = { userHasNavigated.value = true },
                 isVerticalRowsScrollingState = isVerticalRowsScrollingState,
                 modifier = Modifier
                     .align(Alignment.BottomStart)

@@ -986,21 +986,37 @@ fun LeanbackModernRow(
         }
     }
 
-    LaunchedEffect(isPendingFocus, pendingFocusNonce) {
-        if (isPendingFocus && items.isNotEmpty()) {
-            val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-            val gridView = rowGrids?.get(rowKey)
-            if (gridView != null) {
-                gridView.post {
-                    if (animationsEnabled) {
-                        gridView.setSelectedPositionSmooth(targetIdx)
-                    } else {
-                        gridView.setSelectedPosition(targetIdx)
+    fun executeRowFocus(grid: InteropHorizontalGridView, targetIdx: Int) {
+        grid.post {
+            if (!grid.isAttachedToWindow) return@post
+            if (animationsEnabled) {
+                grid.setSelectedPositionSmooth(targetIdx)
+            } else {
+                grid.setSelectedPosition(targetIdx)
+            }
+            grid.requestFocus()
+            val vh = grid.findViewHolderForAdapterPosition(targetIdx)
+            if (vh != null) {
+                vh.itemView.requestFocus()
+            } else {
+                grid.post {
+                    if (grid.isAttachedToWindow) {
+                        val deferredVh = grid.findViewHolderForAdapterPosition(targetIdx)
+                        deferredVh?.itemView?.requestFocus()
                     }
-                    gridView.requestFocus()
                 }
             }
-            onClearPendingFocus()
+        }
+    }
+
+    LaunchedEffect(isPendingFocus, pendingFocusNonce, items.size) {
+        if (isPendingFocus && items.isNotEmpty()) {
+            val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+            val gridView = rowGrids?.get(rowKey) as? InteropHorizontalGridView
+            if (gridView != null && gridView.isAttachedToWindow) {
+                executeRowFocus(gridView, targetIdx)
+                onClearPendingFocus()
+            }
         }
     }
 
@@ -1033,6 +1049,11 @@ fun LeanbackModernRow(
                 this.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
                 this.animationsEnabled = animationsEnabled
                 rowGrids?.put(rowKey, this)
+                if (isPendingFocus && items.isNotEmpty()) {
+                    val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+                    executeRowFocus(this, targetIdx)
+                    onClearPendingFocus()
+                }
             }
         },
         update = { gridView ->
@@ -1059,8 +1080,11 @@ fun LeanbackModernRow(
             adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
             rowGrids?.put(rowKey, gridView)
             adapter.submitItems(items)
-
-
+            if (isPendingFocus && items.isNotEmpty() && gridView is InteropHorizontalGridView) {
+                val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+                executeRowFocus(gridView, targetIdx)
+                onClearPendingFocus()
+            }
         }
     )
 }
