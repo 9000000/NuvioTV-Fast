@@ -215,7 +215,7 @@ class SearchViewModel @Inject constructor(
         if (id.isBlank() || id in metaPrefetchedIds) return
         metaPrefetchJob?.cancel()
         metaPrefetchJob = viewModelScope.launch {
-            delay(150)
+            delay(450)
             if (id in metaPrefetchedIds) return@launch
             metaPrefetchedIds.add(id)
             metaRepository.getMetaFromAllAddons(type = type, id = id)

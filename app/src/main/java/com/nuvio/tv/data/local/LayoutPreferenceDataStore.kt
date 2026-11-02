@@ -230,9 +230,7 @@ class LayoutPreferenceDataStore @Inject constructor(
         prefs[sidebarCollapsedKey] ?: false
     }
 
-    val modernSidebarEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
-    }
+    val modernSidebarEnabled: Flow<Boolean> = kotlinx.coroutines.flow.flowOf(true)
 
     val modernSidebarBlurEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[modernSidebarBlurEnabledKey] ?: false

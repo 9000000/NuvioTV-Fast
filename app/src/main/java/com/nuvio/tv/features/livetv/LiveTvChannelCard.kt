@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,11 +54,13 @@ internal fun TvChannelCard(
     focusRequester: FocusRequester? = null,
     isFirstRow: Boolean = false,
     isLastRow: Boolean = false,
+    isFirstColumn: Boolean = false,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRequestNavigateToCategory: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
 
     Card(
         onClick = onClick,
@@ -67,10 +70,17 @@ internal fun TvChannelCard(
             .aspectRatio(1.25f)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { isFocused = it.isFocused }
-            .onKeyEvent { keyEvent ->
+            .onPreviewKeyEvent { keyEvent ->
                 val code = keyEvent.nativeKeyEvent.keyCode
                 val action = keyEvent.nativeKeyEvent.action
-                when {
+                                when {
+                    action == AndroidKeyEvent.ACTION_DOWN &&
+                    code == AndroidKeyEvent.KEYCODE_DPAD_LEFT && isFirstColumn -> {
+                        if (openSidebar != null) {
+                            openSidebar()
+                            true
+                        } else false
+                    }
                     action == AndroidKeyEvent.ACTION_DOWN &&
                     code == AndroidKeyEvent.KEYCODE_DPAD_UP && isFirstRow -> {
                         onRequestNavigateToCategory(); true

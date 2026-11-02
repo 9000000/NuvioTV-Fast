@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.util.TypedValue
+import android.view.FocusFinder
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -21,7 +22,8 @@ import com.nuvio.tv.R
 /**
  * High-performance Native Android View Sidebar for TV.
  * Replaces heavy Compose LazyColumn / Haze Blur panel with pure hardware-accelerated Views.
- * Ensures 60fps instant focus transitions and 100% focus synchronization with Leanback card rows.
+ * Supports both Modern Floating Panel and Classic Full-Height TV Drawer modes.
+ * Ensures 60fps instant focus transitions, 100% focus synchronization, and zero focus leaks.
  */
 class NativeSidebarView @JvmOverloads constructor(
     context: Context,
@@ -33,6 +35,14 @@ class NativeSidebarView @JvmOverloads constructor(
     var onNavigateRight: (() -> Unit)? = null
     var onNavigateBack: (() -> Boolean)? = null
     var onSwitchProfile: (() -> Unit)? = null
+
+    var isFloating: Boolean = true
+        set(value) {
+            if (field != value) {
+                field = value
+                applySidebarStyle()
+            }
+        }
 
     private var currentItems: List<DrawerItem> = emptyList()
     private var currentSelectedRoute: String? = null
@@ -54,20 +64,9 @@ class NativeSidebarView @JvmOverloads constructor(
         orientation = VERTICAL
         clipChildren = false
         clipToPadding = false
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
 
-        // Background: Solid dark sleek surface (#161618) with 24dp right corner radius
-        val bgDrawable = GradientDrawable().apply {
-            setColor(Color.parseColor("#FA141416"))
-            cornerRadii = floatArrayOf(
-                0f, 0f,
-                24f.toPx(), 24f.toPx(),
-                24f.toPx(), 24f.toPx(),
-                0f, 0f
-            )
-            setStroke(1.toPx(), Color.parseColor("#25FFFFFF"))
-        }
-        background = bgDrawable
-        setPadding(12.toPx(), 24.toPx(), 12.toPx(), 24.toPx())
+        applySidebarStyle()
 
         // Header (Logo or Profile)
         headerContainer = FrameLayout(context).apply {
@@ -82,12 +81,52 @@ class NativeSidebarView @JvmOverloads constructor(
             orientation = VERTICAL
             clipChildren = false
             clipToPadding = false
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
         addView(itemsContainer)
     }
 
+    private fun applySidebarStyle() {
+        val bgDrawable = GradientDrawable().apply {
+            if (isFloating) {
+                setColor(Color.parseColor("#FA141416"))
+                cornerRadii = floatArrayOf(
+                    0f, 0f,
+                    24f.toPx(), 24f.toPx(),
+                    24f.toPx(), 24f.toPx(),
+                    0f, 0f
+                )
+                setStroke(1.toPx(), Color.parseColor("#25FFFFFF"))
+            } else {
+                // Classic Full-Height solid dark TV drawer
+                setColor(Color.parseColor("#FF101012"))
+                cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f)
+                setStroke(1.toPx(), Color.parseColor("#18FFFFFF"))
+            }
+        }
+        background = bgDrawable
+        if (isFloating) {
+            setPadding(12.toPx(), 24.toPx(), 12.toPx(), 24.toPx())
+        } else {
+            setPadding(16.toPx(), 36.toPx(), 16.toPx(), 24.toPx())
+        }
+    }
+
+    override fun focusSearch(focused: View?, direction: Int): View? {
+        val nextFocus = FocusFinder.getInstance().findNextFocus(this, focused, direction)
+        return nextFocus ?: focused
+    }
+
+    private var currentProfileName: String? = null
+    private var currentAvatarColorHex: String? = null
+    private var currentShowProfile: Boolean = false
+
     fun setHeader(profileName: String?, avatarColorHex: String?, showProfile: Boolean) {
+        if (currentProfileName == profileName && currentAvatarColorHex == avatarColorHex && currentShowProfile == showProfile && headerContainer.childCount > 0) return
+        currentProfileName = profileName
+        currentAvatarColorHex = avatarColorHex
+        currentShowProfile = showProfile
         headerContainer.removeAllViews()
         if (showProfile && !profileName.isNullOrBlank()) {
             val profileLayout = LinearLayout(context).apply {
@@ -140,15 +179,24 @@ class NativeSidebarView @JvmOverloads constructor(
                 setOnKeyListener { _, keyCode, event ->
                     if (event.action == KeyEvent.ACTION_DOWN) {
                         when (keyCode) {
+                            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                val firstRoute = currentItems.firstOrNull()?.route
+                                firstRoute?.let { itemViews[it]?.requestFocus() }
+                                return@setOnKeyListener true
+                            }
                             KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                clearFocus()
                                 onNavigateRight?.invoke()
                                 return@setOnKeyListener true
                             }
                             KeyEvent.KEYCODE_BACK -> {
-                                if (onNavigateBack?.invoke() == true) return@setOnKeyListener true
+                                if (onNavigateBack?.invoke() == true) {
+                                    clearFocus()
+                                    return@setOnKeyListener true
+                                }
                             }
                             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_LEFT -> {
-                                return@setOnKeyListener true
+                                return@setOnKeyListener true // Consume to prevent escape
                             }
                         }
                     }
@@ -171,13 +219,17 @@ class NativeSidebarView @JvmOverloads constructor(
     }
 
     fun setItems(items: List<DrawerItem>, selectedRoute: String?) {
+        if (currentItems == items) {
+            setSelectedRoute(selectedRoute)
+            return
+        }
         currentItems = items
         currentSelectedRoute = selectedRoute
         itemsContainer.removeAllViews()
         itemViews.clear()
 
         items.forEachIndexed { index, item ->
-            val itemView = createNavigationItemView(item, index == 0, index == items.lastIndex)
+            val itemView = createNavigationItemView(index, item)
             itemViews[item.route] = itemView
             itemsContainer.addView(itemView)
         }
@@ -191,18 +243,31 @@ class NativeSidebarView @JvmOverloads constructor(
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (visibility == View.VISIBLE && !hasFocus()) {
+            post {
+                if (!hasFocus() && isAttachedToWindow) {
+                    requestSidebarFocus()
+                }
+            }
+        }
+    }
+
     fun requestSidebarFocus(targetRoute: String? = null) {
+        if (hasFocus()) return
         val target = targetRoute ?: currentSelectedRoute ?: currentItems.firstOrNull()?.route
         val targetView = target?.let { itemViews[it] } ?: itemViews.values.firstOrNull()
         targetView?.post {
-            targetView.requestFocus()
+            if (!hasFocus() && isAttachedToWindow) {
+                targetView.requestFocus()
+            }
         }
     }
 
     private fun createNavigationItemView(
-        item: DrawerItem,
-        isFirst: Boolean,
-        isLast: Boolean
+        index: Int,
+        item: DrawerItem
     ): LinearLayout {
         val isSelected = item.route == currentSelectedRoute
 
@@ -254,6 +319,7 @@ class NativeSidebarView @JvmOverloads constructor(
         }
 
         container.setOnClickListener {
+            clearFocus()
             onDrawerItemClick?.invoke(item.route)
         }
 
@@ -264,25 +330,42 @@ class NativeSidebarView @JvmOverloads constructor(
                         return@setOnKeyListener true // Consume to stay in sidebar
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        clearFocus()
                         onNavigateRight?.invoke()
                         return@setOnKeyListener true
                     }
                     KeyEvent.KEYCODE_BACK -> {
-                        if (onNavigateBack?.invoke() == true) return@setOnKeyListener true
+                        if (onNavigateBack?.invoke() == true) {
+                            clearFocus()
+                            return@setOnKeyListener true
+                        }
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (isFirst) {
+                        if (index > 0) {
+                            val prevRoute = currentItems.getOrNull(index - 1)?.route
+                            val prevView = prevRoute?.let { itemViews[it] }
+                            if (prevView != null) {
+                                prevView.requestFocus()
+                                return@setOnKeyListener true
+                            }
+                        } else {
                             if (headerContainer.childCount > 0 && headerContainer.getChildAt(0).isFocusable) {
                                 headerContainer.getChildAt(0).requestFocus()
                                 return@setOnKeyListener true
                             }
-                            return@setOnKeyListener true // Consume to prevent escape
                         }
+                        return@setOnKeyListener true // Consume to prevent escape to top
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        if (isLast) {
-                            return@setOnKeyListener true // Consume to prevent escape
+                        if (index < currentItems.size - 1) {
+                            val nextRoute = currentItems.getOrNull(index + 1)?.route
+                            val nextView = nextRoute?.let { itemViews[it] }
+                            if (nextView != null) {
+                                nextView.requestFocus()
+                                return@setOnKeyListener true
+                            }
                         }
+                        return@setOnKeyListener true // Consume to prevent escape to bottom
                     }
                 }
             }

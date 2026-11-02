@@ -75,7 +75,7 @@ fun GridContentCard(
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     showLabel: Boolean = true,
     showLogo: Boolean = false,
-    imageCrossfade: Boolean = true,
+    imageCrossfade: Boolean = false,
     isWatched: Boolean = false,
     focusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
@@ -118,12 +118,14 @@ fun GridContentCard(
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
 
-    val targetScale = if (animationsEnabled && isFocused) posterCardStyle.focusedScale else 1f
+    val isScaleAnimNeeded = animationsEnabled && posterCardStyle.focusedScale != 1f
+    val targetScale = if (isScaleAnimNeeded && isFocused) posterCardStyle.focusedScale else 1f
     val animatedCardScale by animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = if (animationsEnabled) tween<Float>(durationMillis = 110, easing = LinearOutSlowInEasing) else snap<Float>(),
+        animationSpec = if (isScaleAnimNeeded) tween<Float>(durationMillis = 80, easing = LinearOutSlowInEasing) else snap<Float>(),
         label = "gridCardScale"
     )
+    val currentCardScale = if (isScaleAnimNeeded) animatedCardScale else 1f
 
     Column(
         modifier = modifier
@@ -195,10 +197,14 @@ fun GridContentCard(
                     }
                     false
                 }
-                .graphicsLayer {
-                    scaleX = animatedCardScale
-                    scaleY = animatedCardScale
-                },
+                .then(
+                    if (isScaleAnimNeeded && currentCardScale != 1f) {
+                        Modifier.graphicsLayer {
+                            scaleX = currentCardScale
+                            scaleY = currentCardScale
+                        }
+                    } else Modifier
+                ),
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
                 containerColor = androidx.compose.ui.graphics.Color.Transparent,

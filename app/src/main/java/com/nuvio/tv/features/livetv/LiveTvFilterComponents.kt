@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,6 +95,7 @@ internal fun PlaylistDropdownButton(
     onClick: () -> Unit
 ) {
     val displayName = selectedName ?: stringResource(R.string.livetv_select_playlist)
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     
     Card(
         onClick = onClick,
@@ -103,7 +105,20 @@ internal fun PlaylistDropdownButton(
         ),
         shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
         scale = CardDefaults.scale(focusedScale = 1.0f),
-        modifier = Modifier.focusRequester(focusRequester)
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                    keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT &&
+                    !isOpen
+                ) {
+                    if (openSidebar != null) {
+                        openSidebar()
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                false
+            }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),

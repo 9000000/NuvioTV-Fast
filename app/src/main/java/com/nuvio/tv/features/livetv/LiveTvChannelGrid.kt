@@ -63,6 +63,7 @@ internal fun LiveTvChannelGrid(
                 focusRequester = requester,
                 isFirstRow = itemIndex < LIVE_TV_GRID_COLUMNS,
                 isLastRow = itemIndex >= lastRowStartIndex,
+                isFirstColumn = (itemIndex % LIVE_TV_GRID_COLUMNS == 0),
                 onClick = { onChannelClick(channel) },
                 onToggleFavorite = { onToggleFavorite(channel.id) },
                 onRequestNavigateToCategory = onRequestNavigateToCategory

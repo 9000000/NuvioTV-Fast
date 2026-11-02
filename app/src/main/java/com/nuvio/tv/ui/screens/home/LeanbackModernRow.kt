@@ -379,6 +379,14 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         return super.requestChildRectangleOnScreen(child, rect, immediate)
     }
 
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (gainFocus && selectedPosition <= 0) {
+            hasReleasedKeyAfterArrivingAt0 = true
+            arrivedAt0FromRight = false
+        }
+    }
     override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
         if (event == null) return false
 
@@ -411,9 +419,10 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     val currentPos = selectedPosition
                     if (currentPos <= 0) {
-                        val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 450L)
-                        val isHeld = !hasReleasedKeyAfterArrivingAt0 || event.repeatCount > 0
-                        if (!arrivedRecently && !isHeld && event.repeatCount == 0) {
+                        val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
+                        if (!arrivedRecently && event.repeatCount == 0) {
+                            hasReleasedKeyAfterArrivingAt0 = true
+                            arrivedAt0FromRight = false
                             if (onNavigateLeftOnFirstItem?.invoke() == true) {
                                 return true
                             }

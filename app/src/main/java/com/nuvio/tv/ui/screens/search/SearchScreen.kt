@@ -68,6 +68,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -967,6 +971,7 @@ private fun RecentSearchesSection(
     modifier: Modifier = Modifier
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     val searchFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val removeFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     var pendingDownwardFocus by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -1058,6 +1063,15 @@ private fun RecentSearchesSection(
                         modifier = Modifier
                             .weight(1f)
                             .focusRequester(searchFocusRequester)
+                            .onPreviewKeyEvent { keyEvent ->
+                                if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
+                                    if (openSidebar != null) {
+                                        openSidebar()
+                                        return@onPreviewKeyEvent true
+                                    }
+                                }
+                                false
+                            }
                             .focusProperties {
                                 if (isRtl) {
                                     left = removeFocusRequester
@@ -1186,6 +1200,7 @@ private fun SearchInputField(
     var isDiscoverButtonFocused by remember { mutableStateOf(false) }
     var isVoiceButtonFocused by remember { mutableStateOf(false) }
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
 
     Row(
         modifier = modifier
@@ -1201,6 +1216,15 @@ private fun SearchInputField(
                     .then(
                         discoverFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier
                     )
+                    .onPreviewKeyEvent { keyEvent ->
+                        if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
+                            if (openSidebar != null) {
+                                openSidebar()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        false
+                    }
                     .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
                     .size(NuvioTheme.spacing.huge)
                     .border(
@@ -1294,6 +1318,15 @@ private fun SearchInputField(
                                 Modifier
                             }
                         )
+                        .onPreviewKeyEvent { keyEvent ->
+                            if (!showDiscoverButton && keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
+                                if (openSidebar != null) {
+                                    openSidebar()
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                            false
+                        }
                         .onFocusChanged { isVoiceButtonFocused = it.isFocused }
                         .size(NuvioTheme.spacing.huge)
                         .border(
@@ -1331,6 +1364,16 @@ private fun SearchInputField(
                 }
                 .onPreviewKeyEvent { keyEvent ->
                     when (keyEvent.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            if (!showDiscoverButton && !showVoiceSearch && keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                                if (openSidebar != null) {
+                                    openSidebar()
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                            false
+                        }
+
                         KeyEvent.KEYCODE_ENTER,
                         KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                             if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {

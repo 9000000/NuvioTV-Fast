@@ -47,6 +47,10 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -114,7 +118,15 @@ internal fun DiscoverSection(
     val genres = selectedCatalog?.genres.orEmpty()
     var expandedPicker by remember { mutableStateOf<String?>(null) }
     val filterFocusRequester = remember { FocusRequester() }
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     var gridHasFocus by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!focusResults && !shouldRestoreFocusedItem) {
+            repeat(3) { withFrameNanos { } }
+            runCatching { filterFocusRequester.requestFocus() }
+        }
+    }
 
     androidx.activity.compose.BackHandler(enabled = gridHasFocus) {
         try { filterFocusRequester.requestFocus() } catch (_: Exception) {}
@@ -147,8 +159,18 @@ internal fun DiscoverSection(
             horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
             DiscoverDropdownPicker(
-                modifier = Modifier.weight(1f)
-                    .focusRequester(filterFocusRequester),
+                modifier = Modifier.weight(1f),
+                cardModifier = Modifier
+                    .focusRequester(filterFocusRequester)
+                    .onPreviewKeyEvent { keyEvent ->
+                        if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown && expandedPicker == null) {
+                            if (openSidebar != null) {
+                                openSidebar()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        false
+                    },
                 title = stringResource(R.string.discover_filter_type),
                 value = selectedTypeLabel,
                 selectedValue = uiState.selectedDiscoverType,
@@ -290,6 +312,7 @@ internal fun DiscoverSection(
 @Composable
 private fun DiscoverDropdownPicker(
     modifier: Modifier = Modifier,
+    cardModifier: Modifier = Modifier,
     title: String,
     value: String,
     selectedValue: String?,
@@ -335,6 +358,7 @@ private fun DiscoverDropdownPicker(
             onClick = { onExpandedChange(!expanded) },
             modifier = Modifier
                 .fillMaxWidth()
+                .then(cardModifier)
                 .onSizeChanged { anchorSize = it }
                 .onFocusChanged { state ->
                     isFocused = state.isFocused
@@ -500,6 +524,7 @@ internal fun DiscoverGrid(
     filterKey: String = ""
 ) {
     val restoreFocusRequester = remember { FocusRequester() }
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     val gridState = rememberLazyGridState()
     var pendingFocusOnNewItemIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -573,13 +598,18 @@ internal fun DiscoverGrid(
         localShouldRestoreFocusedItem = true
     }
 
-    // Infinite scroll: auto-load more when the user scrolls near the end.
+    // Infinite scroll: auto-load more when the user scrolls near the end, debounced
     val shouldAutoLoad = canLoadMore && !isLoadingMore && items.isNotEmpty()
+    var lastAutoLoadTime by remember { mutableStateOf(0L) }
     LaunchedEffect(gridState.firstVisibleItemIndex, items.size, shouldAutoLoad) {
         if (!shouldAutoLoad) return@LaunchedEffect
         val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@LaunchedEffect
-        if (lastVisible >= items.size - 6) {
-            onLoadMore()
+        if (lastVisible >= items.size - 4) {
+            val now = System.currentTimeMillis()
+            if (now - lastAutoLoadTime > 1200L) {
+                lastAutoLoadTime = now
+                onLoadMore()
+            }
         }
     }
 
@@ -671,13 +701,27 @@ internal fun DiscoverGrid(
                 onClick = { onItemClick(index, item) },
                 onLongPress = { onItemLongPress(item) },
                 posterCardStyle = adaptiveStyle,
+                imageCrossfade = false,
                 isWatched = run {
                     val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
                     if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds
                 },
                 modifier = Modifier
                     .padding(top = 3.dp)
-                    .width(adaptiveStyle.width),
+                    .width(adaptiveStyle.width)
+                    .onPreviewKeyEvent { keyEvent ->
+                        if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
+                            val itemInfo = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                            val isCol0 = itemInfo?.column == 0 || (itemInfo == null && index % 6 == 0) || index == 0
+                            if (isCol0) {
+                                if (openSidebar != null) {
+                                    openSidebar()
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                        }
+                        false
+                    },
                 focusRequester = focusReq,
                 onFocused = {
                     onItemFocused(index)
@@ -701,7 +745,20 @@ internal fun DiscoverGrid(
                     posterCardStyle = adaptiveStyle,
                     modifier = Modifier
                         .padding(top = 3.dp)
-                        .width(adaptiveStyle.width),
+                        .width(adaptiveStyle.width)
+                        .onPreviewKeyEvent { keyEvent ->
+                            if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
+                                val itemInfo = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == actionIndex }
+                                val isCol0 = itemInfo?.column == 0 || (itemInfo == null && actionIndex % 6 == 0) || actionIndex == 0
+                                if (isCol0) {
+                                    if (openSidebar != null) {
+                                        openSidebar()
+                                        return@onPreviewKeyEvent true
+                                    }
+                                }
+                            }
+                            false
+                        },
                     focusRequester = focusReq,
                     onFocused = { onItemFocused(actionIndex) },
                     onClick = {

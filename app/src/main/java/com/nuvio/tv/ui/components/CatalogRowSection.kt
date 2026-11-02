@@ -1,6 +1,11 @@
 package com.nuvio.tv.ui.components
 
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -445,6 +450,19 @@ fun CatalogRowSection(
                     onClick = onItemClickStable,
                     onLongPress = onItemLongPressStable,
                     modifier = Modifier
+                        .then(
+                            if (index == 0) {
+                                val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
+                                Modifier.onPreviewKeyEvent { keyEvent ->
+                                    if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown && openSidebar != null) {
+                                        openSidebar()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                            } else Modifier
+                        )
                         .then(directionalFocusModifier)
                         .then(
                             if (isNonFirstPlaceholder) Modifier.focusProperties { canFocus = false }

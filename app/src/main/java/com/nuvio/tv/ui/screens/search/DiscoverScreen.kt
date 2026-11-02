@@ -46,7 +46,8 @@ fun DiscoverScreen(
     val watchedSeriesIds by viewModel.watchedSeriesIds.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
-    var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
+    val currentFocusedIndexRef = remember { java.util.concurrent.atomic.AtomicInteger(0) }
+    var savedFocusedItemIndexForRestore by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
     var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
 
@@ -99,30 +100,34 @@ fun DiscoverScreen(
                 focusResults = false,
                 showBuiltInHeader = showBuiltInHeader,
                 firstItemFocusRequester = discoverFirstItemFocusRequester,
-                focusedItemIndex = discoverFocusedItemIndex,
+                focusedItemIndex = savedFocusedItemIndexForRestore,
                 shouldRestoreFocusedItem = restoreDiscoverFocus,
                 blockFilterFocus = restoreDiscoverFocus || pendingDiscoverRestoreOnResume,
                 onRestoreFocusedItemHandled = { restoreDiscoverFocus = false },
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
+                    savedFocusedItemIndexForRestore = currentFocusedIndexRef.get()
                     pendingDiscoverRestoreOnResume = true
                     onNavigateToDetail(itemId, itemType, addonBaseUrl)
                 },
                 onDiscoverItemFocused = { index ->
-                    discoverFocusedItemIndex = index
+                    currentFocusedIndexRef.set(index)
                     uiState.discoverResults.getOrNull(index)?.let { item ->
                         viewModel.prefetchMetaOnFocus(item.id, item.rawType)
                     }
                 },
                 onSelectType = {
-                    discoverFocusedItemIndex = 0
+                    currentFocusedIndexRef.set(0)
+                    savedFocusedItemIndexForRestore = 0
                     viewModel.onEvent(SearchEvent.SelectDiscoverType(it))
                 },
                 onSelectCatalog = {
-                    discoverFocusedItemIndex = 0
+                    currentFocusedIndexRef.set(0)
+                    savedFocusedItemIndexForRestore = 0
                     viewModel.onEvent(SearchEvent.SelectDiscoverCatalog(it))
                 },
                 onSelectGenre = {
-                    discoverFocusedItemIndex = 0
+                    currentFocusedIndexRef.set(0)
+                    savedFocusedItemIndexForRestore = 0
                     viewModel.onEvent(SearchEvent.SelectDiscoverGenre(it))
                 },
                 onLoadMore = { viewModel.onEvent(SearchEvent.LoadNextDiscoverResults) },

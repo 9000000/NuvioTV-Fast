@@ -396,11 +396,14 @@ private fun LiveTvContent(
                         var channelFocused = false
                         for (delayMs in listOf(30L, 60L, 100L, 150L)) {
                             delay(delayMs)
-                            channelFocused = runCatching {
-                                channelFocusRequesters[targetId]?.requestFocus()
-                                true
-                            }.getOrDefault(false)
-                            if (channelFocused) break
+                            val requester = channelFocusRequesters[targetId]
+                            if (requester != null) {
+                                channelFocused = runCatching {
+                                    requester.requestFocus()
+                                    true
+                                }.getOrDefault(false)
+                                if (channelFocused) break
+                            }
                         }
                         if (!channelFocused) {
                             navigateToActiveChip()

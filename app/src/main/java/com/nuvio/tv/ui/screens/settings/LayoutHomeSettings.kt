@@ -197,35 +197,20 @@ internal fun LayoutSidebarSection(
     uiState: LayoutSettingsUiState,
     onEvent: (LayoutSettingsEvent) -> Unit
 ) {
-    SettingsToggleRow(
-        title = stringResource(R.string.layout_modern_sidebar),
-        subtitle = stringResource(R.string.layout_modern_sidebar_sub),
-        checked = uiState.modernSidebarEnabled,
-        onToggle = { onEvent(LayoutSettingsEvent.SetModernSidebarEnabled(!uiState.modernSidebarEnabled)) }
-    )
-    if (uiState.modernSidebarEnabled) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            SettingsToggleRow(
-                title = stringResource(R.string.layout_modern_sidebar_blur),
-                subtitle = stringResource(R.string.layout_modern_sidebar_blur_sub),
-                checked = uiState.modernSidebarBlurEnabled,
-                onToggle = { onEvent(LayoutSettingsEvent.SetModernSidebarBlurEnabled(!uiState.modernSidebarBlurEnabled)) }
-            )
-        }
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
         SettingsToggleRow(
-            title = stringResource(R.string.layout_hide_floating_pill),
-            subtitle = stringResource(R.string.layout_hide_floating_pill_sub),
-            checked = uiState.sidebarCollapsedByDefault,
-            onToggle = { onEvent(LayoutSettingsEvent.SetSidebarCollapsed(!uiState.sidebarCollapsedByDefault)) }
-        )
-    } else {
-        SettingsToggleRow(
-            title = stringResource(R.string.layout_collapse_sidebar),
-            subtitle = stringResource(R.string.layout_collapse_sidebar_sub),
-            checked = uiState.sidebarCollapsedByDefault,
-            onToggle = { onEvent(LayoutSettingsEvent.SetSidebarCollapsed(!uiState.sidebarCollapsedByDefault)) }
+            title = stringResource(R.string.layout_modern_sidebar_blur),
+            subtitle = stringResource(R.string.layout_modern_sidebar_blur_sub),
+            checked = uiState.modernSidebarBlurEnabled,
+            onToggle = { onEvent(LayoutSettingsEvent.SetModernSidebarBlurEnabled(!uiState.modernSidebarBlurEnabled)) }
         )
     }
+    SettingsToggleRow(
+        title = stringResource(R.string.layout_hide_floating_pill),
+        subtitle = stringResource(R.string.layout_hide_floating_pill_sub),
+        checked = uiState.sidebarCollapsedByDefault,
+        onToggle = { onEvent(LayoutSettingsEvent.SetSidebarCollapsed(!uiState.sidebarCollapsedByDefault)) }
+    )
     DiscoverLocationRow(
         selectedLocation = uiState.discoverLocation,
         rememberedLocation = uiState.lastNonOffDiscoverLocation,

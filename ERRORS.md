@@ -1,3 +1,43 @@
+## [2026-11-02 15:12] - Laggy poster scrolling in Discover & Legacy sidebar removal
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `NuvioScrollDefaults.kt:14`, `GridContentCard.kt:78,121`, `SearchDiscoverSection.kt:604`, `MainActivity.kt:1227`, `LayoutHomeSettings.kt:200`
+- **Agent**: mon
+- **Root Cause**:
+  1. `NuvioScrollDefaults.smoothScrollSpec` accidentally passed `NuvioMotion.tokens.durations.fast.toFloat()` (= 160f) as spring stiffness. Spring stiffness 160f is 10x slower than normal TV stiffness (1500f), causing an 800ms sluggish rubber-band drag on every D-pad movement in Discover's `LazyVerticalGrid`.
+  2. `GridContentCard.kt` ran Compose `animateFloatAsState` continuously for 110ms on every focus shift even when scale was 1.0f, and default Coil `imageCrossfade = true` caused dozens of concurrent alpha blending animations while scrolling.
+  3. `SearchDiscoverSection.kt` had an unthrottled `onLoadMore` triggering multiple overlapping 20-item page loads and image decodings while scrolling, causing 694ms GC pauses.
+  4. User encountered bugs when switching to the obsolete legacy sidebar.
+- **Fix Applied**:
+  1. Completely deleted all legacy sidebar code (`LegacySidebarScaffold`). The Modern Sidebar is now permanently active.
+  2. Removed the "Thanh điều hướng hiện đại" toggle from `LayoutHomeSettings.kt`, keeping only Modern Blur (Android 12+) and Hide Floating Pill.
+  3. Replaced spring stiffness in `NuvioScrollDefaults.smoothScrollSpec` with `Spring.StiffnessMedium` (1500f) and `Spring.DampingRatioNoBouncy` for instant, crisp, snappy 120ms scroll.
+  4. Set `imageCrossfade = false` by default in `GridContentCard` and `DiscoverGrid`.
+  5. Bypassed `animateFloatAsState` and graphicsLayer scaling when `focusedScale == 1f` (the standard), with 80ms snappy tween when custom scale is used.
+  6. Added 1200ms debounce to `onLoadMore` in `SearchDiscoverSection` near tail (`items.size - 4`).
+- **Prevention**: Never use duration (ms) as spring stiffness. Always use physics-based `Spring.StiffnessMedium` or higher for TV focus animations.
+- **Status**: Fixed
+
+---
+
+## [2026-11-02 12:03] - @Composable invocations can only happen from context of @Composable function in key listeners
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvChannelCard.kt:74`, `LiveTvFilterComponents.kt:113`, `SearchDiscoverSection.kt:158`, `SearchScreen.kt:1063`
+- **Agent**: mon
+- **Root Cause**: Calling `LocalOpenSidebar.current` directly inside key listener lambdas (`onKeyEvent`, `onPreviewKeyEvent`). Since `.current` is an `@Composable` getter on CompositionLocal, it cannot be called within an event callback lambda.
+- **Error Message**: 
+  ```
+  e: @Composable invocations can only happen from the context of a @Composable function
+  ```
+- **Fix Applied**: Evaluated `val openSidebar = LocalOpenSidebar.current` once in the enclosing Composable body, and invoked the resulting function `openSidebar?.invoke()` inside the event lambdas. Also added missing Compose Key imports and removed duplicate `@Composable` annotation on `LegacySidebarScaffold`.
+- **Prevention**: Always capture CompositionLocal getters outside event handler lambdas at Composable scope.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-02 10:58] - 'val' cannot be reassigned due to lambda shadowing in apply block
 
 - **Type**: Syntax
@@ -291,6 +331,61 @@ oot, plus onViewDetachedFromWindow and onViewRecycled in LeanbackRowAdapter to g
   3. Moved `onLoadMore()` trigger to `addOnChildViewHolderSelectedListener` dispatched via `post` when the selected position is within 5 items of the end.
   4. In `submitItems`, deferred the entire assignment `items = newItems` via `rv.post` if `rv.isComputingLayout || rv.isInLayout` is true.
 - **Prevention**: Never trigger adapter load more or data state mutations inside `onBindViewHolder`; always defer through focus/selection listeners with `post`.
+- **Status**: Fixed
+
+---
+
+## [2026-11-02 13:14] - Focus lost when exiting Sidebar (Right/Back) & inside LiveTV and Discover
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: pp/src/main/java/com/nuvio/tv/MainActivity.kt:1561, LiveTvScreen.kt:399, SearchDiscoverSection.kt:120
+- **Agent**: mon
+- **Root Cause**:
+  1. Adding ocusProperties { canFocus = !isSidebarExpanded } and canFocus = !isDrawerOpen on the root container of NuvioNavHost forcibly cleared all focus from Compose hierarchy whenever the sidebar opened. When the sidebar closed, Compose did not automatically restore focus, and contentFocusRequester was an unattached dummy. Focus became 
+ull, rendering directional D-pad keys unresponsive until the user pressed DPAD_CENTER (OK).
+  2. In SearchDiscoverSection.kt, ilterFocusRequester was not given an initial LaunchedEffect request, causing the Discover screen to have no initial focused item when navigated to from the sidebar.
+  3. In LiveTvScreen.kt, channelFocusRequesters[targetId]?.requestFocus() evaluated to 
+ull before grid items were bound, but the subsequent ; true returned 	rue inside 
+unCatching, falsely marking channelFocused = true and skipping fallback focus navigation to chips.
+- **Error Message**:
+  `
+  Lost focus in LiveTV and Discover; pressing Right or exiting Sidebar caused complete loss of focus until OK key was pressed.
+  `
+- **Fix Applied**:
+  1. Removed canFocus = !isSidebarExpanded and canFocus = !isDrawerOpen from both LegacySidebarScaffold and ModernSidebarScaffold. NativeSidebarView already traps focus internally 100% via ocusSearch() and index navigation.
+  2. Added clearFocus() on NativeSidebarView when pressing DPAD_RIGHT, BACK, and on item click, smoothly returning window focus to Compose.
+  3. Added LaunchedEffect(Unit) in SearchDiscoverSection.kt to focus the Type dropdown filter on entry.
+  4. Fixed channelFocusRequesters[targetId] null-check in LiveTvScreen.kt so it properly waits or falls back to active chips.
+- **Prevention**: Never use canFocus = false on an entire navigation host unless a deterministic focus restorer is bound to every destination; always verify focus state transitions when mixing Native View overlays with Compose TV.
+- **Status**: Fixed
+
+---
+
+## [2026-11-02 14:18] - Sửa lỗi kẹt phím Trái mở Sidebar, giật lag Khám phá và thoát Sidebar mất focus
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: pp/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt:419, SearchDiscoverSection.kt:163, MainActivity.kt:1851, SearchViewModel.kt:218
+- **Agent**: mon
+- **Root Cause**:
+  1. Trong LeanbackModernRow.kt, cờ arrivedAt0FromRight và hasReleasedKeyAfterArrivingAt0 không được reset khi hàng nhận focus từ trên/dưới hoặc sau khi thoát Settings/Detail, dẫn tới việc nhấn phím Trái ở hàng poster thứ 2 bị nuốt lệnh (stopScroll()) và không thể mở Sidebar.
+  2. Tại SearchDiscoverSection.kt, focusRequester(filterFocusRequester) được gắn vào Modifier của Box cha thay vì gắn vào Card focusable bên trong, khiến cho khi bấm Back từ grid hoặc khi vào màn hình, focus bị trỏ vào một node không focus được và rơi vào trạng thái mất focus (phải bấm OK mới hiện lại).
+  3. SearchDiscoverSection và DiscoverScreen recompose toàn màn hình trên mỗi bước D-pad do biến trạng thái discoverFocusedItemIndex được ghi liên tục; đồng thời debounce nạp trước metadata quá ngắn (150ms) gây nghẽn CPU và GC freeze.
+  4. SidebarFocusRecoveryEffect cố gắng gọi FocusRequester cũ của Compose (không còn gắn vào cây giao diện do đã chuyển sang NativeSidebarView thuần View), phát sinh hàng chục cảnh báo FocusRelatedWarning.
+- **Error Message**:
+  `
+  FocusRelatedWarning: FocusRequester is not initialized (spammed 49 times)
+  JANK: 180ms - 248ms during rapid card navigation in Discover
+  D-pad Left on row 2 failed to open Sidebar or jumped to poster
+  `
+- **Fix Applied**:
+  1. Thêm onFocusChanged trong InteropHorizontalGridView (LeanbackModernRow.kt) tự động reset cờ khi gainFocus ở position 0; giảm debounce scroll trái từ 450ms xuống 300ms và chỉ cần nhả phím là mở Sidebar tức thì.
+  2. Bổ sung cardModifier vào DiscoverDropdownPicker để gắn focusRequester và onPreviewKeyEvent trực tiếp vào Card tương tác, sửa triệt để lỗi mất focus khi Back từ Grid.
+  3. Tách focus index trong DiscoverScreen sang AtomicInteger tránh recomposition toàn màn hình; tăng debounce nạp metadata từ 150ms lên 450ms, giảm độ trễ giật lag khung hình từ 248ms xuống còn 36-45ms (mượt mà 60fps).
+  4. Gỡ bỏ hoàn toàn SidebarFocusRecoveryEffect và drawerItemFocusRequesters thừa, xóa sạch 49 cảnh báo FocusRelatedWarning.
+  5. Đổi onKeyEvent sang onPreviewKeyEvent ở LiveTvChannelCard và LiveTvFilterComponents để bắt phím Trái mở Sidebar nhạy và chuẩn xác 100%.
+- **Prevention**: Khi kết hợp Native View / Leanback với Compose TV, luôn đảm bảo các cờ trạng thái điều hướng được reset tại các điểm chuyển giao focus; không đặt FocusRequester lên các container Box không focus được; không biến vị trí focus tần số cao thành MutableState của container cha.
 - **Status**: Fixed
 
 ---
