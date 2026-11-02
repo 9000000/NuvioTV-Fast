@@ -1,3 +1,25 @@
+## [2026-11-03 00:15] - Hiệu ứng viền phát quang Neon Glow bị vuông góc không bo tròn theo thiết lập Poster & Tích hợp tối ưu khung hình
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `LeanbackModernRow.kt:174-220, 531-549, 735-785, 921-985`
+- **Agent**: mon
+- **Root Cause**:
+  1. Trong `LeanbackRowAdapter.onCreateViewHolder`: `val glowView = PlayStoreGlowView(context).apply { this.cornerRadiusPx = cornerRadiusPx ... }`. Trong phạm vi `apply`, định danh `cornerRadiusPx` bên phải dấu gán tự tham chiếu đến chính thuộc tính mặc định của `PlayStoreGlowView` (`0.0f`), dẫn đến gán tự thân `0.0f` thay vì lấy từ adapter.
+  2. Trong `LeanbackCardViewHolder.updateCornerRadius`: `if (cornerRadiusPx == newRadiusPx) return` gây thoát sớm ngay từ lần bind đầu tiên vì `holder.cornerRadiusPx` đã mang giá trị ban đầu truyền từ adapter constructor, khiến `glowView.cornerRadiusPx` không bao giờ được cập nhật và vĩnh viễn bằng `0.0f`.
+  3. Tại `PlayStoreGlowView.onDraw`: Do `cornerRadiusPx == 0.0f`, nhánh `if (cornerRadiusPx > 0f)` không bao giờ thỏa mãn, ép vẽ `cardPath.addRect(...)` tạo thành hình chữ nhật góc vuông 90 độ sắc nhọn.
+  4. Ngoài ra, việc dùng `Paint.Style.FILL` cho quầng sáng tán xạ Gaussian tập trung mật độ blur dày đặc ở các đỉnh góc lồi tạo ảo giác loe góc vuông.
+- **Fix Applied**:
+  1. Chỉ định rõ scope adapter: `this.cornerRadiusPx = this@LeanbackRowAdapter.cornerRadiusPx` trong `onCreateViewHolder`.
+  2. Bổ sung kiểm tra đồng bộ trong `updateCornerRadius`: `val radiusChanged = cornerRadiusPx != newRadiusPx || glowView.cornerRadiusPx != newRadiusPx; if (!radiusChanged) return`.
+  3. Chuyển đổi toàn bộ `auraPaint`, `midPaint`, `corePaint` sang `Paint.Style.STROKE` với `strokeCap = Paint.Cap.ROUND` và `strokeJoin = Paint.Join.ROUND`, độ dày nét tương thích để quầng phát quang bám sát ôm đồng tâm chính xác tuyệt đối với đường viền bo góc tròn của poster.
+  4. **Tích hợp Gợi ý 1 (Pill-shaped ProgressBar)**: Thiết kế lại toàn bộ thanh tiến trình xem tiếp thành dạng viên thuốc hai đầu bo tròn (`LayerDrawable` với `trackPill` và `clipProg` bán kính `h / 2f`), đồng thời thụt lề động `horizMargin` theo bán kính góc bo của poster để không bao giờ bị cắt cụt hay lòi góc.
+  5. **Tích hợp Gợi ý 2 (Zero GPU Overdraw)**: Khi Coil nạp xong ảnh poster che kín thẻ, gán `cardContainer.background = null` triệt tiêu 100% lớp vẽ nền đen thừa; tự động khôi phục lại background khi ViewHolder bị unbind/recycle.
+- **Prevention**: Luôn cẩn trọng với biến bị che khuất (variable shadowing) trong các hàm scope function của Kotlin (`apply`, `run`) khi thuộc tính của View trùng tên với tham số lớp ngoài (sử dụng `@Label` tường minh); các nhánh kiểm tra thay đổi bán kính bo góc phải kiểm tra trạng thái thực tế của tất cả View con phụ thuộc.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-02 22:30] - Tối ưu toàn diện Home Leanback: Shared RecycledViewPool, Deferred Glow 60fps, 16 Hue Bins Histogram và dọn sạch mã mồ côi
 
 - **Type**: Logic

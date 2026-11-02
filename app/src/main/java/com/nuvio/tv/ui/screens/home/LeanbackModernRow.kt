@@ -161,24 +161,30 @@ class PlayStoreGlowView(context: Context) : View(context) {
             }
         }
 
-    private val clipPath = Path()
+    private val cardPath = Path()
 
-    // 3 bộ lọc Gaussian blur cho hiệu ứng ánh sáng Neon thực tế (chuẩn v1.2.50):
-    // Core: tia sáng neon cường độ cao ngay sát viền
-    // Mid: thân sáng quang học
-    // Aura: quầng sáng tán xạ khí quyển mềm mại ra xa
+    // 3 bộ lọc Gaussian blur cho hiệu ứng ánh sáng Neon thực tế (chuẩn Play Store TV & Cyberpunk):
+    // 1. Aura: Quầng sáng tán xạ khí quyển mềm mại tỏa rộng ra nền đen (FILL, Blur.NORMAL)
+    // 2. Mid: Đai quang học dày dặn ôm trọn 4 cạnh và bù năng lượng 4 góc bo (STROKE, Blur.NORMAL)
+    // 3. Core: Sợi dây tim neon phát quang cường độ cao ôm sát mép poster (STROKE, Blur.NORMAL)
     private var coreFilter: BlurMaskFilter? = null
     private var midFilter: BlurMaskFilter? = null
     private var auraFilter: BlurMaskFilter? = null
 
-    private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
+    private val auraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
     private val midPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
-    private val auraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
+    private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
 
     init {
@@ -196,21 +202,29 @@ class PlayStoreGlowView(context: Context) : View(context) {
             auraPaint.maskFilter = null
             return
         }
-        val rCore = (glowSpreadPx * 0.22f).coerceAtLeast(1f)
-        val rMid = (glowSpreadPx * 0.50f).coerceAtLeast(1f)
-        val rAura = (glowSpreadPx * 0.85f).coerceAtLeast(1f)
-        coreFilter = BlurMaskFilter(rCore, BlurMaskFilter.Blur.OUTER)
-        midFilter = BlurMaskFilter(rMid, BlurMaskFilter.Blur.OUTER)
-        auraFilter = BlurMaskFilter(rAura, BlurMaskFilter.Blur.OUTER)
+        val rCore = (glowSpreadPx * 0.15f).coerceAtLeast(1f)
+        val rMid = (glowSpreadPx * 0.35f).coerceAtLeast(1f)
+        val rAura = (glowSpreadPx * 0.65f).coerceAtLeast(1f)
+        coreFilter = BlurMaskFilter(rCore, BlurMaskFilter.Blur.NORMAL)
+        midFilter = BlurMaskFilter(rMid, BlurMaskFilter.Blur.NORMAL)
+        auraFilter = BlurMaskFilter(rAura, BlurMaskFilter.Blur.NORMAL)
         corePaint.maskFilter = coreFilter
         midPaint.maskFilter = midFilter
         auraPaint.maskFilter = auraFilter
+
+        auraPaint.strokeWidth = (glowSpreadPx * 0.75f).coerceAtLeast(4f)
+        midPaint.strokeWidth = (glowSpreadPx * 0.40f).coerceAtLeast(2f)
+        corePaint.strokeWidth = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, 3.5f, resources.displayMetrics
+        ).coerceAtLeast(2f)
     }
 
     private fun updatePaints() {
-        corePaint.color = ColorUtils.setAlphaComponent(glowColor, 255)
-        midPaint.color = ColorUtils.setAlphaComponent(glowColor, 200)
-        auraPaint.color = ColorUtils.setAlphaComponent(glowColor, 110)
+        if (glowColor == 0) return
+        val coreColor = ColorUtils.blendARGB(glowColor, Color.WHITE, 0.15f)
+        corePaint.color = ColorUtils.setAlphaComponent(coreColor, 255)
+        midPaint.color = ColorUtils.setAlphaComponent(glowColor, 185)
+        auraPaint.color = ColorUtils.setAlphaComponent(glowColor, 85)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -221,9 +235,9 @@ class PlayStoreGlowView(context: Context) : View(context) {
         val cardRight = width - margin
         val cardBottom = height - margin
 
-        clipPath.reset()
+        cardPath.reset()
         if (cornerRadiusPx > 0f) {
-            clipPath.addRoundRect(
+            cardPath.addRoundRect(
                 cardLeft,
                 cardTop,
                 cardRight,
@@ -233,7 +247,7 @@ class PlayStoreGlowView(context: Context) : View(context) {
                 Path.Direction.CW
             )
         } else {
-            clipPath.addRect(
+            cardPath.addRect(
                 cardLeft,
                 cardTop,
                 cardRight,
@@ -242,24 +256,18 @@ class PlayStoreGlowView(context: Context) : View(context) {
             )
         }
 
-        val saveCount = canvas.save()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            canvas.clipOutPath(clipPath)
-        } else {
-            @Suppress("DEPRECATION")
-            canvas.clipPath(clipPath, Region.Op.DIFFERENCE)
-        }
-
+        // Vẽ từ tầng tán xạ xa (Aura) đến tầng vầng sáng quang học (Mid) rồi sợi tim Neon rực rỡ (Core).
+        // KHÔNG dùng clipOutPath: để ánh sáng neon bắt nguồn liên tục từ dưới lưng tấm poster tỏa ra ngoài,
+        // ôm trọn vẹn 100% cả 4 góc bo cong lẫn 4 cạnh, triệt tiêu hoàn toàn các khoảng đen hở góc.
         if (auraPaint.maskFilter != null) {
-            canvas.drawPath(clipPath, auraPaint)
+            canvas.drawPath(cardPath, auraPaint)
         }
         if (midPaint.maskFilter != null) {
-            canvas.drawPath(clipPath, midPaint)
+            canvas.drawPath(cardPath, midPaint)
         }
         if (corePaint.maskFilter != null) {
-            canvas.drawPath(clipPath, corePaint)
+            canvas.drawPath(cardPath, corePaint)
         }
-        canvas.restoreToCount(saveCount)
     }
 }
 
@@ -520,13 +528,23 @@ class LeanbackCardViewHolder(
     }
 
     fun updateCornerRadius(newRadiusPx: Float) {
-        if (cornerRadiusPx == newRadiusPx) return
+        val radiusChanged = cornerRadiusPx != newRadiusPx || glowView.cornerRadiusPx != newRadiusPx
+        if (!radiusChanged) return
         cornerRadiusPx = newRadiusPx
 
         (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
         focusBorderDrawable.cornerRadius = newRadiusPx
         posterImage.invalidateOutline()
         glowView.cornerRadiusPx = newRadiusPx
+
+        val horizMargin = (newRadiusPx * 0.75f).toInt().coerceAtLeast(6)
+        (progressBar?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            if (lp.leftMargin != horizMargin || lp.rightMargin != horizMargin) {
+                lp.leftMargin = horizMargin
+                lp.rightMargin = horizMargin
+                progressBar.layoutParams = lp
+            }
+        }
 
         if (root.hasFocus()) {
             updateFocusVisual(true)
@@ -714,6 +732,8 @@ class LeanbackCardViewHolder(
                         }
                         override fun onSuccess(result: Image) {
                             posterImage.setImageDrawable(result.asDrawable(ctx.resources))
+                            // Gợi ý 2: Triệt tiêu 100% GPU Overdraw khi ảnh đã nạp xong kín thẻ
+                            cardContainer.background = null
                             val existingColor = dominantColorCache.get(item.key)
                             if (existingColor != null) {
                                 currentDominantColor = existingColor
@@ -756,6 +776,13 @@ class LeanbackCardViewHolder(
         imageDisposable = null
         glowView.visibility = View.GONE
         cardContainer.foreground = null
+        // Phục hồi lại background placeholder khi view được recycle
+        if (cardContainer.background == null) {
+            cardContainer.background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1A1A1A"))
+                cornerRadius = cornerRadiusPx
+            }
+        }
     }
 }
 
@@ -893,7 +920,7 @@ class LeanbackRowAdapter(
 
         // Play Store Glow View (nằm sau posterImage, tỏa ánh sáng ra ngoài nền)
         val glowView = PlayStoreGlowView(context).apply {
-            this.cornerRadiusPx = cornerRadiusPx
+            this.cornerRadiusPx = this@LeanbackRowAdapter.cornerRadiusPx
             this.glowSpreadPx = glowSpreadPx
             this.glowMarginPx = glowMarginPx.toFloat()
             layoutParams = FrameLayout.LayoutParams(
@@ -923,16 +950,37 @@ class LeanbackRowAdapter(
         }
         cardContainer.addView(posterImage)
 
-        // Progress bar for continue watching
+        // Progress bar for continue watching (Gợi ý 1: Bo tròn 2 đầu dạng viên thuốc Pill-Shape, không bao giờ lòi góc nhọn)
         val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            val h = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3.5f, context.resources.displayMetrics).toInt().coerceAtLeast(2)
+            val horizMargin = (cornerRadiusPx * 0.75f).toInt().coerceAtLeast(6)
+            val bMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 4f, context.resources.displayMetrics).toInt()
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 4f, context.resources.displayMetrics).toInt()
+                h
             ).apply {
                 gravity = Gravity.BOTTOM
+                leftMargin = horizMargin
+                rightMargin = horizMargin
+                bottomMargin = bMargin
             }
             max = 100
             progress = 0
+            
+            // Thiết lập Drawable bo tròn viên thuốc cho cả track và progress
+            val trackPill = GradientDrawable().apply {
+                setColor(Color.parseColor("#4D000000")) // Đen mờ 30%
+                cornerRadius = h / 2f
+            }
+            val progPill = GradientDrawable().apply {
+                setColor(Color.parseColor("#38BDF8")) // Electric Cyan
+                cornerRadius = h / 2f
+            }
+            val clipProg = android.graphics.drawable.ClipDrawable(progPill, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL)
+            progressDrawable = LayerDrawable(arrayOf(trackPill, clipProg)).apply {
+                setId(0, android.R.id.background)
+                setId(1, android.R.id.progress)
+            }
             visibility = View.GONE
         }
         cardContainer.addView(progressBar)
