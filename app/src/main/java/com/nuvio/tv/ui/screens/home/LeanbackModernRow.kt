@@ -259,9 +259,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     var animationsEnabled: Boolean = true
 
     private var isHoldingHorizontalKey = false
-    private var isAtItem0 = false
-    private var item0SettledTime = 0L
-    private var hasReleasedLeftKeySinceAt0 = true
+    private var arrivalAt0Time = 0L
+    private var arrivedAt0FromRight = false
+    private var hasReleasedKeyAfterArrivingAt0 = true
 
     private val rowAdapter: LeanbackRowAdapter?
         get() = adapter as? LeanbackRowAdapter
@@ -287,18 +287,10 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 subposition: Int
             ) {
                 if (position == 0) {
-                    isAtItem0 = true
-                    item0SettledTime = SystemClock.uptimeMillis()
+                    arrivalAt0Time = SystemClock.uptimeMillis()
                 } else {
-                    isAtItem0 = false
-                    hasReleasedLeftKeySinceAt0 = false
-                }
-
-                if (position >= 0 && child != null) {
-                    val item = rowAdapter?.getItem(position)
-                    if (item != null) {
-                        rowAdapter?.onItemFocused?.invoke(position, item)
-                    }
+                    arrivedAt0FromRight = true
+                    hasReleasedKeyAfterArrivingAt0 = false
                 }
 
                 val totalCount = rowAdapter?.itemCount ?: 0
@@ -398,7 +390,8 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                         isHoldingHorizontalKey = false
                     }
                     if (selectedPosition <= 0) {
-                        hasReleasedLeftKeySinceAt0 = true
+                        hasReleasedKeyAfterArrivingAt0 = true
+                        arrivedAt0FromRight = false
                     }
                     return true
                 }
@@ -418,7 +411,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     val currentPos = selectedPosition
                     if (currentPos <= 0) {
-                        if (hasReleasedLeftKeySinceAt0 && (now - item0SettledTime >= 350L) && event.repeatCount == 0) {
+                        val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 450L)
+                        val isHeld = !hasReleasedKeyAfterArrivingAt0 || event.repeatCount > 0
+                        if (!arrivedRecently && !isHeld && event.repeatCount == 0) {
                             if (onNavigateLeftOnFirstItem?.invoke() == true) {
                                 return true
                             }
@@ -427,7 +422,6 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                         return true
                     }
 
-                    hasReleasedLeftKeySinceAt0 = false
                     if (event.repeatCount > 0) {
                         isHoldingHorizontalKey = true
                     }
@@ -670,9 +664,9 @@ class LeanbackCardViewHolder(
                                     dominantColorCache.put(item.key, it)
                                 }
                                 currentDominantColor = extracted
-                                if (root.hasFocus()) {
-                                    updateFocusVisual(true)
-                                }
+                            }
+                            if (root.hasFocus()) {
+                                updateFocusVisual(true)
                             }
                         }
                         override fun onError(error: Image?) {
@@ -690,6 +684,9 @@ class LeanbackCardViewHolder(
         } else {
             posterImage.setImageDrawable(null)
         }
+
+        // Always sync focus visual to current focus state when bound or recycled
+        updateFocusVisual(root.hasFocus())
     }
 
     fun unbind() {
@@ -998,11 +995,13 @@ fun LeanbackModernRow(
             val vh = grid.findViewHolderForAdapterPosition(targetIdx)
             if (vh != null) {
                 vh.itemView.requestFocus()
+                (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
             } else {
                 grid.post {
                     if (grid.isAttachedToWindow) {
                         val deferredVh = grid.findViewHolderForAdapterPosition(targetIdx)
                         deferredVh?.itemView?.requestFocus()
+                        (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
                     }
                 }
             }

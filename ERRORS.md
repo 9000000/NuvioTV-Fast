@@ -1,3 +1,20 @@
+## [2026-11-02 10:58] - 'val' cannot be reassigned due to lambda shadowing in apply block
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/MainActivity.kt:2210`
+- **Agent**: mon
+- **Root Cause**: In `ModernSidebarScaffold`, `NativeSidebarView.apply { onSwitchProfile = onSwitchProfile }` shadowed the composable parameter `val onSwitchProfile: () -> Unit`, causing Kotlin compiler to attempt reassigning the parameter instead of setting the view property.
+- **Error Message**: 
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/MainActivity.kt:2210:33 'val' cannot be reassigned.
+  ```
+- **Fix Applied**: Disambiguated receiver explicitly with `this.onSwitchProfile = onSwitchProfile`.
+- **Prevention**: Explicitly prefix `this.` when assigning properties with identical names inside receiver blocks (`apply`, `run`).
+- **Status**: Fixed
+
+---
+
 ## [2026-11-01 22:03] - IllegalStateException Cannot call notifyDataSetChanged while RecyclerView is computing layout
 
 - **Type**: Runtime

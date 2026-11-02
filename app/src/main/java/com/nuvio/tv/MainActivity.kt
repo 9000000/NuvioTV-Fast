@@ -114,6 +114,8 @@ import com.nuvio.tv.ui.components.StartupLoadingState
 import com.nuvio.tv.ui.components.StartupDestination
 import com.nuvio.tv.ui.components.shouldShowStartupSplash
 import com.nuvio.tv.ui.components.startupDestinationForRoute
+import com.nuvio.tv.ui.components.NativeSidebarView
+import androidx.compose.ui.viewinterop.AndroidView
 import com.nuvio.tv.core.runtime.PluginRuntimeHooks
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -1524,8 +1526,7 @@ private fun LegacySidebarScaffold(
 
 
     BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
-        pendingSidebarFocusRequest = true
-        drawerState.setValue(DrawerValue.Open)
+        onExitApp()
     }
 
     BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Open) {
@@ -1902,6 +1903,7 @@ private fun ModernSidebarScaffold(
     var sidebarCollapsePending by remember { mutableStateOf(false) }
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
+    var nativeSidebarRef by remember { mutableStateOf<NativeSidebarView?>(null) }
     var focusedDrawerIndex by remember { mutableStateOf(-1) }
     var isFloatingPillIconOnly by remember { mutableStateOf(false) }
     var pillExpandRequestCount by remember { mutableIntStateOf(0) }
@@ -2044,22 +2046,8 @@ private fun ModernSidebarScaffold(
         if (!showSidebar || !pendingSidebarFocusRequest || !isSidebarExpanded) {
             return@LaunchedEffect
         }
-        val targetRoute = selectedDrawerRoute ?: drawerItems.firstOrNull()?.route ?: run {
-            pendingSidebarFocusRequest = false
-            return@LaunchedEffect
-        }
-        val requester = drawerItemFocusRequesters[targetRoute] ?: run {
-            pendingSidebarFocusRequest = false
-            return@LaunchedEffect
-        }
-        for (i in 0 until 6) {
-            withFrameNanos { }
-            val ok = runCatching {
-                requester.requestFocus()
-                true
-            }.getOrDefault(false)
-            if (ok && focusedDrawerIndex >= 0) break
-        }
+        val targetRoute = selectedDrawerRoute ?: drawerItems.firstOrNull()?.route
+        nativeSidebarRef?.requestSidebarFocus(targetRoute)
         pendingSidebarFocusRequest = false
     }
 
@@ -2182,96 +2170,60 @@ private fun ModernSidebarScaffold(
                         alpha = sidebarSurfaceAlpha
                     }
                     .selectableGroup()
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (!isSidebarExpanded || keyEvent.type != KeyEventType.KeyDown) {
-                            return@onPreviewKeyEvent false
-                        }
-                        val collapseKey = if (isRtl) Key.DirectionLeft else Key.DirectionRight
-                        if (keyEvent.key == collapseKey) {
-                            pendingContentFocusTransfer = true
-                            sidebarCollapsePending = true
-                            return@onPreviewKeyEvent true
-                        }
-                        val stayInSidebarKey = if (isRtl) Key.DirectionRight else Key.DirectionLeft
-                        if (keyEvent.key == stayInSidebarKey) {
-                            // Stay within the sidebar, do not let focus escape to the left
-                            return@onPreviewKeyEvent true
-                        }
-                        if (focusedDrawerIndex < 0) {
-                            val targetRoute = selectedDrawerRoute ?: drawerItems.firstOrNull()?.route
-                            if (targetRoute != null) {
-                                runCatching { drawerItemFocusRequesters[targetRoute]?.requestFocus() }
-                            }
-                        }
-                        when (keyEvent.key) {
-                            Key.DirectionUp -> {
-                                if (focusedDrawerIndex == sidebarTopBoundaryIndex) {
-                                    true
-                                } else {
-                                    // Move focus within the sidebar; consume unconditionally
-                                    // so focus never escapes into the content behind.
-                                    focusManager.moveFocus(FocusDirection.Up)
-                                    true
-                                }
-                            }
-
-                            Key.DirectionDown -> {
-                                if (focusedDrawerIndex == drawerItems.lastIndex) {
-                                    // Already at the bottom drawer item — stay put.
-                                    true
-                                } else if (focusedDrawerIndex == drawerItems.size && hasSidebarProfileItem) {
-                                    // Profile → first drawer item: skip moveFocus (the
-                                    // Spacer gap causes it to land in content) and
-                                    // request the first drawer item directly.
-                                    drawerItems.firstOrNull()?.route?.let { route ->
-                                        drawerItemFocusRequesters[route]?.requestFocus()
-                                    }
-                                    true
-                                } else {
-                                    focusManager.moveFocus(FocusDirection.Down)
-                                    true
-                                }
-                            }
-
-
-
-                            else -> false
-                        }
-                    }
             ) {
                 if (showExpandedPanel) {
-                    ModernSidebarBlurPanel(
-                        drawerItems = drawerItems,
-                        selectedDrawerRoute = selectedDrawerRoute,
-                        keepSidebarFocusDuringCollapse = keepSidebarFocusDuringCollapse,
-                        sidebarLabelAlpha = sidebarLabelAlpha,
-                        sidebarIconScale = sidebarIconScale,
-                        sidebarExpandProgress = sidebarExpandProgress,
-                        isSidebarExpanded = isSidebarExpanded,
-                        sidebarCollapsePending = sidebarCollapsePending,
-                        blurEnabled = modernSidebarBlurEnabled,
-                        sidebarHazeState = sidebarHazeState,
-                        panelShape = panelShape,
-                        drawerItemFocusRequesters = drawerItemFocusRequesters,
-                        onDrawerItemFocused = { focusedDrawerIndex = it },
-                        onDrawerItemClick = { targetRoute ->
-                            keyboardController?.hide()
-                            onNavigate(targetRoute)
-                            navigateToDrawerRoute(
-                                navController = navController,
-                                currentRoute = currentRoute,
-                                targetRoute = targetRoute
-                            )
-                            pendingSidebarFocusRequest = false
-                            isSidebarExpanded = false
-                            sidebarCollapsePending = false
-                            pendingContentFocusTransfer = currentRoute == targetRoute
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            NativeSidebarView(ctx).apply {
+                                nativeSidebarRef = this
+                                setHeader(
+                                    profileName = activeProfileName,
+                                    avatarColorHex = activeProfileColorHex,
+                                    showProfile = showProfileSelector
+                                )
+                                setItems(drawerItems, selectedDrawerRoute)
+                                onDrawerItemClick = { targetRoute ->
+                                    keyboardController?.hide()
+                                    onNavigate(targetRoute)
+                                    navigateToDrawerRoute(
+                                        navController = navController,
+                                        currentRoute = currentRoute,
+                                        targetRoute = targetRoute
+                                    )
+                                    pendingSidebarFocusRequest = false
+                                    isSidebarExpanded = false
+                                    sidebarCollapsePending = false
+                                    pendingContentFocusTransfer = currentRoute == targetRoute
+                                }
+                                onNavigateRight = {
+                                    pendingContentFocusTransfer = true
+                                    sidebarCollapsePending = true
+                                }
+                                onNavigateBack = {
+                                    if (!longPressBackHeld.value) {
+                                        pendingContentFocusTransfer = true
+                                        sidebarCollapsePending = true
+                                        true
+                                    } else false
+                                }
+                                this.onSwitchProfile = onSwitchProfile
+                            }
                         },
-                        activeProfileName = activeProfileName,
-                        activeProfileColorHex = activeProfileColorHex,
-                        activeProfileAvatarImageUrl = activeProfileAvatarImageUrl,
-                        showProfileSelector = showProfileSelector,
-                        onSwitchProfile = onSwitchProfile
+                        update = { view ->
+                            nativeSidebarRef = view
+                            view.setHeader(
+                                profileName = activeProfileName,
+                                avatarColorHex = activeProfileColorHex,
+                                showProfile = showProfileSelector
+                            )
+                            view.setItems(drawerItems, selectedDrawerRoute)
+                            view.setSelectedRoute(selectedDrawerRoute)
+                            if (isSidebarExpanded && (pendingSidebarFocusRequest || !view.hasFocus())) {
+                                view.requestSidebarFocus(selectedDrawerRoute)
+                                pendingSidebarFocusRequest = false
+                            }
+                        }
                     )
                 }
             }
