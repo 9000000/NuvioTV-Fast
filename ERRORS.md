@@ -1,3 +1,24 @@
+## [2026-11-02 15:40] - FocusRequester is not initialized when navigating down from Play button in MetaDetailsScreen
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `HeroSection.kt:70,165,302`, `EpisodesSection.kt:48,84,185`, `MetaDetailsScreen.kt:2380-2440`
+- **Agent**: mon
+- **Root Cause**:
+  1. In `MetaDetailsScreen.kt`, `HeroSection` action buttons (`PlayButton`, `ActionIconButton`) had `focusProperties { down = downFocusRequester }` directly assigned to downstream sections (`SeasonTabs`, `EpisodesRow`, or `Cast`).
+  2. Because `HeroSection` spans the entire initial TV viewport, items below it are off-screen and not yet composed by `LazyColumn`.
+  3. Consequently, `downFocusRequester` has no attached layout nodes. Compose emitted `FocusRelatedWarning: FocusRequester is not initialized` and rejected the 2D focus navigation entirely.
+  4. A legacy workaround in `MetaDetailsScreen.kt` required double-tapping DPAD_DOWN within 280ms (`rapidDown`) to scroll by 240dp, forcing the user to spam the DOWN key 4–6 times before the next section was brought into view and composed.
+- **Fix Applied**:
+  1. Added `onNavigateDown: (() -> Boolean)? = null` callbacks across `HeroSection`, `PlayButton`, `ActionIconButton`, `SeasonTabs`, `EpisodesRow`, and `EpisodeCard`.
+  2. In `PlayButton` and related elements, only assign `down = downFocusRequester` when `onNavigateDown == null`.
+  3. Intercept `ACTION_DOWN` + `KEYCODE_DPAD_DOWN` via `onPreviewKeyEvent` to trigger `onNavigateDown()`.
+  4. In `MetaDetailsScreen.kt`, implemented `onHeroNavigateDown`, `onSeasonTabsNavigateDown`, and `onEpisodesRowNavigateDown` to programmatically invoke `listState.animateScrollToItem(targetIndex)`, wait 2 frames (`withFrameNanos`) for layout nodes to attach, and immediately call `requestFocus()` on the target.
+- **Prevention**: Never link `focusProperties.down/up` to `FocusRequester`s belonging to uncomposed items in a `LazyColumn`/`LazyRow`. Instead, intercept the DPAD key event, scroll the target into the viewport, and request focus once composed.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-02 15:12] - Laggy poster scrolling in Discover & Legacy sidebar removal
 
 - **Type**: Logic

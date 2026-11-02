@@ -2363,6 +2363,99 @@ private fun MetaDetailsContent(
         val showSeasonTabs = isSeries && seasons.isNotEmpty() && !(seasons.size == 1 && meta.apiType.equals("other", ignoreCase = true))
         val showEpisodesRow = isSeries && seasons.isNotEmpty()
 
+        val onHeroNavigateDown = remember(
+            showSeasonTabs,
+            showEpisodesRow,
+            hasVisiblePeopleSection,
+            hasVisiblePeopleTabs,
+            shouldSplitCollection,
+            collection.size,
+            shouldShowCommentsSection,
+            activePeopleTabFocusRequester,
+            selectedSeasonFocusRequester,
+            seasonDownFocusRequester,
+            castSectionFocusRequester
+        ) {
+            {
+                coroutineScope.launch {
+                    when {
+                        showSeasonTabs -> {
+                            listState.animateScrollToItem(1)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { selectedSeasonFocusRequester.requestFocus() }
+                        }
+                        showEpisodesRow -> {
+                            val targetIdx = if (showSeasonTabs) 2 else 1
+                            listState.animateScrollToItem(targetIdx)
+                            repeat(2) { withFrameNanos { } }
+                            val req = seasonDownFocusRequester ?: selectedSeasonFocusRequester
+                            runCatching { req.requestFocus() }
+                        }
+                        hasVisiblePeopleSection -> {
+                            val targetIdx = 1
+                            listState.animateScrollToItem(targetIdx)
+                            repeat(2) { withFrameNanos { } }
+                            val req = if (hasVisiblePeopleTabs) activePeopleTabFocusRequester else castSectionFocusRequester
+                            runCatching { req.requestFocus() }
+                        }
+                        shouldSplitCollection && collection.isNotEmpty() -> {
+                            listState.animateScrollToItem(1)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { collectionSectionFocusRequester.requestFocus() }
+                        }
+                        shouldShowCommentsSection -> {
+                            listState.animateScrollToItem(1)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { commentsRowEntryFocusRequester.requestFocus() }
+                        }
+                    }
+                }
+                showSeasonTabs || showEpisodesRow || hasVisiblePeopleSection || (shouldSplitCollection && collection.isNotEmpty()) || shouldShowCommentsSection
+            }
+        }
+
+        val onSeasonTabsNavigateDown = remember(showEpisodesRow, showSeasonTabs, seasonDownFocusRequester, selectedSeasonFocusRequester) {
+            {
+                if (showEpisodesRow) {
+                    coroutineScope.launch {
+                        val episodesIndex = if (showSeasonTabs) 2 else 1
+                        listState.animateScrollToItem(episodesIndex)
+                        repeat(2) { withFrameNanos { } }
+                        val req = seasonDownFocusRequester ?: selectedSeasonFocusRequester
+                        runCatching { req.requestFocus() }
+                    }
+                    true
+                } else false
+            }
+        }
+
+        val onEpisodesRowNavigateDown = remember(hasVisiblePeopleSection, hasVisiblePeopleTabs, activePeopleTabFocusRequester, castSectionFocusRequester, showSeasonTabs, showEpisodesRow, shouldSplitCollection, collection.size) {
+            {
+                if (hasVisiblePeopleSection) {
+                    coroutineScope.launch {
+                        var castIndex = 1
+                        if (showSeasonTabs) castIndex++
+                        if (showEpisodesRow) castIndex++
+                        listState.animateScrollToItem(castIndex)
+                        repeat(2) { withFrameNanos { } }
+                        val req = if (hasVisiblePeopleTabs) activePeopleTabFocusRequester else castSectionFocusRequester
+                        runCatching { req.requestFocus() }
+                    }
+                    true
+                } else if (shouldSplitCollection && collection.isNotEmpty()) {
+                    coroutineScope.launch {
+                        var colIndex = 1
+                        if (showSeasonTabs) colIndex++
+                        if (showEpisodesRow) colIndex++
+                        listState.animateScrollToItem(colIndex)
+                        repeat(2) { withFrameNanos { } }
+                        runCatching { collectionSectionFocusRequester.requestFocus() }
+                    }
+                    true
+                } else false
+            }
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -2550,6 +2643,7 @@ private fun MetaDetailsContent(
                         isTrailerPlaying = isTrailerPlaying,
                         playButtonFocusRequester = heroPlayButtonFocusRequester,
                         playButtonDownFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (seasonDownFocusRequester ?: episodesDownFocusRequester),
+                        onNavigateDown = onHeroNavigateDown,
                         onHeroActionFocused = {
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
                                 coroutineScope.launch {
@@ -2585,6 +2679,7 @@ private fun MetaDetailsContent(
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
                             upFocusRequester = heroPlayFocusRequester,
                             downFocusRequester = seasonDownFocusRequester,
+                            onNavigateDown = onSeasonTabsNavigateDown,
                             isFocusEnabled = pendingRestoreType != RestoreTarget.EPISODE
                         )
                     }
@@ -2629,6 +2724,7 @@ private fun MetaDetailsContent(
                             onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
                             upFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (heroPlayFocusRequester ?: heroPlayButtonFocusRequester),
                             downFocusRequester = episodesDownFocusRequester,
+                            onNavigateDown = onEpisodesRowNavigateDown,
                             episodeFocusRequesters = seasonEpisodeFocusRequesters,
                             restoreEpisodeId = visibleEpisodeRestoreId,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,

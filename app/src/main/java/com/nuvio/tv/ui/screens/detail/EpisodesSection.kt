@@ -128,6 +128,7 @@ fun SeasonTabs(
     selectedTabFocusRequester: FocusRequester,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Boolean)? = null,
     isFocusEnabled: Boolean = true
 ) {
     // Move season 0 (specials) to the end
@@ -299,11 +300,20 @@ fun SeasonTabs(
                 },
                 modifier = Modifier
                     .focusRequester(seasonFocusRequester)
+                    .onPreviewKeyEvent { event ->
+                        val native = event.nativeKeyEvent
+                        if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                            if (onNavigateDown != null && onNavigateDown()) {
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        false
+                    }
                     .focusProperties {
                         canFocus = isFocusEnabled
                         if (isRightEdge) right = FocusRequester.Cancel
                         if (isLeftEdge) left = FocusRequester.Cancel
-                        if (isSelected && downFocusRequester != null) {
+                        if (onNavigateDown == null && isSelected && downFocusRequester != null) {
                             down = downFocusRequester
                         }
                         if (upFocusRequester != null) {
@@ -401,6 +411,7 @@ fun EpisodesRow(
     onMarkPreviousEpisodesWatched: (Video) -> Unit = {},
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Boolean)? = null,
     episodeFocusRequesters: MutableMap<String, FocusRequester> = mutableMapOf(),
     restoreEpisodeId: String? = null,
     restoreFocusToken: Int = 0,
@@ -560,6 +571,7 @@ fun EpisodesRow(
                 onLongPress = episodeOnLongPress,
                 upFocusRequester = upFocusRequester,
                 downFocusRequester = downFocusRequester,
+                onNavigateDown = onNavigateDown,
                 focusRequester = episodeFocusRequester,
                 isFocusEnabled = restoreEpisodeId.isNullOrBlank() || isRestoreTarget,
                 onFocused = episodeOnFocused,
@@ -656,6 +668,7 @@ private fun EpisodeCard(
     onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Boolean)? = null,
     focusRequester: FocusRequester,
     isFocusEnabled: Boolean = true,
     onFocused: (() -> Unit)? = null,
@@ -876,7 +889,7 @@ private fun EpisodeCard(
             .focusProperties {
                 canFocus = isFocusEnabled
                 up = upFocusRequester
-                if (downFocusRequester != null) {
+                if (onNavigateDown == null && downFocusRequester != null) {
                     down = downFocusRequester
                 }
             },

@@ -124,6 +124,7 @@ fun HeroContentSection(
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
     playButtonDownFocusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Boolean)? = null,
     restorePlayFocusToken: Int = 0,
     onHeroActionFocused: () -> Unit = {},
     onPlayFocusRestored: () -> Unit = {},
@@ -254,6 +255,15 @@ fun HeroContentSection(
             ) {
                 Column {
                     Row(
+                        modifier = Modifier.onPreviewKeyEvent { event ->
+                            val native = event.nativeKeyEvent
+                            if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                                if (onNavigateDown != null && onNavigateDown()) {
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                            false
+                        },
                         horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -264,6 +274,7 @@ fun HeroContentSection(
                             onLongPress = onPlayLongPress,
                             focusRequester = playButtonFocusRequester,
                             downFocusRequester = playButtonDownFocusRequester,
+                            onNavigateDown = onNavigateDown,
                             restoreFocusToken = restorePlayFocusToken,
                             onFocusRestored = {
                                 onHeroActionFocused()
@@ -281,7 +292,8 @@ fun HeroContentSection(
                             contentDescription = if (isInLibrary) stringResource(R.string.hero_remove_from_library) else stringResource(R.string.hero_add_to_library),
                             onClick = onToggleLibrary,
                             onLongPress = onLibraryLongPress,
-                            onFocused = onHeroActionFocused
+                            onFocused = onHeroActionFocused,
+                            onNavigateDown = onNavigateDown
                         )
 
                         if (meta.apiType == "movie") {
@@ -383,6 +395,7 @@ internal fun PlayButton(
     onLongPress: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Boolean)? = null,
     restoreFocusToken: Int = 0,
     onFocusRestored: () -> Unit = {}
 ) {
@@ -415,6 +428,11 @@ internal fun PlayButton(
             }
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
+                if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (onNavigateDown != null && onNavigateDown()) {
+                        return@onPreviewKeyEvent true
+                    }
+                }
                 if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount == 0 && isSelectKey(native.keyCode)) {
                     longPressTriggered = false
                 }
@@ -447,7 +465,7 @@ internal fun PlayButton(
             }
             .focusProperties {
                 up = FocusRequester.Cancel
-                if (downFocusRequester != null) {
+                if (onNavigateDown == null && downFocusRequester != null) {
                     down = downFocusRequester
                 }
             }
@@ -562,7 +580,8 @@ private fun ActionIconButton(
     selectedContainerColor: Color = Color(0xFF7CFF9B),
     selectedContentColor: Color = Color.Black,
     onFocused: () -> Unit = {},
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Boolean)? = null
 ) {
     var longPressTriggered by remember { mutableStateOf(false) }
     val longPressKeyTracker = rememberLongPressKeyTracker()
@@ -584,6 +603,11 @@ private fun ActionIconButton(
             }
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
+                if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (onNavigateDown != null && onNavigateDown()) {
+                        return@onPreviewKeyEvent true
+                    }
+                }
                 if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount == 0 && isSelectKey(native.keyCode)) {
                     longPressTriggered = false
                 }
