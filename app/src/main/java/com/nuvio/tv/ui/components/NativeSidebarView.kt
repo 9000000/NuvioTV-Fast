@@ -56,6 +56,7 @@ class NativeSidebarView @JvmOverloads constructor(
     private val dp = context.resources.displayMetrics.density
     private fun Int.toPx(): Int = (this * dp).toInt()
     private fun Float.toPx(): Float = this * dp
+    private val itemCornerRadiusPx by lazy { 24f.toPx() }
 
     private val headerContainer: FrameLayout
     private val itemsContainer: LinearLayout
@@ -246,21 +247,21 @@ class NativeSidebarView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (visibility == View.VISIBLE && !hasFocus()) {
-            post {
-                if (!hasFocus() && isAttachedToWindow) {
-                    requestSidebarFocus()
-                }
-            }
+            requestSidebarFocus()
         }
     }
 
     fun requestSidebarFocus(targetRoute: String? = null) {
         if (hasFocus()) return
         val target = targetRoute ?: currentSelectedRoute ?: currentItems.firstOrNull()?.route
-        val targetView = target?.let { itemViews[it] } ?: itemViews.values.firstOrNull()
-        targetView?.post {
-            if (!hasFocus() && isAttachedToWindow) {
-                targetView.requestFocus()
+        val targetView = target?.let { itemViews[it] } ?: itemViews.values.firstOrNull() ?: return
+        if (!hasFocus() && targetView.isAttachedToWindow && !targetView.isInLayout) {
+            targetView.requestFocus()
+        } else {
+            targetView.post {
+                if (!hasFocus() && isAttachedToWindow) {
+                    targetView.requestFocus()
+                }
             }
         }
     }
@@ -281,6 +282,10 @@ class NativeSidebarView @JvmOverloads constructor(
                 bottomMargin = 3.toPx()
             }
             setPadding(14.toPx(), 0, 14.toPx(), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = itemCornerRadiusPx
+                setColor(Color.TRANSPARENT)
+            }
         }
 
         val iconView = ImageView(context).apply {
@@ -379,21 +384,16 @@ class NativeSidebarView @JvmOverloads constructor(
         val iconView = view.getChildAt(0) as? ImageView ?: return
         val textView = view.getChildAt(1) as? TextView ?: return
 
-        val pillBg = GradientDrawable().apply {
-            cornerRadius = 24f.toPx()
-            when {
-                isFocused -> {
-                    setColor(accentOrange)
-                }
-                isSelected -> {
-                    setColor(selectedBgColor)
-                }
-                else -> {
-                    setColor(Color.TRANSPARENT)
-                }
-            }
+        val pillBg = (view.background as? GradientDrawable) ?: GradientDrawable().apply {
+            cornerRadius = itemCornerRadiusPx
+            view.background = this
         }
-        view.background = pillBg
+        val targetColor = when {
+            isFocused -> accentOrange
+            isSelected -> selectedBgColor
+            else -> Color.TRANSPARENT
+        }
+        pillBg.setColor(targetColor)
 
         when {
             isFocused -> {

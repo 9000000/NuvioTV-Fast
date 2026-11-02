@@ -1469,14 +1469,12 @@ private fun ModernSidebarScaffold(
     var sidebarCollapsePending by remember { mutableStateOf(false) }
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var nativeSidebarRef by remember { mutableStateOf<NativeSidebarView?>(null) }
-    var focusedDrawerIndex by remember { mutableStateOf(-1) }
     var isFloatingPillIconOnly by remember { mutableStateOf(false) }
     var pillExpandRequestCount by remember { mutableIntStateOf(0) }
     val keepFloatingPillExpanded = false
     val keepSidebarFocusDuringCollapse =
         isSidebarExpanded || sidebarCollapsePending || pendingContentFocusTransfer
     val hasSidebarProfileItem = showProfileSelector && activeProfileName.isNotEmpty()
-    val sidebarTopBoundaryIndex = if (hasSidebarProfileItem) drawerItems.size else 0
 
     LaunchedEffect(showSidebar) {
         if (!showSidebar) {
@@ -1552,11 +1550,7 @@ private fun ModernSidebarScaffold(
     // Panel is always laid out at full expanded width; open/close is
     // purely a graphicsLayer transform (scale + alpha) so Compose never
     // re-layouts and haze doesn't re-render blur every frame.
-    val sidebarWidth = if (sidebarVisible) openSidebarWidth else collapsedSidebarWidth
-    val animationDuration = if (sidebarVisible) 400 else 300
     val animationEasing = if (sidebarVisible) FastOutSlowInEasing else FastOutLinearInEasing
-
-    val sidebarSlideX = NuvioTheme.spacing.none
     val sidebarSurfaceAlpha by animateFloatAsState(
         targetValue = if (isSidebarExpanded) 1f else 0f,
         animationSpec = if (NuvioTheme.animationsEnabled) {
@@ -1592,10 +1586,7 @@ private fun ModernSidebarScaffold(
     val sidebarShowCollapsedPill by remember { derivedStateOf { sidebarExpandProgress < 0.98f } }
     val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled && (isSidebarExpanded || sidebarShowExpandedPanel)
 
-    val sidebarIconScale = 1f
-    val sidebarBloomScale = 1f
-    val sidebarDeflateOffsetX = NuvioTheme.spacing.none
-    val sidebarDeflateOffsetY = NuvioTheme.spacing.none
+
 
     LaunchedEffect(isSidebarExpanded, sidebarCollapsePending, pendingContentFocusTransfer, showSidebar) {
         if (!showSidebar || !pendingContentFocusTransfer || isSidebarExpanded || sidebarCollapsePending) {
@@ -1698,8 +1689,7 @@ private fun ModernSidebarScaffold(
                 LocalOpenSidebar provides {
                     isSidebarExpanded = true
                     sidebarCollapsePending = false
-                    val initialIdx = drawerItems.indexOfFirst { it.route == selectedDrawerRoute }.takeIf { it >= 0 } ?: 0
-                    focusedDrawerIndex = initialIdx
+
                 }
             ) {
                 NuvioNavHost(
@@ -1711,7 +1701,6 @@ private fun ModernSidebarScaffold(
         }
 
         if (showSidebar && (sidebarVisible || sidebarShowExpandedPanel)) {
-            val panelShape = RoundedCornerShape(sidebarTokens.panelRadius)
             val showExpandedPanel = isSidebarExpanded || sidebarShowExpandedPanel
 
             Box(
@@ -1775,6 +1764,32 @@ private fun ModernSidebarScaffold(
                             )
                             view.setItems(drawerItems, selectedDrawerRoute)
                             view.setSelectedRoute(selectedDrawerRoute)
+                            view.onDrawerItemClick = { targetRoute ->
+                                keyboardController?.hide()
+                                onNavigate(targetRoute)
+                                navigateToDrawerRoute(
+                                    navController = navController,
+                                    currentRoute = currentRoute,
+                                    targetRoute = targetRoute
+                                )
+                                isSidebarExpanded = false
+                                sidebarCollapsePending = false
+                                pendingContentFocusTransfer = currentRoute == targetRoute
+                            }
+                            view.onNavigateRight = {
+                                isSidebarExpanded = false
+                                sidebarCollapsePending = false
+                                pendingContentFocusTransfer = true
+                            }
+                            view.onNavigateBack = {
+                                if (!longPressBackHeld.value) {
+                                    isSidebarExpanded = false
+                                    sidebarCollapsePending = false
+                                    pendingContentFocusTransfer = true
+                                    true
+                                } else false
+                            }
+                            view.onSwitchProfile = onSwitchProfile
                             if (isSidebarExpanded && !view.hasFocus()) {
                                 view.requestSidebarFocus(selectedDrawerRoute)
                             }
@@ -1800,7 +1815,7 @@ private fun ModernSidebarScaffold(
                         .offset {
                             IntOffset(
                                 (NuvioTheme.spacing.lg - NuvioTheme.spacing.xxs).roundToPx(),
-                                (NuvioTheme.spacing.lg + sidebarDeflateOffsetY).roundToPx()
+                                NuvioTheme.spacing.lg.roundToPx()
                             )
                         }
                         .graphicsLayer {

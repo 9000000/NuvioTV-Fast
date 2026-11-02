@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.home
 
+import androidx.recyclerview.widget.RecyclerView
+
 import com.nuvio.tv.domain.model.catalogRowLegacyKey
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -170,6 +172,11 @@ internal fun ModernHomeRowsList(
     val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val stableItemFocusRequestersByRow = remember { mutableMapOf<String, StableRef<MutableMap<Int, FocusRequester>>>() }
     val rowGrids = remember { mutableMapOf<String, androidx.leanback.widget.HorizontalGridView>() }
+    val sharedRecycledViewPool = remember {
+        RecyclerView.RecycledViewPool().apply {
+            setMaxRecycledViews(0, 30)
+        }
+    }
     val coroutineScope = rememberCoroutineScope()
     var scrollJob by remember { mutableStateOf<Job?>(null) }
     var localPendingFocusRowKey by remember { mutableStateOf<String?>(null) }
@@ -662,6 +669,7 @@ internal fun ModernHomeRowsList(
                     onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem,
                     onNavigateBack = onNavigateBack,
                     rowGrids = rowGrids,
+                    sharedRecycledViewPool = sharedRecycledViewPool,
                     isPendingFocus = localPendingFocusRowKey == row.key,
                     pendingFocusIndex = localPendingFocusIndex,
                     pendingFocusNonce = localPendingFocusNonce,

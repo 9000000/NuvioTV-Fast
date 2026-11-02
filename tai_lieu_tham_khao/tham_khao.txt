@@ -1,0 +1,7 @@
+Để vắt kiệt thêm hiệu năng từ các thư viện đã import trong com.nuvio.tv.ui.screens.home, bạn có thể bảo Antigravity kiểm tra và bổ sung 3 điểm nhỏ sau trong phần thân code:
+
+Chia sẻ RecycledViewPool giữa các hàng ngang: Nếu màn hình Home có nhiều HorizontalGridView xếp chồng lên nhau, hãy tạo một biến remember { RecyclerView.RecycledViewPool() } ở cấp màn hình và gán cho tất cả các hàng (gridView.setRecycledViewPool(sharedPool)). Khi cuộn từ hàng Phim Hành Động xuống hàng Phim Kinh Dị, máy sẽ lấy luôn View của hàng trên gắn xuống hàng dưới mà không tốn 1 mili-giây nào để tạo View mới.
+
+Tắt crossfade của Coil 3 khi đang cuộn nhanh: Bạn có import coil3.request.crossfade. Hiệu ứng mờ dần (crossfade) rất đẹp khi đứng yên, nhưng khi người dùng đang giữ phím cuộn liên tục, nó bắt GPU vẽ chồng 2 lớp ảnh (TransitionDrawable) trong suốt 200ms. Hãy tắt crossfade(false) hoặc chỉ bật khi trạng thái cuộn của HorizontalGridView là SCROLL_STATE_IDLE.
+
+Bật setHasFixedSize(true) và setInitialPrefetchItemCount(4): Giúp HorizontalGridView tận dụng khoảng thời gian rảnh vài mili-giây giữa hai khung hình (RenderThread Idle Time có trên Android 9) để chuẩn bị sẵn các thẻ phim nằm ngoài mép màn hình trước khi người dùng bấm tới.

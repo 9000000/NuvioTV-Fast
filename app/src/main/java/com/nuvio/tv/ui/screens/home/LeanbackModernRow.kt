@@ -67,55 +67,55 @@ fun extractDominantColor(bitmap: Bitmap): Int {
     if (bitmap.isRecycled) return Color.WHITE
     return runCatching {
         val stepX = (bitmap.width / 14).coerceAtLeast(1)
-    val stepY = (bitmap.height / 14).coerceAtLeast(1)
-    val hsv = FloatArray(3)
-    val numBins = 16
-    val binScores = FloatArray(numBins)
-    val binBestWeight = FloatArray(numBins)
-    val binRepresentative = IntArray(numBins)
+        val stepY = (bitmap.height / 14).coerceAtLeast(1)
+        val hsv = FloatArray(3)
+        val numBins = 16
+        val binScores = FloatArray(numBins)
+        val binBestWeight = FloatArray(numBins)
+        val binRepresentative = IntArray(numBins)
 
-    for (x in 0 until bitmap.width step stepX) {
-        for (y in 0 until bitmap.height step stepY) {
-            val pixel = bitmap.getPixel(x, y)
-            val alpha = (pixel ushr 24) and 0xFF
-            if (alpha < 128) continue
-            Color.colorToHSV(pixel, hsv)
-            val sat = hsv[1]
-            val brightness = hsv[2]
-            // Loại bỏ màu đen kịt và màu xám/trắng không có sắc độ
-            if (sat > 0.22f && brightness > 0.18f) {
-                // Trọng số ưu tiên độ bão hòa màu và độ sáng
-                val weight = sat * sat * brightness
-                val bin = (((hsv[0] + 11.25f) % 360f) / 22.5f).toInt().coerceIn(0, numBins - 1)
-                binScores[bin] += weight
-                if (weight > binBestWeight[bin]) {
-                    binBestWeight[bin] = weight
-                    binRepresentative[bin] = pixel
+        for (x in 0 until bitmap.width step stepX) {
+            for (y in 0 until bitmap.height step stepY) {
+                val pixel = bitmap.getPixel(x, y)
+                val alpha = (pixel ushr 24) and 0xFF
+                if (alpha < 128) continue
+                Color.colorToHSV(pixel, hsv)
+                val sat = hsv[1]
+                val brightness = hsv[2]
+                // Loại bỏ màu đen kịt và màu xám/trắng không có sắc độ
+                if (sat > 0.22f && brightness > 0.18f) {
+                    // Trọng số ưu tiên độ bão hòa màu và độ sáng
+                    val weight = sat * sat * brightness
+                    val bin = (((hsv[0] + 11.25f) % 360f) / 22.5f).toInt().coerceIn(0, numBins - 1)
+                    binScores[bin] += weight
+                    if (weight > binBestWeight[bin]) {
+                        binBestWeight[bin] = weight
+                        binRepresentative[bin] = pixel
+                    }
                 }
             }
         }
-    }
 
-    var bestBin = -1
-    var maxBinScore = 0f
-    for (i in 0 until numBins) {
-        if (binScores[i] > maxBinScore) {
-            maxBinScore = binScores[i]
-            bestBin = i
+        var bestBin = -1
+        var maxBinScore = 0f
+        for (i in 0 until numBins) {
+            if (binScores[i] > maxBinScore) {
+                maxBinScore = binScores[i]
+                bestBin = i
+            }
         }
-    }
 
-    val dominantColor = if (bestBin >= 0 && binRepresentative[bestBin] != 0) {
-        binRepresentative[bestBin]
-    } else {
-        Color.parseColor("#38BDF8") // Fallback: Electric Cyan
-    }
+        val dominantColor = if (bestBin >= 0 && binRepresentative[bestBin] != 0) {
+            binRepresentative[bestBin]
+        } else {
+            Color.parseColor("#38BDF8") // Fallback: Electric Cyan
+        }
 
-    Color.colorToHSV(dominantColor, hsv)
-    // Tăng độ bão hòa và đẩy độ sáng lên cực đại để ra chất đèn Neon phát quang rực rỡ
-    hsv[1] = (hsv[1] * 1.20f).coerceIn(0.75f, 1.0f)
-    hsv[2] = 1.0f
-    Color.HSVToColor(hsv)
+        Color.colorToHSV(dominantColor, hsv)
+        // Tăng độ bão hòa và đẩy độ sáng lên cực đại để ra chất đèn Neon phát quang rực rỡ
+        hsv[1] = (hsv[1] * 1.20f).coerceIn(0.75f, 1.0f)
+        hsv[2] = 1.0f
+        Color.HSVToColor(hsv)
     }.getOrDefault(Color.parseColor("#38BDF8"))
 }
 
@@ -123,7 +123,8 @@ fun extractDominantColor(bitmap: Bitmap): Int {
  * View vẽ hào quang ánh sáng đèn Neon chân thực (Gaussian Neon Bloom) tỏa ra phía ngoài poster.
  * - Sử dụng Skia BlurMaskFilter.Blur.OUTER trên Software Layer:
  *   + Ở TRONG GIỮ NGUYÊN HOÀN TOÀN: Blur.OUTER chỉ vẽ ra ngoài biên dạng, không vẽ bất kỳ pixel nào bên trong.
- *   + Kết hợp clipOutPath loại bỏ 100% diện tích bên trong poster, đảm bảo poster sắc nét hoàn hảo.
+ *   + Kết hợp clipOutPath loại bỏ 100% diện tích bên trong poster, đảm bảo poster sắc nét hoàn hảo
+ *     và CPU không phải tính toán Gaussian Blur vô ích dưới lớp poster.
  *   + Tỏa ra ngoài với 3 tầng tán xạ Gaussian mịn màng (Core, Mid, Ambient Aura),
  *     tạo hiệu ứng phát sáng đèn neon liên tục, không có các vòng tròn đồng tâm giật cục.
  * - Đổi màu phát quang linh hoạt theo màu chủ đạo rực rỡ trích xuất từ poster.
@@ -131,9 +132,11 @@ fun extractDominantColor(bitmap: Bitmap): Int {
 class PlayStoreGlowView(context: Context) : View(context) {
     var glowColor: Int = Color.WHITE
         set(value) {
-            field = value
-            updatePaints()
-            invalidate()
+            if (field != value) {
+                field = value
+                updatePaints()
+                invalidate()
+            }
         }
     var cornerRadiusPx: Float = 0f
         set(value) {
@@ -160,10 +163,10 @@ class PlayStoreGlowView(context: Context) : View(context) {
 
     private val clipPath = Path()
 
-    // 3 bo loc Gaussian blur cho hieu ung anh sang Neon thuc te (chuan v1.2.50):
-    // Core: tia sang neon cuong do cao ngay sat vien
-    // Mid: than sang quang hoc
-    // Aura: quang sang tan xa khi quyen mem mai ra xa
+    // 3 bộ lọc Gaussian blur cho hiệu ứng ánh sáng Neon thực tế (chuẩn v1.2.50):
+    // Core: tia sáng neon cường độ cao ngay sát viền
+    // Mid: thân sáng quang học
+    // Aura: quầng sáng tán xạ khí quyển mềm mại ra xa
     private var coreFilter: BlurMaskFilter? = null
     private var midFilter: BlurMaskFilter? = null
     private var auraFilter: BlurMaskFilter? = null
@@ -196,9 +199,9 @@ class PlayStoreGlowView(context: Context) : View(context) {
         val rCore = (glowSpreadPx * 0.22f).coerceAtLeast(1f)
         val rMid = (glowSpreadPx * 0.50f).coerceAtLeast(1f)
         val rAura = (glowSpreadPx * 0.85f).coerceAtLeast(1f)
-        coreFilter = BlurMaskFilter(rCore, BlurMaskFilter.Blur.NORMAL)
-        midFilter = BlurMaskFilter(rMid, BlurMaskFilter.Blur.NORMAL)
-        auraFilter = BlurMaskFilter(rAura, BlurMaskFilter.Blur.NORMAL)
+        coreFilter = BlurMaskFilter(rCore, BlurMaskFilter.Blur.OUTER)
+        midFilter = BlurMaskFilter(rMid, BlurMaskFilter.Blur.OUTER)
+        auraFilter = BlurMaskFilter(rAura, BlurMaskFilter.Blur.OUTER)
         corePaint.maskFilter = coreFilter
         midPaint.maskFilter = midFilter
         auraPaint.maskFilter = auraFilter
@@ -239,6 +242,14 @@ class PlayStoreGlowView(context: Context) : View(context) {
             )
         }
 
+        val saveCount = canvas.save()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            canvas.clipOutPath(clipPath)
+        } else {
+            @Suppress("DEPRECATION")
+            canvas.clipPath(clipPath, Region.Op.DIFFERENCE)
+        }
+
         if (auraPaint.maskFilter != null) {
             canvas.drawPath(clipPath, auraPaint)
         }
@@ -248,6 +259,7 @@ class PlayStoreGlowView(context: Context) : View(context) {
         if (corePaint.maskFilter != null) {
             canvas.drawPath(clipPath, corePaint)
         }
+        canvas.restoreToCount(saveCount)
     }
 }
 
@@ -258,7 +270,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     var onNavigateLeftOnFirstItem: (() -> Boolean)? = null
     var animationsEnabled: Boolean = true
 
-    private var isHoldingHorizontalKey = false
+    var isHoldingHorizontalKey: Boolean = false
+        private set
+
     private var arrivalAt0Time = 0L
     private var arrivedAt0FromRight = false
     private var hasReleasedKeyAfterArrivingAt0 = true
@@ -270,10 +284,13 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         itemAnimator = null
         layoutManager?.isItemPrefetchEnabled = false
+        setHasFixedSize(true)
+        setItemViewCacheSize(8)
 
         addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    isHoldingHorizontalKey = false
                     rowAdapter?.onScrollSettled()
                 }
             }
@@ -379,14 +396,16 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         return super.requestChildRectangleOnScreen(child, rect, immediate)
     }
 
-
-    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
-        if (gainFocus && selectedPosition <= 0) {
+        if (!gainFocus) {
+            isHoldingHorizontalKey = false
+        } else if (selectedPosition <= 0) {
             hasReleasedKeyAfterArrivingAt0 = true
             arrivedAt0FromRight = false
         }
     }
+
     override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
         if (event == null) return false
 
@@ -456,12 +475,15 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     }
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    isHoldingHorizontalKey = false
                     if (onNavigateDown?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
+                    isHoldingHorizontalKey = false
                     if (onNavigateUp?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_BACK -> {
+                    isHoldingHorizontalKey = false
                     if (onNavigateBack?.invoke() == true) return true
                 }
             }
@@ -483,23 +505,27 @@ class LeanbackCardViewHolder(
     val adapter: LeanbackRowAdapter
 ) : RecyclerView.ViewHolder(root) {
 
+    // Tái sử dụng 1 đối tượng GradientDrawable duy nhất cho viền Focus để triệt tiêu cấp phát bộ nhớ khi cuộn
+    private val focusBorderDrawable = GradientDrawable().apply {
+        setColor(Color.TRANSPARENT)
+        cornerRadius = cornerRadiusPx
+    }
+
+    // Trì hoãn nhẹ việc bật Software Layer GlowView khi người dùng đang nhấn giữ phím cuộn liên tục
+    private val deferredGlowRunnable = Runnable {
+        if (root.hasFocus() && adapter.animationsEnabled()) {
+            glowView.glowColor = currentDominantColor
+            glowView.visibility = View.VISIBLE
+        }
+    }
+
     fun updateCornerRadius(newRadiusPx: Float) {
         if (cornerRadiusPx == newRadiusPx) return
         cornerRadiusPx = newRadiusPx
 
         (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
-
-        posterImage.outlineProvider = object : ViewOutlineProvider() {
-            override fun getOutline(view: View, outline: Outline) {
-                if (newRadiusPx > 0f) {
-                    outline.setRoundRect(0, 0, view.width, view.height, newRadiusPx)
-                } else {
-                    outline.setRect(0, 0, view.width, view.height)
-                }
-            }
-        }
+        focusBorderDrawable.cornerRadius = newRadiusPx
         posterImage.invalidateOutline()
-
         glowView.cornerRadiusPx = newRadiusPx
 
         if (root.hasFocus()) {
@@ -516,6 +542,17 @@ class LeanbackCardViewHolder(
         root.isFocusable = true
         root.isFocusableInTouchMode = true
         root.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+
+        posterImage.outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                if (cornerRadiusPx > 0f) {
+                    outline.setRoundRect(0, 0, view.width, view.height, cornerRadiusPx)
+                } else {
+                    outline.setRect(0, 0, view.width, view.height)
+                }
+            }
+        }
+        posterImage.clipToOutline = true
 
         root.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
             updateFocusVisual(hasFocus)
@@ -556,6 +593,7 @@ class LeanbackCardViewHolder(
     }
 
     fun updateFocusVisual(hasFocus: Boolean) {
+        root.removeCallbacks(deferredGlowRunnable)
         val anim = adapter.animationsEnabled()
         val targetScale = if (anim && hasFocus) 1.08f else 1.0f
 
@@ -576,21 +614,24 @@ class LeanbackCardViewHolder(
         cardContainer.translationZ = 0f
 
         if (anim && hasFocus) {
-            glowView.visibility = View.VISIBLE
-            glowView.glowColor = currentDominantColor
             val tintedWhite = ColorUtils.blendARGB(currentDominantColor, Color.WHITE, 0.90f)
-            cardContainer.foreground = GradientDrawable().apply {
-                setColor(Color.TRANSPARENT)
-                setStroke(borderWidthPx, tintedWhite)
-                cornerRadius = cornerRadiusPx
+            focusBorderDrawable.setStroke(borderWidthPx, tintedWhite)
+            focusBorderDrawable.cornerRadius = cornerRadiusPx
+            cardContainer.foreground = focusBorderDrawable
+
+            val isFastScrolling = (adapter.attachedRecyclerView as? InteropHorizontalGridView)?.isHoldingHorizontalKey == true
+            if (isFastScrolling) {
+                glowView.visibility = View.GONE
+                root.postDelayed(deferredGlowRunnable, 55L)
+            } else {
+                glowView.glowColor = currentDominantColor
+                glowView.visibility = View.VISIBLE
             }
         } else if (hasFocus) {
             glowView.visibility = View.GONE
-            cardContainer.foreground = GradientDrawable().apply {
-                setColor(Color.TRANSPARENT)
-                setStroke(borderWidthPx, Color.WHITE)
-                cornerRadius = cornerRadiusPx
-            }
+            focusBorderDrawable.setStroke(borderWidthPx, Color.WHITE)
+            focusBorderDrawable.cornerRadius = cornerRadiusPx
+            cardContainer.foreground = focusBorderDrawable
         } else {
             glowView.visibility = View.GONE
             cardContainer.foreground = null
@@ -623,6 +664,12 @@ class LeanbackCardViewHolder(
             glowLp.width = cardWidthPx + (glowMarginPx * 2)
             glowLp.height = cardHeightPx + (glowMarginPx * 2)
             glowView.layoutParams = glowLp
+
+            val rootLp = root.layoutParams
+            if (rootLp != null && rootLp.width != cardWidthPx) {
+                rootLp.width = cardWidthPx
+                root.layoutParams = rootLp
+            }
         }
 
         // Title
@@ -647,14 +694,15 @@ class LeanbackCardViewHolder(
             progressBar?.visibility = View.GONE
         }
 
-        // Image loading via Coil với Dynamic Color extraction & Instant Memory Cache
+        // Image loading via Coil với Dynamic Color extraction & Hardware Bitmap khi đã có màu trong cache
         val imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
         if (!imageUrl.isNullOrBlank()) {
             val ctx = posterImage.context
+            val hasCachedColor = cachedColor != null
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx, cardHeightPx)
-                .allowHardware(false)
+                .allowHardware(hasCachedColor)
                 .crossfade(false)
                 .target(
                     object : Target {
@@ -666,13 +714,17 @@ class LeanbackCardViewHolder(
                         }
                         override fun onSuccess(result: Image) {
                             posterImage.setImageDrawable(result.asDrawable(ctx.resources))
-                            val bmp = (result as? BitmapImage)?.bitmap
-                            if (bmp != null && !bmp.isRecycled) {
-                                val cached = dominantColorCache.get(item.key)
-                                val extracted = cached ?: extractDominantColor(bmp).also {
-                                    dominantColorCache.put(item.key, it)
+                            val existingColor = dominantColorCache.get(item.key)
+                            if (existingColor != null) {
+                                currentDominantColor = existingColor
+                            } else {
+                                val bmp = (result as? BitmapImage)?.bitmap
+                                if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
+                                    val extracted = extractDominantColor(bmp).also {
+                                        dominantColorCache.put(item.key, it)
+                                    }
+                                    currentDominantColor = extracted
                                 }
-                                currentDominantColor = extracted
                             }
                             if (root.hasFocus()) {
                                 updateFocusVisual(true)
@@ -699,6 +751,7 @@ class LeanbackCardViewHolder(
     }
 
     fun unbind() {
+        root.removeCallbacks(deferredGlowRunnable)
         imageDisposable?.dispose()
         imageDisposable = null
         glowView.visibility = View.GONE
@@ -952,6 +1005,7 @@ fun LeanbackModernRow(
     pendingFocusIndex: Int = 0,
     pendingFocusNonce: Int = 0,
     onClearPendingFocus: () -> Unit = {},
+    recycledViewPool: RecyclerView.RecycledViewPool? = null,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -1056,6 +1110,9 @@ fun LeanbackModernRow(
                 this.onNavigateBack = onNavigateBack
                 this.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
                 this.animationsEnabled = animationsEnabled
+                setHasFixedSize(true)
+                setItemViewCacheSize(8)
+                recycledViewPool?.let { setRecycledViewPool(it) }
                 rowGrids?.put(rowKey, this)
                 if (isPendingFocus && items.isNotEmpty()) {
                     val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
@@ -1084,6 +1141,11 @@ fun LeanbackModernRow(
             adapter.onNavigateBack = onNavigateBack
             if (gridView.adapter !== adapter) {
                 gridView.adapter = adapter
+            }
+            recycledViewPool?.let {
+                if (gridView.recycledViewPool !== it) {
+                    gridView.setRecycledViewPool(it)
+                }
             }
             adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
             rowGrids?.put(rowKey, gridView)

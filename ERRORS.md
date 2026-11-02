@@ -1,3 +1,27 @@
+## [2026-11-02 22:30] - Tối ưu toàn diện Home Leanback: Shared RecycledViewPool, Deferred Glow 60fps, 16 Hue Bins Histogram và dọn sạch mã mồ côi
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `LeanbackModernRow.kt`, `ModernHomeRows.kt`, `ModernHomeRowsList.kt`, `MainActivity.kt`, `NativeSidebarView.kt`, `ModernSidebarBlurPanel.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. Mỗi hàng ngang `HorizontalGridView` trên màn hình Home tạo một RecycledViewPool riêng, khiến Android phải inflate lại toàn bộ ViewHolder khi cuộn dọc giữa các hàng phim, gây khựng khung hình.
+  2. `PlayStoreGlowView` chạy trên Software Layer với Gaussian Blur; khi người dùng giữ phím D-pad cuộn nhanh qua hàng loạt thẻ, GPU/CPU bị quá tải vì phải liên tục tính toán Gaussian blur cho từng thẻ lướt qua.
+  3. Cấp phát đối tượng `GradientDrawable` mới liên tục mỗi khi thẻ hoặc sidebar item nhận/mất focus, gây áp lực rác lớn lên Garbage Collector (GC pauses).
+  4. Coil 3 luôn nạp ảnh ở chế độ Software Bitmap (`allowHardware = false`) ngay cả khi ảnh đã có màu trong cache, tiêu tốn gấp đôi RAM hệ thống.
+  5. Tệp `ModernSidebarBlurPanel.kt` mồ côi (300+ dòng) cùng các biến trạng thái cũ trong `MainActivity.kt` không còn được sử dụng sau khi chuyển sang `NativeSidebarView`.
+- **Fix Applied**:
+  1. Khởi tạo `sharedRecycledViewPool = remember { RecyclerView.RecycledViewPool().apply { setMaxRecycledViews(0, 30) } }` tại `ModernHomeRowsList.kt` và truyền dùng chung cho tất cả các hàng ngang `HorizontalGridView`.
+  2. Bổ sung cơ chế `deferredGlowRunnable`: Trì hoãn 55ms việc kích hoạt Software Glow khi phát hiện đang giữ phím cuộn nhanh (`isHoldingHorizontalKey == true`), khóa cứng tốc độ 60fps khi lướt và chỉ bừng sáng khi dừng ở thẻ mục tiêu.
+  3. Nâng cấp thuật toán `extractDominantColor` sang 16 Hue Bins Histogram với trọng số `sat * sat * brightness`, lọc sạch pixel đen/trắng đục và boost màu Neon rực rỡ chuẩn TV OLED/QLED.
+  4. Cấu hình `allowHardware(hasCachedColor)` trong Coil: Ảnh đã có màu trong cache sẽ nạp thẳng vào GPU Hardware Bitmap, giảm 50% RAM.
+  5. Tái sử dụng `focusBorderDrawable` và `itemCornerRadiusPx` trong `LeanbackCardViewHolder` và `NativeSidebarView`, triệt tiêu hoàn toàn việc cấp phát Drawable mới mỗi frame.
+  6. Xóa vĩnh viễn tệp mồ côi `ModernSidebarBlurPanel.kt`, dọn dẹp các biến thừa trong `MainActivity.kt`, cập nhật stale closure cho các callback trong `AndroidView`.
+- **Prevention**: Luôn chia sẻ RecycledViewPool cho các danh sách con lồng nhau; hạn chế tối đa việc render Software Blur trong các thao tác lướt phím tốc độ cao; tái sử dụng Drawable cho các hiệu ứng focus viền.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-02 15:40] - FocusRequester is not initialized when navigating down from Play button in MetaDetailsScreen
 
 - **Type**: Logic

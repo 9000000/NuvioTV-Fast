@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens.home
 
+import androidx.recyclerview.widget.RecyclerView
+
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import android.view.KeyEvent as AndroidKeyEvent
@@ -503,6 +505,7 @@ internal fun ModernRowSection(
     onNavigateLeftOnFirstItem: () -> Boolean = { false },
     onNavigateBack: () -> Boolean = { false },
     rowGrids: MutableMap<String, androidx.leanback.widget.HorizontalGridView>? = null,
+    sharedRecycledViewPool: RecyclerView.RecycledViewPool? = null,
     isPendingFocus: Boolean = false,
     pendingFocusIndex: Int = 0,
     pendingFocusNonce: Int = 0,
@@ -628,9 +631,7 @@ internal fun ModernRowSection(
             if (pendingRowFocusKey.value != row.key) return@LaunchedEffect
             val targetIndex = (pendingRowFocusIndex.value ?: 0)
                 .coerceIn(0, (row.items.list.size - 1).coerceAtLeast(0))
-            if (!rowListState.isScrollInProgress) {
-                runCatching { rowListState.scrollToItem(targetIndex) }
-            }
+
             val grid = rowGrids?.get(row.key)
             if (grid != null && grid.isAttachedToWindow) {
                 grid.post {
@@ -961,6 +962,7 @@ internal fun ModernRowSection(
 
         LeanbackModernRow(
             rowKey = row.key,
+            recycledViewPool = sharedRecycledViewPool,
             items = row.items.list,
             cardWidth = effectiveCardWidth,
             cardHeight = effectiveCardHeight,
