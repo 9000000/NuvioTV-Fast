@@ -14,6 +14,7 @@ import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.AudioOutputChannels
 import com.nuvio.tv.data.local.DeniedCodecHandling
+import com.nuvio.tv.data.local.DownmixLfeLevel
 import com.nuvio.tv.data.local.NightMode
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
@@ -127,6 +128,13 @@ internal fun PlaybackAudioSection(
             checked = settings.maintainOriginalAudioOnDownmix,
             onToggle = { onUpdate { setMaintainOriginalAudioOnDownmix(!settings.maintainOriginalAudioOnDownmix) } },
             enabled = enabled
+        )
+        SettingsActionRow(
+            title = stringResource(R.string.audio_downmix_lfe_level),
+            subtitle = stringResource(R.string.audio_downmix_lfe_level_sub),
+            value = downmixLfeLevelLabel(settings.downmixLfeLevel),
+            enabled = enabled && !settings.audioOutputChannels.hasLfe,
+            onClick = { onOpenDialog(PlaybackDialog.DOWNMIX_LFE_LEVEL) }
         )
     }
     SettingsToggleRow(
@@ -322,6 +330,13 @@ private fun surroundChannelTargetLabel(target: SurroundChannelTarget): String = 
 }
 
 @Composable
+private fun downmixLfeLevelLabel(level: DownmixLfeLevel): String = when (level) {
+    DownmixLfeLevel.OFF -> stringResource(R.string.audio_downmix_lfe_level_off)
+    DownmixLfeLevel.HALF -> stringResource(R.string.audio_downmix_lfe_level_half)
+    DownmixLfeLevel.FULL -> stringResource(R.string.audio_downmix_lfe_level_full)
+}
+
+@Composable
 private fun nightModeLabel(mode: NightMode): String = when (mode) {
     NightMode.OFF -> stringResource(R.string.audio_night_mode_off)
     NightMode.LIGHT -> stringResource(R.string.audio_night_mode_light)
@@ -365,6 +380,19 @@ internal fun AudioSettingsDialogs(
                 onDismiss()
             },
             onDismiss = onDismiss
+        )
+        PlaybackDialog.DOWNMIX_LFE_LEVEL -> SettingsSingleChoiceDialog(
+            title = stringResource(R.string.audio_downmix_lfe_level),
+            subtitle = stringResource(R.string.audio_downmix_lfe_level_desc),
+            options = DownmixLfeLevel.entries.map { SettingsPickerOption(it, downmixLfeLevelLabel(it)) },
+            selectedValue = settings.downmixLfeLevel,
+            onOptionSelected = { level ->
+                onUpdate { setDownmixLfeLevel(level) }
+                onDismiss()
+            },
+            onDismiss = onDismiss,
+            width = 420.dp,
+            maxHeight = 320.dp
         )
         PlaybackDialog.NIGHT_MODE -> NightModeDialog(
             selectedMode = settings.nightMode,

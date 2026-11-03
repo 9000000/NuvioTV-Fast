@@ -15,6 +15,7 @@ import com.nuvio.tv.data.local.LibassRenderScale
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.LibassRenderMode
 import com.nuvio.tv.data.local.InternalPlayerEngine
+import com.nuvio.tv.data.local.DownmixLfeLevel
 import com.nuvio.tv.data.local.NightMode
 import com.nuvio.tv.data.local.Dv7HandlingMode
 import com.nuvio.tv.data.local.SurroundFormatMode
@@ -160,6 +161,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     private val _iecProbeFeedback = MutableSharedFlow<IecProbeFeedback>(extraBufferCapacity = 4)
     val iecProbeFeedback: SharedFlow<IecProbeFeedback> = _iecProbeFeedback
+
+    suspend fun setDownmixLfeLevel(level: DownmixLfeLevel) {
+        playerSettingsDataStore.setDownmixLfeLevel(level)
+    }
 
     suspend fun setTunnelingEnabled(enabled: Boolean) {
         playerSettingsDataStore.setTunnelingEnabled(enabled)
