@@ -30,6 +30,7 @@ internal fun PlaybackSettingsSections(
     playerSettings: PlayerSettings,
     p2p: P2pSettingsUi,
     transparentLetterbox: Boolean,
+    releaseDecoderOnBackground: Boolean,
     onUpdate: PlaybackSettingsUpdate,
     onOpenDialog: (PlaybackDialog) -> Unit,
     onMemorySettingChanged: () -> Unit,
@@ -70,6 +71,7 @@ internal fun PlaybackSettingsSections(
                         playerSettings = playerSettings,
                         p2p = p2p,
                         transparentLetterbox = transparentLetterbox,
+                        releaseDecoderOnBackground = releaseDecoderOnBackground,
                         onUpdate = onUpdate,
                         onOpenDialog = onOpenDialog,
                         onMemorySettingChanged = onMemorySettingChanged,
@@ -89,6 +91,7 @@ private fun PlaybackSectionContent(
     playerSettings: PlayerSettings,
     p2p: P2pSettingsUi,
     transparentLetterbox: Boolean,
+    releaseDecoderOnBackground: Boolean,
     onUpdate: PlaybackSettingsUpdate,
     onOpenDialog: (PlaybackDialog) -> Unit,
     onMemorySettingChanged: () -> Unit,
@@ -96,7 +99,7 @@ private fun PlaybackSectionContent(
     customFontName: String? = null
 ) {
     when (section) {
-        PlaybackSection.PLAYER -> PlaybackPlayerSection(playerSettings, onUpdate, onOpenDialog)
+        PlaybackSection.PLAYER -> PlaybackPlayerSection(playerSettings, releaseDecoderOnBackground, onUpdate, onOpenDialog)
         PlaybackSection.STREAM_SELECTION -> PlaybackStreamSelectionSection(playerSettings, onUpdate, onOpenDialog)
         PlaybackSection.UP_NEXT -> PlaybackUpNextSection(playerSettings, onUpdate, onOpenDialog)
         PlaybackSection.SKIP_SEGMENTS -> PlaybackSkipSegmentsSection(playerSettings, onUpdate)
