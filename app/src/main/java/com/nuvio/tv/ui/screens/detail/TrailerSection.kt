@@ -1,58 +1,27 @@
 package com.nuvio.tv.ui.screens.detail
 
-import com.nuvio.tv.ui.theme.NuvioTheme
-
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.relocation.BringIntoViewResponder
-import androidx.compose.foundation.relocation.bringIntoViewResponder
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
 import com.nuvio.tv.R
-import com.nuvio.tv.domain.model.ContentType
-import com.nuvio.tv.domain.model.CardDepthSurface
-import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.MetaTrailer
-import com.nuvio.tv.domain.model.PosterShape
-import com.nuvio.tv.ui.components.GridContentCard
-import com.nuvio.tv.ui.components.PosterCardStyle
+import com.nuvio.tv.ui.leanback.LeanbackNativeRow
+import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
+import com.nuvio.tv.ui.theme.NuvioTheme
 
-private data class TrailerListItem(
-    val trailer: MetaTrailer,
-    val preview: MetaPreview
-)
-
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun TrailerSection(
     trailers: List<MetaTrailer>,
-    listState: LazyListState,
+    listState: LazyListState = rememberLazyListState(),
     posterCardCornerRadius: Dp = NuvioTheme.spacing.md,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
@@ -69,7 +38,7 @@ fun TrailerSection(
     if (trailers.isEmpty()) return
 
     val trailerFallbackTitle = stringResource(R.string.detail_tab_trailer)
-    val trailerItems = remember(trailers, trailerFallbackTitle) {
+    val leanbackItems = remember(trailers, trailerFallbackTitle) {
         trailers.mapNotNull { trailer ->
             val ytId = trailer.ytId?.trim().orEmpty()
             if (ytId.isBlank()) return@mapNotNull null
@@ -81,85 +50,22 @@ fun TrailerSection(
                 trailer.lang?.takeIf { it.isNotBlank() }?.uppercase()?.let(::add)
             }.joinToString(" • ")
 
-            TrailerListItem(
-                trailer = trailer,
-                preview = MetaPreview(
-                    id = ytId,
-                    type = ContentType.MOVIE,
-                    name = title,
-                    poster = "https://img.youtube.com/vi/$ytId/hqdefault.jpg",
-                    posterShape = PosterShape.LANDSCAPE,
-                    background = null,
-                    logo = null,
-                    description = null,
-                    releaseInfo = subtitle.ifBlank { null },
-                    imdbRating = null,
-                    genres = emptyList(),
-                    trailerYtIds = listOf(ytId),
-                    trailers = listOf(trailer)
-                )
+            LeanbackCardItem.Poster(
+                key = ytId,
+                title = title,
+                imageUrl = "https://img.youtube.com/vi/$ytId/hqdefault.jpg",
+                subtitle = subtitle.ifBlank { null },
+                isLandscape = true,
+                payload = trailer
             )
         }
     }
 
-    if (trailerItems.isEmpty()) return
+    if (leanbackItems.isEmpty()) return
 
-    val trailerIds = remember(trailerItems) { trailerItems.map { it.preview.id } }
-    listState.keepDetailRowWindow(
-        itemIds = trailerIds,
-        lazyKeyAt = { index ->
-            trailerItems.getOrNull(index)?.let { previewRowLazyKey(index, it.preview.id, it.preview.name) }
-        },
-        resetKey = windowResetKey
-    )
-
-    val firstItemFocusRequester = remember { FocusRequester() }
-    val restoreFocusRequester = remember { FocusRequester() }
-    val itemFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
-    val lastFocusedRequester = remember(lastFocusedTrailerId, trailerItems, restoreTrailerId) {
-        when {
-            lastFocusedTrailerId == null -> firstItemFocusRequester
-            lastFocusedTrailerId == restoreTrailerId -> restoreFocusRequester
-            lastFocusedTrailerId == trailerItems.firstOrNull()?.preview?.id -> firstItemFocusRequester
-            else -> itemFocusRequesters.getOrPut(lastFocusedTrailerId) { FocusRequester() }
-        }
-    }
-
-    LaunchedEffect(trailerItems) {
-        val validIds = trailerItems.mapTo(mutableSetOf()) { it.preview.id }
-        itemFocusRequesters.keys.retainAll(validIds)
-    }
-
-    val suppressRestoreScroll = !restoreTrailerId.isNullOrBlank() && restoreFocusToken > 0
-    var restorePending by remember(restoreTrailerId, restoreFocusToken) {
-        mutableStateOf(suppressRestoreScroll)
-    }
-    var placedFocused by remember(restoreTrailerId, restoreFocusToken) { mutableStateOf(false) }
-    LaunchedEffect(restoreFocusToken, restoreTrailerId, trailerItems) {
-        if (restoreFocusToken <= 0 || restoreTrailerId.isNullOrBlank()) return@LaunchedEffect
-        if (trailerItems.none { it.preview.id == restoreTrailerId }) return@LaunchedEffect
-        restoreFocusRequester.requestFocusAfterFrames(frames = 0)
-    }
-    val restoreNoScrollResponder = remember {
-        object : BringIntoViewResponder {
-            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
-            override suspend fun bringChildIntoView(localRect: () -> Rect?) {}
-        }
-    }
-    val restoreItemModifier = if (suppressRestoreScroll) {
-        Modifier.bringIntoViewResponder(restoreNoScrollResponder)
-    } else {
-        Modifier
-    }
-
-    val landscapeStyle = remember(posterCardCornerRadius) {
-        PosterCardStyle(
-            width = 260.dp,
-            height = 146.dp,
-            cornerRadius = posterCardCornerRadius,
-            focusedBorderWidth = NuvioTheme.spacing.xxs,
-            focusedScale = 1.06f
-        )
+    val initialIndex = remember(leanbackItems, restoreTrailerId, lastFocusedTrailerId) {
+        val targetId = restoreTrailerId ?: lastFocusedTrailerId
+        if (!targetId.isNullOrBlank()) leanbackItems.indexOfFirst { it.key == targetId }.coerceAtLeast(0) else 0
     }
 
     Column(
@@ -167,83 +73,39 @@ fun TrailerSection(
             .fillMaxWidth()
             .padding(top = NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.sm)
     ) {
-        LazyRow(
-            state = listState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (sectionFocusRequester != null) Modifier.focusRequester(sectionFocusRequester) else Modifier)
-                .focusRestorer {
-                    when {
-                        restorePending -> restoreFocusRequester
-                        else -> lastFocusedRequester
-                    }
+        LeanbackNativeRow(
+            rowKey = "trailers_${windowResetKey ?: "default"}",
+            items = leanbackItems,
+            cardWidth = 260.dp,
+            cardHeight = 146.dp,
+            cornerRadius = posterCardCornerRadius,
+            showLabels = true,
+            animationsEnabled = NuvioTheme.animationsEnabled,
+            startPadding = NuvioTheme.spacing.xxxl,
+            spacing = NuvioTheme.spacing.md,
+            onItemFocused = { _, cardItem ->
+                val trailer = cardItem.payload as? MetaTrailer ?: return@LeanbackNativeRow
+                onLastFocusedTrailerIdChange(cardItem.key)
+                onTrailerFocused(trailer)
+                if (cardItem.key == restoreTrailerId && !restoreTrailerId.isNullOrBlank()) {
+                    onRestoreFocusHandled()
                 }
-                .focusGroup(),
-            contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.xxxl, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
-        ) {
-            itemsIndexed(
-                items = trailerItems,
-                key = { index, item -> previewRowLazyKey(index, item.preview.id, item.preview.name) }
-            ) { index, item ->
-                val isRestoreTarget = item.preview.id == restoreTrailerId
-                val isFirstItem = index == 0
-                val focusRequester = when {
-                    isRestoreTarget && restoreFocusToken > 0 -> restoreFocusRequester
-                    isFirstItem -> firstItemFocusRequester
-                    else -> remember(item.preview.id) {
-                        itemFocusRequesters.getOrPut(item.preview.id) { FocusRequester() }
-                    }
-                }
-
-                Column(
-                    modifier = restoreItemModifier.then(
-                        if (isRestoreTarget && suppressRestoreScroll) {
-                            Modifier.onPlaced {
-                                if (placedFocused) return@onPlaced
-                                placedFocused = true
-                                runCatching { focusRequester.requestFocus() }
-                            }
-                        } else {
-                            Modifier
-                        }
-                    )
-                ) {
-                    GridContentCard(
-                        item = item.preview,
-                        onClick = { onTrailerClick(item.trailer) },
-                        posterCardStyle = landscapeStyle,
-                        showLabel = true,
-                        imageCrossfade = true,
-                        focusRequester = focusRequester,
-                        upFocusRequester = upFocusRequester,
-                        downFocusRequester = downFocusRequester,
-                        depthSurface = CardDepthSurface.TRAILERS,
-                        onFocused = {
-                            onLastFocusedTrailerIdChange(item.preview.id)
-                            onTrailerFocused(item.trailer)
-                            if (isRestoreTarget && restoreFocusToken > 0) {
-                                restorePending = false
-                                onRestoreFocusHandled()
-                            }
-                        }
-                    )
-
-                    val subtitle = item.preview.releaseInfo
-                    if (!subtitle.isNullOrBlank()) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.colors.TextTertiary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .width(landscapeStyle.width)
-                                .padding(start = NuvioTheme.spacing.xxs, end = NuvioTheme.spacing.xxs, top = NuvioTheme.spacing.xxs)
-                        )
-                    }
-                }
-            }
-        }
+            },
+            onItemClick = { cardItem ->
+                val trailer = cardItem.payload as? MetaTrailer ?: return@LeanbackNativeRow
+                onTrailerClick(trailer)
+            },
+            onNavigateUp = {
+                upFocusRequester?.requestFocus()
+                upFocusRequester != null
+            },
+            onNavigateDown = {
+                downFocusRequester?.requestFocus()
+                downFocusRequester != null
+            },
+            isPendingFocus = !restoreTrailerId.isNullOrBlank(),
+            pendingFocusIndex = initialIndex,
+            pendingFocusNonce = restoreFocusToken
+        )
     }
 }

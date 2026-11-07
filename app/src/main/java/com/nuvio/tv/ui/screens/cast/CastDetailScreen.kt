@@ -1,5 +1,8 @@
 package com.nuvio.tv.ui.screens.cast
 
+import androidx.compose.ui.graphics.graphicsLayer
+import com.nuvio.tv.ui.leanback.LeanbackNativeRow
+import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.activity.compose.BackHandler
@@ -567,7 +570,6 @@ private fun SectionHeader(title: String, count: Int) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun FilmographyRow(
     credits: List<MetaPreview>,
@@ -580,71 +582,66 @@ private fun FilmographyRow(
     onItemLongPress: (MetaPreview) -> Unit = {},
     isItemWatched: (MetaPreview) -> Boolean = { false }
 ) {
-    val hasRequestedInitialFocus = remember(credits) { mutableStateOf(false) }
-    val restoreFocusRequester = remember { FocusRequester() }
-    var restorePending by remember { mutableStateOf(false) }
-    val lazyListState = rememberLazyListState()
+    val globalLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
+    val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
+    val effectiveHeight = if (globalLandscape) 146.dp else posterCardStyle.height
 
-    LaunchedEffect(restoreFocusToken) {
-        if (restoreFocusToken <= 0 || restoreItemId == null) {
-            restorePending = false
-            return@LaunchedEffect
-        }
-        val targetIndex = credits.indexOfFirst { it.id == restoreItemId }
-        if (targetIndex < 0) {
-            restorePending = false
-            return@LaunchedEffect
-        }
-        restorePending = true
-        restoreFocusRequester.requestFocusAfterFrames()
-    }
-
-    LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusRestorer { if (restorePending) restoreFocusRequester else firstItemFocusRequester },
-        state = lazyListState,
-        contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.xxxl, vertical = NuvioTheme.spacing.xs),
-        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
-    ) {
-        itemsIndexed(
-            items = credits,
-            key = { _, item -> item.id + item.name }
-        ) { index, item ->
-            val isRestoreTarget = item.id == restoreItemId
-            val isFirstItem = index == 0
-            val itemFocusRequester = when {
-                isRestoreTarget -> restoreFocusRequester
-                isFirstItem -> firstItemFocusRequester
-                else -> null
-            }
-
-            GridContentCard(
-                item = item,
-                onClick = { onItemClick(item) },
-                onLongPress = { onItemLongPress(item) },
+    val leanbackItems = remember(credits, globalLandscape) {
+        credits.mapIndexed { index, item ->
+            LeanbackCardItem.Poster(
+                key = item.id + item.name + "_$index",
+                title = item.name,
+                imageUrl = if (globalLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                isLandscape = globalLandscape,
                 isWatched = isItemWatched(item),
-                modifier = if (isFirstItem) {
-                    Modifier.onGloballyPositioned {
-                        if (!hasRequestedInitialFocus.value) {
-                            hasRequestedInitialFocus.value = true
-                            runCatching { firstItemFocusRequester.requestFocus() }
-                        }
-                    }
-                } else {
-                    Modifier
-                },
-                posterCardStyle = posterCardStyle,
-                showLabel = true,
-                focusRequester = itemFocusRequester,
-                onFocused = {
-                    if (isRestoreTarget && restoreFocusToken > 0) {
-                        onRestoreFocusHandled()
-                        restorePending = false
-                    }
-                }
+                payload = item
             )
         }
+    }
+
+    val initialPos = remember(restoreItemId, restoreFocusToken) {
+        if (restoreFocusToken > 0 && restoreItemId != null) {
+            credits.indexOfFirst { it.id == restoreItemId }.takeIf { it >= 0 } ?: 0
+        } else {
+            0
+        }
+    }
+
+    LaunchedEffect(restoreFocusToken) {
+        if (restoreFocusToken > 0 && restoreItemId != null) {
+            onRestoreFocusHandled()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(effectiveHeight + 52.dp)
+            .graphicsLayer { clip = false }
+    ) {
+        LeanbackNativeRow(
+            rowKey = "cast_filmography_${restoreFocusToken}",
+            items = leanbackItems,
+            cardWidth = effectiveWidth,
+            cardHeight = effectiveHeight,
+            cornerRadius = posterCardStyle.cornerRadius,
+            showLabels = true,
+            animationsEnabled = NuvioTheme.animationsEnabled,
+            paddingValues = PaddingValues(
+                horizontal = NuvioTheme.spacing.xxxl,
+                vertical = NuvioTheme.spacing.xs
+            ),
+            itemSpacing = NuvioTheme.spacing.md,
+            initialFocusPosition = initialPos,
+            onItemClick = { cardItem ->
+                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                onItemClick(item)
+            },
+            onItemLongClick = { cardItem ->
+                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                onItemLongPress(item)
+            }
+        )
     }
 }
 

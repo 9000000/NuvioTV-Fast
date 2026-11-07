@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.collection
 
+import com.nuvio.tv.ui.leanback.LeanbackNativeGrid
+import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import androidx.compose.ui.semantics.clearAndSetSemantics
 
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -407,177 +409,89 @@ private fun TabbedGridContent(
                 height = (uiState.posterCardWidthDp * 1.5f).dp,
                 cornerRadius = uiState.posterCardCornerRadiusDp.dp
             )
-            val itemFocusRequesters = remember(uiState.selectedTabIndex) { mutableMapOf<String, FocusRequester>() }
-            var lastFocusedItemKey by remember(
-                uiState.selectedTabIndex,
-                tabFocusState.focusedItemKey
-            ) {
-                mutableStateOf(tabFocusState.focusedItemKey)
-            }
-            val gridState = rememberLazyGridState(
-                initialFirstVisibleItemIndex = tabFocusState.verticalScrollIndex,
-                initialFirstVisibleItemScrollOffset = tabFocusState.verticalScrollOffset
-            )
+            val catalogRow = currentTab.catalogRow
+            val globalLandscape = LocalLandscapePosterMode.current
+            val numCols = if (globalLandscape) 4 else 6
+            val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
+            val effectiveHeight = if (globalLandscape) 146.dp else posterCardStyle.height
 
-            // Scroll grid to top when OK is pressed on a tab or tab changes
-            LaunchedEffect(gridScrollToTopTrigger, uiState.selectedTabIndex) {
-                if (gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 0) {
-                    gridState.scrollToItem(0, 0)
+            val leanbackItems = remember(items, globalLandscape, uiState.selectedTabIndex) {
+                items.mapIndexed { index, item ->
+                    LeanbackCardItem.Poster(
+                        key = "${item.id}_${uiState.selectedTabIndex}_$index",
+                        title = item.name,
+                        imageUrl = if (globalLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                        isLandscape = globalLandscape,
+                        isWatched = isItemWatched(item),
+                        payload = item
+                    )
                 }
+            }
+
+            var focusedIndex by remember(uiState.selectedTabIndex) {
+                val initial = if (tabFocusState.hasSavedFocus && tabFocusState.focusedItemKey != null) {
+                    items.indexOfFirst { "${it.id}" == tabFocusState.focusedItemKey }.takeIf { it >= 0 }
+                        ?: tabFocusState.verticalScrollIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+                } else {
+                    0
+                }
+                mutableIntStateOf(initial)
             }
 
             DisposableEffect(Unit) {
                 onDispose {
+                    val key = items.getOrNull(focusedIndex)?.id
                     onSaveFocusState(
-                        gridState.firstVisibleItemIndex,
-                        gridState.firstVisibleItemScrollOffset,
-                        lastFocusedItemKey
+                        focusedIndex,
+                        0,
+                        key
                     )
                 }
             }
 
-            LaunchedEffect(tabFocusState.verticalScrollIndex, tabFocusState.verticalScrollOffset) {
-                val targetIndex = tabFocusState.verticalScrollIndex
-                val targetOffset = tabFocusState.verticalScrollOffset
-                if (gridState.firstVisibleItemIndex == targetIndex &&
-                    gridState.firstVisibleItemScrollOffset == targetOffset
-                ) {
-                    return@LaunchedEffect
-                }
-                if (targetIndex > 0 || targetOffset > 0) {
-                    gridState.scrollToItem(targetIndex, targetOffset)
-                }
-            }
-
-            LaunchedEffect(items, tabFocusState.hasSavedFocus, tabFocusState.focusedItemKey) {
-                val targetKey = tabFocusState.focusedItemKey ?: return@LaunchedEffect
-                if (!tabFocusState.hasSavedFocus) return@LaunchedEffect
-                val requester = itemFocusRequesters[targetKey] ?: return@LaunchedEffect
-                repeat(2) { withFrameNanos { } }
-                if (runCatching { requester.requestFocus() }.isSuccess) {
-                    lastFocusedItemKey = targetKey
-                }
-            }
-
-            val catalogRow = currentTab.catalogRow
-            LaunchedEffect(gridState, items.size) {
-                snapshotFlow {
-                    val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                    val total = gridState.layoutInfo.totalItemsCount
-                    lastVisible to total
-                }
-                    .distinctUntilChanged()
-                    .collect { (lastVisible, total) ->
-                        if (total > 0 && lastVisible >= total - 10) {
-                            if (catalogRow != null && catalogRow.hasMore && !catalogRow.isLoading) {
-                                onLoadMore()
-                            }
+            Box(modifier = Modifier.fillMaxSize().onFocusChanged { gridHasFocus = it.hasFocus }) {
+                LeanbackNativeGrid(
+                    gridKey = "folder_grid_${uiState.selectedTabIndex}",
+                    items = leanbackItems,
+                    numColumns = numCols,
+                    cardWidth = effectiveWidth,
+                    cardHeight = effectiveHeight,
+                    cornerRadius = posterCardStyle.cornerRadius,
+                    showLabels = uiState.posterLabelsEnabled,
+                    animationsEnabled = NuvioTheme.animationsEnabled,
+                    paddingValues = PaddingValues(
+                        start = NuvioTheme.spacing.xxxl,
+                        end = NuvioTheme.spacing.xxxl,
+                        top = NuvioTheme.spacing.lg,
+                        bottom = NuvioTheme.spacing.xxxl
+                    ),
+                    horizontalSpacing = NuvioTheme.spacing.lg,
+                    verticalSpacing = NuvioTheme.spacing.lg,
+                    initialFocusPosition = focusedIndex,
+                    onItemFocused = { idx, cardItem ->
+                        focusedIndex = idx
+                        val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid
+                        HeroBackdropState.update(item.backdropUrl)
+                    },
+                    onItemClick = { cardItem ->
+                        val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid
+                        HeroBackdropState.update(item.backdropUrl)
+                        onNavigateToDetail(
+                            item.id,
+                            item.apiType,
+                            currentTab.catalogRow.addonBaseUrl
+                        )
+                    },
+                    onItemLongClick = { cardItem ->
+                        val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid
+                        onItemLongPress(item, currentTab.catalogRow.addonBaseUrl)
+                    },
+                    onLoadMore = {
+                        if (catalogRow != null && catalogRow.hasMore && !catalogRow.isLoading) {
+                            onLoadMore()
                         }
                     }
-            }
-
-            val globalLandscape = LocalLandscapePosterMode.current
-            LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Adaptive(minSize = if (globalLandscape) posterCardStyle.height else posterCardStyle.width),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .onFocusChanged { gridHasFocus = it.hasFocus }
-                    .focusRestorer {
-                        lastFocusedItemKey?.let { itemFocusRequesters[it] } ?: FocusRequester.Default
-                    }
-                    .dpadRepeatThrottle(),
-                contentPadding = PaddingValues(
-                    start = NuvioTheme.spacing.xxxl,
-                    end = NuvioTheme.spacing.xxxl,
-                    top = NuvioTheme.spacing.lg,
-                    bottom = NuvioTheme.spacing.xxxl
-                ),
-                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
-                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
-            ) {
-                itemsIndexed(
-                    items = items,
-                    key = { index, item -> "${item.id}_$index" }
-                ) { index, item ->
-                    val itemKey = "${item.id}_$index"
-                    val focusReq = itemFocusRequesters.getOrPut(itemKey) { FocusRequester() }
-                    GridContentCard(
-                        item = item,
-                        posterCardStyle = posterCardStyle,
-                        focusRequester = focusReq,
-                        isWatched = isItemWatched(item),
-                        showReleaseInfo = true,
-                        onFocused = { lastFocusedItemKey = itemKey },
-                        onClick = {
-                            HeroBackdropState.update(item.backdropUrl)
-                            onNavigateToDetail(
-                                item.id,
-                                item.apiType,
-                                currentTab.catalogRow.addonBaseUrl
-                            )
-                        },
-                        onLongPress = {
-                            lastFocusedItemKey = itemKey
-                            onItemLongPress(item, currentTab.catalogRow.addonBaseUrl)
-                        }
-                    )
-                }
-                if (catalogRow != null && catalogRow.isLoading) {
-                    item(
-                        key = "loading_more"
-                    ) {
-                        val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
-                        val cardDepthStyle = LocalCardDepthStyle.current
-                        val globalLandscape = LocalLandscapePosterMode.current
-                        val loadingCardHeight = if (globalLandscape) {
-                            posterCardStyle.width / com.nuvio.tv.domain.model.PosterShape.LANDSCAPE.aspectRatio()
-                        } else {
-                            posterCardStyle.width * 1.5f
-                        }
-                        Column(
-                            modifier = Modifier.width(posterCardStyle.width)
-                        ) {
-                            Card(
-                                onClick = {},
-                                modifier = Modifier
-                                    .width(posterCardStyle.width)
-                                    .height(loadingCardHeight)
-                              .clearAndSetSemantics {}
-                              .focusProperties { canFocus = false },
-                                shape = CardDefaults.shape(shape = cardShape),
-                                colors = CardDefaults.colors(
-                                    containerColor = NuvioTheme.colors.BackgroundCard,
-                                    focusedContainerColor = NuvioTheme.colors.BackgroundCard
-                                )
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(cardShape)
-                                        .nuvioCardDepth(
-                                            shape = cardShape,
-                                            surface = CardDepthSurface.POSTERS,
-                                            style = cardDepthStyle
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    LoadingIndicator()
-                                }
-                            }
-                            // Reserve space for title + release date to match ContentCard height
-                            Spacer(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = NuvioTheme.spacing.sm)
-                                    .height(
-                                        MaterialTheme.typography.titleMedium.lineHeight.value.dp +
-                                            MaterialTheme.typography.labelMedium.lineHeight.value.dp
-                                    )
-                            )
-                        }
-                    }
-                }
+                )
             }
         }
     }

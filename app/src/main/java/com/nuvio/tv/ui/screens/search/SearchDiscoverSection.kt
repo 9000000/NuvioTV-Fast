@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.search
 
+import com.nuvio.tv.ui.leanback.LeanbackNativeGrid
+import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.screens.home.HeroBackdropState
 
@@ -523,261 +525,85 @@ internal fun DiscoverGrid(
     onItemLongPress: (MetaPreview) -> Unit = {},
     filterKey: String = ""
 ) {
-    val restoreFocusRequester = remember { FocusRequester() }
     val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
-    val gridState = rememberLazyGridState()
-    var pendingFocusOnNewItemIndex by remember { mutableStateOf<Int?>(null) }
-
-    // Scroll to top only when the filter combination actually changes (not on initial composition / back navigation).
-    var previousFilterKey by remember { mutableStateOf(filterKey) }
-    LaunchedEffect(filterKey) {
-        if (filterKey != previousFilterKey) {
-            gridState.scrollToItem(0, 0)
-            previousFilterKey = filterKey
-        }
-    }
-    var localRestoreFocusedItemIndex by remember { mutableStateOf(-1) }
-    var localShouldRestoreFocusedItem by remember { mutableStateOf(false) }
-    val effectiveFocusedItemIndex = if (localShouldRestoreFocusedItem) {
-        localRestoreFocusedItemIndex
-    } else {
-        focusedItemIndex
-    }
-    val effectiveShouldRestoreFocusedItem = shouldRestoreFocusedItem || localShouldRestoreFocusedItem
-    val actionType = when {
-        pendingCount > 0 -> DiscoverGridAction.ShowMore
-        isLoadingMore -> DiscoverGridAction.Loading
-        canLoadMore -> DiscoverGridAction.LoadMore
-        else -> DiscoverGridAction.None
-    }
-    val totalCells = items.size + if (actionType != DiscoverGridAction.None) 1 else 0
-    val hasActionCell = actionType != DiscoverGridAction.None
-
     val globalLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
-    val adaptiveStyle = remember(posterCardStyle) {
-        val cardWidth = posterCardStyle.width
-        posterCardStyle.copy(
-            width = cardWidth,
-            height = cardWidth * 1.5f
-        )
+    val numCols = if (globalLandscape) 4 else 6
+    val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
+    val effectiveHeight = if (globalLandscape) 146.dp else (posterCardStyle.width * 1.5f)
+
+    val leanbackItems = remember(items, globalLandscape, watchedMovieIds, watchedSeriesIds) {
+        items.mapIndexed { index, item ->
+            val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
+            val isWatched = if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds
+            LeanbackCardItem.Poster(
+                key = item.id.ifEmpty { "discover_${filterKey}_$index" },
+                title = item.name,
+                imageUrl = if (globalLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                isLandscape = globalLandscape,
+                isWatched = isWatched,
+                payload = Pair(index, item)
+            )
+        }
     }
 
-    LaunchedEffect(effectiveShouldRestoreFocusedItem, effectiveFocusedItemIndex, totalCells) {
-        if (!effectiveShouldRestoreFocusedItem) return@LaunchedEffect
-        if (effectiveFocusedItemIndex !in 0 until totalCells) {
-            if (localShouldRestoreFocusedItem) {
-                localShouldRestoreFocusedItem = false
-                localRestoreFocusedItemIndex = -1
-            } else {
-                onRestoreFocusedItemHandled()
-            }
-            return@LaunchedEffect
-        }
-        try {
-            restoreFocusRequester.requestFocus()
-        } catch (_: Exception) {
-        }
-        repeat(2) { withFrameNanos { } }
-        try {
-            restoreFocusRequester.requestFocus()
-        } catch (_: Exception) {
-        }
-        if (localShouldRestoreFocusedItem) {
-            localShouldRestoreFocusedItem = false
-            localRestoreFocusedItemIndex = -1
-        } else {
+    val initialPos = when {
+        shouldRestoreFocusedItem && focusedItemIndex in items.indices -> focusedItemIndex
+        focusResults && items.isNotEmpty() -> 0
+        else -> focusedItemIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+    }
+
+    LaunchedEffect(shouldRestoreFocusedItem) {
+        if (shouldRestoreFocusedItem) {
             onRestoreFocusedItemHandled()
         }
     }
 
-    LaunchedEffect(items.size, pendingFocusOnNewItemIndex) {
-        val targetIndex = pendingFocusOnNewItemIndex ?: return@LaunchedEffect
-        if (items.size <= targetIndex) return@LaunchedEffect
-        pendingFocusOnNewItemIndex = null
-        localRestoreFocusedItemIndex = targetIndex
-        localShouldRestoreFocusedItem = true
-    }
-
-    // Infinite scroll: auto-load more when the user scrolls near the end, debounced
-    val shouldAutoLoad = canLoadMore && !isLoadingMore && items.isNotEmpty()
-    var lastAutoLoadTime by remember { mutableStateOf(0L) }
-    LaunchedEffect(gridState.firstVisibleItemIndex, items.size, shouldAutoLoad) {
-        if (!shouldAutoLoad) return@LaunchedEffect
-        val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@LaunchedEffect
-        if (lastVisible >= items.size - 4) {
-            val now = System.currentTimeMillis()
-            if (now - lastAutoLoadTime > 1200L) {
-                lastAutoLoadTime = now
-                onLoadMore()
-            }
-        }
-    }
-
-    // Per-item FocusRequesters for focusRestorer on the grid.
-    // Pre-create the requester for the focused item so focusRestorer can use it
-    // even before the grid items are composed (first return from navigation).
-    val itemFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
-    val focusedItemRequester = remember(focusedItemIndex) {
-        itemFocusRequesters.getOrPut(focusedItemIndex) { FocusRequester() }
-    }
-
-    // Column the user was navigating in at the moment fast-scroll engaged.
-    // Captured on drag-start (see onFastScrollingChanged below) because the
-    // originally-focused card will have scrolled out of visibleItemsInfo by
-    // the time landing runs — looking it up at landing time is unreliable
-    // and was causing focus to jump to a different column after long drags.
-    var fastScrollStartColumn by remember { mutableStateOf<Int?>(null) }
-
-    LazyVerticalGrid(
-        state = gridState,
-        columns = GridCells.Adaptive(
-            minSize = if (globalLandscape) posterCardStyle.height else adaptiveStyle.width
-        ),
-        modifier = Modifier.fillMaxSize()
-            .focusRestorer { focusedItemRequester }
-            .dpadVerticalFastScroll(
-                scrollableState = gridState,
-                onFastScrollingChanged = { active ->
-                    // Only snapshot on drag-start. The modifier fires
-                    // active=false BEFORE it calls resolveVerticalLanding,
-                    // so clearing here would wipe the column right before
-                    // landing reads it. Next drag-start will overwrite.
-                    if (active) {
-                        fastScrollStartColumn = gridState.layoutInfo
-                            .visibleItemsInfo
-                            .firstOrNull { it.index == focusedItemIndex }
-                            ?.column
-                    }
-                },
-                resolveVerticalLanding = { sign ->
-                    // Keep the user on the column they were navigating in
-                    // so fast-scroll feels like a single vertical strip,
-                    // not a teleport to an arbitrary cell in the viewport.
-                    // Exclude the action (Load More / Loading) cell up front
-                    // — it lives at index == items.size and when items.size
-                    // % columns == 0 it lands at column 0 of a brand-new
-                    // tail row, which would otherwise hijack every column-0
-                    // landing and bounce focus to the last content cell.
-                    val contentVisible = gridState.layoutInfo.visibleItemsInfo
-                        .filter { it.index < items.size }
-                    if (contentVisible.isEmpty()) {
-                        null
-                    } else {
-                        val col = fastScrollStartColumn
-                        val sameColumn = if (col != null) {
-                            contentVisible.filter { it.column == col }
-                        } else {
-                            emptyList()
-                        }
-                        val target = when {
-                            sameColumn.isNotEmpty() && sign > 0 -> sameColumn.last()
-                            sameColumn.isNotEmpty() && sign < 0 -> sameColumn.first()
-                            sign > 0 -> contentVisible.last()
-                            else -> contentVisible.first()
-                        }
-                        val requester = itemFocusRequesters[target.index]
-                        runCatching { requester?.requestFocus() }
-                        null // Discover uses imperative requestFocus for now
-                    }
-                }
+    Box(modifier = Modifier.fillMaxSize()) {
+        LeanbackNativeGrid(
+            gridKey = "discover_grid_$filterKey",
+            items = leanbackItems,
+            numColumns = numCols,
+            cardWidth = effectiveWidth,
+            cardHeight = effectiveHeight,
+            cornerRadius = posterCardStyle.cornerRadius,
+            showLabels = true,
+            animationsEnabled = NuvioTheme.animationsEnabled,
+            paddingValues = PaddingValues(
+                bottom = NuvioTheme.spacing.xxl
             ),
-        contentPadding = PaddingValues(bottom = NuvioTheme.spacing.xxl),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
-    ) {
-        itemsIndexed(
-            items = items,
-            key = { index, item -> item.id.ifEmpty { "discover_$index" } },
-            contentType = { _, _ -> "content_card" }
-        ) { index, item ->
-            val itemFocusReq = remember(index) { itemFocusRequesters.getOrPut(index) { FocusRequester() } }
-            val focusReq = when {
-                effectiveShouldRestoreFocusedItem && index == effectiveFocusedItemIndex -> restoreFocusRequester
-                focusResults && index == 0 -> firstItemFocusRequester
-                else -> itemFocusReq
-            }
-            GridContentCard(
-                item = item,
-                onClick = { onItemClick(index, item) },
-                onLongPress = { onItemLongPress(item) },
-                posterCardStyle = adaptiveStyle,
-                imageCrossfade = false,
-                isWatched = run {
-                    val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
-                    if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds
-                },
-                modifier = Modifier
-                    .padding(top = 3.dp)
-                    .width(adaptiveStyle.width)
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
-                            val itemInfo = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-                            val isCol0 = itemInfo?.column == 0 || (itemInfo == null && index % 6 == 0) || index == 0
-                            if (isCol0) {
-                                if (openSidebar != null) {
-                                    openSidebar()
-                                    return@onPreviewKeyEvent true
-                                }
-                            }
-                        }
-                        false
-                    },
-                focusRequester = focusReq,
-                onFocused = {
-                    onItemFocused(index)
+            horizontalSpacing = 10.dp,
+            verticalSpacing = NuvioTheme.spacing.lg,
+            initialFocusPosition = initialPos,
+            onItemFocused = { _, cardItem ->
+                val pair = cardItem.payload as? Pair<*, *> ?: return@LeanbackNativeGrid
+                val index = pair.first as? Int ?: return@LeanbackNativeGrid
+                onItemFocused(index)
+            },
+            onItemClick = { cardItem ->
+                val pair = cardItem.payload as? Pair<*, *> ?: return@LeanbackNativeGrid
+                val index = pair.first as? Int ?: return@LeanbackNativeGrid
+                val item = pair.second as? MetaPreview ?: return@LeanbackNativeGrid
+                onItemClick(index, item)
+            },
+            onItemLongClick = { cardItem ->
+                val pair = cardItem.payload as? Pair<*, *> ?: return@LeanbackNativeGrid
+                val item = pair.second as? MetaPreview ?: return@LeanbackNativeGrid
+                onItemLongPress(item)
+            },
+            onLoadMore = {
+                if (canLoadMore && !isLoadingMore) {
+                    onLoadMore()
                 }
-            )
-        }
-
-        if (hasActionCell) {
-            item(
-                key = "discover_action",
-                contentType = "action_card"
-            ) {
-                val actionIndex = items.size
-                val focusReq = when {
-                    effectiveShouldRestoreFocusedItem && actionIndex == effectiveFocusedItemIndex -> restoreFocusRequester
-                    focusResults && items.isEmpty() -> firstItemFocusRequester
-                    else -> null
+            },
+            onNavigateLeftOnFirstColumn = {
+                if (openSidebar != null) {
+                    openSidebar()
+                    true
+                } else {
+                    false
                 }
-                DiscoverActionCard(
-                    actionType = actionType,
-                    posterCardStyle = adaptiveStyle,
-                    modifier = Modifier
-                        .padding(top = 3.dp)
-                        .width(adaptiveStyle.width)
-                        .onPreviewKeyEvent { keyEvent ->
-                            if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
-                                val itemInfo = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == actionIndex }
-                                val isCol0 = itemInfo?.column == 0 || (itemInfo == null && actionIndex % 6 == 0) || actionIndex == 0
-                                if (isCol0) {
-                                    if (openSidebar != null) {
-                                        openSidebar()
-                                        return@onPreviewKeyEvent true
-                                    }
-                                }
-                            }
-                            false
-                        },
-                    focusRequester = focusReq,
-                    onFocused = { onItemFocused(actionIndex) },
-                    onClick = {
-                        when (actionType) {
-                            DiscoverGridAction.ShowMore -> {
-                                pendingFocusOnNewItemIndex = items.size
-                                onLoadMore()
-                            }
-                            DiscoverGridAction.LoadMore -> {
-                                pendingFocusOnNewItemIndex = items.size
-                                onLoadMore()
-                            }
-                            DiscoverGridAction.Loading -> Unit
-                            DiscoverGridAction.None -> Unit
-                        }
-                    }
-                )
             }
-        }
+        )
     }
 }
 

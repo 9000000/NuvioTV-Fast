@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens
 
+import com.nuvio.tv.ui.leanback.LeanbackNativeGrid
+import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.domain.model.catalogRowLegacyKey
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -232,123 +234,78 @@ fun CatalogSeeAllScreen(
         val hasItems = catalogRow?.items?.isNotEmpty() == true
         val isCatalogLoading = if (catalogRow == null) serverFailed?.value != true else catalogRow.isLoading
 
-        if (hasItems) {
-            val seeAllItemKeys = remember(catalogRow?.items) {
-                catalogRow?.stableItemKeys().orEmpty()
+        if (hasItems && catalogRow != null) {
+            val isLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
+            val numCols = if (isLandscape) 4 else 6
+            val effectiveWidth = if (isLandscape) 260.dp else posterCardStyle.width
+            val effectiveHeight = if (isLandscape) 146.dp else posterCardStyle.height
+
+            val leanbackItems = remember(catalogRow.items, isSearchMode, isLandscape, uiState.movieWatchedStatus) {
+                catalogRow.items.mapIndexed { index, item ->
+                    val isWatched = if (isSearchMode) {
+                        val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
+                        if (isSeries) item.id in (searchWatchedSeriesIds?.value ?: emptySet())
+                        else item.id in (searchWatchedMovieIds?.value ?: emptySet())
+                    } else {
+                        uiState.movieWatchedStatus[com.nuvio.tv.ui.screens.home.homeItemStatusKey(item.id, item.apiType)] == true
+                    }
+                    LeanbackCardItem.Poster(
+                        key = "${catalogRow.stableKey()}_$index",
+                        title = item.name,
+                        imageUrl = if (isLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                        isLandscape = isLandscape,
+                        isWatched = isWatched,
+                        payload = item
+                    )
+                }
             }
+
             Box(modifier = Modifier.fillMaxSize()) {
-                LazyVerticalGrid(
-                    state = gridState,
-                    columns = GridCells.Adaptive(
-                        minSize = if (com.nuvio.tv.ui.components.LocalLandscapePosterMode.current) posterCardStyle.height else posterCardStyle.width
-                    ),
-                    modifier = Modifier.dpadRepeatThrottle(),
-                    contentPadding = PaddingValues(
+                LeanbackNativeGrid(
+                    gridKey = "see_all_${catalogRow.stableKey()}",
+                    items = leanbackItems,
+                    numColumns = numCols,
+                    cardWidth = effectiveWidth,
+                    cardHeight = effectiveHeight,
+                    cornerRadius = posterCardStyle.cornerRadius,
+                    showLabels = uiState.posterLabelsEnabled,
+                    animationsEnabled = NuvioTheme.animationsEnabled,
+                    paddingValues = PaddingValues(
                         start = NuvioTheme.spacing.xxxl,
                         end = NuvioTheme.spacing.xl,
                         top = NuvioTheme.spacing.md,
                         bottom = NuvioTheme.spacing.xxl
                     ),
-                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
-                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
-                ) {
-                    itemsIndexed(
-                        items = catalogRow.items,
-                        key = { index, _ -> seeAllItemKeys.getOrElse(index) { "${catalogRow.stableKey()}_$index" } }
-                    ) { index, item ->
-                        val isWatched = if (isSearchMode) {
-                            val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
-                            if (isSeries) item.id in (searchWatchedSeriesIds?.value ?: emptySet())
-                            else item.id in (searchWatchedMovieIds?.value ?: emptySet())
-                        } else {
-                            uiState.movieWatchedStatus[
-                                com.nuvio.tv.ui.screens.home.homeItemStatusKey(item.id, item.apiType)
-                            ] == true
-                        }
-                        val itemFocusKey = catalogItemFocusKey(item)
-                        GridContentCard(
-                            item = item,
-                            posterCardStyle = posterCardStyle,
-                            showLabel = uiState.posterLabelsEnabled,
-                            isWatched = isWatched,
-                            focusRequester = if (index == focusedItemIndex) restoreFocusRequester else null,
-                            onFocused = {
-                                // While restoring after Details/resume, ignore transient focus on the
-                                // first/leftmost cell so it cannot overwrite the saved poster key.
-                                if (shouldRestoreFocus &&
-                                    focusedItemKey != null &&
-                                    itemFocusKey != focusedItemKey
-                                ) {
-                                    return@GridContentCard
-                                }
-                                focusedItemKey = itemFocusKey
-                            },
-                            onClick = {
-                                focusedItemKey = itemFocusKey
-                                onNavigateToDetail(
-                                    item.id,
-                                    item.apiType,
-                                    catalogRow.addonBaseUrl
-                                )
-                            },
-                            onLongPress = {
-                                focusedItemKey = itemFocusKey
-                                posterOptionsController.show(item, catalogRow.addonBaseUrl)
-                            }
-                        )
-                    }
-
-                    if (catalogRow.isLoading) {
-                        item(key = "loading_more") {
-                            val cardShape = remember(posterCardStyle.cornerRadius) {
-                                androidx.compose.foundation.shape.RoundedCornerShape(posterCardStyle.cornerRadius)
-                            }
-                            val cardDepthStyle = com.nuvio.tv.ui.components.LocalCardDepthStyle.current
-                            val globalLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
-                            Column(
-                                modifier = Modifier
-                                    .then(if (globalLandscape) Modifier.fillMaxWidth() else Modifier.width(posterCardStyle.width))
-                            ) {
-                                androidx.tv.material3.Card(
-                                    onClick = {},
-                                    modifier = Modifier
-                                        .then(
-                                            if (globalLandscape) Modifier.fillMaxWidth().aspectRatio(com.nuvio.tv.domain.model.PosterShape.LANDSCAPE.aspectRatio())
-                                            else Modifier.width(posterCardStyle.width).height(posterCardStyle.height)
-                                        )
-                                        .then(Modifier.focusProperties { canFocus = false }),
-                                    shape = androidx.tv.material3.CardDefaults.shape(shape = cardShape),
-                                    colors = androidx.tv.material3.CardDefaults.colors(
-                                        containerColor = NuvioTheme.colors.BackgroundCard,
-                                        focusedContainerColor = NuvioTheme.colors.BackgroundCard
-                                    )
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(cardShape)
-                                            .then(
-                                                Modifier.nuvioCardDepth(
-                                                    shape = cardShape,
-                                                    surface = com.nuvio.tv.domain.model.CardDepthSurface.POSTERS,
-                                                    style = cardDepthStyle
-                                                )
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        LoadingIndicator()
-                                    }
-                                }
-                                Spacer(
-                                    modifier = Modifier
-                                        .then(if (globalLandscape) Modifier.fillMaxWidth() else Modifier.width(posterCardStyle.width))
-                                        .padding(top = NuvioTheme.spacing.sm)
-                                        .height(MaterialTheme.typography.titleMedium.lineHeight.value.dp)
-                                )
+                    horizontalSpacing = NuvioTheme.spacing.md,
+                    verticalSpacing = NuvioTheme.spacing.lg,
+                    onItemFocused = { _, cardItem ->
+                        val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid
+                        focusedItemKey = catalogItemFocusKey(item)
+                    },
+                    onItemClick = { cardItem ->
+                        val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid
+                        focusedItemKey = catalogItemFocusKey(item)
+                        onNavigateToDetail(item.id, item.apiType, catalogRow.addonBaseUrl)
+                    },
+                    onItemLongClick = { cardItem ->
+                        val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid
+                        focusedItemKey = catalogItemFocusKey(item)
+                        posterOptionsController.show(item, catalogRow.addonBaseUrl)
+                    },
+                    onLoadMore = {
+                        val row = catalogRow
+                        if (row.hasMore && !row.isLoading) {
+                            if (serverCatalog != null) {
+                                serverCatalog.loadMore()
+                            } else if (isSearchMode) {
+                                searchViewModel.onEvent(SearchEvent.LoadMoreCatalog(row.catalogId, row.addonId, row.apiType))
+                            } else {
+                                viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(row.catalogId, row.addonId, row.apiType))
                             }
                         }
-                    }
-                }
+                    },
+                    initialFocusPosition = focusedItemIndex
+                )
             }
         } else if (isCatalogLoading) {
             Box(

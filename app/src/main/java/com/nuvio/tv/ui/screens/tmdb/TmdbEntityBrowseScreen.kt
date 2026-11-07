@@ -1,5 +1,8 @@
 package com.nuvio.tv.ui.screens.tmdb
 
+import androidx.compose.ui.graphics.graphicsLayer
+import com.nuvio.tv.ui.leanback.LeanbackNativeRow
+import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.activity.compose.BackHandler
@@ -454,7 +457,6 @@ private fun TmdbEntityHero(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun EntityRailRow(
     rail: TmdbEntityRail,
@@ -475,63 +477,40 @@ private fun EntityRailRow(
     onItemLongPress: (MetaPreview) -> Unit = {},
     onLoadMore: (TmdbEntityMediaType, TmdbEntityRailType) -> Unit
 ) {
-    val restoreFocusRequester = remember(rail.mediaType, rail.railType) { FocusRequester() }
-    var restorePending by remember(rail.mediaType, rail.railType) { mutableStateOf(false) }
-    val firstItemFocusRequester = initialFocusRequester
-        ?: itemFocusRequesters.getOrPut(0) { FocusRequester() }
-    var lastLoadMoreRequestTotal by remember(rail.mediaType, rail.railType) { mutableIntStateOf(-1) }
+    val globalLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
+    val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
+    val effectiveHeight = if (globalLandscape) 146.dp else posterCardStyle.height
 
-    LaunchedEffect(shouldRequestInitialFocus, firstItemFocusRequester, rail.items.firstOrNull()?.id) {
-        if (!shouldRequestInitialFocus || rail.items.isEmpty()) return@LaunchedEffect
-        val focused = firstItemFocusRequester.requestFocusAfterFrames(frames = 2)
-        if (focused) {
-            onInitialFocusHandled()
-        }
-    }
-
-    // Scroll the target card into composition, then request focus with retries.
-    // Looking up a FocusRequester that was never composed (off-screen LazyRow items)
-    // used to exit early and leave focus on a random card after Back.
-    LaunchedEffect(restoreItemId, restoreFocusToken, rail.items) {
-        if (restoreFocusToken <= 0 || restoreItemId.isNullOrBlank()) {
-            restorePending = false
-            return@LaunchedEffect
-        }
-        val targetIndex = rail.items.indexOfFirst { it.id == restoreItemId }
-        if (targetIndex < 0) {
-            restorePending = false
-            return@LaunchedEffect
-        }
-        restorePending = true
-        runCatching { rowListState.scrollToItem(targetIndex) }
-        val focused = restoreFocusRequester.requestFocusAfterFrames(frames = 2)
-        if (!focused) {
-            // One more attempt after layout settles (common after column rail scroll).
-            restoreFocusRequester.requestFocusAfterFrames(frames = 3)
-        }
-    }
-
-    LaunchedEffect(rail.mediaType, rail.railType, rowListState, rail.hasMore, rail.isLoading) {
-        if (!rail.hasMore) return@LaunchedEffect
-        snapshotFlow {
-            val layoutInfo = rowListState.layoutInfo
-            val total = layoutInfo.totalItemsCount
-            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible to total
-        }
-            .distinctUntilChanged()
-            .collect { (lastVisible, total) ->
-                if (total <= 0) return@collect
-                val isNearEnd = lastVisible >= total - 4
-                if (!isNearEnd) {
-                    lastLoadMoreRequestTotal = -1
-                    return@collect
-                }
-                if (rail.hasMore && !rail.isLoading && lastLoadMoreRequestTotal != total) {
-                    lastLoadMoreRequestTotal = total
-                    onLoadMore(rail.mediaType, rail.railType)
-                }
+    val leanbackItems = remember(rail.items, globalLandscape, watchedMovieIds, watchedSeriesIds) {
+        rail.items.mapIndexed { index, item ->
+            val isWatched = if (rail.mediaType == TmdbEntityMediaType.TV) {
+                item.id in watchedSeriesIds
+            } else {
+                item.id in watchedMovieIds
             }
+            LeanbackCardItem.Poster(
+                key = "${rail.mediaType}_${rail.railType}_${item.id}_$index",
+                title = item.name,
+                imageUrl = if (globalLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                isLandscape = globalLandscape,
+                isWatched = isWatched,
+                payload = item
+            )
+        }
+    }
+
+    val initialPos = remember(restoreItemId, restoreFocusToken, rememberedFocusedIndex) {
+        if (restoreFocusToken > 0 && restoreItemId != null) {
+            rail.items.indexOfFirst { it.id == restoreItemId }.takeIf { it >= 0 } ?: 0
+        } else {
+            rememberedFocusedIndex.coerceIn(0, (rail.items.size - 1).coerceAtLeast(0))
+        }
+    }
+
+    LaunchedEffect(restoreFocusToken) {
+        if (restoreFocusToken > 0 && restoreItemId != null) {
+            onRestoreFocusHandled()
+        }
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -544,78 +523,40 @@ private fun EntityRailRow(
             modifier = Modifier.padding(horizontal = NuvioTheme.spacing.xxxl)
         )
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
-        val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
-        val localDensity = LocalDensity.current
-        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-        val rowBringIntoViewSpec = remember(localDensity, defaultBringIntoViewSpec) {
-            val startPx = with(localDensity) { NuvioTheme.spacing.xxxl.roundToPx() }
-            object : BringIntoViewSpec {
-                override val scrollAnimationSpec: AnimationSpec<Float> =
-                    defaultBringIntoViewSpec.scrollAnimationSpec
-
-                override fun calculateScrollDistance(
-                    offset: Float,
-                    size: Float,
-                    containerSize: Float
-                ): Float {
-                    val childSize = kotlin.math.abs(size)
-                    val target = startPx.toFloat()
-                    val space = containerSize - target
-                    val leading = if (childSize <= containerSize && space < childSize) containerSize - childSize else target
-                    return offset - leading
-                }
-            }
-        }
-        CompositionLocalProvider(LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRestorer {
-                        if (restorePending) {
-                            restoreFocusRequester
-                        } else {
-                            itemFocusRequesters[rememberedFocusedIndex]
-                                ?: itemFocusRequesters[0]
-                                ?: firstItemFocusRequester
-                        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(effectiveHeight + 52.dp)
+                .graphicsLayer { clip = false }
+        ) {
+            LeanbackNativeRow(
+                rowKey = "tmdb_entity_${rail.mediaType}_${rail.railType}",
+                items = leanbackItems,
+                cardWidth = effectiveWidth,
+                cardHeight = effectiveHeight,
+                cornerRadius = posterCardStyle.cornerRadius,
+                showLabels = true,
+                animationsEnabled = NuvioTheme.animationsEnabled,
+                paddingValues = PaddingValues(horizontal = NuvioTheme.spacing.xxxl),
+                itemSpacing = NuvioTheme.spacing.md,
+                initialFocusPosition = initialPos,
+                onItemFocused = { idx, _ ->
+                    onFocusedItemIndexChanged(idx)
+                },
+                onItemClick = { cardItem ->
+                    val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                    onItemClick(item)
+                },
+                onItemLongClick = { cardItem ->
+                    val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                    onItemLongPress(item)
+                },
+                onLoadMore = {
+                    if (rail.hasMore && !rail.isLoading) {
+                        onLoadMore(rail.mediaType, rail.railType)
                     }
-                    .focusGroup(),
-                state = rowListState,
-                contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.xxxl),
-                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
-            ) {
-                itemsIndexed(
-                    items = rail.items,
-                    key = { _, item -> item.id }
-                ) { itemIndex, item ->
-                    val isRestoreTarget = item.id == restoreItemId
-                    val requester = when {
-                        isRestoreTarget -> restoreFocusRequester
-                        itemIndex == 0 -> firstItemFocusRequester
-                        else -> itemFocusRequesters.getOrPut(itemIndex) { FocusRequester() }
-                    }
-                    GridContentCard(
-                        item = item,
-                        onClick = { onItemClick(item) },
-                        onLongPress = { onItemLongPress(item) },
-                        posterCardStyle = posterCardStyle,
-                        showLabel = true,
-                        isWatched = if (rail.mediaType == TmdbEntityMediaType.TV) {
-                            item.id in watchedSeriesIds
-                        } else {
-                            item.id in watchedMovieIds
-                        },
-                        focusRequester = requester,
-                        onFocused = {
-                            onFocusedItemIndexChanged(itemIndex)
-                            if (isRestoreTarget && restoreFocusToken > 0) {
-                                restorePending = false
-                                onRestoreFocusHandled()
-                            }
-                        }
-                    )
                 }
-            }
+            )
         }
     }
 }

@@ -71,6 +71,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.ui.leanback.LeanbackNativeRow
+import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.stableKey
 import com.nuvio.tv.domain.model.stableItemKeys
@@ -361,213 +363,93 @@ fun CatalogRowSection(
             null
         }
 
-        CompositionLocalProvider(LocalBringIntoViewSpec provides horizontalBringIntoViewSpec) {
-        LazyRow(
-            state = listState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { rowHasFocusRef.value = it.hasFocus }
-                .focusRequester(resolvedRowFocusRequester)
-                .focusRestorer {
-                    if (enableRowFocusRestorer) {
-                        val visibleIndices = listState.layoutInfo.visibleItemsInfo
-                            .map { it.index }
-                            .filter { it in catalogRow.items.indices }
-                        val preferredIndex = if (lastFocusedItemIndex.intValue >= 0) {
-                            lastFocusedItemIndex.intValue
-                        } else {
-                            restorerFocusedIndex
-                        }
-                        val idx = preferredIndex.takeIf { it in visibleIndices }
-                            ?: visibleIndices.firstOrNull()
-                        idx?.let { visibleIndex ->
-                            catalogRow.items.getOrNull(visibleIndex)?.let { item ->
-                                itemFocusRequestersByKey[rowItemFocusKey(visibleIndex, item)]
-                            }
-                        }
-                            ?: FocusRequester.Default
-                    } else {
-                        FocusRequester.Default
-                    }
-                }
-                .focusGroup(),
-            contentPadding = PaddingValues(start = NuvioTheme.spacing.xxxl, end = 200.dp),
-            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
-        ) {
-            itemsIndexed(
-                items = catalogRow.items,
-                key = { index, item ->
-                    rowItemFocusKey(index, item)
-                },
-                contentType = { _, item -> item.apiType } // Group items by apiType for better recycling
-            ) { index, item ->
-                val isEntryTarget by remember(entryFocusRequester, index) {
-                    derivedStateOf {
-                        val targetIndex = if (lastFocusedItemIndex.intValue >= 0) {
-                            lastFocusedItemIndex.intValue
-                        } else {
-                            0
-                        }
-                        entryFocusRequester != null && index == targetIndex
-                    }
-                }
-                val cardFocusRequester = itemFocusRequestersByKey.getOrPut(
-                    rowItemFocusKey(index, item)
-                ) { FocusRequester() }
-
-                val isPlaceholder = item.id.startsWith("__placeholder_")
-                val isNonFirstPlaceholder = isPlaceholder && index > 0
-                val onItemClickStable = remember(item.id, catalogRow.addonBaseUrl) {
-                    { if (!isPlaceholder) latestOnItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) }
-                }
-                val onItemLongPressStable = remember(item.id, catalogRow.addonBaseUrl) {
-                    { if (!isPlaceholder) latestOnItemLongPress(item, catalogRow.addonBaseUrl) }
-                }
-                val onFocusStable = remember(index) {
-                    { focusedItem: MetaPreview ->
-                        latestOnItemFocus(focusedItem)
-                        lastFocusedItemIndex.intValue = index
-                        latestOnItemFocused(index)
-                    }
-                }
-
-                ContentCard(
-                    item = item,
-                    posterCardStyle = posterCardStyle,
-                    showLabels = showPosterLabels,
-                    showImdbRatings = showImdbRatings,
-                    placeholderShimmerOffsetState = placeholderShimmerOffsetState,
-                    focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
-                    focusedPosterBackdropExpandDelaySeconds = focusedPosterBackdropExpandDelaySeconds,
-                    focusedPosterBackdropTrailerEnabled = focusedPosterBackdropTrailerEnabled,
-                    focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
-                    trailerPreviewUrl = trailerPreviewUrls[item.id],
-                    trailerPreviewAudioUrl = trailerPreviewAudioUrls[item.id],
-                    onRequestTrailerPreview = latestOnRequestTrailerPreview,
+        val isLandscape = LocalLandscapePosterMode.current || catalogRow.items.firstOrNull()?.posterShape == PosterShape.LANDSCAPE
+        val strSeeAll = seeAllLabel ?: stringResource(R.string.action_see_all)
+        val leanbackItems = remember(catalogRow.items, showSeeAll, isLandscape, strSeeAll) {
+            val list = catalogRow.items.mapIndexed { index, item ->
+                LeanbackCardItem.Poster(
+                    key = rowItemFocusKey(index, item),
+                    title = item.name,
+                    imageUrl = if (isLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                    isLandscape = isLandscape,
                     isWatched = latestIsItemWatched(item),
-                    onFocus = onFocusStable,
-                    onBackdropExpandedChanged = null,
-                    onClick = onItemClickStable,
-                    onLongPress = onItemLongPressStable,
-                    modifier = Modifier
-                        .then(
-                            if (index == 0) {
-                                val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
-                                Modifier.onPreviewKeyEvent { keyEvent ->
-                                    if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown && openSidebar != null) {
-                                        openSidebar()
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                }
-                            } else Modifier
-                        )
-                        .then(directionalFocusModifier)
-                        .then(
-                            if (isNonFirstPlaceholder) Modifier.focusProperties { canFocus = false }
-                            else Modifier
-                        )
-                        .then(
-                            if (isEntryTarget) Modifier.focusRequester(entryFocusRequester!!) else Modifier
-                        ),
-                    focusRequester = cardFocusRequester
+                    payload = item
+                )
+            }.toMutableList()
+
+            if (showSeeAll) {
+                list.add(
+                    LeanbackCardItem.Poster(
+                        key = "${catalogRow.type}_${catalogRow.catalogId}_see_all",
+                        title = strSeeAll,
+                        imageUrl = null,
+                        isLandscape = isLandscape,
+                        badgeText = "ALL",
+                        payload = "SEE_ALL"
+                    )
                 )
             }
-
-            if (!showSeeAll && catalogRow.isLoading) {
-                item(key = "${catalogRow.type}_${catalogRow.catalogId}_loading") {
-                    val cardDepthStyle = LocalCardDepthStyle.current
-                    val globalLandscape = LocalLandscapePosterMode.current
-                    val loadingCardWidth = if (globalLandscape) posterCardStyle.height else posterCardStyle.width
-                    val loadingCardHeight = if (globalLandscape) posterCardStyle.height / PosterShape.LANDSCAPE.aspectRatio() else posterCardStyle.height
-                    Card(
-                        onClick = {},
-                        modifier = Modifier
-                            .width(loadingCardWidth)
-                            .height(loadingCardHeight)
-                              .clearAndSetSemantics {}
-                              .focusProperties { canFocus = false },
-                        shape = CardDefaults.shape(shape = seeAllCardShape),
-                        colors = CardDefaults.colors(
-                            containerColor = NuvioTheme.colors.BackgroundCard,
-                            focusedContainerColor = NuvioTheme.colors.BackgroundCard
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(seeAllCardShape)
-                                .nuvioCardDepth(
-                                    shape = seeAllCardShape,
-                                    surface = CardDepthSurface.POSTERS,
-                                    style = cardDepthStyle
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingIndicator()
-                        }
-                    }
-                }
-            }
-            if (showSeeAll) {
-                item(key = "${catalogRow.type}_${catalogRow.catalogId}_see_all") {
-                    val cardDepthStyle = LocalCardDepthStyle.current
-                    val globalLandscape = LocalLandscapePosterMode.current
-                    val seeAllCardWidth = if (globalLandscape) posterCardStyle.height else posterCardStyle.width
-                    val seeAllCardHeight = if (globalLandscape) posterCardStyle.height / PosterShape.LANDSCAPE.aspectRatio() else posterCardStyle.height
-                    Card(
-                        onClick = onSeeAll,
-                        modifier = Modifier
-                            .width(seeAllCardWidth)
-                            .height(seeAllCardHeight)
-                            .then(directionalFocusModifier),
-                        shape = CardDefaults.shape(shape = seeAllCardShape),
-                        colors = CardDefaults.colors(
-                            containerColor = NuvioTheme.colors.BackgroundCard,
-                            focusedContainerColor = NuvioTheme.colors.BackgroundCard
-                        ),
-                        border = CardDefaults.border(
-                            focusedBorder = Border(
-                                border = NuvioTheme.posterFocusRing.border(posterCardStyle.focusedBorderWidth),
-                                shape = seeAllCardShape
-                            )
-                        ),
-                        scale = CardDefaults.scale(focusedScale = posterCardStyle.focusedScale)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(seeAllCardShape)
-                                .nuvioCardDepth(
-                                    shape = seeAllCardShape,
-                                    surface = CardDepthSurface.POSTERS,
-                                    style = cardDepthStyle
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(NuvioTheme.spacing.xxl),
-                                    tint = NuvioTheme.colors.TextSecondary
-                                )
-                                Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
-                                Text(
-                                    text = seeAllLabel ?: stringResource(R.string.action_see_all),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = NuvioTheme.colors.TextSecondary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            list
         }
-        } // CompositionLocalProvider
+
+        val targetFocusIndex = if (focusedItemIndex >= 0) {
+            focusedItemIndex
+        } else if (restorerFocusedIndex in catalogRow.items.indices) {
+            restorerFocusedIndex
+        } else 0
+
+        val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
+
+        LeanbackNativeRow(
+            rowKey = "catalog_row_${catalogRow.stableKey()}",
+            items = leanbackItems,
+            cardWidth = if (isLandscape) 260.dp else posterCardStyle.width,
+            cardHeight = if (isLandscape) 146.dp else posterCardStyle.height,
+            cornerRadius = posterCardStyle.cornerRadius,
+            showLabels = showPosterLabels,
+            animationsEnabled = NuvioTheme.animationsEnabled,
+            startPadding = NuvioTheme.spacing.xxxl,
+            spacing = NuvioTheme.spacing.lg,
+            onItemFocused = { index, cardItem ->
+                if (cardItem.payload == "SEE_ALL") {
+                    lastFocusedItemIndex.intValue = index
+                    latestOnItemFocused(index)
+                    return@LeanbackNativeRow
+                }
+                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                latestOnItemFocus(item)
+                lastFocusedItemIndex.intValue = index
+                latestOnItemFocused(index)
+            },
+            onItemClick = { cardItem ->
+                if (cardItem.payload == "SEE_ALL") {
+                    onSeeAll()
+                    return@LeanbackNativeRow
+                }
+                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                if (!item.id.startsWith("__placeholder_")) {
+                    latestOnItemClick(item.id, item.apiType, catalogRow.addonBaseUrl)
+                }
+            },
+            onItemLongClick = { cardItem ->
+                if (cardItem.payload == "SEE_ALL") return@LeanbackNativeRow
+                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                if (!item.id.startsWith("__placeholder_")) {
+                    latestOnItemLongPress(item, catalogRow.addonBaseUrl)
+                }
+            },
+            onNavigateUp = {
+                upFocusRequester?.requestFocus()
+                upFocusRequester != null
+            },
+            onNavigateLeftOnFirstItem = {
+                if (openSidebar != null) {
+                    openSidebar()
+                    true
+                } else false
+            },
+            isPendingFocus = focusedItemIndex >= 0,
+            pendingFocusIndex = targetFocusIndex
+        )
     }
 }
