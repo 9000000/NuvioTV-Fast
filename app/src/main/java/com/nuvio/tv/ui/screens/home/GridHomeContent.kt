@@ -493,6 +493,7 @@ fun GridHomeContent(
                                 showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
                                 mdbListShowOnHero = uiState.mdbListShowOnHero,
                                 mdbListRatingOrder = uiState.mdbListRatingOrder,
+                                descriptionAutoScrollEnabled = uiState.heroDescriptionAutoScrollEnabled,
                                 initialActiveIndex = savedHeroIndex.intValue,
                                 onItemFocus = {
                                     lastFocusedGridItemKey.value = "hero"
@@ -695,6 +696,7 @@ fun GridHomeContent(
                                 showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,
                                 mdbListShowOnHero = uiState.mdbListShowOnHero,
                                 mdbListRatingOrder = uiState.mdbListRatingOrder,
+                                descriptionAutoScrollEnabled = uiState.heroDescriptionAutoScrollEnabled,
                                 initialActiveIndex = savedHeroIndex.intValue,
                                 onItemFocus = {
                                     lastFocusedGridItemKey.value = "hero"
