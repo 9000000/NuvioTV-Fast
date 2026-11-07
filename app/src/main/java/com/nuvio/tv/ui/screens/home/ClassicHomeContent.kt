@@ -849,6 +849,7 @@ fun ClassicHomeContent(
 
                     CatalogRowSection(
                         catalogRow = catalogRow,
+                        allowOpenSidebar = true,
                         posterCardStyle = classicCatalogPosterCardStyle,
                         showPosterLabels = uiState.posterLabelsEnabled,
                         showImdbRatings = uiState.homeImdbRatingsVisibility.showRatings,

@@ -41,6 +41,7 @@ class LeanbackAvatarViewHolder(
 ) : LeanbackBaseViewHolder(
     root, cardContainer, glowView, cornerRadiusPx, borderWidthPx, glowMarginPx, adapter
 ) {
+    override val isCircle: Boolean get() = true
     private var imageDisposable: coil3.request.Disposable? = null
 
     init {
@@ -157,6 +158,10 @@ class LeanbackAvatarViewHolder(
         ): LeanbackAvatarViewHolder {
             val context = parent.context
             val dp = context.resources.displayMetrics.density
+            val glowSpreadDp = 18f
+            val glowSpreadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, glowSpreadDp, context.resources.displayMetrics)
+            val effectiveGlowMarginPx = (glowSpreadPx * 1.35f).toInt()
+            val effectiveBorderWidthPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2.0f, context.resources.displayMetrics).toInt().coerceAtLeast(2)
             val diameter = minOf(cardWidthPx, cardHeightPx)
 
             val root = LinearLayout(context).apply {
@@ -180,17 +185,16 @@ class LeanbackAvatarViewHolder(
                 }
             }
 
-            val glowSpreadPx = 24f * dp
             val glowView = PlayStoreGlowView(context).apply {
                 this.isCircle = true
                 this.glowSpreadPx = glowSpreadPx
-                this.glowMarginPx = glowMarginPx.toFloat()
+                this.glowMarginPx = effectiveGlowMarginPx.toFloat()
                 layoutParams = FrameLayout.LayoutParams(
-                    diameter + (glowMarginPx * 2),
-                    diameter + (glowMarginPx * 2)
+                    diameter + (effectiveGlowMarginPx * 2),
+                    diameter + (effectiveGlowMarginPx * 2)
                 ).apply {
-                    leftMargin = -glowMarginPx
-                    topMargin = -glowMarginPx
+                    leftMargin = -effectiveGlowMarginPx
+                    topMargin = -effectiveGlowMarginPx
                 }
                 visibility = View.GONE
             }
@@ -243,8 +247,8 @@ class LeanbackAvatarViewHolder(
                 nameText = nameText,
                 roleText = roleText,
                 cornerRadiusPx = cornerRadiusPx,
-                borderWidthPx = borderWidthPx,
-                glowMarginPx = glowMarginPx,
+                borderWidthPx = effectiveBorderWidthPx,
+                glowMarginPx = effectiveGlowMarginPx,
                 adapter = adapter
             )
         }

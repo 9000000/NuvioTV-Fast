@@ -76,9 +76,7 @@ class LeanbackUniversalAdapter(
 
         val rv = attachedRecyclerView
         if (rv == null) {
-            items = newItems
-            pendingItems = null
-            notifyDataSetChanged()
+            applyItemsUpdate(newItems)
             return
         }
 
@@ -86,24 +84,51 @@ class LeanbackUniversalAdapter(
             rv.post {
                 val pending = pendingItems ?: return@post
                 if (rv.isAttachedToWindow && !rv.isComputingLayout && rv.scrollState == RecyclerView.SCROLL_STATE_IDLE) {
-                    items = pending
-                    pendingItems = null
-                    safeNotifyDataSetChanged()
+                    applyItemsUpdate(pending)
                 } else {
                     rv.post {
                         val retryPending = pendingItems ?: return@post
-                        items = retryPending
-                        pendingItems = null
-                        safeNotifyDataSetChanged()
+                        applyItemsUpdate(retryPending)
                     }
                 }
             }
             return
         }
 
+        applyItemsUpdate(newItems)
+    }
+
+    private fun applyItemsUpdate(newItems: List<LeanbackCardItem>) {
+        val oldItems = items
+        val oldSize = oldItems.size
+        val newSize = newItems.size
+        val isAppendOnly = oldSize > 0 && newSize > oldSize && itemsMatchPrefix(oldItems, newItems, oldSize)
+
         items = newItems
         pendingItems = null
-        safeNotifyDataSetChanged()
+
+        val rv = attachedRecyclerView
+        if (rv == null || !rv.isAttachedToWindow) {
+            notifyDataSetChanged()
+            return
+        }
+
+        if (isAppendOnly) {
+            try {
+                notifyItemRangeInserted(oldSize, newSize - oldSize)
+            } catch (_: Exception) {
+                safeNotifyDataSetChanged()
+            }
+        } else {
+            safeNotifyDataSetChanged()
+        }
+    }
+
+    private fun itemsMatchPrefix(oldItems: List<LeanbackCardItem>, newItems: List<LeanbackCardItem>, count: Int): Boolean {
+        for (i in 0 until count) {
+            if (oldItems[i].key != newItems[i].key) return false
+        }
+        return true
     }
 
     fun safeNotifyDataSetChanged() {
@@ -151,6 +176,12 @@ class LeanbackUniversalAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): LeanbackBaseViewHolder {
         val parentLayout = (parent as? LinearLayout) ?: LinearLayout(parent.context)
+        val dp = parent.context.resources.displayMetrics.density
+        val glowSpreadDp = 18f
+        val glowSpreadPx = glowSpreadDp * dp
+        val dynamicGlowMarginPx = (glowSpreadPx * 1.35f).toInt()
+        val dynamicBorderWidthPx = (2f * dp).toInt().coerceAtLeast(2)
+
         return when (viewType) {
             LeanbackPoolManager.VIEW_TYPE_EPISODE -> {
                 LeanbackEpisodeViewHolder.create(
@@ -158,8 +189,8 @@ class LeanbackUniversalAdapter(
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
                     cornerRadiusPx = cornerRadiusPx,
-                    borderWidthPx = borderWidthPx,
-                    glowMarginPx = glowMarginPx,
+                    borderWidthPx = dynamicBorderWidthPx,
+                    glowMarginPx = dynamicGlowMarginPx,
                     showLabels = showLabels,
                     adapter = this
                 )
@@ -170,8 +201,8 @@ class LeanbackUniversalAdapter(
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
                     cornerRadiusPx = cornerRadiusPx,
-                    borderWidthPx = borderWidthPx,
-                    glowMarginPx = glowMarginPx,
+                    borderWidthPx = dynamicBorderWidthPx,
+                    glowMarginPx = dynamicGlowMarginPx,
                     showLabels = showLabels,
                     adapter = this
                 )
@@ -182,8 +213,8 @@ class LeanbackUniversalAdapter(
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
                     cornerRadiusPx = this@LeanbackUniversalAdapter.cornerRadiusPx,
-                    borderWidthPx = borderWidthPx,
-                    glowMarginPx = glowMarginPx,
+                    borderWidthPx = dynamicBorderWidthPx,
+                    glowMarginPx = dynamicGlowMarginPx,
                     showLabels = showLabels,
                     adapter = this
                 )

@@ -1672,12 +1672,7 @@ private fun ModernSidebarScaffold(
                                 else -> Unit
                             }
                         }
-                        val openKey = if (isRtl) Key.DirectionRight else Key.DirectionLeft
-                        if (keyEvent.key == openKey) {
-                            focusManager.moveFocus(if (isRtl) FocusDirection.Right else FocusDirection.Left)
-                        } else {
-                            false
-                        }
+                        false
                     } else {
                         false
                     }
@@ -1686,11 +1681,12 @@ private fun ModernSidebarScaffold(
             CompositionLocalProvider(
                 LocalSidebarExpanded provides isSidebarExpanded,
                 LocalContentFocusRequester provides contentFocusRequester,
-                LocalOpenSidebar provides {
-                    isSidebarExpanded = true
-                    sidebarCollapsePending = false
-
-                }
+                LocalOpenSidebar provides if (showSidebar) {
+                    {
+                        isSidebarExpanded = true
+                        sidebarCollapsePending = false
+                    }
+                } else null
             ) {
                 NuvioNavHost(
                     navController = navController,

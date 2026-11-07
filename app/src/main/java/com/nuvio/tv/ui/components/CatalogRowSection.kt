@@ -127,6 +127,8 @@ fun CatalogRowSection(
      *  Wide elements above (CW, collections) can point their D-pad down here. */
     entryFocusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
+    onNavigateLeftOnFirstItem: (() -> Boolean)? = null,
+    allowOpenSidebar: Boolean = false,
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
 ) {
     val catalogRowKey = remember(catalogRow) { catalogRow.stableKey() }
@@ -242,29 +244,9 @@ fun CatalogRowSection(
         }
     }
 
-    // Restore focus from saved state when focusedItemIndex is set.
-    LaunchedEffect(focusedItemIndex, catalogRow.items) {
-        if (focusedItemIndex >= 0 && focusedItemIndex < catalogRow.items.size) {
-            val targetItem = catalogRow.items[focusedItemIndex]
-            val targetItemKey = rowItemFocusKey(focusedItemIndex, targetItem)
-            if (lastRequestedFocusItemKey == targetItemKey) return@LaunchedEffect
-            val requester = itemFocusRequestersByKey.getOrPut(targetItemKey) { FocusRequester() }
-            if (!listState.isScrollInProgress) {
-                runCatching { listState.scrollToItem(focusedItemIndex) }
-            }
-            var focused = false
-            for (attempt in 0 until 6) {
-                withFrameNanos { }
-                runCatching { requester.requestFocus() }
-                withFrameNanos { }
-                focused = lastFocusedItemIndex.intValue == focusedItemIndex
-                if (focused) break
-            }
-            if (focused) {
-                lastRequestedFocusItemKey = targetItemKey
-            }
-        } else {
-            lastRequestedFocusItemKey = null
+    LaunchedEffect(focusedItemIndex) {
+        if (focusedItemIndex >= 0 && catalogRow.items.isNotEmpty()) {
+            runCatching { (entryFocusRequester ?: resolvedRowFocusRequester).requestFocus() }
         }
     }
 
@@ -401,6 +383,9 @@ fun CatalogRowSection(
         val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
 
         LeanbackNativeRow(
+            modifier = Modifier
+                .then(if (entryFocusRequester != null) Modifier.focusRequester(entryFocusRequester) else Modifier)
+                .focusRequester(resolvedRowFocusRequester),
             rowKey = "catalog_row_${catalogRow.stableKey()}",
             items = leanbackItems,
             cardWidth = if (isLandscape) 260.dp else posterCardStyle.width,
@@ -443,10 +428,14 @@ fun CatalogRowSection(
                 upFocusRequester != null
             },
             onNavigateLeftOnFirstItem = {
-                if (openSidebar != null) {
+                if (onNavigateLeftOnFirstItem != null) {
+                    onNavigateLeftOnFirstItem()
+                } else if (allowOpenSidebar && openSidebar != null) {
                     openSidebar()
                     true
-                } else false
+                } else {
+                    false
+                }
             },
             isPendingFocus = focusedItemIndex >= 0,
             pendingFocusIndex = targetFocusIndex

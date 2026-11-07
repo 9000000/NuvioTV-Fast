@@ -230,17 +230,21 @@ class LeanbackPosterViewHolder(
                 }
             }
 
-            val glowSpreadPx = 28f * context.resources.displayMetrics.density
+            val glowSpreadDp = 18f
+            val glowSpreadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, glowSpreadDp, context.resources.displayMetrics)
+            val effectiveGlowMarginPx = (glowSpreadPx * 1.35f).toInt()
+            val effectiveBorderWidthPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2.0f, context.resources.displayMetrics).toInt().coerceAtLeast(2)
+
             val glowView = PlayStoreGlowView(context).apply {
                 this.cornerRadiusPx = cornerRadiusPx
                 this.glowSpreadPx = glowSpreadPx
-                this.glowMarginPx = glowMarginPx.toFloat()
+                this.glowMarginPx = effectiveGlowMarginPx.toFloat()
                 layoutParams = FrameLayout.LayoutParams(
-                    cardWidthPx + (glowMarginPx * 2),
-                    cardHeightPx + (glowMarginPx * 2)
+                    cardWidthPx + (effectiveGlowMarginPx * 2),
+                    cardHeightPx + (effectiveGlowMarginPx * 2)
                 ).apply {
-                    leftMargin = -glowMarginPx
-                    topMargin = -glowMarginPx
+                    leftMargin = -effectiveGlowMarginPx
+                    topMargin = -effectiveGlowMarginPx
                 }
                 visibility = View.GONE
             }
@@ -322,8 +326,8 @@ class LeanbackPosterViewHolder(
                 progressBar = progressBar,
                 badgeView = badgeView,
                 cornerRadiusPx = cornerRadiusPx,
-                borderWidthPx = borderWidthPx,
-                glowMarginPx = glowMarginPx,
+                borderWidthPx = effectiveBorderWidthPx,
+                glowMarginPx = effectiveGlowMarginPx,
                 adapter = adapter
             )
         }

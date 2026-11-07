@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -127,14 +130,16 @@ fun LeanbackNativeRow(
         }
     }
 
-    LaunchedEffect(isPendingFocus, pendingFocusNonce, initialFocusPosition, items.size) {
+    var localGridViewRef by remember(rowKey) { mutableStateOf<InteropHorizontalGridView?>(null) }
+
+    LaunchedEffect(isPendingFocus, pendingFocusNonce) {
         val targetIdx = if (isPendingFocus) pendingFocusIndex else initialFocusPosition
-        if ((isPendingFocus || initialFocusPosition > 0) && items.isNotEmpty()) {
+        if (isPendingFocus && items.isNotEmpty()) {
             val safeIdx = targetIdx.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-            val gridView = rowGrids?.get(rowKey) as? InteropHorizontalGridView
+            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView)
             if (gridView != null && gridView.isAttachedToWindow) {
                 executeRowFocus(gridView, safeIdx)
-                if (isPendingFocus) onClearPendingFocus()
+                onClearPendingFocus()
             }
         }
     }
@@ -170,6 +175,7 @@ fun LeanbackNativeRow(
                 setHasFixedSize(true)
                 setItemViewCacheSize(8)
                 effectivePool?.let { setRecycledViewPool(it) }
+                localGridViewRef = this
                 rowGrids?.put(rowKey, this)
                 if (isPendingFocus && items.isNotEmpty()) {
                     val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
@@ -181,6 +187,7 @@ fun LeanbackNativeRow(
             }
         },
         update = { gridView ->
+            localGridViewRef = gridView
             gridView.onNavigateDown = onNavigateDown
             gridView.onNavigateUp = onNavigateUp
             gridView.onNavigateBack = onNavigateBack

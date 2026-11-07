@@ -1,3 +1,54 @@
+## [2026-11-07 23:15] - Khắc phục lỗi nhảy focus về item đầu khi nạp thêm dữ liệu (Pagination), chập chờn Header danh mục, cướp focus sang Sidebar và kẹt D-pad màn hình Search
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `LeanbackNativeGrid.kt`, `LeanbackNativeRow.kt`, `LeanbackUniversalAdapter.kt`, `InteropHorizontalGridView.kt`, `InteropVerticalGridView.kt`, `MainActivity.kt`, `CatalogRowSection.kt`, `SearchScreen.kt`, `FolderDetailScreen.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `LeanbackNativeGrid.kt`: `LaunchedEffect(restoreFocusNonce, items.size)` đưa `items.size` làm dependency key. Mỗi khi người dùng cuộn xuống đáy để nạp trang mới (Pagination), `items.size` tăng lên làm kích hoạt lại `executeGridFocus(grid, initialFocusPosition)`. Do `initialFocusPosition` mặc định là 0, focus bị giật ngược từ vị trí đang cuộn về phim đầu tiên, làm màn hình cuộn vọt lên đỉnh khiến thanh danh mục hiện lên rồi biến mất (tạo hiện tượng chập chờn).
+  2. `LeanbackUniversalAdapter.kt`: Gọi `notifyDataSetChanged()` cho mọi thay đổi dữ liệu khiến toàn bộ ViewHolders bị hủy và tái tạo, làm mất focus của thẻ đang được chọn.
+  3. `InteropHorizontalGridView.kt` & `MainActivity.kt`: Lắng nghe phím `KEYCODE_DPAD_LEFT` mà không kiểm tra vị trí thực tế (`currentPos <= 0` match với cả `NO_POSITION = -1`) và xử lý `onKeyEvent` chưa có điều kiện ở Scaffold làm phím Trái luôn kích hoạt mở Sidebar khi cuộn hàng.
+  4. `SearchScreen.kt`: Trong `SearchInputField`, phím `KEYCODE_DPAD_DOWN` bị chặn bởi điều kiện `if (canMoveToResults)`. Khi ô tìm kiếm rỗng hoặc khi kết quả chưa nạp xong, người dùng không thể bấm D-pad Xuống để vào danh sách tìm kiếm gần đây. Sau khi nhập nội dung và nhấn Done/OK/Enter, hệ thống ẩn bàn phím nhưng không điều hướng focus xuống hàng catalog đầu tiên, gây mất tiêu điểm hoặc kẹt chỉ di chuyển được sang phải.
+- **Fix Applied**:
+  1. Tách biệt `initialFocusDone` trong `LeanbackNativeGrid.kt`: Chỉ cho phép `initialFocusPosition` chạy một lần duy nhất lúc khởi tạo hoặc khi có `restoreFocusNonce` tăng lên; loại bỏ `items.size` khỏi LaunchedEffect.
+  2. Nâng cấp `submitItems` trong `LeanbackUniversalAdapter.kt`: Tự động nhận diện `isAppendOnly` và sử dụng `notifyItemRangeInserted` thay vì `notifyDataSetChanged()` khi nạp trang mới, bảo toàn 100% ViewHolder và trạng thái focus của người dùng.
+  3. Cơ chế Double-Tap xác nhận tại mép trái (`InteropHorizontalGridView.kt`): Nhấn D-pad Trái lần đầu tại thẻ 0 sẽ dừng tại biên thẻ; chỉ khi người dùng nhấn Trái lần thứ 2 có chủ đích trong vòng 700ms thì mới kích hoạt điều hướng sang Sidebar/menu trái.
+  4. Kết nối `FocusRequester` trong `CatalogRowSection.kt`: Gán `entryFocusRequester` và `resolvedRowFocusRequester` vào `LeanbackNativeRow` để hỗ trợ focus mượt mà từ bên ngoài.
+  5. Thiết kế lại điều hướng Search (`SearchScreen.kt`):
+     - D-pad Xuống từ ô Search: Khi `canMoveToResults == true`, tự động cuộn xuống kết quả và focus hàng đầu; khi `canMoveToResults == false`, trỏ trực tiếp xuống phần tử tìm kiếm gần đây (`recentFirstSearchFocusRequester` hoặc nút Xóa lịch sử).
+     - Khi nhấn OK/Enter/Done: Tự động kích hoạt cơ chế `pendingAutoMoveToResultsOnLoad`, tự động bắt tiêu điểm vào thẻ phim đầu tiên của kết quả ngay khi dữ liệu được nạp xong.
+     - Xóa bỏ các listener phím Trái mở Sidebar ngoài ý muốn trong Search Screen.
+  6. Bổ sung `onNavigateUpOnFirstRow` trong `FolderDetailScreen.kt`: Cho phép D-pad Lên từ hàng đầu của Grid đưa focus mượt mà về Tab đang chọn của thư mục.
+- **Prevention**: Khi cài đặt pagination trong RecyclerView/Leanback, bắt buộc phân biệt append dữ liệu (`notifyItemRangeInserted`) với reload toàn bộ (`notifyDataSetChanged`); không đưa kích thước danh sách (`items.size`) làm trigger cho hiệu ứng khôi phục focus; luôn đảm bảo trạng thái rỗng hoặc đang nạp có lộ trình focus dự phòng (fallback focus target).
+- **Status**: Fixed
+
+---
+
+## [2026-11-07 22:10] - Khắc phục lỗi mở Sidebar trái ngoài ý muốn trên màn hình phụ & Chuẩn hóa viền sáng Skia Bloom chuẩn 1:1 Home trên toàn hệ thống Leanback
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `MainActivity.kt`, `LeanbackBaseViewHolder.kt`, `LeanbackAvatarViewHolder.kt`, `LeanbackPosterViewHolder.kt`, `LeanbackEpisodeViewHolder.kt`, `LeanbackUniversalAdapter.kt`, `InteropVerticalGridView.kt`, `SearchDiscoverSection.kt`, `CatalogRowSection.kt`, `ClassicHomeContent.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `MainActivity.kt`: `LocalOpenSidebar` được cấp phát toàn cục vô điều kiện cho toàn bộ `NuvioNavHost`. Các màn hình con (`Detail`, `SeeAll`, `FolderDetail`, `Search Discover`, `Player`) vô tình nhận được callback mở Sidebar khi nhấn D-pad Left ở phần tử đầu tiên.
+  2. `InteropVerticalGridView.kt`: Khi ở cột 0 (`currentColumn == 0`), nếu không có phần tử bên trái trong View hierarchy, sự kiện `DPAD_LEFT` rơi vào fallback của Android window/Compose, gây focus escape hoặc kích hoạt mở sidebar.
+  3. `LeanbackUniversalAdapter.kt` và các ViewHolder: `borderWidthPx` bị gán cứng là raw `2` (pixels) thay vì `2dp` theo mật độ hiển thị màn hình TV; `glowMarginPx` bị gán cứng `16px` trong khi `glowSpreadPx` lên tới `28dp` (~42-56px). Do `glowMarginPx < glowSpreadPx`, hiệu ứng Skia Gaussian Bloom bị cắt cụt ở biên 16px tạo vệt hộp chữ nhật sắc cạnh (hard clipping) thay vì hào quang lan tỏa êm dịu (atmospheric dispersion).
+  4. `LeanbackBaseViewHolder.kt`: Không nâng `translationZ` khi thẻ nhận focus, khiến các thẻ lân cận (vẽ sau theo thứ tự adapter) đè lên viền sáng và scale 1.08f của thẻ đang focus.
+  5. `LeanbackAvatarViewHolder.kt`: Dùng viền bo góc chữ nhật thay vì `GradientDrawable.OVAL`, làm méo viền focus tròn của avatar diễn viên.
+- **Fix Applied**:
+  1. Khóa `LocalOpenSidebar provides if (showSidebar) { ... } else null` trong `MainActivity.kt`, chỉ cấp phát cho các root route (`currentRoute in rootRoutes`). Mọi màn hình con nhận `null`.
+  2. Cập nhật `CatalogRowSection.kt` chỉ kích hoạt mở sidebar khi `allowOpenSidebar = true` (chỉ bật ở `ClassicHomeContent`) và `openSidebar != null`.
+  3. Loại bỏ hoàn toàn callback mở sidebar ở cột 0 trong `SearchDiscoverSection.kt`.
+  4. Cập nhật `InteropVerticalGridView.kt`: Ở cột 0 (hoặc cột cuối), nếu không tìm thấy view lân cận hợp lệ qua `focusSearch`, gọi `stopScroll()` và return `true` để hấp thụ phím mượt mà, ngăn focus escape.
+  5. Chuẩn hóa tỷ lệ viền sáng: Đưa `glowSpreadDp = 18f`, `glowMarginPx = (glowSpreadPx * 1.35f).toInt()`, `borderWidthPx = (2f * dp).toInt().coerceAtLeast(2)` đồng bộ trên `LeanbackUniversalAdapter`, `LeanbackPosterViewHolder`, `LeanbackEpisodeViewHolder`, và `LeanbackAvatarViewHolder`.
+  6. Thêm `root.translationZ = if (hasFocus) 12f else 0f` trong `LeanbackBaseViewHolder.kt` để thẻ đang focus luôn nổi lên layer cao nhất, triệt tiêu 100% overdraw từ các thẻ xung quanh.
+  7. Thiết lập `GradientDrawable.OVAL` cho `LeanbackAvatarViewHolder.kt` khi `isCircle = true`.
+- **Prevention**: Luôn kiểm tra điều kiện cấp phát của các CompositionLocal có tính chất điều hướng toàn cục; tính toán độ lề Canvas Glow rộng hơn bán kính lan tỏa Gaussian Bloom ít nhất 35% để tránh clipping; dùng Z-elevation khi thẻ có hiệu ứng phóng to (scale) trong RecyclerView.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-03 00:15] - Hiệu ứng viền phát quang Neon Glow bị vuông góc không bo tròn theo thiết lập Poster & Tích hợp tối ưu khung hình
 
 - **Type**: Logic

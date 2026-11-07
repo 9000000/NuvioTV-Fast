@@ -490,6 +490,15 @@ private fun TabbedGridContent(
                         if (catalogRow != null && catalogRow.hasMore && !catalogRow.isLoading) {
                             onLoadMore()
                         }
+                    },
+                    onNavigateUpOnFirstRow = {
+                        if (uiState.tabs.size > 1) {
+                            tabFocusRequesters.getOrNull(uiState.selectedTabIndex)?.let {
+                                runCatching { it.requestFocus() }.isSuccess
+                            } ?: false
+                        } else {
+                            false
+                        }
                     }
                 )
             }

@@ -35,6 +35,7 @@ abstract class LeanbackBaseViewHolder(
     protected val interpolator = DecelerateInterpolator(1.5f)
     var currentDominantColor: Int = LeanbackColorEngine.defaultFallbackColor
     protected var currentItem: LeanbackCardItem? = null
+    open val isCircle: Boolean get() = false
 
     // Reuse a single focus border drawable to eliminate per-frame allocations
     val focusBorderDrawable = GradientDrawable().apply {
@@ -121,13 +122,21 @@ abstract class LeanbackBaseViewHolder(
             root.scaleY = targetScale
         }
 
+        // Lift focused card so glow and 1.08f scaled borders are never drawn over by adjacent views
+        root.translationZ = if (hasFocus) 12f else 0f
         cardContainer.elevation = 0f
         cardContainer.translationZ = 0f
+
+        if (isCircle) {
+            focusBorderDrawable.shape = GradientDrawable.OVAL
+        } else {
+            focusBorderDrawable.shape = GradientDrawable.RECTANGLE
+            focusBorderDrawable.cornerRadius = cornerRadiusPx
+        }
 
         if (anim && hasFocus) {
             val tintedWhite = ColorUtils.blendARGB(currentDominantColor, Color.WHITE, 0.90f)
             focusBorderDrawable.setStroke(borderWidthPx, tintedWhite)
-            focusBorderDrawable.cornerRadius = cornerRadiusPx
             cardContainer.foreground = focusBorderDrawable
 
             val isFastScrollingHorizontal = (adapter.attachedRecyclerView as? InteropHorizontalGridView)?.isHoldingHorizontalKey == true
@@ -142,7 +151,6 @@ abstract class LeanbackBaseViewHolder(
         } else if (hasFocus) {
             glowView.visibility = View.GONE
             focusBorderDrawable.setStroke(borderWidthPx, Color.WHITE)
-            focusBorderDrawable.cornerRadius = cornerRadiusPx
             cardContainer.foreground = focusBorderDrawable
         } else {
             glowView.visibility = View.GONE

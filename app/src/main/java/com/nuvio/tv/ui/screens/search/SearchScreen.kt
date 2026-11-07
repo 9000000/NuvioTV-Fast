@@ -158,12 +158,14 @@ fun SearchScreen(
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     val recentClearHistoryFocusRequester = remember { FocusRequester() }
+    val recentFirstSearchFocusRequester = remember { FocusRequester() }
     val discoverButtonFocusRequester = remember { FocusRequester() }
     var isSearchFieldFocused by remember { mutableStateOf(false) }
     // Track the whole input row, including voice and Discover.
     var inputRowHasFocus by remember { mutableStateOf(false) }
     var isRecentSearchSectionFocused by remember { mutableStateOf(false) }
     var focusResults by remember { mutableStateOf(false) }
+    var pendingAutoMoveToResultsOnLoad by remember { mutableStateOf(false) }
     var pendingFocusMoveToResultsQuery by remember { mutableStateOf<String?>(null) }
     var pendingFocusMoveSawSearching by remember { mutableStateOf(false) }
     var pendingFocusMoveHadExistingSearchRows by remember { mutableStateOf(false) }
@@ -325,6 +327,7 @@ fun SearchScreen(
 
     // Stable per-row state maps — mirrors ClassicHomeContent pattern so
     // CatalogRowSection keeps focus when placeholder→real data transitions.
+    val listState = rememberLazyListState()
     val searchRowStates = remember { mutableMapOf<String, LazyListState>() }
     val searchRowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val searchRowEntryFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
@@ -408,12 +411,14 @@ fun SearchScreen(
         focusResults = false
         if (submittedQuery.length >= MIN_SEARCH_QUERY_LENGTH) {
             pendingFocusMoveToResultsQuery = submittedQuery
+            pendingAutoMoveToResultsOnLoad = true
             pendingFocusMoveSawSearching = false
             pendingFocusMoveHadExistingSearchRows =
                 trimmedSubmittedQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
                     uiState.catalogRows.any { row -> row.items.isNotEmpty() }
         } else {
             pendingFocusMoveToResultsQuery = null
+            pendingAutoMoveToResultsOnLoad = false
             pendingFocusMoveSawSearching = false
             pendingFocusMoveHadExistingSearchRows = false
         }
@@ -455,6 +460,21 @@ fun SearchScreen(
             pendingFocusMoveToResultsQuery = null
             pendingFocusMoveSawSearching = false
             pendingFocusMoveHadExistingSearchRows = false
+        }
+    }
+
+    LaunchedEffect(pendingAutoMoveToResultsOnLoad, uiState.isSearching, visibleCatalogRows.size) {
+        if (pendingAutoMoveToResultsOnLoad && !uiState.isSearching && visibleCatalogRows.isNotEmpty()) {
+            pendingAutoMoveToResultsOnLoad = false
+            focusResults = true
+            keyboardController?.hide()
+            runCatching { listState.scrollToItem(1) }
+            repeat(4) { withFrameNanos { } }
+            val firstKey = visibleCatalogRows.firstOrNull()?.stableKey()
+            if (firstKey != null) {
+                val req = searchRowEntryFocusRequesters[firstKey] ?: searchRowFocusRequesters[firstKey]
+                runCatching { req?.requestFocus() }
+            }
         }
     }
 
@@ -571,8 +591,6 @@ fun SearchScreen(
             .background(NuvioTheme.colors.Background),
         contentAlignment = Alignment.TopCenter
     ) {
-        val listState = rememberLazyListState()
-
         // Step back within Search before falling through to the root handler.
         val focusedRowKey = lastFocusedRowKey
         val focusedItemIndex = focusedResultItemIndex.intValue
@@ -651,6 +669,16 @@ fun SearchScreen(
                         // live-search results are useful, even before a particular card opens.
                         viewModel.onEvent(SearchEvent.RememberSearchFromTextInput)
                         focusResults = true
+                        keyboardController?.hide()
+                        coroutineScope.launch {
+                            runCatching { listState.scrollToItem(1) }
+                            repeat(3) { withFrameNanos { } }
+                            val firstKey = visibleCatalogRows.firstOrNull()?.stableKey()
+                            if (firstKey != null) {
+                                val req = searchRowEntryFocusRequesters[firstKey] ?: searchRowFocusRequesters[firstKey]
+                                runCatching { req?.requestFocus() }
+                            }
+                        }
                     },
                     onOpenDiscover = {
                         // Arm the restore so coming back lands on this button rather than the
@@ -662,6 +690,7 @@ fun SearchScreen(
                     showDiscoverButton = uiState.discoverLocation == DiscoverLocation.IN_SEARCH,
                     keyboardController = keyboardController,
                     clearHistoryFocusRequester = if (showRecentSearches) recentClearHistoryFocusRequester else null,
+                    firstRecentSearchFocusRequester = if (showRecentSearches) recentFirstSearchFocusRequester else null,
                     isScreenActive = isScreenActive
                 )
             }
@@ -680,6 +709,7 @@ fun SearchScreen(
                             },
                             onSectionFocusChanged = { focused -> isRecentSearchSectionFocused = focused },
                             clearHistoryFocusRequester = recentClearHistoryFocusRequester,
+                            firstItemFocusRequester = recentFirstSearchFocusRequester,
                             emptyHistoryFocusRequester = searchFocusRequester,
                             modifier = Modifier.padding(horizontal = 52.dp)
                         )
@@ -715,6 +745,7 @@ fun SearchScreen(
                                         isRecentSearchSectionFocused = focused
                                     },
                                     clearHistoryFocusRequester = recentClearHistoryFocusRequester,
+                                    firstItemFocusRequester = recentFirstSearchFocusRequester,
                                     emptyHistoryFocusRequester = searchFocusRequester,
                                     modifier = Modifier.padding(horizontal = 52.dp)
                                 )
@@ -968,17 +999,17 @@ private fun RecentSearchesSection(
     onSectionFocusChanged: (Boolean) -> Unit,
     clearHistoryFocusRequester: FocusRequester,
     emptyHistoryFocusRequester: FocusRequester,
+    firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     val searchFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val removeFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     var pendingDownwardFocus by remember { mutableStateOf<Pair<String, String>?>(null) }
     // Downward focus enters the query column. The remove buttons are reached with right.
-    val firstSearchFocusRequester = searchFocusRequesters.getOrPut(recentSearches.first()) {
-        FocusRequester()
-    }
+    val firstSearchFocusRequester = firstItemFocusRequester
+        ?: (recentSearches.firstOrNull()?.let { searchFocusRequesters.getOrPut(it) { FocusRequester() } }
+            ?: FocusRequester())
     LaunchedEffect(recentSearches, pendingDownwardFocus) {
         val visibleQueries = recentSearches.toSet()
         searchFocusRequesters.keys.retainAll(visibleQueries)
@@ -1033,8 +1064,12 @@ private fun RecentSearchesSection(
 
         recentSearches.forEachIndexed { index, recentQuery ->
             key(recentQuery) {
-                val searchFocusRequester = searchFocusRequesters.getOrPut(recentQuery) {
-                    FocusRequester()
+                val searchFocusRequester = if (index == 0) {
+                    firstSearchFocusRequester
+                } else {
+                    searchFocusRequesters.getOrPut(recentQuery) {
+                        FocusRequester()
+                    }
                 }
                 val removeFocusRequester = removeFocusRequesters.getOrPut(recentQuery) {
                     FocusRequester()
@@ -1063,15 +1098,6 @@ private fun RecentSearchesSection(
                         modifier = Modifier
                             .weight(1f)
                             .focusRequester(searchFocusRequester)
-                            .onPreviewKeyEvent { keyEvent ->
-                                if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
-                                    if (openSidebar != null) {
-                                        openSidebar()
-                                        return@onPreviewKeyEvent true
-                                    }
-                                }
-                                false
-                            }
                             .focusProperties {
                                 if (isRtl) {
                                     left = removeFocusRequester
@@ -1195,12 +1221,12 @@ private fun SearchInputField(
     showDiscoverButton: Boolean,
     keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?,
     clearHistoryFocusRequester: FocusRequester?,
+    firstRecentSearchFocusRequester: FocusRequester? = null,
     isScreenActive: Boolean = true
 ) {
     var isDiscoverButtonFocused by remember { mutableStateOf(false) }
     var isVoiceButtonFocused by remember { mutableStateOf(false) }
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
 
     Row(
         modifier = modifier
@@ -1216,15 +1242,6 @@ private fun SearchInputField(
                     .then(
                         discoverFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier
                     )
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
-                            if (openSidebar != null) {
-                                openSidebar()
-                                return@onPreviewKeyEvent true
-                            }
-                        }
-                        false
-                    }
                     .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
                     .size(NuvioTheme.spacing.huge)
                     .border(
@@ -1318,15 +1335,6 @@ private fun SearchInputField(
                                 Modifier
                             }
                         )
-                        .onPreviewKeyEvent { keyEvent ->
-                            if (!showDiscoverButton && keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown) {
-                                if (openSidebar != null) {
-                                    openSidebar()
-                                    return@onPreviewKeyEvent true
-                                }
-                            }
-                            false
-                        }
                         .onFocusChanged { isVoiceButtonFocused = it.isFocused }
                         .size(NuvioTheme.spacing.huge)
                         .border(
@@ -1364,16 +1372,6 @@ private fun SearchInputField(
                 }
                 .onPreviewKeyEvent { keyEvent ->
                     when (keyEvent.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_LEFT -> {
-                            if (!showDiscoverButton && !showVoiceSearch && keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                                if (openSidebar != null) {
-                                    openSidebar()
-                                    return@onPreviewKeyEvent true
-                                }
-                            }
-                            false
-                        }
-
                         KeyEvent.KEYCODE_ENTER,
                         KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                             if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
@@ -1383,11 +1381,20 @@ private fun SearchInputField(
                         }
 
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (canMoveToResults) {
-                                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                                    keyboardController?.hide()
+                            if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                                keyboardController?.hide()
+                                if (canMoveToResults) {
                                     onMoveToResults()
+                                    return@onPreviewKeyEvent true
+                                } else if (firstRecentSearchFocusRequester != null) {
+                                    runCatching { firstRecentSearchFocusRequester.requestFocus() }
+                                    return@onPreviewKeyEvent true
+                                } else if (clearHistoryFocusRequester != null) {
+                                    runCatching { clearHistoryFocusRequester.requestFocus() }
+                                    return@onPreviewKeyEvent true
                                 }
+                            }
+                            if (canMoveToResults || firstRecentSearchFocusRequester != null || clearHistoryFocusRequester != null) {
                                 return@onPreviewKeyEvent true
                             }
                         }

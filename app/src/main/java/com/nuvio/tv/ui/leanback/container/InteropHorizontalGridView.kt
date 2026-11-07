@@ -35,6 +35,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     private var arrivalAt0Time = 0L
     private var arrivedAt0FromRight = false
     private var hasReleasedKeyAfterArrivingAt0 = true
+    private var lastEdgeLeftPressTime = 0L
 
     private val universalAdapter: LeanbackUniversalAdapter?
         get() = adapter as? LeanbackUniversalAdapter
@@ -178,14 +179,23 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             val now = SystemClock.uptimeMillis()
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    val currentPos = selectedPosition
-                    if (currentPos <= 0) {
-                        val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
-                        if (!arrivedRecently && event.repeatCount == 0) {
-                            hasReleasedKeyAfterArrivingAt0 = true
-                            arrivedAt0FromRight = false
-                            if (onNavigateLeftOnFirstItem?.invoke() == true) {
-                                return true
+                    val focusedChild = findFocus()
+                    val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
+                    val actualPos = holder?.bindingAdapterPosition ?: selectedPosition
+
+                    if (actualPos == 0) {
+                        val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 350L)
+                        if (!arrivedRecently && event.repeatCount == 0 && onNavigateLeftOnFirstItem != null) {
+                            val isIntentionalEdgeTrigger = (now - lastEdgeLeftPressTime) < 700L
+                            if (isIntentionalEdgeTrigger) {
+                                lastEdgeLeftPressTime = 0L
+                                hasReleasedKeyAfterArrivingAt0 = true
+                                arrivedAt0FromRight = false
+                                if (onNavigateLeftOnFirstItem?.invoke() == true) {
+                                    return true
+                                }
+                            } else {
+                                lastEdgeLeftPressTime = now
                             }
                         }
                         stopScroll()
@@ -197,7 +207,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     }
 
                     if (!animationsEnabled) {
-                        val target = (currentPos - 1).coerceAtLeast(0)
+                        val target = (actualPos - 1).coerceAtLeast(0)
                         stopScroll()
                         setSelectedPosition(target)
                         return true

@@ -120,7 +120,6 @@ internal fun DiscoverSection(
     val genres = selectedCatalog?.genres.orEmpty()
     var expandedPicker by remember { mutableStateOf<String?>(null) }
     val filterFocusRequester = remember { FocusRequester() }
-    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     var gridHasFocus by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -163,16 +162,7 @@ internal fun DiscoverSection(
             DiscoverDropdownPicker(
                 modifier = Modifier.weight(1f),
                 cardModifier = Modifier
-                    .focusRequester(filterFocusRequester)
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown && expandedPicker == null) {
-                            if (openSidebar != null) {
-                                openSidebar()
-                                return@onPreviewKeyEvent true
-                            }
-                        }
-                        false
-                    },
+                    .focusRequester(filterFocusRequester),
                 title = stringResource(R.string.discover_filter_type),
                 value = selectedTypeLabel,
                 selectedValue = uiState.selectedDiscoverType,
@@ -525,7 +515,6 @@ internal fun DiscoverGrid(
     onItemLongPress: (MetaPreview) -> Unit = {},
     filterKey: String = ""
 ) {
-    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     val globalLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
     val numCols = if (globalLandscape) 4 else 6
     val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
@@ -593,14 +582,6 @@ internal fun DiscoverGrid(
             onLoadMore = {
                 if (canLoadMore && !isLoadingMore) {
                     onLoadMore()
-                }
-            },
-            onNavigateLeftOnFirstColumn = {
-                if (openSidebar != null) {
-                    openSidebar()
-                    true
-                } else {
-                    false
                 }
             }
         )

@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -110,10 +113,28 @@ fun LeanbackNativeGrid(
         }
     }
 
-    LaunchedEffect(restoreFocusNonce, items.size) {
-        val grid = gridViewRef
-        if (grid != null && grid.isAttachedToWindow && initialFocusPosition in items.indices) {
-            executeGridFocus(grid, initialFocusPosition)
+    var initialFocusDone by remember(gridKey) { mutableStateOf(false) }
+
+    LaunchedEffect(gridKey) {
+        initialFocusDone = false
+    }
+
+    LaunchedEffect(restoreFocusNonce) {
+        if (restoreFocusNonce > 0) {
+            val grid = gridViewRef
+            if (grid != null && grid.isAttachedToWindow && initialFocusPosition in items.indices) {
+                executeGridFocus(grid, initialFocusPosition)
+            }
+        }
+    }
+
+    LaunchedEffect(items.isNotEmpty()) {
+        if (!initialFocusDone && items.isNotEmpty()) {
+            val grid = gridViewRef
+            if (grid != null && grid.isAttachedToWindow && initialFocusPosition in items.indices) {
+                executeGridFocus(grid, initialFocusPosition)
+                initialFocusDone = true
+            }
         }
     }
 
@@ -150,8 +171,9 @@ fun LeanbackNativeGrid(
                 gridViewRef = this
                 onGridCreated?.invoke(this)
 
-                if (initialFocusPosition in items.indices) {
+                if (!initialFocusDone && initialFocusPosition in items.indices) {
                     executeGridFocus(this, initialFocusPosition)
+                    initialFocusDone = true
                 }
             }
         },

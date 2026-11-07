@@ -144,12 +144,14 @@ class InteropVerticalGridView @JvmOverloads constructor(
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
-            val currentPos = selectedPosition
+            val focusedChild = findFocus()
+            val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
+            val actualPos = holder?.bindingAdapterPosition ?: selectedPosition
             val cols = numColumnsCount.coerceAtLeast(1)
-            val currentColumn = currentPos % cols
-            val isFirstRow = currentPos < cols
+            val currentColumn = if (actualPos >= 0) actualPos % cols else 0
+            val isFirstRow = actualPos in 0 until cols
             val totalItems = universalAdapter?.itemCount ?: 0
-            val isLastRow = currentPos >= (totalItems - cols)
+            val isLastRow = actualPos >= 0 && actualPos >= (totalItems - cols)
 
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP -> {
@@ -177,6 +179,8 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         if (onNavigateLeftOnFirstColumn?.invoke() == true) {
                             return true
                         }
+                        stopScroll()
+                        return true
                     }
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
@@ -184,6 +188,8 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         if (onNavigateRightOnLastColumn?.invoke() == true) {
                             return true
                         }
+                        stopScroll()
+                        return true
                     }
                 }
                 KeyEvent.KEYCODE_BACK -> {
