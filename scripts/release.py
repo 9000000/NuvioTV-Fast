@@ -478,6 +478,238 @@ def upload_via_api(token, tag, title, notes, apks, is_prerelease=False, is_draft
     print(f"-> {html_url}\n")
     return True
 
+def cleanup_old_releases(token=None, keep_count=5, cleanup_tags=True, dry_run=False):
+    """
+    Xóa các bản release cũ trên GitHub, chỉ giữ lại `keep_count` bản gần nhất (bao gồm cả bản vừa tải lên).
+    Hỗ trợ xóa cả git tag từ xa nếu cleanup_tags=True.
+    """
+    if keep_count is None or keep_count <= 0:
+        return
+
+    print(f"\n[CLEANUP] Dang kiem tra cac ban Release cu tren GitHub ({GITHUB_OWNER}/{GITHUB_REPO})...")
+    api_base = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}"
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "NuvioTV-Release-Script",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    releases = []
+    # 1. Thu lay danh sach qua GitHub REST API
+    if token:
+        try:
+            page = 1
+            while True:
+                url = f"{api_base}/releases?per_page=100&page={page}"
+                req = urllib.request.Request(url, headers=headers, method="GET")
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    page_items = json.loads(resp.read().decode("utf-8"))
+                    if not page_items:
+                        break
+                    releases.extend(page_items)
+                    if len(page_items) < 100:
+                        break
+                    page += 1
+        except Exception as e:
+            print(f"[WARN] Khong the lay danh sach release qua API: {e}")
+
+    # 2. Neu API khong co ket qua, thu fallback qua gh CLI neu co san
+    if not releases and shutil.which("gh"):
+        try:
+            cmd = ["gh", "release", "list", "--repo", f"{GITHUB_OWNER}/{GITHUB_REPO}", "--limit", "100", "--json", "id,tagName,name,createdAt,isDraft"]
+            res = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if res.returncode == 0:
+                gh_items = json.loads(res.stdout)
+                for item in gh_items:
+                    releases.append({
+                        "id": item.get("id"),
+                        "tag_name": item.get("tagName"),
+                        "name": item.get("name"),
+                        "created_at": item.get("createdAt"),
+                        "draft": item.get("isDraft", False),
+                    })
+        except Exception as e:
+            print(f"[WARN] Khong the lay danh sach release qua gh CLI: {e}")
+
+    if not releases:
+        print("[INFO] Khong co du lieu release nao de don dep.")
+        return
+
+    # Sap xep theo thoi gian phat hanh (hoac tao) giam dan (moi nhat dung dau)
+    releases.sort(key=lambda r: r.get("published_at") or r.get("created_at") or "", reverse=True)
+
+    to_keep = releases[:keep_count]
+    total_releases = len(releases)
+
+    if total_releases <= keep_count:
+        print(f"[OK] Hien co {total_releases} ban Release (<= {keep_count} ban can giu). Khong co release cu nao can xoa.")
+    else:
+        to_delete = releases[keep_count:]
+
+        print(f"-> Tong so release hien co: {total_releases}")
+        print(f"-> Giu lai {keep_count} ban release moi nhat:")
+        for r in to_keep:
+            date_str = (r.get("published_at") or r.get("created_at") or "")[:10]
+            print(f"   [GIU] {r.get('tag_name')} ({r.get('name') or 'No title'}) - {date_str}")
+
+        print(f"-> Can don dep {len(to_delete)} ban release cu:")
+        for r in to_delete:
+            date_str = (r.get("published_at") or r.get("created_at") or "")[:10]
+            print(f"   [XOA] {r.get('tag_name')} (ID: {r.get('id')}) - {date_str}")
+
+        if dry_run:
+            print(f"[DRY-RUN] Bo qua buoc xoa release thuc te tren GitHub.")
+        else:
+            deleted_count = 0
+            gh_available = shutil.which("gh") is not None
+
+            for r in to_delete:
+                rel_id = r.get("id")
+                tag_name = r.get("tag_name")
+                print(f"\n   Dang xoa release: {tag_name} (ID: {rel_id})...")
+
+                deleted_release = False
+                # Xoa release qua GitHub REST API
+                if token and rel_id:
+                    try:
+                        del_url = f"{api_base}/releases/{rel_id}"
+                        del_req = urllib.request.Request(del_url, headers=headers, method="DELETE")
+                        with urllib.request.urlopen(del_req, timeout=30) as del_resp:
+                            if del_resp.status in (200, 204):
+                                deleted_release = True
+                                print(f"   [OK] Da xoa release {tag_name} tren GitHub.")
+                    except urllib.error.HTTPError as e:
+                        print(f"   [WARN] Loi xoa release {tag_name} qua API (HTTP {e.code}): {e.read().decode('utf-8', errors='replace')}")
+                    except Exception as e:
+                        print(f"   [WARN] Loi goi API xoa release {tag_name}: {e}")
+
+                # Fallback xoa qua gh CLI
+                if not deleted_release and gh_available and tag_name:
+                    cmd = ["gh", "release", "delete", tag_name, "--repo", f"{GITHUB_OWNER}/{GITHUB_REPO}", "--yes"]
+                    if cleanup_tags:
+                        cmd.append("--cleanup-tag")
+                    res = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                    if res.returncode == 0:
+                        deleted_release = True
+                        print(f"   [OK] Da xoa release {tag_name} qua gh CLI.")
+                    else:
+                        print(f"   [WARN] Loi xoa release {tag_name} qua gh CLI: {res.stderr.strip()}")
+
+                if deleted_release:
+                    deleted_count += 1
+                    # Xoa git tag tren remote repo qua REST API neu duoc yeu cau
+                    if cleanup_tags and tag_name and token:
+                        try:
+                            tag_url = f"{api_base}/git/refs/tags/{tag_name}"
+                            tag_req = urllib.request.Request(tag_url, headers=headers, method="DELETE")
+                            with urllib.request.urlopen(tag_req, timeout=30) as t_resp:
+                                if t_resp.status in (200, 204):
+                                    print(f"   [OK] Da xoa git tag '{tag_name}' tren GitHub.")
+                        except urllib.error.HTTPError as e:
+                            if e.code == 404:
+                                pass  # Tag da duoc xoa truoc do hoac khong ton tai
+                            else:
+                                print(f"   [WARN] Khong the xoa tag '{tag_name}' (HTTP {e.code})")
+                        except Exception as e:
+                            print(f"   [WARN] Loi khi xoa tag '{tag_name}': {e}")
+
+            print(f"\n[DONE] Da hoan tat don dep: da xoa {deleted_count}/{len(to_delete)} ban release cu.")
+
+    # 3. Quet va don dep toan bo Git Tags tren GitHub (xoa ca cac tag mo coi khong con release)
+    if cleanup_tags and token:
+        cleanup_remote_tags(
+            token=token,
+            keep_release_tags={r.get("tag_name") for r in to_keep if r.get("tag_name")},
+            keep_count=keep_count,
+            dry_run=dry_run
+        )
+
+def cleanup_remote_tags(token, keep_release_tags, keep_count=5, dry_run=False):
+    """
+    Quet toan bo Git Tags tren remote GitHub, xoa tat ca cac tags cu mo coi,
+    chi giu lai cac tags thuoc top releases va top tags moi nhat.
+    """
+    print(f"\n[CLEANUP TAGS] Dang kiem tra toan bo Git Tags tren GitHub ({GITHUB_OWNER}/{GITHUB_REPO})...")
+    api_base = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "NuvioTV-Release-Script",
+    }
+
+    all_remote_tags = []
+    try:
+        page = 1
+        while True:
+            url = f"{api_base}/tags?per_page=100&page={page}"
+            req = urllib.request.Request(url, headers=headers, method="GET")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                items = json.loads(resp.read().decode("utf-8"))
+                if not items:
+                    break
+                all_remote_tags.extend(items)
+                if len(items) < 100:
+                    break
+                page += 1
+    except Exception as e:
+        print(f"[WARN] Khong the lay danh sach tags qua API: {e}")
+        return
+
+    remote_tag_names = [t.get("name") for t in all_remote_tags if t.get("name")]
+    if not remote_tag_names:
+        print("[INFO] Khong tim thay tag nao tren GitHub.")
+        return
+
+    # Xac dinh cac tag can giu lai: gom tag cua cac ban release con giu + top tags moi nhat
+    keep_tags_set = set()
+    for t in remote_tag_names:
+        if t in keep_release_tags or len(keep_tags_set) < keep_count:
+            keep_tags_set.add(t)
+        if len(keep_tags_set) >= keep_count and keep_release_tags.issubset(keep_tags_set):
+            break
+
+    tags_to_delete = [t for t in remote_tag_names if t not in keep_tags_set]
+
+    if not tags_to_delete:
+        print(f"[OK] Toan bo {len(remote_tag_names)} tags tren GitHub deu hop le (<= {len(keep_tags_set)} tags can giu). Khong co tag cu nao can xoa.")
+        return
+
+    print(f"-> Tong so tags tren GitHub: {len(remote_tag_names)}")
+    print(f"-> Giu lai cac tags moi nhat ({len(keep_tags_set)} tags): {', '.join(sorted(keep_tags_set))}")
+    print(f"-> Xoa cac tags cu ({len(tags_to_delete)} tags):")
+    preview_delete = tags_to_delete[:15]
+    for t in preview_delete:
+        print(f"   [XOA TAG] {t}")
+    if len(tags_to_delete) > 15:
+        print(f"   ... va {len(tags_to_delete) - 15} tags cu khac.")
+
+    if dry_run:
+        print(f"[DRY-RUN] Bo qua buoc xoa tag thuc te tren GitHub.")
+        return
+
+    deleted_tags_count = 0
+    for t in tags_to_delete:
+        try:
+            del_url = f"{api_base}/git/refs/tags/{t}"
+            req = urllib.request.Request(del_url, headers=headers, method="DELETE")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                if resp.status in (200, 204):
+                    deleted_tags_count += 1
+                    print(f"   [OK] Da xoa git tag '{t}' tren GitHub.")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                pass  # Da xoa truoc do
+            else:
+                print(f"   [WARN] Khong the xoa tag '{t}' (HTTP {e.code})")
+        except Exception as e:
+            print(f"   [WARN] Loi khi xoa tag '{t}': {e}")
+
+    print(f"[DONE] Da hoan tat don dep Git tags: da xoa {deleted_tags_count}/{len(tags_to_delete)} tags cu tren GitHub.")
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Script tự động phát hành bản Release APK của Nuvio TV lên GitHub Releases."
@@ -573,10 +805,44 @@ def parse_arguments():
         default=False,
         help="Tạo release ở chế độ nháp (Draft)."
     )
+    parser.add_argument(
+        "--keep-releases",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Số lượng bản Release mới nhất cần giữ lại trên GitHub (gồm cả bản vừa upload, mặc định: 5; đặt 0 để tắt dọn dẹp)."
+    )
+    parser.add_argument(
+        "--no-cleanup-tags",
+        action="store_false",
+        dest="cleanup_tags",
+        default=True,
+        help="Không xóa git tag từ xa tương ứng khi xóa các bản Release cũ."
+    )
+    parser.add_argument(
+        "--cleanup-only",
+        action="store_true",
+        default=False,
+        help="Chỉ thực hiện dọn dẹp các bản Release và Git Tag cũ trên GitHub rồi thoát (không build hoặc upload)."
+    )
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
+
+    if args.cleanup_only:
+        token = read_token()
+        if not token:
+            print("\n[WARN] Chua cau hinh xac thuc GitHub!")
+            print("Them Token vao file local.properties: GITHUB_TOKEN=...")
+            sys.exit(1)
+        cleanup_old_releases(
+            token=token,
+            keep_count=args.keep_releases,
+            cleanup_tags=args.cleanup_tags,
+            dry_run=args.dry_run
+        )
+        return
 
     current_gradle_version = read_version()
     current_gradle_code = read_version_code()
@@ -670,6 +936,10 @@ def main():
     print(f"Pre-release: {'Co' if is_prerelease else 'Khong'} | Draft: {'Co' if args.draft else 'Khong'}")
     print(f"Nhanh nguon (Target Branch): {TARGET_BRANCH}")
     print(f"Kho chua (Repository): {GITHUB_OWNER}/{GITHUB_REPO}")
+    if args.keep_releases > 0:
+        print(f"Don dep release cu: Giu lai {args.keep_releases} ban moi nhat ({'xoa ca git tag' if args.cleanup_tags else 'giu git tag'})")
+    else:
+        print("Don dep release cu: Da tat (--keep-releases 0)")
     if args.dry_run:
         print(f"Che do: DRY-RUN (Kiem tra thu nghiem, khong upload)")
     print(f"==================================================")
@@ -701,23 +971,46 @@ def main():
         print(f"\n--- NOI DUNG RELEASE NOTES DU KIEN ---")
         print(notes.strip())
         print(f"--------------------------------------\n")
+        if args.keep_releases > 0:
+            token = read_token()
+            cleanup_old_releases(
+                token=token,
+                keep_count=args.keep_releases,
+                cleanup_tags=args.cleanup_tags,
+                dry_run=True
+            )
         return
 
     # 3. Upload
+    upload_success = False
     gh_available = shutil.which("gh") is not None
     if gh_available:
         if upload_via_gh(tag, title, notes, apks, is_prerelease=is_prerelease, is_draft=args.draft):
-            return
+            upload_success = True
 
     token = read_token()
-    if token:
-        if upload_via_api(token, tag, title, notes, apks, is_prerelease=is_prerelease, is_draft=args.draft):
-            return
-    else:
-        print("\n[WARN] Chua cau hinh xac thuc GitHub!")
-        print("Them Token vao file local.properties:")
-        print("   GITHUB_TOKEN=ghp_your_personal_access_token")
+    if not upload_success:
+        if token:
+            if upload_via_api(token, tag, title, notes, apks, is_prerelease=is_prerelease, is_draft=args.draft):
+                upload_success = True
+        else:
+            print("\n[WARN] Chua cau hinh xac thuc GitHub!")
+            print("Them Token vao file local.properties:")
+            print("   GITHUB_TOKEN=ghp_your_personal_access_token")
+            sys.exit(1)
+
+    if not upload_success:
+        print("\n[ERROR] Phat hanh Release that bai!")
         sys.exit(1)
+
+    # 4. Don dep cac ban release cu (chi giu lai `keep_releases` ban gan nhat)
+    if args.keep_releases > 0:
+        cleanup_old_releases(
+            token=token,
+            keep_count=args.keep_releases,
+            cleanup_tags=args.cleanup_tags,
+            dry_run=False
+        )
 
 if __name__ == "__main__":
     main()
