@@ -2387,9 +2387,8 @@ private fun MetaDetailsContent(
                         showEpisodesRow -> {
                             val targetIdx = if (showSeasonTabs) 2 else 1
                             listState.animateScrollToItem(targetIdx)
-                            repeat(2) { withFrameNanos { } }
                             val req = seasonDownFocusRequester ?: selectedSeasonFocusRequester
-                            runCatching { req.requestFocus() }
+                            req.requestFocusAfterFrames()
                         }
                         hasVisiblePeopleSection -> {
                             val targetIdx = 1
@@ -2420,9 +2419,8 @@ private fun MetaDetailsContent(
                     coroutineScope.launch {
                         val episodesIndex = if (showSeasonTabs) 2 else 1
                         listState.animateScrollToItem(episodesIndex)
-                        repeat(2) { withFrameNanos { } }
                         val req = seasonDownFocusRequester ?: selectedSeasonFocusRequester
-                        runCatching { req.requestFocus() }
+                        req.requestFocusAfterFrames()
                     }
                     true
                 } else false
@@ -2724,6 +2722,7 @@ private fun MetaDetailsContent(
                             onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
                             upFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (heroPlayFocusRequester ?: heroPlayButtonFocusRequester),
                             downFocusRequester = episodesDownFocusRequester,
+                            entryFocusRequester = seasonDownFocusRequester,
                             onNavigateDown = onEpisodesRowNavigateDown,
                             episodeFocusRequesters = seasonEpisodeFocusRequesters,
                             restoreEpisodeId = visibleEpisodeRestoreId,

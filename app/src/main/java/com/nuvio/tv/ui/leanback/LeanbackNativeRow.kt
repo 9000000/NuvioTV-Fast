@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -55,6 +57,7 @@ fun LeanbackNativeRow(
     pendingFocusIndex: Int = 0,
     initialFocusPosition: Int = 0,
     pendingFocusNonce: Int = 0,
+    entryFocusRequester: FocusRequester? = null,
     onClearPendingFocus: () -> Unit = {},
     recycledViewPool: RecyclerView.RecycledViewPool? = null,
     paddingValues: PaddingValues? = null,
@@ -157,6 +160,13 @@ fun LeanbackNativeRow(
 
     AndroidView(
         modifier = modifier
+            .then(
+                if (entryFocusRequester != null) {
+                    Modifier.focusRequester(entryFocusRequester)
+                } else {
+                    Modifier
+                }
+            )
             .height(totalRowHeightDp)
             .fillMaxWidth()
             .graphicsLayer { clip = false },

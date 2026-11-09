@@ -413,6 +413,7 @@ fun EpisodesRow(
     onMarkPreviousEpisodesWatched: (Video) -> Unit = {},
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester? = null,
+    entryFocusRequester: FocusRequester? = null,
     onNavigateDown: (() -> Boolean)? = null,
     episodeFocusRequesters: MutableMap<String, FocusRequester> = mutableMapOf(),
     restoreEpisodeId: String? = null,
@@ -595,7 +596,8 @@ fun EpisodesRow(
         },
         isPendingFocus = !targetFocusEpisodeId.isNullOrBlank(),
         pendingFocusIndex = initialIdx,
-        pendingFocusNonce = restoreFocusToken
+        pendingFocusNonce = restoreFocusToken,
+        entryFocusRequester = entryFocusRequester
     )
 
     optionsEpisode?.let { selectedEpisode ->
