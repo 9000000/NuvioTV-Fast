@@ -47,6 +47,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.Key
@@ -57,6 +58,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.zIndex
 import com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames
 import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.IntSize
@@ -120,6 +123,7 @@ internal fun DiscoverSection(
     val genres = selectedCatalog?.genres.orEmpty()
     var expandedPicker by remember { mutableStateOf<String?>(null) }
     val filterFocusRequester = remember { FocusRequester() }
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     var gridHasFocus by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -144,157 +148,196 @@ internal fun DiscoverSection(
     val selectedGenreLabel = uiState.selectedDiscoverGenre?.let { localizedGenreLabel(it) } ?: stringResource(R.string.discover_genre_default)
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = NuvioTheme.spacing.xxxl),
-        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+        modifier = modifier.fillMaxSize()
     ) {
-        Text(
-            text = stringResource(R.string.discover_title),
-            style = MaterialTheme.typography.headlineMedium,
-            color = if (showBuiltInHeader) NuvioTheme.colors.TextPrimary else Color.Transparent
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
-        ) {
-            DiscoverDropdownPicker(
-                modifier = Modifier.weight(1f),
-                cardModifier = Modifier
-                    .focusRequester(filterFocusRequester),
-                title = stringResource(R.string.discover_filter_type),
-                value = selectedTypeLabel,
-                selectedValue = uiState.selectedDiscoverType,
-                expanded = expandedPicker == "type",
-                options = availableTypes.map { type ->
-                    val label = localizedTypeLabel(type)
-                    DiscoverOption(label, type)
-                },
-                onExpandedChange = { shouldExpand ->
-                    expandedPicker = if (shouldExpand) "type" else null
-                },
-                onSelect = { option ->
-                    onSelectType(option.value)
-                    expandedPicker = null
-                },
-                blockFocus = blockFilterFocus
-            )
-
-            DiscoverDropdownPicker(
-                modifier = Modifier.weight(1f),
-                title = stringResource(R.string.discover_filter_catalog),
-                value = selectedCatalogLabel,
-                selectedValue = uiState.selectedDiscoverCatalogKey,
-                expanded = expandedPicker == "catalog",
-                options = filteredCatalogs.map { DiscoverOption(it.catalogName, it.key) },
-                onExpandedChange = { shouldExpand ->
-                    expandedPicker = if (shouldExpand) "catalog" else null
-                },
-                onSelect = { option ->
-                    onSelectCatalog(option.value)
-                    expandedPicker = null
-                },
-                blockFocus = blockFilterFocus
-            )
-
-            DiscoverDropdownPicker(
-                modifier = Modifier.weight(1f),
-                title = stringResource(R.string.discover_filter_genre),
-                value = selectedGenreLabel,
-                selectedValue = uiState.selectedDiscoverGenre ?: "__default__",
-                expanded = expandedPicker == "genre",
-                options = buildList {
-                    add(DiscoverOption(stringResource(R.string.discover_genre_default), "__default__"))
-                    addAll(genres.map { DiscoverOption(localizedGenreLabel(it), it) })
-                },
-                onExpandedChange = { shouldExpand ->
-                    expandedPicker = if (shouldExpand) "genre" else null
-                },
-                onSelect = { option ->
-                    onSelectGenre(option.value.takeUnless { it == "__default__" })
-                    expandedPicker = null
-                },
-                blockFocus = blockFilterFocus
-            )
-        }
-
-        selectedCatalog?.let { catalog ->
-            val metadataSegments = buildList {
-                add(catalog.addonName)
-                if (uiState.catalogTypeSuffixEnabled) {
-                    localizedTypeLabel(catalog.type)
-                        .takeIf { it.isNotEmpty() }
-                        ?.let(::add)
-                }
-                uiState.selectedDiscoverGenre?.let { add(localizedGenreLabel(it)) }
-            }
-            Text(
-                text = metadataSegments.joinToString(" • "),
-                style = MaterialTheme.typography.bodySmall,
-                color = NuvioTheme.colors.TextSecondary
-            )
-        }
-
-        when {
-            uiState.discoverLoading && uiState.discoverResults.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 28.dp, bottom = 28.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    LoadingIndicator()
-                }
-            }
-
-            uiState.discoverResults.isNotEmpty() -> {
-                Box(modifier = Modifier.onFocusChanged { gridHasFocus = it.hasFocus }) {
-                DiscoverGrid(
-                    items = uiState.discoverResults,
-                    posterCardStyle = posterCardStyle,
-                    watchedMovieIds = watchedMovieIds,
-                    watchedSeriesIds = watchedSeriesIds,
-                    focusResults = focusResults,
-                    firstItemFocusRequester = firstItemFocusRequester,
-                    focusedItemIndex = focusedItemIndex,
-                    shouldRestoreFocusedItem = shouldRestoreFocusedItem,
-                    onRestoreFocusedItemHandled = onRestoreFocusedItemHandled,
-                    onItemFocused = onDiscoverItemFocused,
-                    pendingCount = uiState.pendingDiscoverResults.size,
-                    canLoadMore = uiState.discoverHasMore,
-                    isLoadingMore = uiState.discoverLoadingMore,
-                    onLoadMore = onLoadMore,
-                    onItemClick = { _, item ->
-                        HeroBackdropState.update(item.backdropUrl)
-                        onNavigateToDetail(
-                            item.id,
-                            item.apiType,
-                            selectedCatalog?.addonBaseUrl ?: ""
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            NuvioTheme.colors.Background,
+                            NuvioTheme.colors.Background,
+                            NuvioTheme.colors.Background.copy(alpha = 0.95f),
+                            Color.Transparent
                         )
-                    },
-                    onItemLongPress = { item ->
-                        onItemLongPress(item, selectedCatalog?.addonBaseUrl ?: "")
-                    },
-                    filterKey = "${uiState.selectedDiscoverType}|${uiState.selectedDiscoverCatalogKey}|${uiState.selectedDiscoverGenre}"
+                    )
                 )
+                .zIndex(10f)
+                .padding(
+                    start = NuvioTheme.spacing.xxxl,
+                    end = NuvioTheme.spacing.xxxl,
+                    bottom = NuvioTheme.spacing.md
+                ),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+        ) {
+            Text(
+                text = stringResource(R.string.discover_title),
+                style = MaterialTheme.typography.headlineMedium,
+                color = if (showBuiltInHeader) NuvioTheme.colors.TextPrimary else Color.Transparent
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+            ) {
+                DiscoverDropdownPicker(
+                    modifier = Modifier.weight(1f),
+                    cardModifier = Modifier
+                        .focusRequester(filterFocusRequester)
+                        .onPreviewKeyEvent { keyEvent ->
+                            if (keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown && expandedPicker == null) {
+                                if (openSidebar != null) {
+                                    openSidebar()
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                            false
+                        },
+                    title = stringResource(R.string.discover_filter_type),
+                    value = selectedTypeLabel,
+                    selectedValue = uiState.selectedDiscoverType,
+                    expanded = expandedPicker == "type",
+                    options = availableTypes.map { type ->
+                        val label = localizedTypeLabel(type)
+                        DiscoverOption(label, type)
+                    },
+                    onExpandedChange = { shouldExpand ->
+                        expandedPicker = if (shouldExpand) "type" else null
+                    },
+                    onSelect = { option ->
+                        onSelectType(option.value)
+                        expandedPicker = null
+                    },
+                    blockFocus = blockFilterFocus
+                )
+
+                DiscoverDropdownPicker(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(R.string.discover_filter_catalog),
+                    value = selectedCatalogLabel,
+                    selectedValue = uiState.selectedDiscoverCatalogKey,
+                    expanded = expandedPicker == "catalog",
+                    options = filteredCatalogs.map { DiscoverOption(it.catalogName, it.key) },
+                    onExpandedChange = { shouldExpand ->
+                        expandedPicker = if (shouldExpand) "catalog" else null
+                    },
+                    onSelect = { option ->
+                        onSelectCatalog(option.value)
+                        expandedPicker = null
+                    },
+                    blockFocus = blockFilterFocus
+                )
+
+                DiscoverDropdownPicker(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(R.string.discover_filter_genre),
+                    value = selectedGenreLabel,
+                    selectedValue = uiState.selectedDiscoverGenre ?: "__default__",
+                    expanded = expandedPicker == "genre",
+                    options = buildList {
+                        add(DiscoverOption(stringResource(R.string.discover_genre_default), "__default__"))
+                        addAll(genres.map { DiscoverOption(localizedGenreLabel(it), it) })
+                    },
+                    onExpandedChange = { shouldExpand ->
+                        expandedPicker = if (shouldExpand) "genre" else null
+                    },
+                    onSelect = { option ->
+                        onSelectGenre(option.value.takeUnless { it == "__default__" })
+                        expandedPicker = null
+                    },
+                    blockFocus = blockFilterFocus
+                )
+            }
+
+            selectedCatalog?.let { catalog ->
+                val metadataSegments = buildList {
+                    add(catalog.addonName)
+                    if (uiState.catalogTypeSuffixEnabled) {
+                        localizedTypeLabel(catalog.type)
+                            .takeIf { it.isNotEmpty() }
+                            ?.let(::add)
+                    }
+                    uiState.selectedDiscoverGenre?.let { add(localizedGenreLabel(it)) }
                 }
-            }
-
-            uiState.discoverInitialized && selectedCatalog == null -> {
-                EmptyScreenState(
-                    title = stringResource(R.string.discover_empty_no_catalog_title),
-                    subtitle = stringResource(R.string.discover_empty_no_catalog_subtitle),
-                    icon = Icons.Default.Search
+                Text(
+                    text = metadataSegments.joinToString(" • "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioTheme.colors.TextSecondary
                 )
             }
+        }
 
-            uiState.discoverInitialized && !uiState.discoverLoading && selectedCatalog != null -> {
-                EmptyScreenState(
-                    title = stringResource(R.string.discover_empty_no_content_title),
-                    subtitle = stringResource(R.string.discover_empty_no_content_subtitle),
-                    icon = Icons.Default.Search
-                )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            when {
+                uiState.discoverLoading && uiState.discoverResults.isEmpty() -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 28.dp, bottom = 28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingIndicator()
+                    }
+                }
+
+                uiState.discoverResults.isNotEmpty() -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .onFocusChanged { gridHasFocus = it.hasFocus }
+                    ) {
+                        DiscoverGrid(
+                            items = uiState.discoverResults,
+                            posterCardStyle = posterCardStyle,
+                            watchedMovieIds = watchedMovieIds,
+                            watchedSeriesIds = watchedSeriesIds,
+                            focusResults = focusResults,
+                            firstItemFocusRequester = firstItemFocusRequester,
+                            focusedItemIndex = focusedItemIndex,
+                            shouldRestoreFocusedItem = shouldRestoreFocusedItem,
+                            filterFocusRequester = filterFocusRequester,
+                            onRestoreFocusedItemHandled = onRestoreFocusedItemHandled,
+                            onItemFocused = onDiscoverItemFocused,
+                            pendingCount = uiState.pendingDiscoverResults.size,
+                            canLoadMore = uiState.discoverHasMore,
+                            isLoadingMore = uiState.discoverLoadingMore,
+                            onLoadMore = onLoadMore,
+                            onItemClick = { _, item ->
+                                HeroBackdropState.update(item.backdropUrl)
+                                onNavigateToDetail(
+                                    item.id,
+                                    item.apiType,
+                                    selectedCatalog?.addonBaseUrl ?: ""
+                                )
+                            },
+                            onItemLongPress = { item ->
+                                onItemLongPress(item, selectedCatalog?.addonBaseUrl ?: "")
+                            },
+                            filterKey = "${uiState.selectedDiscoverType}|${uiState.selectedDiscoverCatalogKey}|${uiState.selectedDiscoverGenre}"
+                        )
+                    }
+                }
+
+                uiState.discoverInitialized && selectedCatalog == null -> {
+                    EmptyScreenState(
+                        title = stringResource(R.string.discover_empty_no_catalog_title),
+                        subtitle = stringResource(R.string.discover_empty_no_catalog_subtitle),
+                        icon = Icons.Default.Search
+                    )
+                }
+
+                uiState.discoverInitialized && !uiState.discoverLoading && selectedCatalog != null -> {
+                    EmptyScreenState(
+                        title = stringResource(R.string.discover_empty_no_content_title),
+                        subtitle = stringResource(R.string.discover_empty_no_content_subtitle),
+                        icon = Icons.Default.Search
+                    )
+                }
             }
         }
     }
@@ -513,8 +556,10 @@ internal fun DiscoverGrid(
     onLoadMore: () -> Unit,
     onItemClick: (Int, MetaPreview) -> Unit,
     onItemLongPress: (MetaPreview) -> Unit = {},
-    filterKey: String = ""
+    filterKey: String = "",
+    filterFocusRequester: FocusRequester? = null
 ) {
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     val globalLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
     val numCols = if (globalLandscape) 4 else 6
     val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
@@ -558,6 +603,9 @@ internal fun DiscoverGrid(
             showLabels = true,
             animationsEnabled = NuvioTheme.animationsEnabled,
             paddingValues = PaddingValues(
+                start = NuvioTheme.spacing.xxxl,
+                end = NuvioTheme.spacing.xxxl,
+                top = NuvioTheme.spacing.md,
                 bottom = NuvioTheme.spacing.xxl
             ),
             horizontalSpacing = 10.dp,
@@ -582,6 +630,19 @@ internal fun DiscoverGrid(
             onLoadMore = {
                 if (canLoadMore && !isLoadingMore) {
                     onLoadMore()
+                }
+            },
+            onNavigateUpOnFirstRow = {
+                filterFocusRequester?.let {
+                    runCatching { it.requestFocus() }.isSuccess
+                } ?: false
+            },
+            onNavigateLeftOnFirstColumn = {
+                if (openSidebar != null) {
+                    openSidebar()
+                    true
+                } else {
+                    false
                 }
             }
         )

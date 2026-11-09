@@ -128,6 +128,8 @@ fun CatalogRowSection(
     entryFocusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
     onNavigateLeftOnFirstItem: (() -> Boolean)? = null,
+    onNavigateDown: (() -> Boolean)? = null,
+    onNavigateUp: (() -> Boolean)? = null,
     allowOpenSidebar: Boolean = false,
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
 ) {
@@ -423,9 +425,14 @@ fun CatalogRowSection(
                     latestOnItemLongPress(item, catalogRow.addonBaseUrl)
                 }
             },
+            onNavigateDown = onNavigateDown ?: { false },
             onNavigateUp = {
-                upFocusRequester?.requestFocus()
-                upFocusRequester != null
+                if (onNavigateUp != null) {
+                    onNavigateUp()
+                } else {
+                    upFocusRequester?.requestFocus()
+                    upFocusRequester != null
+                }
             },
             onNavigateLeftOnFirstItem = {
                 if (onNavigateLeftOnFirstItem != null) {

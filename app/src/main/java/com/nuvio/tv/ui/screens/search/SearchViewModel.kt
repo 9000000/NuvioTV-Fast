@@ -441,6 +441,19 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun submitSearch() {
+        val currentQuery = _uiState.value.query.trim()
+        if (currentQuery.length < MIN_SEARCH_QUERY_LENGTH) return
+
+        // If the live search already completed or has valid results for this exact query,
+        // do NOT wipe or refetch. Simply record to history and keep existing results intact.
+        val hasRealResults = _uiState.value.catalogRows.any { row -> row.items.isNotEmpty() }
+        if (activeSearchQuery == currentQuery && hasRealResults) {
+            viewModelScope.launch {
+                searchHistoryDataStore.saveRecentSearch(currentQuery, MAX_RECENT_SEARCHES)
+            }
+            return
+        }
+
         // An explicit submit just skips the remaining debounce; the live run would land anyway.
         liveSearchJob?.cancel()
         performSearch(_uiState.value.query, rememberToHistory = true)

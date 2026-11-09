@@ -70,10 +70,6 @@ abstract class LeanbackBaseViewHolder(
         root.setOnKeyListener { _, keyCode, event ->
             if (event.action == KeyEvent.ACTION_DOWN) {
                 when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_DOWN -> if (adapter.onNavigateDown()) return@setOnKeyListener true
-                    KeyEvent.KEYCODE_DPAD_UP -> if (adapter.onNavigateUp()) return@setOnKeyListener true
-                    KeyEvent.KEYCODE_DPAD_LEFT -> if (adapter.onNavigateLeft()) return@setOnKeyListener true
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> if (adapter.onNavigateRight()) return@setOnKeyListener true
                     KeyEvent.KEYCODE_BACK -> if (adapter.onNavigateBack()) return@setOnKeyListener true
                 }
             }

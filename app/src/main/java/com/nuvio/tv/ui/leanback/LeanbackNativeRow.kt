@@ -106,8 +106,8 @@ fun LeanbackNativeRow(
     }
 
     fun executeRowFocus(grid: InteropHorizontalGridView, targetIdx: Int) {
-        grid.post {
-            if (!grid.isAttachedToWindow) return@post
+        val action = Runnable {
+            if (!grid.isAttachedToWindow) return@Runnable
             if (animationsEnabled) {
                 grid.setSelectedPositionSmooth(targetIdx)
             } else {
@@ -127,6 +127,17 @@ fun LeanbackNativeRow(
                     }
                 }
             }
+        }
+        if (grid.isAttachedToWindow) {
+            grid.post(action)
+        } else {
+            grid.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: android.view.View) {
+                    grid.removeOnAttachStateChangeListener(this)
+                    grid.post(action)
+                }
+                override fun onViewDetachedFromWindow(v: android.view.View) {}
+            })
         }
     }
 

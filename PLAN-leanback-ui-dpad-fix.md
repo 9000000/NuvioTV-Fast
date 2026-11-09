@@ -164,8 +164,12 @@ Sau khi nâng cấp toàn bộ hệ thống hiển thị sang chuẩn **Android 
   - Chọn tập phim đầu tiên (EP 1) -> Nhấn D-Pad Trái -> Xác nhận: **Không mở Sidebar**, focus giữ nguyên ở EP 1.
   - Chọn diễn viên đầu tiên -> Nhấn D-Pad Trái -> Xác nhận: **Không mở Sidebar**.
   - Kiểm tra viền focus avatar diễn viên: Hình tròn `OVAL` hoàn hảo, không có góc chữ nhật.
-- [ ] **Màn hình Tìm Kiếm & Khám Phá (Discover)**:
-  - Chọn thẻ đầu tiên cột 0 trong lưới Discover -> Nhấn D-Pad Trái -> Xác nhận: **Không mở Sidebar**.
+- [x] **Màn hình Tìm Kiếm & Khám Phá (Discover)**:
+  - Chọn thẻ ở cột 0 trong lưới Discover -> Nhấn D-Pad Trái -> Xác nhận: **Trỏ ngay vào thanh điều hướng (Sidebar)** khi Sidebar khả dụng; nếu không có Sidebar thì giữ nguyên focus ở cột 0, tuyệt đối không nhảy lên danh mục.
+  - Chọn thẻ ở cột > 0 (cột 1, 2, 3...) -> Nhấn D-Pad Trái -> Xác nhận: **Di chuyển sang thẻ bên trái trong cùng hàng**, tuyệt đối không trỏ lên danh mục.
+  - Chọn thẻ ở hàng đầu tiên (row 0) -> Nhấn D-Pad Lên -> Xác nhận: **Trỏ vào danh mục (bộ lọc phía trên)**.
+  - Chọn thẻ ở các hàng bên dưới (row 1, 2, 3...) -> Nhấn D-Pad Lên -> Xác nhận: **Di chuyển lên hàng trên trong lưới**, tuyệt đối không nhảy cóc lên danh mục.
+  - Cuộn dọc danh sách phim xuống các hàng dưới -> Xác nhận: **Thanh chứa danh mục (Tiêu đề + 3 Dropdown Pickers) luôn cố định ở đỉnh màn hình**, các thẻ phim cuộn mượt mà phía dưới mà không đè hay che khuất danh mục.
 - [ ] **Màn hình Thư mục (Folder Detail)**:
   - Chọn thẻ bất kỳ ở cột 0 -> Nhấn D-Pad Trái -> Xác nhận: **Không mở Sidebar**.
 - [ ] **Chất lượng Viền Sáng (Glow & Focus Ring)**:

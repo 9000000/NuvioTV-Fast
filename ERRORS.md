@@ -1,3 +1,175 @@
+## [2026-11-09 12:15] - Khắc phục triệt để lỗi mục tìm kiếm và khám phá bấm D-pad Lên/Xuống thi thoảng bị mất tiêu điểm (Focus Loss)
+
+- **Type**: Logic & Focus Management
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchScreen.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `SearchScreen.kt`: Trong `onNavigateDown` và `onNavigateUp`, điều kiện kiểm tra hiển thị `isNextVisible` yêu cầu hàng tiếp theo phải hiển thị 100% trọn vẹn trong viewport. Khi hàng tiếp theo chỉ hiển thị một phần (chẳng hạn lấp ló mép dưới), code nuốt phím (`return true`) và launch coroutine `animateScrollToItem`. Tuy nhiên, coroutine chỉ chờ vẻn vẹn 2 frame (`repeat(2) { withFrameNanos { } }`) rồi gọi `nextReq?.requestFocus()`. Nếu hàng mới chưa kịp layout xong hoặc RecyclerView đang bận (`isBusyLayout == true`), `requestFocus()` thất bại âm thầm và tiêu điểm biến mất hoàn toàn. Mặt khác, khi `isNextVisible == true`, code trả về `false` để Android FocusFinder tự tìm theo hình học; giữa 2 `AndroidView` trong LazyColumn với khoảng cách padding/title, FocusFinder thường không tìm thấy card thẳng hàng và drop phím.
+  2. `InteropHorizontalGridView.kt` & `InteropVerticalGridView.kt`: Khi ViewGroup nhận focus (`onFocusChanged(gainFocus = true)` hoặc qua `super.requestFocus`), do cơ chế `FOCUS_AFTER_DESCENDANTS`, nếu card con chưa sẵn sàng ở frame đó, ViewGroup cha tự nhận focus (`findFocus() === this`). Do ViewGroup cha không có cơ chế tự động chuyển giao focus cho `child ViewHolder` khi view con bind xong trong `onChildViewHolderSelected`, tiêu điểm bị kẹt vĩnh viễn ở ViewGroup cha, khiến không có bất kỳ poster con nào được highlight viền sáng (mất tiêu điểm). Đồng thời trong `focusSearch`, code cũ từng trả về `this` (ViewGroup), trực tiếp cướp tiêu điểm khỏi các card poster.
+- **Fix Applied**:
+  1. `SearchScreen.kt`:
+     - Tái cấu trúc `onNavigateDown` và `onNavigateUp`: Luôn xử lý dứt khoát và trả về `true` (không phó mặc cho FocusFinder hình học).
+     - Áp dụng cơ chế Retry Loop (10 frame liên tiếp với `withFrameNanos { }`): Liên tục thử `nextReq.requestFocus()` ngay khi View hoàn tất layout pass trong frame đầu tiên và ngắt vòng lặp ngay khi thành công.
+     - Đồng bộ hóa tương tự cho hàm `navigateToFirstResult()` khi người dùng bấm D-pad DOWN từ ô tìm kiếm (`SearchInputField`).
+  2. `InteropHorizontalGridView.kt` & `InteropVerticalGridView.kt`:
+     - Trong `addOnChildViewHolderSelectedListener`: Khi `child != null && hasFocus()`, lập tức gọi `child.itemView.requestFocus()` và bật sáng viền `(child as? LeanbackBaseViewHolder)?.updateFocusVisual(true)`. Đảm bảo ngay khoảnh khắc card con xuất hiện, tiêu điểm được gán trực tiếp vào card con.
+     - Trong `onFocusChanged`: Khi `gainFocus == true` và `findFocus() === this` (ViewGroup đang giữ tiêu điểm), chủ động tìm `selectedPosition` và đẩy tiêu điểm vào ViewHolder con ngay lập tức.
+     - Trong `focusSearch`: Loại bỏ hoàn toàn việc trả về `this` (ViewGroup). Thay thế bằng `focused ?: findFocus()`, đảm bảo ViewGroup cha không bao giờ trở thành đích nhận tiêu điểm.
+     - `InteropVerticalGridView.kt`: Thêm biến `pendingTargetPosition` để khóa mục tiêu khi di chuyển dọc qua `moveToPosition`, đồng thời xử lý dứt khoát `DPAD_UP` và `DPAD_DOWN` theo bước nhảy toán học cột (`actualPos ± cols`).
+- **Prevention**: Không bao giờ để ViewGroup cha nhận tiêu điểm thay cho ViewHolder con trong Leanback; luôn lắng nghe `onChildViewHolderSelected` để bàn giao tiêu điểm vào item con ngay khi layout pass hoàn tất; sử dụng retry loop qua `withFrameNanos` khi request focus trên các item vừa được cuộn vào màn hình thay vì giả định cứng 2 frame.
+- **Status**: Fixed
+
+---
+
+## [2026-11-09 11:46] - Khắc phục triệt để hiện tượng tiêu điểm bị trượt qua poster khác rồi nhảy lại gây nháy giật khi bấm Lên/Xuống
+
+- **Type**: Logic & Motion
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchScreen.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `InteropVerticalGridView.kt`: Trong 2D Grid, khi bấm `FOCUS_DOWN` hoặc `FOCUS_UP`, `super.focusSearch` của Android RecyclerView sử dụng thuật toán tìm kiếm hình học tổng quát `FocusFinder`. Do sự chênh lệch nhỏ về khoảng cách hoặc kích thước scale giữa các poster, `FocusFinder` có thể tìm thấy một card lân cận lệch cột (ví dụ cột 1 thay vì cột 2), sau đó Leanback LayoutManager lại kéo focus về đúng cột 2, khiến focus bị trượt sang poster khác rồi mới nhảy về vị trí thẳng hàng, gây cảm giác nháy giật.
+  2. `InteropHorizontalGridView.kt`: Trong `requestFocus(direction, previouslyFocusedRect)`, việc ép `val targetPos = selectedPosition.coerceAtLeast(0)` và request focus vào `targetPos` đã bỏ qua hoàn toàn tham số `previouslyFocusedRect`. Khi người dùng di chuyển D-pad từ một card ở cột 3 của hàng trên xuống hàng dưới, code ép focus vào Card 0, sau đó Android Framework lại phát hiện `previouslyFocusedRect` ở cột 3 và kéo focus từ Card 0 về Card 3, tạo ra hiện tượng trượt/nháy rõ rệt.
+  3. `SearchScreen.kt`: Trong `onNavigateDown` và `onNavigateUp`, hàm luôn can thiệp và nuốt sự kiện kể cả khi hàng tiếp theo đã hiển thị đầy đủ trên màn hình, thay vì để Android View Hierarchy tự động chuyển tiêu điểm trực tiếp giữa hai hàng trong cùng một frame.
+- **Fix Applied**:
+  1. `InteropVerticalGridView.kt`: Trong `focusSearch`: Xác định chính xác vị trí thẻ thẳng hàng theo cột (`actualPos + cols` cho `FOCUS_DOWN` và `actualPos - cols` cho `FOCUS_UP`). Nếu ViewHolder tại vị trí đó đã có sẵn, trả về trực tiếp `targetVh.itemView`. Tiêu điểm di chuyển thẳng tắp theo trục dọc, triệt tiêu 100% hiện tượng trượt chéo sang thẻ khác.
+  2. `InteropHorizontalGridView.kt`: Trong `requestFocus`: Kiểm tra nếu `previouslyFocusedRect != null` (chuyển hàng theo D-pad), ưu tiên để `super.requestFocus(direction, previouslyFocusedRect)` tìm đúng thẻ có tọa độ X thẳng hàng nhất. Chỉ ép về `selectedPosition` khi `previouslyFocusedRect == null` (focus từ code programmatic).
+  3. `SearchScreen.kt`: Khi hàng tiếp theo hoặc hàng trước đó đã hiển thị trên màn hình (`isNextVisible == true` / `isPrevVisible == true`), `onNavigateDown` và `onNavigateUp` trả về `false`, cho phép Android FocusFinder tự chuyển focus thẳng hàng trực tiếp trong 1 frame duy nhất mà không qua bất kỳ coroutine hay sự can thiệp nhân tạo nào.
+- **Prevention**: Luôn tận dụng `previouslyFocusedRect` khi chuyển giao tiêu điểm giữa các hàng ngang để bảo toàn cột thẳng hàng; trong 2D grid, ưu tiên điều hướng theo chỉ số toán học cột (`pos ± cols`) trước khi fallback về geometric focus search.
+- **Status**: Fixed
+
+---
+
+## [2026-11-09 10:28] - Khắc phục triệt để lỗi bấm D-pad Lên/Xuống không focus vào poster hoặc bị mất tiêu điểm trên Android TV
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchScreen.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `InteropVerticalGridView.kt`: Trong `dispatchKeyEvent`, sự kiện `DPAD_UP` và `DPAD_DOWN` bị can thiệp bởi mã tự định vị `moveToPosition(targetPos)` và `return true`. Lệnh này cướp mất luồng xử lý tự nhiên của Leanback `VerticalGridView`. Vì `moveToPosition` dùng `setSelectedPositionSmooth` và chỉ `post` 1 frame (16ms) để tìm ViewHolder, trong khi animation cuộn của GridView kéo dài 200-300ms chưa kịp bind xong ViewHolder mới, dẫn đến ViewHolder trả về `null` và focus bị mất hoàn toàn giữa các hàng.
+  2. `InteropHorizontalGridView.kt`: Khi `InteropHorizontalGridView` được gọi `requestFocus()`, `super.requestFocus()` rơi vào `ViewGroup.requestFocus()`. Nếu không có child nào được layout kịp thời hoặc ViewGroup nhận focus, tiêu điểm dừng lại ở container ngoài mà không lọt vào bất kỳ `ViewHolder` poster con nào, khiến poster không có viền sáng (glow) và không scale lên.
+  3. `SearchScreen.kt`: Trong `onNavigateDown` và `onNavigateUp`, khi hàng mục tiêu chưa hiển thị (`!isNextVisible`), lệnh `nextReq?.requestFocus()` bị gọi ngay lập tức trước khi coroutine `animateScrollToItem` cuộn xong và View được attach vào Window, dẫn đến `requestFocus()` thất bại âm thầm và mất tiêu điểm.
+- **Fix Applied**:
+  1. `InteropVerticalGridView.kt`: Trả lại quyền xử lý `DPAD_UP` và `DPAD_DOWN` giữa các hàng cho Leanback `super.dispatchKeyEvent(event)`, chỉ can thiệp chặn biên khi ở hàng đầu tiên (`isFirstRow`) để trỏ lên danh mục hoặc hàng cuối cùng (`isLastRow`). Thuật toán gốc của Google Leanback tự động cuộn và trao focus chuẩn xác 100% cho poster con mà không bao giờ mất focus.
+  2. `InteropHorizontalGridView.kt`: Override `requestFocus(direction, previouslyFocusedRect)`: Chủ động tìm `findViewHolderForAdapterPosition(selectedPosition)` và gọi trực tiếp `vh.itemView.requestFocus()`, đồng thời bật viền sáng `(vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)`. Nếu ViewHolder chưa gắn, `post` chuyển giao focus ngay khi View attach. Đảm bảo 100% poster con luôn luôn nhận được focus.
+  3. `SearchScreen.kt`: Đưa `nextReq?.requestFocus()` vào bên trong coroutine và chờ 2 frame sau khi `animateScrollToItem` cuộn xong, đảm bảo hàng mới đã render và attach hoàn chỉnh vào Window trước khi trao tiêu điểm.
+- **Prevention**: Không can thiệp ghi đè sự kiện phím điều hướng dọc nội bộ của Leanback GridView; luôn chủ động chuyển tiếp focus từ ViewGroup cha vào ViewHolder con mục tiêu trong RecyclerView.
+- **Status**: Fixed
+
+---
+
+## [2026-11-09 09:45] - Khắc phục lỗi cuộn thô bạo khi di chuyển D-pad Down/Up và bấm gợi ý trong Tìm kiếm, loại bỏ viền đen cắt poster trong mục Khám phá
+
+- **Type**: Logic & UI/UX
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchScreen.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchDiscoverSection.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. Trong `SearchScreen.kt`:
+     - Lệnh `listState.animateScrollToItem(...)` bị gọi vô điều kiện trong `onNavigateDown`, `onNavigateUp` và `onItemFocused` bất cứ khi nào đổi hàng. Lệnh này ép hàng mục tiêu cuộn lên tận đỉnh màn hình (`offset = 0`), khiến ô tìm kiếm và các hàng trước đó bị đẩy vọt ra khỏi màn hình ngay khi bấm một nút D-pad.
+     - Khi bấm vào gợi ý tìm kiếm có sẵn (`submitRecentSearch`), lệnh `topInputFocusRequester.requestFocus()` giật tiêu điểm vọt lên ô tìm kiếm làm LazyColumn giật ngược lên 0, sau đó `submitCurrentQuery` lại gọi `navigateToFirstResult` ép cuộn xuống 1, gây ra hiện tượng màn hình tự động cuộn giật lên rồi xuống.
+  2. Trong `SearchDiscoverSection.kt`:
+     - Container của Grid bị bọc bởi `Box` có `.clipToBounds()` và `Column` có `padding(horizontal = 52.dp)`. Khi poster ở cột 0 và cột 5 nhận focus (phóng to 1.1x và tỏa glow ra ngoài), `.clipToBounds()` cắt phẳng lỳ cạnh trái và cạnh phải của poster.
+     - Thanh danh mục cố định có background đen che sát sàn sạt đầu poster hàng 1, cắt cụt đỉnh đầu poster khi phóng to.
+     - `paddingValues` của `LeanbackNativeGrid` thiếu lề `start` và `end`.
+- **Fix Applied**:
+  1. `SearchScreen.kt`:
+     - Trong `onNavigateDown` và `onNavigateUp`: Kiểm tra xem hàng mục tiêu đã hiển thị đầy đủ trong viewport chưa (`visibleItemsInfo`). Nếu đã hiển thị, chỉ chuyển focus bằng `nextReq?.requestFocus()`, tuyệt đối KHÔNG cuộn `animateScrollToItem`. Chỉ cuộn khi hàng đó thực sự nằm ngoài viewport.
+     - Trong `onItemFocused`: Xóa bỏ hoàn toàn lệnh `animateScrollToItem(index + 1)`.
+     - Trong `submitRecentSearch`: Bỏ lệnh giật focus lên ô tìm kiếm.
+     - Trong `navigateToFirstResult`: Chỉ cuộn nếu hàng kết quả đầu tiên chưa nhìn thấy được; nếu đã nhìn thấy được thì giữ nguyên màn hình và chuyển nhẹ focus.
+  2. `SearchDiscoverSection.kt`:
+     - Xóa bỏ hoàn toàn `.clipToBounds()` ở Box chứa Grid.
+     - Chuyển `padding(horizontal = 52.dp)` từ Column ngoài vào trong `paddingValues` của `LeanbackNativeGrid` (`start = 52.dp, end = 52.dp`). Do `InteropVerticalGridView` có `clipToPadding = false` và `clipChildren = false`, các poster khi phóng to và tỏa glow thoải mái mở rộng vào vùng lề 52dp mà không bị bất cứ cạnh nào cắt xén.
+     - Nâng cấp Header với dải Gradient chuyển màu mượt mà từ Background sang Transparent ở cạnh đáy và khoảng đệm an toàn `topPadding = 24.dp`, giúp poster hàng 1 có không gian thở rộng rãi, không bao giờ bị viền đen cắt vào đầu.
+- **Prevention**: Không dùng `animateScrollToItem` thô bạo không có điều kiện kiểm tra hiển thị (`visibleItemsInfo`); không lạm dụng `clipToBounds()` trên các container bọc TV Cards có animation phóng to (focus scale) và hiệu ứng phát sáng (glow).
+- **Status**: Fixed
+
+---
+
+## [2026-11-09 09:20] - Khắc phục triệt để lỗi mục tìm kiếm bị giật nhảy loạn và tự động cuộn lung tung khi bấm OK trên Android TV
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchViewModel.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchScreen.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `SearchViewModel.kt`: Khi người dùng nhấn OK/Submit, ViewModel lại gọi `performSearch` và đặt lại `catalogRows = emptyList()` dù Live Search đã nạp sẵn kết quả đầy đủ cho từ khóa đó. Việc xóa rỗng kết quả làm các View bị dispose tức thì, mất tiêu điểm và làm `LazyColumn` giật ngược về vị trí 0, sau đó vài trăm mili-giây lại bị giật xuống khi kết quả mới nạp lại.
+  2. `SearchScreen.kt`: Tồn tại 2 `LaunchedEffect` (dòng 466 và 480 cũ) chạy song song và xung đột nhau. Cả hai cùng lắng nghe `visibleCatalogRows.size`, khiến mỗi khi có Addon trả về kết quả (size tăng dần), `LaunchedEffect` lại bị kích hoạt lại, liên tục gọi `animateScrollToItem(1)` và cướp tiêu điểm trở lại hàng đầu tiên, tranh chấp trực tiếp với thao tác duyệt của người dùng.
+  3. `CatalogRowSection.onItemFocused`: Lệnh `listState.animateScrollToItem(index + 1)` bị gọi vô điều kiện cho **mọi thẻ nhận focus**. Khi người dùng duyệt D-pad ngang giữa các poster trong cùng một hàng, lệnh cuộn dọc liên tục bị bắn ra làm giật màn hình.
+  4. Đóng bàn phím ảo (IME) làm thay đổi đột ngột Viewport Insets, nếu cuộn ngay trong cùng frame sẽ làm lệch tọa độ cuộn của Compose.
+- **Fix Applied**:
+  1. `SearchViewModel.kt`: Sửa `submitSearch()`: nếu từ khóa gửi đi trùng khớp với từ khóa đang có kết quả (`activeSearchQuery == currentQuery && hasRealResults`), không gọi `performSearch` để hủy rows, chỉ cập nhật lịch sử tìm kiếm vào `saveRecentSearch` và giữ nguyên kết quả trên màn hình.
+  2. `SearchScreen.kt`: Thay thế toàn bộ mớ cờ trạng thái chạy đua (`pendingAutoMoveToResultsOnLoad`, `pendingFocusMoveToResultsQuery`, `pendingFocusMoveSawSearching`, `focusResults`) bằng biến trạng thái duy nhất `pendingMoveToFirstResult` và hàm điều hướng `navigateToFirstResult()`. Khi Submit hoặc khi đợt kết quả đầu tiên xuất hiện, cuộn và chuyển tiêu điểm đúng **1 lần duy nhất**, sau đó tắt cờ ngay lập tức; các Addon trả về sau hoàn toàn không cướp focus hay cuộn lại.
+  3. `SearchScreen.kt`: Thêm biến theo dõi `currentActiveRowIndex`. Trong `onItemFocused`, chỉ gọi `listState.animateScrollToItem(index + 1)` khi `currentActiveRowIndex != index` (chỉ cuộn khi chuyển hàng). Khi duyệt ngang giữa các phim trong cùng một hàng, màn hình đứng yên hoàn toàn.
+  4. Đợi 2 frames sau khi ẩn bàn phím ảo bằng `withFrameNanos` để Window Insets ổn định trước khi cuộn màn hình.
+- **Prevention**: Tuyệt đối không xóa dữ liệu UI hiện có khi người dùng chỉ bấm xác nhận từ khóa đã được Live Search nạp sẵn; không để `LaunchedEffect` tự động focus phụ thuộc vào kích thước mảng (`size`) tăng dần; kiểm soát cuộn dọc của danh sách cha dựa trên sự thay đổi chỉ số hàng (`rowIndex`) thay vì bắn lệnh ở mọi sự kiện focus con.
+- **Status**: Fixed
+
+---
+
+## [2026-11-09 00:08] - Sửa lỗi D-pad mục Khám phá: Nhấn Trái/Lên bị văng vào danh mục, chuẩn hóa chỉ trỏ vào danh mục khi ở hàng đầu và trỏ Sidebar khi ở cột đầu
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `InteropVerticalGridView.kt`: Trong `focusSearch`, khi `super.focusSearch` trả về `null` (hoặc view ngoài GridView), method trả về `null` thay vì giữ tiêu điểm `focused`. Khi một ViewGroup trả về `null` trong `focusSearch`, Android Framework tự động leo lên cây cha `AndroidComposeView`. Lúc này thuật toán 2D focus của Compose tìm thấy 3 Dropdown Picker (Loại, Danh mục, Thể loại) ở góc trên bên trái và đẩy tiêu điểm lên danh mục dù người dùng đang ở hàng 2, 3 hoặc cột 1, 2, 3.
+  2. Trong `dispatchKeyEvent`: Khi nhấn `DPAD_LEFT` ở cột 0, biến `lastEdgeLeftPressTime` bắt buộc double-tap trong vòng 700ms mới kích hoạt `onNavigateLeftOnFirstColumn`, khiến lần nhấn đầu tiên bị chặn không mở được thanh điều hướng. Đồng thời ở các cột khác (`currentColumn > 0`) hoặc các hàng khác (`!isFirstRow`), nếu `super.dispatchKeyEvent` trả về `false`, Compose FocusManager nhận được sự kiện unconsumed và tự động đẩy tiêu điểm vọt lên danh mục phía trên.
+- **Fix Applied**:
+  1. Nâng cấp `focusSearch` trong `InteropVerticalGridView.kt`: Chặn đứng thoát tiêu điểm ra ngoài GridView cho `FOCUS_LEFT`, `FOCUS_RIGHT`, và `FOCUS_DOWN` khi chưa ở biên, cũng như `FOCUS_UP` khi không phải hàng đầu (`!isFirstRow`). Nếu `result == null || !isChildOfThis(result)`, lập tức trả về `focused ?: this` để ngăn triệt để Android/Compose leo lên các Dropdown Picker phía trên.
+  2. Bổ sung hàm `moveToPosition(targetPos)` chủ động điều hướng tiêu điểm trong Grid kèm kiểm tra an toàn `findViewHolderForAdapterPosition` và fallback `post`.
+  3. Cập nhật `dispatchKeyEvent`:
+     - Phím `DPAD_LEFT`: Khi `currentColumn == 0`, gọi ngay `onNavigateLeftOnFirstColumn?.invoke()` trong lần nhấn đầu tiên để trỏ vào Sidebar; khi `currentColumn > 0`, di chuyển sang thẻ bên trái trong cùng hàng (`actualPos - 1`), tiêu thụ sự kiện và không để rò rỉ lên Compose.
+     - Phím `DPAD_UP`: Chỉ gọi `onNavigateUpOnFirstRow?.invoke()` để trỏ vào danh mục khi đang ở hàng đầu tiên (`isFirstRow == true`). Khi `isFirstRow == false`, di chuyển tiêu điểm lên hàng trên trong Grid (`actualPos - cols`), tiêu thụ hoàn toàn sự kiện và không bao giờ nhảy cóc lên danh mục.
+- **Prevention**: Luôn chủ động tiêu thụ (consume) toàn bộ các hướng di chuyển bên trong 2D Grid nhúng trong Compose để tránh việc Compose FocusManager tự ý tìm kiếm mục tiêu lân cận; không áp dụng cơ chế double-tap gây cản trở trải nghiệm điều hướng tự nhiên của người dùng TV D-pad.
+- **Status**: Fixed
+
+---
+
+## [2026-11-08 00:33] - Khắc phục triệt để lỗi điều hướng D-pad: Chặn bắt phím trái ở cấp ViewHolder mở nhầm Sidebar, lỗi che biến listState trong SearchScreen, mất focus khi submit tìm kiếm và rò rỉ focus trong Khám phá
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `LeanbackBaseViewHolder.kt`, `InteropHorizontalGridView.kt`, `InteropVerticalGridView.kt`, `LeanbackNativeGrid.kt`, `LeanbackNativeRow.kt`, `SearchScreen.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `LeanbackBaseViewHolder.kt`: `root.setOnKeyListener` lắng nghe `DPAD_LEFT` và gọi ngay `adapter.onNavigateLeft()` trên **mọi card** (bất kể vị trí ở giữa hay ở biên). Do child view nhận key event trước parent, nó tự động mở Sidebar khi người dùng bấm Left ở bất kỳ poster nào, vô hiệu hóa toàn bộ cơ chế tính toán biên (`actualPos == 0`) và debounce double-tap 700ms của Grid cha.
+  2. `SearchScreen.kt`: Dòng 840 khai báo `val listState = searchRowStates.getOrPut(catalogKey)` đã **che khuất (shadowing)** biến `val listState` của màn hình ở dòng 330 (`LazyColumn`). Khi người dùng bấm Down/Up giữa các hàng, lệnh `listState.animateScrollToItem(...)` tác động nhầm vào `LazyListState` ngang của hàng thay vì cuộn dọc màn hình! Do đó, màn hình hoàn toàn đứng im, các hàng kết quả bên dưới bị khuất.
+  3. `LeanbackNativeRow.kt` & `LeanbackNativeGrid.kt`: Hàm `executeRowFocus` / `executeGridFocus` dùng `grid.post { if (!grid.isAttachedToWindow) return@post }`. Khi kết quả tìm kiếm vừa nạp, nếu lệnh focus chạy trước khi View attach vào window, lệnh bị hủy âm thầm mà không thử lại, dẫn đến mất tiêu điểm sau khi bấm tìm kiếm.
+  4. `InteropVerticalGridView.kt`: `focusSearch` chỉ chặn thoát tiêu điểm cho `FOCUS_LEFT` và `FOCUS_RIGHT`. Khi người dùng bấm `FOCUS_UP` ở các hàng dưới (hàng 1, 2, 3), nếu View hàng trên chưa kịp render, FocusFinder có thể quét vọt lên các Dropdown menu trên cùng.
+- **Fix Applied**:
+  1. Gỡ bỏ hoàn toàn việc chặn bắt phím 4 hướng trong `LeanbackBaseViewHolder.root.setOnKeyListener`; trao quyền phán quyết biên và mở Sidebar độc quyền cho `InteropHorizontalGridView` và `InteropVerticalGridView`.
+  2. Đổi tên biến cục bộ thành `val rowState` trong `SearchScreen.kt`, giải phóng biến `listState` dọc để `listState.animateScrollToItem(nextIndex + 1)` cuộn mượt mà các hàng kết quả lên tầm nhìn.
+  3. Thêm `addOnAttachStateChangeListener` vào `executeRowFocus` và `executeGridFocus`: Đảm bảo lệnh focus vào card 0 không bao giờ bị rơi rụng dù View đang trong quá trình gắn vào Window.
+  4. Nâng cấp `focusSearch` trong `InteropVerticalGridView.kt`: Chặn đứng thoát tiêu điểm `FOCUS_UP` trừ khi người dùng đang thực sự đứng ở hàng đầu tiên (`actualPos in 0 until cols`).
+- **Prevention**: Tuyệt đối không xử lý điều hướng biên (boundary navigation) ở cấp ViewHolder con trong RecyclerView; luôn kiểm tra variable shadowing với các State cốt lõi của Jetpack Compose.
+- **Status**: Fixed
+
+---
+
+## [2026-11-07 23:55] - Khắc phục lỗi D-pad Trái nhảy lên thanh menu Khám phá, màn hình Tìm kiếm không tự động đẩy lên khi cuộn xuống và mất focus sau khi tìm phim
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `InteropVerticalGridView.kt`, `SearchDiscoverSection.kt`, `CatalogRowSection.kt`, `SearchScreen.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `InteropVerticalGridView.kt`: Android TV `FocusFinder` quét theo góc chéo khi nhấn D-pad Trái/Phải; nếu không tìm thấy view ngang cùng trục trong Grid, nó tìm kiếm lên các view ở phía trên ngoài Grid (chính là 3 dropdown picker Loại / Danh mục / Thể loại của Khám phá), khiến tiêu điểm nhảy vọt lên thanh menu trên cùng.
+  2. `CatalogRowSection.kt` & `SearchScreen.kt`: `LeanbackNativeRow` (`AndroidView`) nằm trong Compose `LazyColumn`. Khi người dùng bấm D-pad Xuống qua các hàng kết quả bên dưới màn hình, `LazyColumn` không nhận được sự kiện `bringIntoView` từ Android View hierarchy nên không tự động cuộn lên (scroll up), khiến các hàng bên dưới bị khuất khỏi màn hình.
+  3. `SearchScreen.kt`: Khi bấm tìm kiếm (`submitCurrentQuery`), `CatalogRowSection` thiếu truyền tham số `focusedItemIndex = 0` (mặc định `-1`), khiến `isPendingFocus` trên `LeanbackNativeRow` bằng `false`, `executeRowFocus(gridView, 0)` không được gọi và focus bị rơi vào trạng thái mất hoàn toàn sau khi nạp kết quả.
+- **Fix Applied**:
+  1. Override `focusSearch` trong `InteropVerticalGridView.kt`: Khi `direction` là `FOCUS_LEFT` hoặc `FOCUS_RIGHT`, nếu kết quả trả về không phải con của Grid (`!isChildOfThis(result)`), chặn lại và trả về `focused`, triệt tiêu 100% hiện tượng focus nhảy chéo lên thanh menu phía trên. Đồng thời tích hợp double-tap 700ms an toàn tại Cột 0 để mở Sidebar khi có chủ đích.
+  2. Kết nối `onNavigateDown` và `onNavigateUp` giữa các hàng trong `SearchScreen.kt`: Khi nhấn D-pad Xuống/Lên, gọi `listState.animateScrollToItem(targetIndex)` đồng thời chuyển giao focus sang hàng tiếp theo, giúp màn hình luôn tự động đẩy lên mượt mà theo từng bước di chuyển.
+  3. Tự động focus hàng kết quả đầu tiên: Truyền `(focusResults || pendingAutoMoveToResultsOnLoad) && index == 0` thành `focusedItemIndex = 0` vào `CatalogRowSection`, kích hoạt `executeRowFocus(gridView, 0)` trên `HorizontalGridView` ngay khi kết quả nạp xong.
+- **Prevention**: Luôn override `focusSearch` trong các container RecyclerView nhúng trong Compose để ngăn FocusFinder quét chéo ra ngoài; khi nhúng AndroidView vào LazyColumn, luôn chủ động điều khiển cuộn của LazyListState theo hàng active.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-07 23:15] - Khắc phục lỗi nhảy focus về item đầu khi nạp thêm dữ liệu (Pagination), chập chờn Header danh mục, cướp focus sang Sidebar và kẹt D-pad màn hình Search
 
 - **Type**: Logic

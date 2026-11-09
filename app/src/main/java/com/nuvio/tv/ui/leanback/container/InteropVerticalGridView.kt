@@ -11,6 +11,7 @@ import androidx.leanback.widget.OnChildViewHolderSelectedListener
 import androidx.leanback.widget.VerticalGridView
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
+import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 
 /**
  * Android Leanback VerticalGridView customized for 2D TV Grids in Jetpack Compose.
@@ -32,6 +33,8 @@ class InteropVerticalGridView @JvmOverloads constructor(
 
     var isHoldingVerticalKey: Boolean = false
         private set
+
+    private var pendingTargetPosition: Int = RecyclerView.NO_POSITION
 
     private val universalAdapter: LeanbackUniversalAdapter?
         get() = adapter as? LeanbackUniversalAdapter
@@ -59,6 +62,16 @@ class InteropVerticalGridView @JvmOverloads constructor(
                 position: Int,
                 subposition: Int
             ) {
+                if (child != null) {
+                    if (pendingTargetPosition == position || hasFocus()) {
+                        child.itemView.requestFocus()
+                        (child as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                        if (pendingTargetPosition == position) {
+                            pendingTargetPosition = RecyclerView.NO_POSITION
+                        }
+                    }
+                }
+
                 val totalCount = universalAdapter?.itemCount ?: 0
                 if (position >= totalCount - (numColumnsCount * 2) && totalCount > 0) {
                     post {
@@ -79,7 +92,41 @@ class InteropVerticalGridView @JvmOverloads constructor(
             post { requestFocus(direction, previouslyFocusedRect) }
             return false
         }
-        return super.requestFocus(direction, previouslyFocusedRect)
+        if (previouslyFocusedRect != null) {
+            val result = super.requestFocus(direction, previouslyFocusedRect)
+            if (result) {
+                val focusedChild = findFocus()
+                if (focusedChild !== this) {
+                    val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
+                    (holder as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                    return true
+                }
+            }
+        }
+        val targetPos = selectedPosition.coerceAtLeast(0)
+        val vh = findViewHolderForAdapterPosition(targetPos)
+        if (vh != null) {
+            val focused = vh.itemView.requestFocus(direction, previouslyFocusedRect)
+            if (focused) {
+                (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                return true
+            }
+        }
+        val result = super.requestFocus(direction, previouslyFocusedRect)
+        if (result) {
+            val focusedChild = findFocus()
+            if (focusedChild !== this) {
+                val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
+                (holder as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+            } else {
+                val deferredVh = findViewHolderForAdapterPosition(targetPos)
+                if (deferredVh != null) {
+                    deferredVh.itemView.requestFocus()
+                    (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                }
+            }
+        }
+        return result
     }
 
     override fun requestChildFocus(child: View?, focused: View?) {
@@ -94,7 +141,84 @@ class InteropVerticalGridView @JvmOverloads constructor(
         if (isBusyLayout) {
             return null
         }
-        return super.focusSearch(focused, direction)
+        val currentFocused = focused ?: findFocus()
+        val holder = if (currentFocused != null) findContainingViewHolder(currentFocused) else null
+        val actualPos = holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
+            ?: selectedPosition
+        val cols = numColumnsCount.coerceAtLeast(1)
+        val isFirstRow = actualPos in 0 until cols
+        val totalItems = universalAdapter?.itemCount ?: 0
+        val isLastRow = actualPos >= 0 && actualPos >= (totalItems - cols)
+
+        val result = super.focusSearch(focused, direction)
+
+        when (direction) {
+            View.FOCUS_LEFT, View.FOCUS_RIGHT -> {
+                // Focus inside grid must NEVER escape to outside views (e.g. category dropdowns)
+                if (result == null || !isChildOfThis(result)) {
+                    return focused ?: findFocus()
+                }
+            }
+            View.FOCUS_UP -> {
+                // Only allow escaping to category / filters when focus is on the first row
+                if (!isFirstRow) {
+                    val targetPos = actualPos - cols
+                    if (targetPos >= 0) {
+                        val targetVh = findViewHolderForAdapterPosition(targetPos)
+                        if (targetVh != null) {
+                            return targetVh.itemView
+                        }
+                    }
+                    if (result == null || !isChildOfThis(result)) {
+                        return focused ?: findFocus()
+                    }
+                }
+            }
+            View.FOCUS_DOWN -> {
+                if (!isLastRow) {
+                    val targetPos = actualPos + cols
+                    if (targetPos < totalItems) {
+                        val targetVh = findViewHolderForAdapterPosition(targetPos)
+                        if (targetVh != null) {
+                            return targetVh.itemView
+                        }
+                    }
+                    if (result == null || !isChildOfThis(result)) {
+                        return focused ?: findFocus()
+                    }
+                }
+            }
+        }
+        if (result === this) {
+            return focused ?: findFocus()
+        }
+        return result
+    }
+
+    private fun moveToPosition(targetPos: Int) {
+        pendingTargetPosition = targetPos
+        if (animationsEnabled && !isHoldingVerticalKey) {
+            setSelectedPositionSmooth(targetPos)
+        } else {
+            setSelectedPosition(targetPos)
+        }
+        val vh = findViewHolderForAdapterPosition(targetPos)
+        if (vh != null) {
+            vh.itemView.requestFocus()
+            (vh as? com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder)?.updateFocusVisual(true)
+            pendingTargetPosition = RecyclerView.NO_POSITION
+        } else {
+            post {
+                if (isAttachedToWindow) {
+                    val deferredVh = findViewHolderForAdapterPosition(targetPos)
+                    if (deferredVh != null) {
+                        deferredVh.itemView.requestFocus()
+                        (deferredVh as? com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                        pendingTargetPosition = RecyclerView.NO_POSITION
+                    }
+                }
+            }
+        }
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
@@ -125,6 +249,23 @@ class InteropVerticalGridView @JvmOverloads constructor(
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
         if (!gainFocus) {
             isHoldingVerticalKey = false
+        } else {
+            if (findFocus() === this) {
+                val targetPos = selectedPosition.coerceAtLeast(0)
+                val vh = findViewHolderForAdapterPosition(targetPos)
+                if (vh != null) {
+                    vh.itemView.requestFocus()
+                    (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                } else {
+                    post {
+                        if (isAttachedToWindow && findFocus() === this) {
+                            val deferredVh = findViewHolderForAdapterPosition(targetPos)
+                            deferredVh?.itemView?.requestFocus()
+                            (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -144,9 +285,10 @@ class InteropVerticalGridView @JvmOverloads constructor(
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
-            val focusedChild = findFocus()
-            val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
-            val actualPos = holder?.bindingAdapterPosition ?: selectedPosition
+            val currentFocused = findFocus()
+            val holder = if (currentFocused != null) findContainingViewHolder(currentFocused) else null
+            val actualPos = holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
+                ?: selectedPosition
             val cols = numColumnsCount.coerceAtLeast(1)
             val currentColumn = if (actualPos >= 0) actualPos % cols else 0
             val isFirstRow = actualPos in 0 until cols
@@ -159,36 +301,64 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         if (onNavigateUpOnFirstRow?.invoke() == true) {
                             return true
                         }
+                        stopScroll()
+                        return true
                     }
                     if (event.repeatCount > 0) {
                         isHoldingVerticalKey = true
                     }
+                    val targetPos = actualPos - cols
+                    if (targetPos >= 0) {
+                        moveToPosition(targetPos)
+                    }
+                    return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     if (isLastRow) {
                         if (onNavigateDownOnLastRow?.invoke() == true) {
                             return true
                         }
+                        stopScroll()
+                        return true
                     }
                     if (event.repeatCount > 0) {
                         isHoldingVerticalKey = true
                     }
+                    val targetPos = (actualPos + cols).coerceAtMost(totalItems - 1)
+                    if (targetPos < totalItems) {
+                        moveToPosition(targetPos)
+                    }
+                    return true
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     if (currentColumn == 0) {
-                        if (onNavigateLeftOnFirstColumn?.invoke() == true) {
-                            return true
+                        if (event.repeatCount == 0 && onNavigateLeftOnFirstColumn != null) {
+                            if (onNavigateLeftOnFirstColumn?.invoke() == true) {
+                                return true
+                            }
                         }
                         stopScroll()
+                        return true
+                    } else {
+                        val targetPos = actualPos - 1
+                        if (targetPos >= 0) {
+                            moveToPosition(targetPos)
+                        }
                         return true
                     }
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (currentColumn == cols - 1) {
+                    if (currentColumn == cols - 1 || actualPos == totalItems - 1) {
                         if (onNavigateRightOnLastColumn?.invoke() == true) {
                             return true
                         }
                         stopScroll()
+                        return true
+                    } else {
+                        val targetPos = actualPos + 1
+                        if (targetPos < totalItems) {
+                            moveToPosition(targetPos)
+                        }
                         return true
                     }
                 }
@@ -201,6 +371,15 @@ class InteropVerticalGridView @JvmOverloads constructor(
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun isChildOfThis(target: View): Boolean {
+        var p = target.parent
+        while (p != null) {
+            if (p === this) return true
+            p = p.parent
+        }
+        return false
     }
 }
 

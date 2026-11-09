@@ -164,11 +164,8 @@ fun SearchScreen(
     // Track the whole input row, including voice and Discover.
     var inputRowHasFocus by remember { mutableStateOf(false) }
     var isRecentSearchSectionFocused by remember { mutableStateOf(false) }
-    var focusResults by remember { mutableStateOf(false) }
-    var pendingAutoMoveToResultsOnLoad by remember { mutableStateOf(false) }
-    var pendingFocusMoveToResultsQuery by remember { mutableStateOf<String?>(null) }
-    var pendingFocusMoveSawSearching by remember { mutableStateOf(false) }
-    var pendingFocusMoveHadExistingSearchRows by remember { mutableStateOf(false) }
+    var pendingMoveToFirstResult by remember { mutableStateOf(false) }
+    var currentActiveRowIndex by remember { mutableIntStateOf(-1) }
     var isVoiceListening by remember { mutableStateOf(false) }
     var voiceRmsLevel by remember { mutableStateOf(0f) }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
@@ -187,12 +184,7 @@ fun SearchScreen(
             backToFieldLatched = false
             viewModel.onEvent(SearchEvent.QueryChanged(recognized))
             viewModel.onEvent(SearchEvent.SubmitSearch)
-            focusResults = false
-            pendingFocusMoveToResultsQuery = recognized
-            pendingFocusMoveSawSearching = false
-            pendingFocusMoveHadExistingSearchRows =
-                uiState.submittedQuery.trim().length >= MIN_SEARCH_QUERY_LENGTH &&
-                    uiState.catalogRows.any { it.items.isNotEmpty() }
+            pendingMoveToFirstResult = true
         } else {
             Toast.makeText(context, strVoiceNoSpeech, Toast.LENGTH_SHORT).show()
         }
@@ -404,23 +396,57 @@ fun SearchScreen(
                 uiState.catalogRows.any { it.items.isNotEmpty() }
         }
     }
+    val navigateToFirstResult: () -> Unit = {
+        keyboardController?.hide()
+        coroutineScope.launch {
+            currentActiveRowIndex = 0
+            // Only scroll if the first catalog row (index 1 in LazyColumn) is not already visible
+            val isFirstRowVisible = listState.layoutInfo.visibleItemsInfo.any { 
+                it.index == 1 && it.offset >= 0 
+            }
+            if (!isFirstRowVisible) {
+                runCatching { listState.animateScrollToItem(1) }
+            }
+            val firstKey = visibleCatalogRows.firstOrNull()?.stableKey()
+            if (firstKey != null) {
+                for (attempt in 0..10) {
+                    withFrameNanos { }
+                    val req = searchRowEntryFocusRequesters[firstKey] ?: searchRowFocusRequesters[firstKey]
+                    if (req != null) {
+                        val ok = runCatching { req.requestFocus(); true }.getOrDefault(false)
+                        if (ok) break
+                    }
+                }
+            }
+        }
+    }
+
     val submitCurrentQuery: (String) -> Unit = { submittedQuery ->
         viewModel.onEvent(SearchEvent.SubmitSearch)
-        // Submitting moves focus into the results without a key event on an on-screen keyboard.
         backToFieldLatched = false
-        focusResults = false
-        if (submittedQuery.length >= MIN_SEARCH_QUERY_LENGTH) {
-            pendingFocusMoveToResultsQuery = submittedQuery
-            pendingAutoMoveToResultsOnLoad = true
-            pendingFocusMoveSawSearching = false
-            pendingFocusMoveHadExistingSearchRows =
-                trimmedSubmittedQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
-                    uiState.catalogRows.any { row -> row.items.isNotEmpty() }
+        val trimmed = submittedQuery.trim()
+        if (trimmed.length >= MIN_SEARCH_QUERY_LENGTH) {
+            val hasResultsNow = if (isDiscoverMode) {
+                uiState.discoverResults.isNotEmpty()
+            } else {
+                visibleCatalogRows.any { it.items.isNotEmpty() }
+            }
+            if (hasResultsNow) {
+                pendingMoveToFirstResult = false
+                if (isDiscoverMode) {
+                    keyboardController?.hide()
+                    coroutineScope.launch {
+                        delay(100)
+                        runCatching { discoverFirstItemFocusRequester.requestFocus() }
+                    }
+                } else {
+                    navigateToFirstResult()
+                }
+            } else {
+                pendingMoveToFirstResult = true
+            }
         } else {
-            pendingFocusMoveToResultsQuery = null
-            pendingAutoMoveToResultsOnLoad = false
-            pendingFocusMoveSawSearching = false
-            pendingFocusMoveHadExistingSearchRows = false
+            pendingMoveToFirstResult = false
         }
     }
     val handleQueryChanged: (String) -> Unit = { nextQuery ->
@@ -434,10 +460,7 @@ fun SearchScreen(
             trimmedNextQuery.startsWith(previousQuery, ignoreCase = true) &&
             trimmedNextQuery.length - previousQuery.length > 1
 
-        focusResults = false
-        pendingFocusMoveToResultsQuery = null
-        pendingFocusMoveSawSearching = false
-        pendingFocusMoveHadExistingSearchRows = false
+        pendingMoveToFirstResult = false
         viewModel.onEvent(SearchEvent.QueryChanged(nextQuery))
         if (selectedSuggestion) {
             submitCurrentQuery(trimmedNextQuery)
@@ -446,71 +469,23 @@ fun SearchScreen(
     val submitRecentSearch: (String) -> Unit = { recentQuery ->
         val trimmedRecentQuery = recentQuery.trim()
         if (trimmedRecentQuery.isNotEmpty()) {
-            runCatching { topInputFocusRequester.requestFocus() }
             viewModel.onEvent(SearchEvent.QueryChanged(trimmedRecentQuery))
             submitCurrentQuery(trimmedRecentQuery)
         }
     }
 
-    LaunchedEffect(focusResults, isDiscoverMode, uiState.discoverResults.size) {
-        if (focusResults && isDiscoverMode && uiState.discoverResults.isNotEmpty()) {
-            delay(100)
-            runCatching { discoverFirstItemFocusRequester.requestFocus() }
-            focusResults = false
-            pendingFocusMoveToResultsQuery = null
-            pendingFocusMoveSawSearching = false
-            pendingFocusMoveHadExistingSearchRows = false
-        }
-    }
-
-    LaunchedEffect(pendingAutoMoveToResultsOnLoad, uiState.isSearching, visibleCatalogRows.size) {
-        if (pendingAutoMoveToResultsOnLoad && !uiState.isSearching && visibleCatalogRows.isNotEmpty()) {
-            pendingAutoMoveToResultsOnLoad = false
-            focusResults = true
-            keyboardController?.hide()
-            runCatching { listState.scrollToItem(1) }
-            repeat(4) { withFrameNanos { } }
-            val firstKey = visibleCatalogRows.firstOrNull()?.stableKey()
-            if (firstKey != null) {
-                val req = searchRowEntryFocusRequesters[firstKey] ?: searchRowFocusRequesters[firstKey]
-                runCatching { req?.requestFocus() }
+    LaunchedEffect(pendingMoveToFirstResult, isDiscoverMode, visibleCatalogRows.size, uiState.discoverResults.size) {
+        if (pendingMoveToFirstResult) {
+            if (isDiscoverMode && uiState.discoverResults.isNotEmpty()) {
+                pendingMoveToFirstResult = false
+                keyboardController?.hide()
+                delay(100)
+                runCatching { discoverFirstItemFocusRequester.requestFocus() }
+            } else if (!isDiscoverMode && visibleCatalogRows.isNotEmpty()) {
+                pendingMoveToFirstResult = false
+                navigateToFirstResult()
             }
         }
-    }
-
-    LaunchedEffect(
-        pendingFocusMoveToResultsQuery,
-        pendingFocusMoveSawSearching,
-        pendingFocusMoveHadExistingSearchRows,
-        uiState.isSearching,
-        uiState.submittedQuery,
-        canMoveToResults,
-        isDiscoverMode
-    ) {
-        val pendingQuery = pendingFocusMoveToResultsQuery ?: return@LaunchedEffect
-        val currentSubmittedQuery = uiState.submittedQuery.trim()
-        if (currentSubmittedQuery != pendingQuery) return@LaunchedEffect
-
-        if (uiState.isSearching) {
-            pendingFocusMoveSawSearching = true
-            return@LaunchedEffect
-        }
-
-        val shouldRequireSeenSearching = pendingFocusMoveHadExistingSearchRows
-        if ((shouldRequireSeenSearching && !pendingFocusMoveSawSearching) || !canMoveToResults) {
-            return@LaunchedEffect
-        }
-
-        if (isDiscoverMode) {
-            focusResults = true
-        } else {
-            // Use explicit first-item focus for deterministic landing on row 1 / column 1.
-            delay(80)
-            focusResults = true
-        }
-        pendingFocusMoveToResultsQuery = null
-        pendingFocusMoveSawSearching = false
-        pendingFocusMoveHadExistingSearchRows = false
     }
 
     val initialFocusRequester = topInputFocusRequester
@@ -546,7 +521,7 @@ fun SearchScreen(
     val latestPendingDiscoverRestore by rememberUpdatedState(pendingDiscoverRestoreOnResume)
     val latestInitialFocusRequester by rememberUpdatedState(initialFocusRequester)
     val latestShouldKeepSearchFocus by rememberUpdatedState(
-        focusResults || uiState.isSearching || isVoiceListening
+        pendingMoveToFirstResult || uiState.isSearching || isVoiceListening
     )
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -668,17 +643,7 @@ fun SearchScreen(
                         // D-pad down from the text field is the user's confirmation that the
                         // live-search results are useful, even before a particular card opens.
                         viewModel.onEvent(SearchEvent.RememberSearchFromTextInput)
-                        focusResults = true
-                        keyboardController?.hide()
-                        coroutineScope.launch {
-                            runCatching { listState.scrollToItem(1) }
-                            repeat(3) { withFrameNanos { } }
-                            val firstKey = visibleCatalogRows.firstOrNull()?.stableKey()
-                            if (firstKey != null) {
-                                val req = searchRowEntryFocusRequesters[firstKey] ?: searchRowFocusRequesters[firstKey]
-                                runCatching { req?.requestFocus() }
-                            }
-                        }
+                        navigateToFirstResult()
                     },
                     onOpenDiscover = {
                         // Arm the restore so coming back lands on this button rather than the
@@ -838,7 +803,7 @@ fun SearchScreen(
                                 catalogRow.items.firstOrNull()?.id?.startsWith("__placeholder_") == true
                             val hasEnoughForSeeAll = !isPlaceholder && catalogRow.items.size >= 15
 
-                            val listState = searchRowStates.getOrPut(catalogKey) {
+                            val rowState = searchRowStates.getOrPut(catalogKey) {
                                 val saved = viewModel.savedRowScrollPositions[catalogKey]
                                 LazyListState(
                                     firstVisibleItemIndex = saved?.first ?: 0,
@@ -860,7 +825,71 @@ fun SearchScreen(
                                 entryFocusRequester = entryFocusRequester,
                                 // Anchor Up to the field; geometric focus varies with the card.
                                 upFocusRequester = if (index == 0) searchFocusRequester else null,
-                                listState = listState,
+                                onNavigateDown = {
+                                    val nextIndex = index + 1
+                                    if (nextIndex in visibleCatalogRows.indices) {
+                                        currentActiveRowIndex = nextIndex
+                                        val nextKey = visibleCatalogRows[nextIndex].stableKey()
+                                        val isNextVisible = listState.layoutInfo.visibleItemsInfo.any { 
+                                            it.index == nextIndex + 1 && (it.offset + it.size) <= listState.layoutInfo.viewportEndOffset && it.offset >= 0
+                                        }
+                                        coroutineScope.launch {
+                                            if (!isNextVisible) {
+                                                runCatching { listState.animateScrollToItem(nextIndex + 1) }
+                                            }
+                                            for (attempt in 0..10) {
+                                                withFrameNanos { }
+                                                val nextReq = searchRowEntryFocusRequesters[nextKey] ?: searchRowFocusRequesters[nextKey]
+                                                if (nextReq != null) {
+                                                    val ok = runCatching { nextReq.requestFocus(); true }.getOrDefault(false)
+                                                    if (ok) break
+                                                }
+                                            }
+                                        }
+                                        true
+                                    } else {
+                                        true
+                                    }
+                                },
+                                onNavigateUp = {
+                                    if (index == 0) {
+                                        currentActiveRowIndex = -1
+                                        val isInputVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == 0 && it.offset >= 0 }
+                                        coroutineScope.launch {
+                                            if (!isInputVisible) {
+                                                runCatching { listState.animateScrollToItem(0) }
+                                            }
+                                            for (attempt in 0..10) {
+                                                withFrameNanos { }
+                                                val ok = runCatching { searchFocusRequester.requestFocus(); true }.getOrDefault(false)
+                                                if (ok) break
+                                            }
+                                        }
+                                        true
+                                    } else {
+                                        val prevIndex = index - 1
+                                        currentActiveRowIndex = prevIndex
+                                        val prevKey = visibleCatalogRows[prevIndex].stableKey()
+                                        val isPrevVisible = listState.layoutInfo.visibleItemsInfo.any { 
+                                            it.index == prevIndex + 1 && it.offset >= 0 
+                                        }
+                                        coroutineScope.launch {
+                                            if (!isPrevVisible) {
+                                                runCatching { listState.animateScrollToItem(prevIndex + 1) }
+                                            }
+                                            for (attempt in 0..10) {
+                                                withFrameNanos { }
+                                                val prevReq = searchRowEntryFocusRequesters[prevKey] ?: searchRowFocusRequesters[prevKey]
+                                                if (prevReq != null) {
+                                                    val ok = runCatching { prevReq.requestFocus(); true }.getOrDefault(false)
+                                                    if (ok) break
+                                                }
+                                            }
+                                        }
+                                        true
+                                    }
+                                },
+                                listState = rowState,
                                 restorerFocusedIndex = if (restoringSearchFocus.value && catalogKey == viewModel.savedFocusRowKey) {
                                     viewModel.savedFocusItemIndex
                                 } else {
@@ -875,27 +904,19 @@ fun SearchScreen(
                                     val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
                                     if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds
                                 },
-                                focusedItemIndex = when {
-                                    restoringSearchFocus.value && catalogKey == viewModel.savedFocusRowKey ->
-                                        viewModel.savedFocusItemIndex
-                                    // The remembered card, not item 0. A query change clears
-                                    // the map, so a new search still lands on the first item.
-                                    focusResults && index == 0 ->
-                                        searchRowFocusedItemIndex[catalogKey] ?: 0
-                                    else -> -1
+                                focusedItemIndex = if (restoringSearchFocus.value && catalogKey == viewModel.savedFocusRowKey) {
+                                    viewModel.savedFocusItemIndex
+                                } else {
+                                    -1
                                 },
                                 onItemFocused = { itemIndex ->
-                                    if (focusResults) {
-                                        focusResults = false
-                                    }
                                     if (restoringSearchFocus.value) {
                                         restoringSearchFocus.value = false
                                         didRestoreSearchFocus.value = true
                                         viewModel.hasSavedSearchFocus = false
                                     }
-                                    // User manually navigated to a row — cancel any
-                                    // pending auto-focus so it doesn't steal focus later.
-                                    pendingFocusMoveToResultsQuery = null
+                                    currentActiveRowIndex = index
+                                    pendingMoveToFirstResult = false
                                     searchRowFocusedItemIndex[catalogKey] = itemIndex
                                     focusedResultItemIndex.intValue = itemIndex
                                     // Prefetch meta for the focused item to warm cache for detail screen.

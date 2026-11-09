@@ -11,6 +11,7 @@ import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.OnChildViewHolderSelectedListener
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
+import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 
 /**
  * Android Leanback HorizontalGridView customized for Jetpack Compose interop.
@@ -70,6 +71,11 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     hasReleasedKeyAfterArrivingAt0 = false
                 }
 
+                if (child != null && hasFocus()) {
+                    child.itemView.requestFocus()
+                    (child as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                }
+
                 val totalCount = universalAdapter?.itemCount ?: 0
                 if (position >= totalCount - 5 && totalCount > 0) {
                     post {
@@ -90,7 +96,44 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             post { requestFocus(direction, previouslyFocusedRect) }
             return false
         }
-        return super.requestFocus(direction, previouslyFocusedRect)
+        // If coming from another view with geometry rect (e.g. D-pad vertical movement),
+        // let super find the card with closest geometric alignment (same column).
+        if (previouslyFocusedRect != null) {
+            val result = super.requestFocus(direction, previouslyFocusedRect)
+            if (result) {
+                val focusedChild = findFocus()
+                if (focusedChild !== this) {
+                    val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
+                    (holder as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                    return true
+                }
+            }
+        }
+        // Programmatic focus (e.g. from search submit / enter): target the current selectedPosition
+        val targetPos = selectedPosition.coerceAtLeast(0)
+        val vh = findViewHolderForAdapterPosition(targetPos)
+        if (vh != null) {
+            val focused = vh.itemView.requestFocus(direction, previouslyFocusedRect)
+            if (focused) {
+                (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                return true
+            }
+        }
+        val result = super.requestFocus(direction, previouslyFocusedRect)
+        if (result) {
+            val focusedChild = findFocus()
+            if (focusedChild !== this) {
+                val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
+                (holder as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+            } else {
+                val deferredVh = findViewHolderForAdapterPosition(targetPos)
+                if (deferredVh != null) {
+                    deferredVh.itemView.requestFocus()
+                    (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                }
+            }
+        }
+        return result
     }
 
     override fun requestChildFocus(child: View?, focused: View?) {
@@ -105,7 +148,16 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         if (isBusyLayout) {
             return null
         }
-        return super.focusSearch(focused, direction)
+        val result = super.focusSearch(focused, direction)
+        if (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT) {
+            if (result != null && !isChildOfThis(result)) {
+                return focused
+            }
+        }
+        if (result === this) {
+            return focused
+        }
+        return result
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
@@ -143,9 +195,27 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
         if (!gainFocus) {
             isHoldingHorizontalKey = false
-        } else if (selectedPosition <= 0) {
-            hasReleasedKeyAfterArrivingAt0 = true
-            arrivedAt0FromRight = false
+        } else {
+            if (selectedPosition <= 0) {
+                hasReleasedKeyAfterArrivingAt0 = true
+                arrivedAt0FromRight = false
+            }
+            if (findFocus() === this) {
+                val targetPos = selectedPosition.coerceAtLeast(0)
+                val vh = findViewHolderForAdapterPosition(targetPos)
+                if (vh != null) {
+                    vh.itemView.requestFocus()
+                    (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                } else {
+                    post {
+                        if (isAttachedToWindow && findFocus() === this) {
+                            val deferredVh = findViewHolderForAdapterPosition(targetPos)
+                            deferredVh?.itemView?.requestFocus()
+                            (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -241,6 +311,15 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun isChildOfThis(target: View): Boolean {
+        var p = target.parent
+        while (p != null) {
+            if (p === this) return true
+            p = p.parent
+        }
+        return false
     }
 }
 
