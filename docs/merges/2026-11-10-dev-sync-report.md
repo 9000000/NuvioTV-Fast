@@ -42,3 +42,4 @@
 - **Android Leanback Native & Search D-pad**: Toàn bộ 27 file tối ưu hóa Leanback Native (`LeanbackColorEngine`, `LeanbackBaseViewHolder`, `LeanbackPosterViewHolder`, `LeanbackEpisodeViewHolder`, `LeanbackAvatarViewHolder`, `LeanbackUniversalAdapter`, `LeanbackNativeRow`, `LeanbackNativeGrid`, `InteropHorizontalGridView`, `InteropVerticalGridView`, `SearchScreen`, `LeanbackModernRow`, `CatalogRowSection`, các section Detail/Browse) được bảo toàn nguyên vẹn 100%.
 - **Home & Navigation**: `NativeSidebarView`, khóa `LocalOpenSidebar` cho root routes, `MemoryBudget`, cùng đồng bộ sớm `StartupSyncService.requestNavigationSync()` khi rời Player hoặc về Home hoạt động song hành.
 - **Player & Audio**: `forcePcmForBluetooth`, `forceOpticalPassthrough` (với `DefaultAudioSink.Builder()` ghim capabilities AC-3), TorrServer, Live TV buffer, DRM, Subtitle style và AutoSync đều nguyên vẹn.
+

@@ -38,6 +38,7 @@ Tệp này kiểm soát hành vi của AI Agent.
 - 💳 **Thanh toán, Bán hàng, Stripe, Gói cước, Checkout**: Tự động áp dụng `stripe-integration`, `pricing-strategy`, `micro-saas-launcher`.
 - 🚀 **Deploy, Đưa web lên mạng, Hosting, Vercel, VPS**: Tự động áp dụng `vercel-deployment`, `server-management`.
 - 📱 **Mobile App, Ứng dụng điện thoại, Flutter, React Native**: Tự động áp dụng `flutter-expert`, `react-native-architecture`.
+- 📺 **Android TV, Google TV, Leanback Native, D-Pad Focus, HorizontalGridView, VerticalGridView**: Tự động áp dụng `android-leanback-native`.
 - 🐳 **Docker, Container, Dockerfile, Docker Compose**: Tự động áp dụng `docker-expert`.
 - 🤖 **AI Prompt, Chatbot, RAG, Hỏi đáp tài liệu, LLM**: Tự động áp dụng `prompt-engineering`, `llm-app-patterns`, `rag-implementation`.
 - 🌐 **Cào dữ liệu, Duyệt web, Scrape, Tìm kiếm mạng**: Tự động áp dụng `firecrawl-scraper`, `browser-automation`, `tavily-web`.
