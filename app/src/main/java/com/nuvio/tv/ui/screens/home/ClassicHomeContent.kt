@@ -4,6 +4,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.activity.compose.BackHandler
 import com.nuvio.tv.LocalContentFocusRequester
+import com.nuvio.tv.LocalRequestUpdateBannerFocus
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -44,6 +45,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import com.nuvio.tv.ui.util.dpadVerticalFastScroll
 import com.nuvio.tv.ui.util.asStable
@@ -527,6 +533,8 @@ fun ClassicHomeContent(
         updatesPausedProvider = { isVerticalScrollingState.value },
         modifier = Modifier.fillMaxSize()
     )
+    val requestUpdateBannerFocus = LocalRequestUpdateBannerFocus.current
+
     LazyColumn(
         state = columnListState,
         modifier = Modifier
@@ -534,6 +542,15 @@ fun ClassicHomeContent(
             .onFocusChanged { contentHasFocus.value = it.hasFocus }
             .focusRequester(contentFocusRequester)
             .focusRestorer()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp) {
+                    val isAtTop = columnListState.firstVisibleItemIndex == 0 && columnListState.firstVisibleItemScrollOffset == 0
+                    if (isAtTop && requestUpdateBannerFocus?.invoke() == true) {
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                false
+            }
             .dpadVerticalFastScroll(
                 scrollableState = columnListState,
                 onFastScrollingChanged = { isFastScrolling = it },

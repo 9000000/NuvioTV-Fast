@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -29,6 +30,8 @@ import com.nuvio.tv.updater.UpdateUiState
 @Composable
 fun UpdateBannerHost(
     state: UpdateUiState,
+    actionFocusRequester: FocusRequester? = null,
+    contentFocusRequester: FocusRequester? = null,
     onDismissBanner: () -> Unit,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
@@ -83,6 +86,8 @@ fun UpdateBannerHost(
                     update = it,
                     isInstalledUpdate = state.update == null,
                     autoDismissPaused = showReleaseNotes,
+                    actionFocusRequester = actionFocusRequester,
+                    contentFocusRequester = contentFocusRequester,
                     onDownload = onDownload,
                     onInstall = onInstall,
                     onShowReleaseNotes = { showReleaseNotes = true },

@@ -255,14 +255,19 @@ private fun LiveTvContent(
         state.channels, activeFilter, selectedGroup, selectedPlaylistId,
         state.favoriteChannelIds, state.recentChannelIds, playlistScopedChannels
     ) {
-        val channelMap = state.channels.associateBy { it.id }
         if (selectedPlaylistId == null) {
             // Khi chưa chọn danh sách phát: CHỈ hiển thị Gần đây hoặc Yêu thích
             when (activeFilter) {
                 FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
-                FilterType.RECENT -> state.recentChannelIds.mapNotNull { channelMap[it] }
+                FilterType.RECENT -> {
+                    val recentSet = state.recentChannelIds.toSet()
+                    val channelMap = state.channels.filter { it.id in recentSet }.associateBy { it.id }
+                    state.recentChannelIds.mapNotNull { channelMap[it] }
+                }
                 else -> {
                     if (state.recentChannelIds.isNotEmpty()) {
+                        val recentSet = state.recentChannelIds.toSet()
+                        val channelMap = state.channels.filter { it.id in recentSet }.associateBy { it.id }
                         state.recentChannelIds.mapNotNull { channelMap[it] }
                     } else {
                         state.channels.filter { it.id in state.favoriteChannelIds }
@@ -277,7 +282,11 @@ private fun LiveTvContent(
                     playlistScopedChannels.filter { it.group?.trim() == selectedGroup }
                 }
                 FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
-                FilterType.RECENT -> state.recentChannelIds.mapNotNull { channelMap[it] }
+                FilterType.RECENT -> {
+                    val recentSet = state.recentChannelIds.toSet()
+                    val channelMap = state.channels.filter { it.id in recentSet }.associateBy { it.id }
+                    state.recentChannelIds.mapNotNull { channelMap[it] }
+                }
             }
         }
     }
@@ -309,8 +318,11 @@ private fun LiveTvContent(
     val groupChipFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val playlistDropdownButtonFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(displayedChannels.map { it.id }) {
-        channelFocusRequesters.keys.retainAll(displayedChannels.map { it.id }.toSet())
+    // Clear unneeded focus requesters when switching filter, category or query
+    // avoiding heavy full-list map/recomposition iterations on the Main thread.
+    LaunchedEffect(activeFilter, selectedPlaylistId, selectedGroup, searchQuery) {
+        channelFocusRequesters.clear()
+        groupChipFocusRequesters.clear()
     }
 
     fun getActiveChipIndex(): Int {

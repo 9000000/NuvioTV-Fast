@@ -4,6 +4,7 @@ import androidx.recyclerview.widget.RecyclerView
 
 import com.nuvio.tv.domain.model.catalogRowLegacyKey
 import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.LocalRequestUpdateBannerFocus
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -361,6 +362,7 @@ internal fun ModernHomeRowsList(
         LocalVerticalRowsScrolling provides isVerticalRowsScrollingState
     ) {
         val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
+        val requestUpdateBannerFocus = LocalRequestUpdateBannerFocus.current
 
         LazyColumn(
             state = verticalRowListState,
@@ -383,6 +385,14 @@ internal fun ModernHomeRowsList(
                     }
                     val firstRowKey = carouselRows.list.firstOrNull()?.key
                     val lastRowKey = carouselRows.list.lastOrNull()?.key
+                    if (event.type == KeyEventType.KeyDown &&
+                        event.key == Key.DirectionUp &&
+                        activeRowKey.value == firstRowKey
+                    ) {
+                        if (requestUpdateBannerFocus?.invoke() == true) {
+                            return@onPreviewKeyEvent true
+                        }
+                    }
                     if (event.type == KeyEventType.KeyDown &&
                         event.key == Key.DirectionUp &&
                         effectiveExpandEnabled &&
@@ -545,7 +555,7 @@ internal fun ModernHomeRowsList(
                     }
                 }
 
-                val onNavigateUp = remember(rowIndex, carouselRows.list, animationsEnabled) {
+                val onNavigateUp = remember(rowIndex, carouselRows.list, animationsEnabled, requestUpdateBannerFocus) {
                     {
                         onUserNavigated()
                         val now = System.currentTimeMillis()
@@ -591,7 +601,11 @@ internal fun ModernHomeRowsList(
                                 }
                                 true
                             } else {
-                                false
+                                if (requestUpdateBannerFocus?.invoke() == true) {
+                                    true
+                                } else {
+                                    false
+                                }
                             }
                         }
                     }

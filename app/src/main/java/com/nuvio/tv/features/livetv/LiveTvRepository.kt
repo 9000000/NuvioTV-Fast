@@ -62,6 +62,9 @@ object LiveTvRepository {
     private val _uiState = MutableStateFlow(LiveTvUiState())
     val uiState: StateFlow<LiveTvUiState> = _uiState.asStateFlow()
 
+    private val _isNavigationEnabled = MutableStateFlow(LiveTvStorage.loadNavigationEnabled() ?: true)
+    val isNavigationEnabled: StateFlow<Boolean> = _isNavigationEnabled.asStateFlow()
+
     private val _navigationResetEvent = MutableStateFlow(0L)
     val navigationResetEvent: StateFlow<Long> = _navigationResetEvent.asStateFlow()
 
@@ -125,32 +128,41 @@ object LiveTvRepository {
         val savedFilterType = LiveTvStorage.loadLastWatchedFilterType()
         val stalker = LiveTvStorage.loadStalkerSettings()
         val xtream = LiveTvStorage.loadXtreamSettings()
-        val cachedChannels = LiveTvStorage.loadChannelsCache()
+        val navEnabled = LiveTvStorage.loadNavigationEnabled() ?: true
+        _isNavigationEnabled.value = navEnabled
 
+        // Initialize metadata immediately; heavy channel cache is loaded on Dispatchers.IO
+        // to avoid blocking the Main UI thread during app startup.
         _uiState.value = LiveTvUiState(
             playlistUrl = playlists.firstEnabledUrlSource(),
             playlists = playlists,
             stalkerSettings = stalker,
             xtreamSettings = xtream,
-            channels = cachedChannels,
+            channels = emptyList(),
             favoriteChannelIds = loadFavoriteChannelIds(),
             lastWatchedChannelId = lastWatched,
             lastWatchedPlaylistId = savedPlaylistId,
             lastWatchedGroup = savedGroup,
             lastWatchedFilterType = savedFilterType,
             recentChannelIds = recentIds,
-            isNavigationEnabled = LiveTvStorage.loadNavigationEnabled() ?: true,
-            isLoading = false,
+            isNavigationEnabled = navEnabled,
+            isLoading = true,
         )
         publishNavigationVisibility()
 
-        if (_uiState.value.hasPlaylist) {
-            val signature = computeConfigSignature(playlists, stalker, xtream)
-            val savedSignature = LiveTvStorage.loadCacheConfigSignature()
-            val isExpired = LiveTvStorage.isCacheExpired()
-            val shouldRefresh = cachedChannels.isEmpty() || signature != savedSignature || isExpired
-            if (shouldRefresh) {
-                refresh(force = true, showLoadingIfHasChannels = cachedChannels.isEmpty())
+        scope.launch(Dispatchers.IO) {
+            val cachedChannels = LiveTvStorage.loadChannelsCache()
+            withContext(Dispatchers.Main) {
+                _uiState.update { it.copy(channels = cachedChannels, isLoading = false) }
+                if (_uiState.value.hasPlaylist) {
+                    val signature = computeConfigSignature(playlists, stalker, xtream)
+                    val savedSignature = LiveTvStorage.loadCacheConfigSignature()
+                    val isExpired = LiveTvStorage.isCacheExpired()
+                    val shouldRefresh = cachedChannels.isEmpty() || signature != savedSignature || isExpired
+                    if (shouldRefresh) {
+                        refresh(force = true, showLoadingIfHasChannels = cachedChannels.isEmpty())
+                    }
+                }
             }
         }
     }
@@ -351,11 +363,11 @@ object LiveTvRepository {
     }
 
     fun setNavigationEnabled(enabled: Boolean) {
-        ensureLoaded()
-        if (_uiState.value.isNavigationEnabled == enabled) return
+        if (_isNavigationEnabled.value == enabled) return
 
         LiveTvStorage.saveNavigationEnabled(enabled)
-        _uiState.value = _uiState.value.copy(isNavigationEnabled = enabled)
+        _isNavigationEnabled.value = enabled
+        _uiState.update { it.copy(isNavigationEnabled = enabled) }
         publishNavigationVisibility()
     }
 

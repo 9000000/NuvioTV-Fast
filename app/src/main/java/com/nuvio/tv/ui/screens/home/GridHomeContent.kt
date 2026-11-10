@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.State
 import androidx.compose.foundation.lazy.grid.items
 import com.nuvio.tv.LocalContentFocusRequester
+import com.nuvio.tv.LocalRequestUpdateBannerFocus
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -47,6 +48,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import com.nuvio.tv.ui.util.asStable
 import com.nuvio.tv.ui.util.contentTextDirection
 import com.nuvio.tv.ui.util.dpadRepeatThrottle
@@ -429,6 +435,8 @@ fun GridHomeContent(
             result
         }
 
+        val requestUpdateBannerFocus = LocalRequestUpdateBannerFocus.current
+
         LazyVerticalGrid(
             state = gridState,
             columns = GridCells.Adaptive(minSize = gridColumnMinSize),
@@ -449,6 +457,15 @@ fun GridHomeContent(
                     val fromGrid = lastKey?.let { key -> focusRequesters[key] }
                     val fromHero = if (hasHero && lastKey == null) heroFocusRequester else null
                     fromCwRow ?: fromGrid ?: fromHero ?: FocusRequester.Default
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp) {
+                        val isAtTop = gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
+                        if (isAtTop && requestUpdateBannerFocus?.invoke() == true) {
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    false
                 }
                 .dpadRepeatThrottle(),
             contentPadding = PaddingValues(

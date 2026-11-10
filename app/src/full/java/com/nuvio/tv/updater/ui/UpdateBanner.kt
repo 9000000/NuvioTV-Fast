@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -44,6 +46,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -73,11 +80,15 @@ internal fun UpdateBanner(
     update: AppUpdate,
     isInstalledUpdate: Boolean,
     autoDismissPaused: Boolean,
+    actionFocusRequester: FocusRequester? = null,
+    contentFocusRequester: FocusRequester? = null,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
     onShowReleaseNotes: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val fallbackActionRequester = remember { FocusRequester() }
+    val effectiveActionRequester = actionFocusRequester ?: fallbackActionRequester
     val context = LocalContext.current
     val targetProgress = (if (state.isDownloading) state.downloadProgress ?: 0f else 0f)
         .coerceIn(0f, 1f)
@@ -133,6 +144,17 @@ internal fun UpdateBanner(
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { bannerHasFocus = it.hasFocus }
+                .onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.DirectionDown) {
+                        contentFocusRequester?.let { req ->
+                            runCatching {
+                                req.requestFocus()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                    }
+                    false
+                }
                 .heightIn(min = 76.dp)
                 .padding(horizontal = 32.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -210,6 +232,7 @@ internal fun UpdateBanner(
                     enabled = state.isDownloading ||
                         state.downloadedApkPath != null ||
                         state.isUpdateAvailable,
+                    modifier = Modifier.focusRequester(effectiveActionRequester),
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioTheme.colors.Secondary,
                         focusedContainerColor = NuvioTheme.colors.SecondaryVariant,
@@ -234,6 +257,7 @@ internal fun UpdateBanner(
             if (!state.isDownloading) {
                 if (isInstalledUpdate) {
                     AutoDismissCloseButton(
+                        modifier = Modifier.focusRequester(effectiveActionRequester),
                         paused = autoDismissPaused || bannerHasFocus,
                         onDismiss = onDismiss
                     )
@@ -252,7 +276,11 @@ internal fun UpdateBanner(
 // Closes the "updated" banner by itself. A ring around the X empties over the time left; it pauses while the banner has
 // focus or the release notes are open, so the banner never closes under the user.
 @Composable
-private fun AutoDismissCloseButton(paused: Boolean, onDismiss: () -> Unit) {
+private fun AutoDismissCloseButton(
+    paused: Boolean,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val remaining = remember { Animatable(1f) }
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     var closeFocused by remember { mutableStateOf(false) }
@@ -271,7 +299,7 @@ private fun AutoDismissCloseButton(paused: Boolean, onDismiss: () -> Unit) {
     }
     val ringColor = NuvioTheme.colors.TextSecondary
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(44.dp)
             .onFocusChanged { closeFocused = it.hasFocus },
         contentAlignment = Alignment.Center

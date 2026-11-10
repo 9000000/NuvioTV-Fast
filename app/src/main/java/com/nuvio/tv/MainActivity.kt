@@ -222,6 +222,7 @@ import kotlinx.coroutines.launch
 val LocalSidebarExpanded = compositionLocalOf { false }
 val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 val LocalOpenSidebar = compositionLocalOf<(() -> Unit)?> { null }
+val LocalRequestUpdateBannerFocus = compositionLocalOf<(() -> Boolean)?> { null }
 
 data class SplashBackground(
     val profileColorHex: String? = null,
@@ -1100,11 +1101,7 @@ open class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    LaunchedEffect(Unit) {
-                        com.nuvio.tv.features.livetv.LiveTvRepository.ensureLoaded()
-                    }
-                    val liveTvUiState by com.nuvio.tv.features.livetv.LiveTvRepository.uiState.collectAsState()
-                    val showLiveTvInDrawer = liveTvUiState.isNavigationEnabled
+                    val showLiveTvInDrawer by com.nuvio.tv.features.livetv.LiveTvRepository.isNavigationEnabled.collectAsState()
 
                     val rootRoutes = remember(discoverLocation, showLiveTvInDrawer) {
                         buildSet {
@@ -1219,48 +1216,68 @@ open class MainActivity : ComponentActivity() {
                         showBanner = updateState.showBanner && currentRoute?.startsWith("player/") != true
                     )
 
-                    UpdateBannerHost(
-                        state = updateBannerState,
-                        onDismissBanner = updateViewModel::dismissBanner,
-                        onDownload = updateViewModel::downloadUpdate,
-                        onInstall = updateViewModel::installUpdateOrRequestPermission,
-                        onDismissUnknownSources = updateViewModel::dismissUnknownSourcesDialog,
-                        onOpenUnknownSources = updateViewModel::openUnknownSourcesSettings,
-                        onFeedbackShown = updateViewModel::consumeFeedbackMessage
-                    ) {
-                        val handleSwitchProfile = {
-                            startupSession++
-                            splashTriggered = false
-                            profileSwitchedManually = true
-                            focusedSplashColor = null
-                            focusedSplashBgUrl = null
-                            focusedSplashCacheKey = null
-                            focusedSplashTheme = null
-                            hasSelectedProfileThisSession = false
-                        }
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            CompositionLocalProvider(LocalNavViewModelStoreOwner provides navViewModelStoreOwner) {
-                                ModernSidebarScaffold(
-                                    longPressBackHeld = longPressBackHeld,
-                                    navController = navController,
-                                    startDestination = startDestination,
-                                    currentRoute = currentRoute,
-                                    rootRoutes = rootRoutes,
-                                    drawerItems = drawerItems,
-                                    selectedDrawerRoute = selectedDrawerRoute,
-                                    selectedDrawerItem = selectedDrawerItem,
-                                    sidebarCollapsed = sidebarCollapsed,
-                                    modernSidebarBlurEnabled = modernSidebarBlurEnabled,
-                                    hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
-                                    activeProfileName = activeProfile?.name ?: "",
-                                    activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                                    activeProfileAvatarImageUrl = activeProfileAvatarImageUrl,
-                                    showProfileSelector = profiles.size > 1,
-                                    onSwitchProfile = handleSwitchProfile,
-                                    onNavigate = { optimisticRoute = it },
-                                    onExitApp = handleExitApp
-                                )
+                    val contentFocusRequester = remember { FocusRequester() }
+                    val updateBannerActionFocusRequester = remember { FocusRequester() }
+                    val requestUpdateBannerFocus = remember(updateBannerState.showBanner) {
+                        if (updateBannerState.showBanner) {
+                            {
+                                runCatching {
+                                    updateBannerActionFocusRequester.requestFocus()
+                                    true
+                                }.getOrDefault(false)
                             }
+                        } else null
+                    }
+
+                    CompositionLocalProvider(
+                        LocalRequestUpdateBannerFocus provides requestUpdateBannerFocus,
+                        LocalContentFocusRequester provides contentFocusRequester
+                    ) {
+                        UpdateBannerHost(
+                            state = updateBannerState,
+                            actionFocusRequester = updateBannerActionFocusRequester,
+                            contentFocusRequester = contentFocusRequester,
+                            onDismissBanner = updateViewModel::dismissBanner,
+                            onDownload = updateViewModel::downloadUpdate,
+                            onInstall = updateViewModel::installUpdateOrRequestPermission,
+                            onDismissUnknownSources = updateViewModel::dismissUnknownSourcesDialog,
+                            onOpenUnknownSources = updateViewModel::openUnknownSourcesSettings,
+                            onFeedbackShown = updateViewModel::consumeFeedbackMessage
+                        ) {
+                            val handleSwitchProfile = {
+                                startupSession++
+                                splashTriggered = false
+                                profileSwitchedManually = true
+                                focusedSplashColor = null
+                                focusedSplashBgUrl = null
+                                focusedSplashCacheKey = null
+                                focusedSplashTheme = null
+                                hasSelectedProfileThisSession = false
+                            }
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                CompositionLocalProvider(LocalNavViewModelStoreOwner provides navViewModelStoreOwner) {
+                                    ModernSidebarScaffold(
+                                        contentFocusRequester = contentFocusRequester,
+                                        longPressBackHeld = longPressBackHeld,
+                                        navController = navController,
+                                        startDestination = startDestination,
+                                        currentRoute = currentRoute,
+                                        rootRoutes = rootRoutes,
+                                        drawerItems = drawerItems,
+                                        selectedDrawerRoute = selectedDrawerRoute,
+                                        selectedDrawerItem = selectedDrawerItem,
+                                        sidebarCollapsed = sidebarCollapsed,
+                                        modernSidebarBlurEnabled = modernSidebarBlurEnabled,
+                                        hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
+                                        activeProfileName = activeProfile?.name ?: "",
+                                        activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
+                                        activeProfileAvatarImageUrl = activeProfileAvatarImageUrl,
+                                        showProfileSelector = profiles.size > 1,
+                                        onSwitchProfile = handleSwitchProfile,
+                                        onNavigate = { optimisticRoute = it },
+                                        onExitApp = handleExitApp
+                                    )
+                                }
 
                             val autoNextOverlay by externalPlaybackTracker.autoNextOverlay.collectAsState()
                             autoNextOverlay?.let { ov ->
@@ -1288,10 +1305,11 @@ open class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                } 
+                }
             } 
         } 
-    }
+    } 
+}
 
                     LaunchedEffect(startupDestination, startupLoadingState) {
                         if (startupDestination == StartupDestination.Content) {
@@ -1453,6 +1471,7 @@ open class MainActivity : ComponentActivity() {
 
 @Composable
 private fun ModernSidebarScaffold(
+    contentFocusRequester: FocusRequester,
     longPressBackHeld: MutableState<Boolean>,
     navController: NavHostController,
     startDestination: String,
@@ -1479,7 +1498,6 @@ private fun ModernSidebarScaffold(
 
     val focusManager = LocalFocusManager.current
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
-    val contentFocusRequester = remember { FocusRequester() }
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
     var isSidebarExpanded by remember { mutableStateOf(false) }

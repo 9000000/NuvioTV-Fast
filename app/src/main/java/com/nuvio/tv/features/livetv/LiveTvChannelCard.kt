@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +43,8 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 // ─── Channel Card ─────────────────────────────────────────────────────────────
@@ -116,8 +119,16 @@ internal fun TvChannelCard(
     ) {
         Box(Modifier.fillMaxSize()) {
             if (!channel.logoUrl.isNullOrBlank()) {
+                val context = LocalContext.current
+                val imageRequest = remember(channel.logoUrl) {
+                    ImageRequest.Builder(context)
+                        .data(channel.logoUrl)
+                        .size(180, 120) // Downsample high-res logos to thumbnail size, preventing huge memory spikes
+                        .crossfade(false)
+                        .build()
+                }
                 AsyncImage(
-                    model = channel.logoUrl,
+                    model = imageRequest,
                     contentDescription = channel.name,
                     modifier = Modifier.fillMaxSize().padding(12.dp).padding(bottom = 28.dp),
                     contentScale = ContentScale.Fit
