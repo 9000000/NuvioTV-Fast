@@ -815,12 +815,15 @@ class LeanbackCardViewHolder(
         cornerRadiusPx: Float,
         showLabels: Boolean
     ) {
-        if (currentItem?.key != item.key) {
+        val imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+        val colorCacheKey = imageUrl ?: item.key
+        val prevImageUrl = currentItem?.let { it.imageUrl ?: it.heroPreview.poster ?: it.heroPreview.backdrop }
+        if (currentItem?.key != item.key || prevImageUrl != imageUrl) {
             posterImage.setImageDrawable(null)
         }
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
-        val cachedColor = LeanbackColorEngine.getCachedColor(item.key) ?: dominantColorCache.get(item.key)
+        val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey) ?: dominantColorCache.get(colorCacheKey)
         currentDominantColor = cachedColor ?: LeanbackColorEngine.defaultFallbackColor
 
         // Set dimensions
@@ -865,11 +868,11 @@ class LeanbackCardViewHolder(
         }
 
         // Image loading via Coil với Dynamic Color extraction & Hardware Bitmap khi đã có màu trong cache
-        val imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
         if (!imageUrl.isNullOrBlank()) {
             val ctx = posterImage.context
             val hasCachedColor = cachedColor != null
             val boundKey = item.key
+            val boundColorKey = colorCacheKey
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
@@ -888,7 +891,7 @@ class LeanbackCardViewHolder(
                             posterImage.setImageDrawable(result.asDrawable(ctx.resources))
                             // Triệt tiêu 100% GPU Overdraw khi ảnh đã nạp xong kín thẻ
                             cardContainer.background = null
-                            val existingColor = LeanbackColorEngine.getCachedColor(boundKey) ?: dominantColorCache.get(boundKey)
+                            val existingColor = LeanbackColorEngine.getCachedColor(boundColorKey) ?: dominantColorCache.get(boundColorKey)
                             if (existingColor != null) {
                                 currentDominantColor = existingColor
                                 if (root.hasFocus()) {
@@ -897,8 +900,8 @@ class LeanbackCardViewHolder(
                             } else {
                                 val bmp = (result as? BitmapImage)?.bitmap
                                 if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
-                                    LeanbackColorEngine.extractDominantColorAsync(boundKey, bmp) { extracted ->
-                                        dominantColorCache.put(boundKey, extracted)
+                                    LeanbackColorEngine.extractDominantColorAsync(boundColorKey, bmp) { extracted ->
+                                        dominantColorCache.put(boundColorKey, extracted)
                                         if (currentItem?.key == boundKey) {
                                             currentDominantColor = extracted
                                             if (root.hasFocus()) {

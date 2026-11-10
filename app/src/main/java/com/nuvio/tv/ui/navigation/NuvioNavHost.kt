@@ -535,7 +535,10 @@ private fun PlaybackNavHost(
             arguments = listOf(
                 navArgument("videoId") { type = NavType.StringType },
                 navArgument("contentType") { type = NavType.StringType },
-                navArgument("title") { type = NavType.StringType },
+                navArgument("title") {
+                    type = NavType.StringType
+                    nullable = true
+                },
                 navArgument("poster") {
                     type = NavType.StringType
                     nullable = true
@@ -769,7 +772,10 @@ private fun PlaybackNavHost(
             route = Screen.Player.route,
             arguments = listOf(
                 navArgument("streamUrl") { type = NavType.StringType },
-                navArgument("title") { type = NavType.StringType },
+                navArgument("title") {
+                    type = NavType.StringType
+                    nullable = true
+                },
                 navArgument("streamName") {
                     type = NavType.StringType
                     nullable = true

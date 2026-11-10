@@ -1026,7 +1026,7 @@ class LayoutSettingsViewModel @Inject constructor(
                                 addonName = addon.displayName
                             )
                         }
-                }
+                }.distinctBy { it.key }
                 updateUiStateIfChanged { it.copy(availableCatalogs = catalogs) }
             }
         }
