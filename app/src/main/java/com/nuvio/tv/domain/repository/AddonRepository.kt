@@ -11,4 +11,5 @@ interface AddonRepository {
     suspend fun removeAddon(url: String)
     suspend fun setAddonOrder(urls: List<String>)
     suspend fun setAddonEnabled(url: String, enabled: Boolean)
+    suspend fun refreshAllAddonManifests(): Result<Int> = Result.success(0)
 }

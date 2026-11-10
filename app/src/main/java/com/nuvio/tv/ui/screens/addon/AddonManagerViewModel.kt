@@ -107,7 +107,36 @@ class AddonManagerViewModel @Inject constructor(
     }
 
     fun requestAddonSyncNow() {
-        startupSyncService.requestAddonSyncNow()
+        if (_uiState.value.isRefreshingAddons) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingAddons = true, transientMessage = null) }
+            val result = startupSyncService.syncAndRefreshAddonsNow()
+            val count = result.getOrDefault(0)
+            if (result.isSuccess) {
+                val message = if (count > 0) {
+                    context.getString(R.string.addon_refresh_success, count)
+                } else {
+                    context.getString(R.string.addon_refresh_done_subtitle)
+                }
+                _uiState.update {
+                    it.copy(
+                        isRefreshingAddons = false,
+                        transientMessage = message,
+                        transientMessageIsError = false
+                    )
+                }
+            } else {
+                val errorMessage = result.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
+                    ?: context.getString(R.string.addon_refresh_error)
+                _uiState.update {
+                    it.copy(
+                        isRefreshingAddons = false,
+                        transientMessage = errorMessage,
+                        transientMessageIsError = true
+                    )
+                }
+            }
+        }
     }
 
     fun onInstallUrlChange(url: String) {

@@ -67,7 +67,13 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -207,6 +213,12 @@ fun AddonManagerScreen(
         if (refreshAddonsSubtitle != defaultRefreshAddonsSubtitle) {
             delay(5_000)
             refreshAddonsSubtitle = defaultRefreshAddonsSubtitle
+        }
+    }
+
+    LaunchedEffect(uiState.isRefreshingAddons) {
+        if (!uiState.isRefreshingAddons && !uiState.transientMessageIsError && uiState.transientMessage != null) {
+            refreshAddonsSubtitle = refreshedAddonsSubtitle
         }
     }
 
@@ -529,10 +541,14 @@ fun AddonManagerScreen(
 
             item {
                 RefreshAddonsEntryCard(
-                    subtitle = refreshAddonsSubtitle,
+                    subtitle = if (uiState.isRefreshingAddons) {
+                        stringResource(R.string.addon_refreshing)
+                    } else {
+                        refreshAddonsSubtitle
+                    },
+                    isRefreshing = uiState.isRefreshingAddons,
                     onClick = {
                         viewModel.requestAddonSyncNow()
-                        refreshAddonsSubtitle = refreshedAddonsSubtitle
                     },
                     modifier = Modifier.focusProperties {
                         down = firstAddonToggleFocusRequester
@@ -916,13 +932,26 @@ private fun CollectionsEntryCard(
 @Composable
 private fun RefreshAddonsEntryCard(
     subtitle: String,
+    isRefreshing: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "refresh_addon_spin")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+
     Surface(
         onClick = onClick,
+        enabled = !isRefreshing,
         modifier = modifier
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused }
@@ -951,8 +980,14 @@ private fun RefreshAddonsEntryCard(
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    tint = if (isFocused) NuvioTheme.colors.Secondary else NuvioTheme.colors.TextSecondary
+                    modifier = Modifier
+                        .size(28.dp)
+                        .graphicsLayer {
+                            if (isRefreshing) {
+                                rotationZ = rotation
+                            }
+                        },
+                    tint = if (isFocused || isRefreshing) NuvioTheme.colors.Secondary else NuvioTheme.colors.TextSecondary
                 )
                 Spacer(modifier = Modifier.width(NuvioTheme.spacing.lg))
                 Column {
@@ -964,16 +999,20 @@ private fun RefreshAddonsEntryCard(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioTheme.colors.TextSecondary
+                        color = if (isRefreshing) NuvioTheme.colors.Secondary else NuvioTheme.colors.TextSecondary
                     )
                 }
             }
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = NuvioTheme.colors.TextSecondary
-            )
+            if (isRefreshing) {
+                LoadingIndicator(modifier = Modifier.size(20.dp))
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = NuvioTheme.colors.TextSecondary
+                )
+            }
         }
     }
 }

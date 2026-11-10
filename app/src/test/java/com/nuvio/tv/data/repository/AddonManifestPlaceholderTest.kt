@@ -225,6 +225,24 @@ class AddonManifestPlaceholderTest {
         )
     }
 
+    @Test
+    fun `refreshAllAddonManifests fetches manifests even within cache TTL window`() = runBlocking {
+        val now = AtomicLong(1_000_000L)
+        val harness = newRepository(reachable = true, clock = { now.get() })
+
+        val addons = withTimeout(5_000) {
+            harness.repository.getInstalledAddons().first { it.isNotEmpty() && it.first().version.isNotEmpty() }
+        }
+        assertEquals(REAL_VERSION, addons.single().version)
+        val initialCalls = harness.manifestCalls.get()
+        assertTrue(initialCalls >= 1)
+
+        val result = harness.repository.refreshAllAddonManifests()
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.getOrNull())
+        assertEquals(initialCalls + 1, harness.manifestCalls.get())
+    }
+
     private fun newContext(): Context = mockk(relaxed = true)
 
     private data class Harness(

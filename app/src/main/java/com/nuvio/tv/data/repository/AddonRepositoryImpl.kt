@@ -348,6 +348,33 @@ class AddonRepositoryImpl(
         triggerRemoteSync()
     }
 
+    override suspend fun refreshAllAddonManifests(): Result<Int> = kotlinx.coroutines.withContext(dispatcher) {
+        val urls = preferences.installedAddonUrls.first()
+        if (urls.isEmpty()) {
+            return@withContext Result.success(0)
+        }
+
+        lastManifestRefreshAttemptTime = clock()
+        val results = coroutineScope {
+            urls.map { url ->
+                async {
+                    fetchAddon(url)
+                }
+            }.awaitAll()
+        }
+
+        val successCount = results.count { it is NetworkResult.Success }
+        if (successCount > 0) {
+            persistManifestCacheToDisk()
+            bumpManifestCacheRevision()
+            Result.success(successCount)
+        } else {
+            val firstError = results.filterIsInstance<NetworkResult.Error>().firstOrNull()
+            val errorMessage = firstError?.message ?: "Failed to refresh addon manifests"
+            Result.failure(IllegalStateException(errorMessage))
+        }
+    }
+
     suspend fun reconcileWithRemoteAddonUrls(
         remoteUrls: List<String>,
         removeMissingLocal: Boolean = true

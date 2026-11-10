@@ -1,3 +1,23 @@
+## [2026-11-10 20:15] - Sửa triệt để tính năng "Làm mới Tiện ích" không hoạt động khi bấm vào
+
+- **Type**: Logic & Integration
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/core/sync/StartupSyncService.kt`, `app/src/main/java/com/nuvio/tv/domain/repository/AddonRepository.kt`, `app/src/main/java/com/nuvio/tv/data/repository/AddonRepositoryImpl.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/addon/AddonManagerViewModel.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/addon/AddonManagerScreen.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `StartupSyncService.requestAddonSyncNow()` trước đó chỉ gọi `addonSyncService.getRemoteAddonUrls()` để lấy danh sách URL từ Supabase. Nếu người dùng chưa đăng nhập tài khoản Nuvio Cloud Sync, hàm ném lỗi ngoại lệ ngầm `IllegalStateException("Unable to resolve sync owner for addon sync")` và dừng lại hoàn toàn trong khối `catch`, không làm mới bất kỳ tiện ích nào trên máy.
+  2. Kể cả khi đã đăng nhập, `reconcileWithRemoteAddonUrls` chỉ so sánh chuỗi URL. Do `AddonRepositoryImpl` áp dụng cache manifest cứng lên tới 6 tiếng (`MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L`) và không có cơ chế force refresh manifest từ mạng, nên TV không hề gửi request tải lại `manifest.json` từ các server tiện ích. Danh mục, phiên bản, cấu hình của các tiện ích không bao giờ được cập nhật.
+  3. UI trong `AddonManagerScreen.kt` không có trạng thái loading (`isRefreshingAddons`), vừa bấm là đổi subtitle sang "Tiện ích vừa được làm mới" tức thì dù quá trình đang chạy ngầm hoặc đã fail do chưa đăng nhập, gây hiểu lầm cho người dùng là nút bị đơ hoặc hỏng.
+- **Fix Applied**:
+  1. `AddonRepository` & `AddonRepositoryImpl`: Bổ sung hàm `refreshAllAddonManifests(): Result<Int>` tải lại mới nhất `manifest.json` từ server của toàn bộ các tiện ích đã cài (bỏ qua giới hạn cache 6 tiếng), tự động cập nhật cache disk và tăng `manifestCacheRevision` để phát tín hiệu cập nhật danh sách cho toàn bộ app.
+  2. `StartupSyncService`: Tách biệt việc pull remote URL (nếu có đăng nhập) và việc refresh manifest. Dù có tài khoản hay dùng khách cục bộ, hàm `syncAndRefreshAddonsNow(): Result<Int>` luôn gọi `addonRepository.refreshAllAddonManifests()` và phát `_manualAddonRefreshes` để Home screen tải lại catalogs.
+  3. `AddonManagerViewModel`: Quản lý trạng thái `isRefreshingAddons: Boolean` và gửi `transientMessage` thông báo kết quả (ví dụ: "Đã làm mới X tiện ích" hoặc thông báo lỗi nếu mất mạng).
+  4. `AddonManagerScreen`: Thêm hiệu ứng xoay 360 độ mượt mà trên icon Refresh, đổi phụ đề sang "Đang làm mới tiện ích…" và hiển thị `LoadingIndicator` ở góc phải thẻ khi đang làm mới; hiển thị `AddonMessageOverlay` thông báo kết quả khi hoàn tất.
+- **Prevention**: Luôn phân tách rõ ràng giữa Cloud Sync (đồng bộ giữa các thiết bị) và Content Refresh (làm mới dữ liệu từ nguồn gốc); cung cấp phản hồi trực quan (loading, message) cho mọi thao tác người dùng trên TV.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-10 19:07] - Khắc phục lỗi D-pad Lên/Xuống trên màn hình Home không hiện viền sáng (phải bấm Trái/Phải mới hiện)
 
 - **Type**: Logic & Focus Management

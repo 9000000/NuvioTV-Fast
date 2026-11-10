@@ -192,30 +192,49 @@ class StartupSyncService @Inject constructor(
     /** Emits after a manual addon refresh, so screens holding catalogs can re-request them. */
     val manualAddonRefreshes: SharedFlow<Unit> = _manualAddonRefreshes.asSharedFlow()
 
+    suspend fun syncAndRefreshAddonsNow(): Result<Int> {
+        val profileId = profileManager.activeProfileId.value
+        Log.d(TAG, "Manual addon sync starting for profile $profileId")
+
+        if (authManager.isAuthenticated) {
+            addonRepository.isSyncingFromRemote = true
+            try {
+                val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrNull()
+                if (remoteAddonUrls != null) {
+                    addonRepository.reconcileWithRemoteAddonUrls(
+                        remoteUrls = remoteAddonUrls,
+                        removeMissingLocal = true
+                    )
+                    Log.d(TAG, "Manual addon sync pulled ${remoteAddonUrls.size} addons for profile $profileId")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Remote addon sync failed for profile $profileId", e)
+            } finally {
+                addonRepository.isSyncingFromRemote = false
+            }
+        } else {
+            Log.d(TAG, "Skipping remote addon pull (not authenticated) for profile $profileId")
+        }
+
+        val refreshResult = try {
+            addonRepository.refreshAllAddonManifests()
+        } catch (e: Exception) {
+            Log.e(TAG, "Manual addon manifest refresh failed for profile $profileId", e)
+            Result.failure(e)
+        }
+
+        // The user asked for a refresh, so let screens holding catalogs re-request them
+        // even when the addon list itself came back unchanged.
+        _manualAddonRefreshes.tryEmit(Unit)
+
+        return refreshResult
+    }
+
     fun requestAddonSyncNow() {
         val profileId = profileManager.activeProfileId.value
         Log.d(TAG, "Manual addon sync enqueued for profile $profileId")
         scope.launch {
-            Log.d(TAG, "Manual addon sync starting for profile $profileId")
-
-            addonRepository.isSyncingFromRemote = true
-            try {
-                val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
-
-                addonRepository.reconcileWithRemoteAddonUrls(
-                    remoteUrls = remoteAddonUrls,
-                    removeMissingLocal = true
-                )
-
-                Log.d(TAG, "Manual addon sync pulled ${remoteAddonUrls.size} addons for profile $profileId")
-            } catch (e: Exception) {
-                Log.e(TAG, "Manual addon sync failed for profile $profileId", e)
-            } finally {
-                addonRepository.isSyncingFromRemote = false
-                // The user asked for a refresh, so let screens holding catalogs re-request them
-                // even when the addon list itself came back unchanged.
-                _manualAddonRefreshes.tryEmit(Unit)
-            }
+            syncAndRefreshAddonsNow()
         }
     }
 

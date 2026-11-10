@@ -1863,6 +1863,9 @@
     <string name="addon_refresh_action">Refresh Addons</string>
     <string name="addon_refresh_default_subtitle">Pull latest addon changes for current profile</string>
     <string name="addon_refresh_done_subtitle">Addons refreshed just now</string>
+    <string name="addon_refreshing">Refreshing addons…</string>
+    <string name="addon_refresh_success">Refreshed %1$d addon(s)</string>
+    <string name="addon_refresh_error">Failed to refresh addons</string>
     <string name="addon_pending_collections_updated">Collections updated</string>
     <string name="addon_pending_collections_replace">%1$d collection(s) will replace current collections</string>
     <string name="addon_confirm_total_addons">Total addons: %1$d</string>
