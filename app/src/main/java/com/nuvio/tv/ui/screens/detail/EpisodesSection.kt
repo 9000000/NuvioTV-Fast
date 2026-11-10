@@ -127,7 +127,8 @@ fun SeasonTabs(
     selectedSeason: Int,
     onSeasonSelected: (Int) -> Unit,
     onSeasonLongPress: (Int) -> Unit = {},
-    selectedTabFocusRequester: FocusRequester,
+    seasonFocusRequesters: MutableMap<Int, FocusRequester> = remember { mutableMapOf() },
+    selectedTabFocusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     onNavigateDown: (() -> Boolean)? = null,
@@ -160,7 +161,6 @@ fun SeasonTabs(
     var suppressFocusSwitch by remember { mutableStateOf(false) }
     var lastAppliedSeason by remember { mutableStateOf(selectedSeason) }
     var lastFocusedSeason by remember { mutableStateOf(selectedSeason) }
-    val seasonFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     // Clear suppress whenever selectedSeason actually settles (composition runs
     // with the new value). This guarantees reset even if the scroll coroutine is cancelled.
     if (lastAppliedSeason != selectedSeason) {
@@ -257,22 +257,17 @@ fun SeasonTabs(
         }
     }
 
-    val restorerRequester = remember(lastFocusedSeason, selectedSeason, selectedTabFocusRequester) {
-        when {
-            lastFocusedSeason == selectedSeason -> selectedTabFocusRequester
-            else -> seasonFocusRequesters.getOrPut(lastFocusedSeason) { FocusRequester() }
-        }
+    val restorerRequester = remember(lastFocusedSeason, selectedSeason) {
+        val target = if (sortedSeasons.contains(lastFocusedSeason)) lastFocusedSeason else selectedSeason
+        seasonFocusRequesters.getOrPut(target) { FocusRequester() }
     }
 
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (selectedTabFocusRequester != null) Modifier.focusRequester(selectedTabFocusRequester) else Modifier)
             .focusRestorer {
-                if (suppressFocusSwitch || pendingSeason != null) {
-                    FocusRequester.Cancel
-                } else {
-                    restorerRequester
-                }
+                restorerRequester
             }
             .focusGroup(),
         state = lazyListState,
@@ -286,10 +281,8 @@ fun SeasonTabs(
             var isFocused by remember { mutableStateOf(false) }
             var longPressTriggered by remember { mutableStateOf(false) }
             val longPressKeyTracker = rememberLongPressKeyTracker()
-            val seasonFocusRequester = if (isSelected) {
-                selectedTabFocusRequester
-            } else {
-                remember(season) { seasonFocusRequesters.getOrPut(season) { FocusRequester() } }
+            val seasonFocusRequester = remember(season) {
+                seasonFocusRequesters.getOrPut(season) { FocusRequester() }
             }
 
             Card(
@@ -305,6 +298,11 @@ fun SeasonTabs(
                     .onPreviewKeyEvent { event ->
                         val native = event.nativeKeyEvent
                         if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                            if (pendingSeason != null) {
+                                val s = pendingSeason!!
+                                pendingSeason = null
+                                onSeasonSelected(s)
+                            }
                             if (onNavigateDown != null && onNavigateDown()) {
                                 return@onPreviewKeyEvent true
                             }
@@ -475,8 +473,13 @@ fun EpisodesRow(
             dedupedEpisodes.indexOfFirst { it.id == targetFocusEpisodeId }.coerceAtLeast(0)
         } else 0
     }
-    val shouldRequestEpisodeFocus = (!restoreEpisodeId.isNullOrBlank() && restoreFocusToken > 0) ||
-        !scrollToEpisodeId.isNullOrBlank()
+    val shouldRequestEpisodeFocus = !restoreEpisodeId.isNullOrBlank() && restoreFocusToken > 0
+
+    LaunchedEffect(scrollToEpisodeId) {
+        if (!scrollToEpisodeId.isNullOrBlank()) {
+            onScrollToEpisodeHandled()
+        }
+    }
 
     LeanbackNativeRow(
         rowKey = "episodes_season_${selectedSeason}_${windowResetKey ?: "default"}",

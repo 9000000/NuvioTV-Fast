@@ -1361,6 +1361,7 @@ private fun MetaDetailsContent(
         }
     }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
+    val seasonFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     val heroPlayButtonFocusRequester = remember { FocusRequester() }
     var synopsisTruncated by remember(meta.id, meta.description) { mutableStateOf(false) }
     val heroPlayFocusRequester = if (synopsisTruncated) null else heroPlayButtonFocusRequester
@@ -2415,6 +2416,7 @@ private fun MetaDetailsContent(
             commentsRowEntryFocusRequester,
             activePeopleTabFocusRequester,
             selectedSeasonFocusRequester,
+            seasonFocusRequesters,
             seasonDownFocusRequester,
             castSectionFocusRequester,
             isTvShow,
@@ -2429,12 +2431,13 @@ private fun MetaDetailsContent(
                         showSeasonTabs -> {
                             listState.animateScrollToItem(1)
                             repeat(2) { withFrameNanos { } }
-                            runCatching { selectedSeasonFocusRequester.requestFocus() }
+                            val req = seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester
+                            runCatching { req.requestFocus() }
                         }
                         showEpisodesRow -> {
                             val targetIdx = if (showSeasonTabs) 2 else 1
                             listState.animateScrollToItem(targetIdx)
-                            val req = seasonDownFocusRequester ?: selectedSeasonFocusRequester
+                            val req = seasonDownFocusRequester ?: seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester
                             req.requestFocusAfterFrames()
                         }
                         hasVisiblePeopleSection -> {
@@ -2656,9 +2659,9 @@ private fun MetaDetailsContent(
                             val name = key as? String ?: return null
                             return when {
                                 name == "hero" -> heroPlayButtonFocusRequester
-                                name == "season_tabs" -> selectedSeasonFocusRequester
+                                name == "season_tabs" -> seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester
                                 name.startsWith("episodes_") ->
-                                    seasonDownFocusRequester ?: selectedSeasonFocusRequester
+                                    seasonDownFocusRequester ?: seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester
                                 name == "cast_more_like_tabs" -> activePeopleTabFocusRequester
                                 name == "cast_or_more_like" -> when (activePeopleTab) {
                                     PeopleSectionTab.CAST -> castSectionFocusRequester
@@ -2754,7 +2757,7 @@ private fun MetaDetailsContent(
                         hideLogoDuringTrailer = hideLogoDuringTrailer,
                         isTrailerPlaying = isTrailerPlaying,
                         playButtonFocusRequester = heroPlayButtonFocusRequester,
-                        playButtonDownFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (seasonDownFocusRequester ?: episodesDownFocusRequester),
+                        playButtonDownFocusRequester = if (showSeasonTabs) (seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester) else (seasonDownFocusRequester ?: episodesDownFocusRequester),
                         onNavigateDown = onHeroNavigateDown,
                         onHeroActionFocused = {
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
@@ -2788,6 +2791,7 @@ private fun MetaDetailsContent(
                             selectedSeason = selectedSeason,
                             onSeasonSelected = onSeasonSelected,
                             onSeasonLongPress = { seasonOptionsDialogSeason = it },
+                            seasonFocusRequesters = seasonFocusRequesters,
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
                             upFocusRequester = heroPlayFocusRequester,
                             downFocusRequester = seasonDownFocusRequester,
@@ -2834,7 +2838,7 @@ private fun MetaDetailsContent(
                             onOpenEpisodeComments = episodeCommentsClick,
                             showOpenEpisodeComments = shouldShowCommentsSection,
                             onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
-                            upFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (heroPlayFocusRequester ?: heroPlayButtonFocusRequester),
+                            upFocusRequester = if (showSeasonTabs) (seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester) else (heroPlayFocusRequester ?: heroPlayButtonFocusRequester),
                             downFocusRequester = episodesDownFocusRequester,
                             entryFocusRequester = seasonDownFocusRequester,
                             entryFocusNonce = episodesRowEntryFocusNonce.intValue,
@@ -3630,7 +3634,6 @@ private fun PeopleSectionTabs(
                     selected = activeTab == item.tab,
                     canFocus = tabsCanFocus,
                     focusRequester = item.focusRequester,
-                    activeFocusRequester = if (activeTab != item.tab) restorerRequester else null,
                     upFocusRequester = upFocusRequester,
                     downFocusRequester = contentDownFocusRequester,
                     onFocused = { onTabFocused(item.tab) }
@@ -3640,6 +3643,9 @@ private fun PeopleSectionTabs(
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .focusRestorer { restorerRequester }
+                .focusGroup()
         ) {
             renderTabs(tabs)
         }
@@ -3653,18 +3659,11 @@ private fun PeopleSectionTabButton(
     selected: Boolean,
     canFocus: Boolean = true,
     focusRequester: FocusRequester,
-    activeFocusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isFocused, selected) {
-        if (isFocused && !selected && activeFocusRequester != null) {
-            runCatching { activeFocusRequester.requestFocus() }
-        }
-    }
 
     Card(
         onClick = onFocused,
@@ -3690,27 +3689,28 @@ private fun PeopleSectionTabButton(
                 role = Role.Tab
                 this.selected = selected
             },
+        shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.xl)),
         colors = CardDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent
+            containerColor = if (selected) NuvioTheme.colors.SurfaceVariant else Color.Transparent,
+            focusedContainerColor = NuvioTheme.colors.Secondary
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(NuvioTheme.spacing.none, Color.Transparent),
+                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
                 shape = RoundedCornerShape(NuvioTheme.radii.xl)
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.03f)
+        scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = when {
-                isFocused -> NuvioTheme.colors.TextPrimary
-                selected -> NuvioTheme.colors.TextPrimary.copy(alpha = 0.92f)
+                isFocused -> NuvioTheme.colors.OnSecondary
+                selected -> NuvioTheme.colors.TextPrimary
                 else -> NuvioTheme.colors.TextPrimary.copy(alpha = 0.55f)
             },
-            modifier = Modifier.padding(horizontal = NuvioTheme.spacing.xxs, vertical = NuvioTheme.spacing.xxs)
+            modifier = Modifier.padding(horizontal = NuvioTheme.spacing.md, vertical = NuvioTheme.spacing.xs)
         )
     }
 }

@@ -61,8 +61,8 @@ internal fun FilterChipItem(
     isSelected: Boolean,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
-    onNavigateDown: (() -> Unit)? = null,
-    onNavigateUp: (() -> Unit)? = null
+    onNavigateDown: (() -> Boolean)? = null,
+    onNavigateUp: (() -> Boolean)? = null
 ) {
     Card(
         onClick = onClick,
@@ -78,14 +78,12 @@ internal fun FilterChipItem(
                 if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN) {
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (onNavigateDown != null) {
-                                onNavigateDown()
+                            if (onNavigateDown != null && onNavigateDown()) {
                                 return@onPreviewKeyEvent true
                             }
                         }
                         AndroidKeyEvent.KEYCODE_DPAD_UP -> {
-                            if (onNavigateUp != null) {
-                                onNavigateUp()
+                            if (onNavigateUp != null && onNavigateUp()) {
                                 return@onPreviewKeyEvent true
                             }
                         }
@@ -113,8 +111,8 @@ internal fun PlaylistDropdownButton(
     isActive: Boolean,
     isOpen: Boolean,
     focusRequester: FocusRequester,
-    onNavigateDown: (() -> Unit)? = null,
-    onNavigateUp: (() -> Unit)? = null,
+    onNavigateDown: (() -> Boolean)? = null,
+    onNavigateUp: (() -> Boolean)? = null,
     onClick: () -> Unit
 ) {
     val displayName = selectedName ?: stringResource(R.string.livetv_select_playlist)
@@ -140,14 +138,12 @@ internal fun PlaylistDropdownButton(
                             }
                         }
                         AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (!isOpen && onNavigateDown != null) {
-                                onNavigateDown()
+                            if (!isOpen && onNavigateDown != null && onNavigateDown()) {
                                 return@onPreviewKeyEvent true
                             }
                         }
                         AndroidKeyEvent.KEYCODE_DPAD_UP -> {
-                            if (!isOpen && onNavigateUp != null) {
-                                onNavigateUp()
+                            if (!isOpen && onNavigateUp != null && onNavigateUp()) {
                                 return@onPreviewKeyEvent true
                             }
                         }

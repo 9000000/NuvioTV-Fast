@@ -310,6 +310,8 @@ private fun LiveTvContent(
     val filterChipsListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val channelFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val firstChannelCardFocusRequester = remember { FocusRequester() }
+    val emptyActionFocusRequester = remember { FocusRequester() }
 
     // Focus requesters cho filter chips
     val allChipFocusRequester = remember { FocusRequester() }
@@ -318,13 +320,6 @@ private fun LiveTvContent(
     val groupChipFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val playlistDropdownButtonFocusRequester = remember { FocusRequester() }
     val searchButtonFocusRequester = remember { FocusRequester() }
-
-    // Clear unneeded focus requesters when switching filter, category or query
-    // avoiding heavy full-list map/recomposition iterations on the Main thread.
-    LaunchedEffect(activeFilter, selectedPlaylistId, selectedGroup, searchQuery) {
-        channelFocusRequesters.clear()
-        groupChipFocusRequesters.clear()
-    }
 
     fun getActiveChipIndex(): Int {
         return if (selectedPlaylistId == null) {
@@ -365,7 +360,7 @@ private fun LiveTvContent(
             activeFilter == FilterType.RECENT -> recentChipFocusRequester
             activeFilter == FilterType.FAVORITES -> favoritesChipFocusRequester
             activeFilter == FilterType.GROUP -> {
-                selectedGroup?.let { groupChipFocusRequesters.getOrPut(it) { FocusRequester() } } ?: allChipFocusRequester
+                selectedGroup?.let { groupChipFocusRequesters[it] } ?: allChipFocusRequester
             }
             else -> playlistDropdownButtonFocusRequester
         }
@@ -392,32 +387,42 @@ private fun LiveTvContent(
         }
     }
 
-    fun navigateToChannelGrid() {
+    fun navigateToChannelGrid(): Boolean {
+        if (displayedChannels.isEmpty()) {
+            return runCatching {
+                emptyActionFocusRequester.requestFocus()
+                true
+            }.getOrDefault(false)
+        }
+
+        val firstVisible = gridState.firstVisibleItemIndex.coerceIn(0, displayedChannels.lastIndex)
+        val targetChannel = displayedChannels.getOrNull(firstVisible) ?: displayedChannels.first()
+        val targetId = targetChannel.id
+
+        val candidateRequester = channelFocusRequesters[targetId] ?: firstChannelCardFocusRequester
+        val directFocused = runCatching {
+            candidateRequester.requestFocus()
+            true
+        }.getOrDefault(false)
+
+        if (directFocused) return true
+
         coroutineScope.launch {
-            if (displayedChannels.isEmpty()) return@launch
-            val firstVisible = gridState.firstVisibleItemIndex.coerceIn(0, displayedChannels.lastIndex)
-            val targetChannel = displayedChannels.getOrNull(firstVisible) ?: displayedChannels.first()
-            val targetId = targetChannel.id
-
-            var focused = channelFocusRequesters[targetId]?.let {
-                runCatching { it.requestFocus(); true }.getOrDefault(false)
-            } ?: false
-            if (focused) return@launch
-
             if (firstVisible > 0) {
-                gridState.scrollToItem(firstVisible)
+                runCatching { gridState.scrollToItem(firstVisible) }
             } else {
-                gridState.scrollToItem(0)
+                runCatching { gridState.scrollToItem(0) }
             }
             for (delayMs in listOf(20L, 50L, 100L, 150L)) {
                 delay(delayMs)
-                val r = channelFocusRequesters[targetId] ?: channelFocusRequesters[displayedChannels.first().id]
-                if (r != null) {
-                    focused = runCatching { r.requestFocus(); true }.getOrDefault(false)
-                    if (focused) return@launch
-                }
+                val r = channelFocusRequesters[targetId]
+                    ?: channelFocusRequesters[displayedChannels.first().id]
+                    ?: firstChannelCardFocusRequester
+                val focused = runCatching { r.requestFocus(); true }.getOrDefault(false)
+                if (focused) return@launch
             }
         }
+        return true
     }
 
     // Tự động cuộn đến đúng chip và trỏ về đúng kênh vừa xem trong mục gần đây
@@ -486,7 +491,7 @@ private fun LiveTvContent(
                 searchButtonFocusRequester = searchButtonFocusRequester
             )
 
-            val onChipNavigateUp = remember { { runCatching { searchButtonFocusRequester.requestFocus() }; Unit } }
+            val onChipNavigateUp = remember { { runCatching { searchButtonFocusRequester.requestFocus(); true }.getOrDefault(false) } }
 
             // ── Filter Chips + Playlist Dropdown Button ──
             LazyRow(
@@ -600,7 +605,11 @@ private fun LiveTvContent(
                     LiveTvEmptyChannelState(
                         activeFilter = activeFilter,
                         hasPlaylistSelected = (selectedPlaylistId != null),
-                        onSelectPlaylist = { showPlaylistDropdown = true }
+                        onSelectPlaylist = { showPlaylistDropdown = true },
+                        actionFocusRequester = emptyActionFocusRequester,
+                        onNavigateUp = {
+                            coroutineScope.launch { navigateToActiveChip() }
+                        }
                     )
                 }
             } else {
@@ -610,6 +619,7 @@ private fun LiveTvContent(
                     launchingChannelId = launchingChannelId,
                     gridState = gridState,
                     channelFocusRequesters = channelFocusRequesters,
+                    firstChannelFocusRequester = firstChannelCardFocusRequester,
                     onChannelClick = { channel ->
                         showPlaylistDropdown = false
                         launchingChannelId = channel.id

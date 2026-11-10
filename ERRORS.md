@@ -1,3 +1,48 @@
+## [2026-11-10 19:07] - Khắc phục lỗi D-pad Lên/Xuống trên màn hình Home không hiện viền sáng (phải bấm Trái/Phải mới hiện)
+
+- **Type**: Logic & Focus Management
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `LeanbackModernRow.kt:1178`: Trong `LeanbackCardViewHolder.updateFocusVisual`, khi một thẻ poster mất focus (`hasFocus == false`), hàm chạy nhánh `else` và kiểm tra `if (gridView?.hasFocus() != true) gridView?.floatingRingView?.hideRing(false)`. Khi người dùng bấm Lên/Xuống sang một hàng mới, RecyclerView tiến hành bind đồng loạt các ViewHolder lân cận (từ thẻ 1 đến thẻ 7) trong khi layout pass đang chạy. Vì tại thời điểm bind các thẻ đó thẻ 0 chưa hoàn tất gắn focus nên `gridView.hasFocus()` tạm thời trả về false, dẫn đến việc 7 thẻ con này liên tục gọi `hideRing(false)` đè lên viền sáng của Thẻ 0 vừa mới kích hoạt.
+  2. `LeanbackModernRow.kt:563` & `614`: Cả `ModernRowContainerLayout.clearFocus()` và `InteropHorizontalGridView.clearFocus()` đều gọi thẳng `floatingRingView.hideRing(true)` mà không kiểm tra `if (!hasFocus())`. Khi Compose cuộn dọc `LazyColumn` hoặc chuyển giao focus giữa các `AndroidView`, ViewGroup cha gọi `clearFocus()` trên container nhưng con của nó (`vh.itemView`) vẫn đang giữ focus (`hasFocus() == true`). Việc gọi `hideRing(true)` tại đây đã dập tắt ngay lập tức viền sáng vừa hiện.
+  3. `LeanbackModernRow.kt:852`: Trong `InteropHorizontalGridView.onFocusChanged`, điều kiện `if (!gainFocus)` chỉ phản ánh bản thân RecyclerView có nhận direct focus hay không. Khi con của nó (`vh.itemView`) nhận focus, `gainFocus` là false nhưng `hasFocus() == true`. Lệnh `if (!gainFocus) floatingRingView?.hideRing(false)` khiến viền sáng bị ẩn đi mỗi khi direct focus của RecyclerView được chuyển giao cho con của nó.
+- **Fix Applied**:
+  1. `LeanbackCardViewHolder.updateFocusVisual`: Loại bỏ hoàn toàn việc thẻ con mất focus tự ý can thiệp vào `floatingRingView` của cả hàng. Focus ring là tài nguyên dùng chung ở cấp độ Hàng (row-level), chỉ được ẩn khi cả hàng thực sự mất focus (`globalFocusListener` và `ModernHomeRowsList`).
+  2. `ModernRowContainerLayout.clearFocus` & `InteropHorizontalGridView.clearFocus`: Bổ sung điều kiện an toàn `if (!hasFocus())` trước khi cho phép gọi `floatingRingView.hideRing(true)`.
+  3. `InteropHorizontalGridView.onFocusChanged`: Đổi điều kiện thành `if (!gainFocus && !hasFocus())` để chỉ ẩn viền sáng khi toàn bộ hàng và con cháu không còn bất kỳ focus nào; nếu `gainFocus || hasFocus()` thì gọi `ensureChildFocusAndRing(animated = false)`.
+  4. Đã cài đặt APK và kiểm thử tự động 100% bằng ADB: Bấm DOWN từ hàng 1 xuống hàng 2, 3, 4 và UP ngược lại các hàng, viền sáng màu neon (Cyan/Vàng cam) hiện lên tức thì trên thẻ poster mà không cần bấm thêm bất kỳ phím Trái/Phải nào.
+- **Prevention**: Không bao giờ để các thẻ con trong RecyclerView tự ý thay đổi hoặc ẩn trạng thái của view trang trí cấp độ ViewGroup cha (`floatingRingView`); luôn kiểm tra `!hasFocus()` trước khi ẩn focus ring trong các hàm `clearFocus()` và `onFocusChanged`.
+- **Status**: Fixed
+
+---
+
+## [2026-11-10 18:43] - Khắc phục lỗi D-pad chuyển mùa trong màn hình Chi tiết Phim tự động rơi focus xuống tập phim và lỗi mất viền focus các tab People
+
+- **Type**: Logic & Focus Management
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/detail/EpisodesSection.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/detail/MetaDetailsScreen.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `EpisodesSection.kt:476`: Biến `shouldRequestEpisodeFocus` được tính bằng `(!restoreEpisodeId.isNullOrBlank() && restoreFocusToken > 0) || !scrollToEpisodeId.isNullOrBlank()`. Khi người dùng chuyển sang một mùa mới (chưa có trong `initialEpisodeScrollDoneBySeason`), `scrollToEpisodeId` được gán bằng ID của tập 1 để cuộn danh sách tập phim. Việc nhầm lẫn giữa hành động "cuộn" (`scrollToEpisodeId`) và "yêu cầu focus" (`shouldRequestEpisodeFocus`) khiến `isPendingFocus` trong `LeanbackNativeRow` bị đặt thành `true`, kích hoạt `executeRowFocus(gridView, safeIdx)` tự động cướp focus khỏi hàng Mùa và trao cho Tập 1.
+  2. `EpisodesSection.kt:289-293`: Thẻ mùa đang chọn dùng `selectedTabFocusRequester`, các thẻ khác dùng `seasonFocusRequesters.getOrPut(season)`. Khi người dùng di chuyển D-pad sang mùa mới, sau 150ms debounce `selectedSeason` thay đổi khiến modifier `focusRequester` của thẻ mùa đang focus bị hoán đổi, làm Compose invalidate focus node.
+  3. `EpisodesSection.kt:271`: `focusRestorer` trên hàng Mùa trả về `FocusRequester.Cancel` khi `pendingSeason != null` hoặc `suppressFocusSwitch == true`, khiến toàn bộ focus restoration bị hủy bỏ khi chuyển mùa.
+  4. `MetaDetailsScreen.kt:3663-3667`: Trong `PeopleSectionTabButton`, `LaunchedEffect(isFocused, selected)` tự động gọi `activeFocusRequester.requestFocus()` khi `isFocused && !selected`, đá ngược focus lại tab cũ trước khi tab mới kịp trở thành selected. Đồng thời tab thiếu viền sáng `focusedBorder` và nền `focusedContainerColor`.
+- **Fix Applied**:
+  1. `EpisodesSection.kt`:
+     - Tách biệt hoàn toàn `shouldRequestEpisodeFocus`: Chỉ kích hoạt khi `!restoreEpisodeId.isNullOrBlank() && restoreFocusToken > 0`. Đối với `scrollToEpisodeId`, chỉ kích hoạt `onScrollToEpisodeHandled()` để cuộn mà không can thiệp focus.
+     - Dùng FocusRequester cố định bất biến cho từng mùa trong `seasonFocusRequesters: MutableMap<Int, FocusRequester>`. Không bao giờ hoán đổi FocusRequester của Card khi `selectedSeason` thay đổi.
+     - Xóa bỏ `FocusRequester.Cancel` khỏi `focusRestorer` của hàng Mùa, luôn khôi phục về `seasonFocusRequesters[lastFocusedSeason]` hoặc `selectedSeason`.
+  2. `MetaDetailsScreen.kt`:
+     - Đồng bộ `seasonFocusRequesters: MutableMap<Int, FocusRequester>` từ `MetaDetailsScreen` để Hero Play button và EpisodesRow có thể request focus trực tiếp vào đúng thẻ mùa đang chọn.
+     - Xóa bỏ race condition `LaunchedEffect(isFocused, selected)` trong `PeopleSectionTabButton`.
+     - Cập nhật UI của `PeopleSectionTabButton` chuẩn NuvioTV với viền sáng `NuvioTheme.focusRing.border(...)`, nền `focusedContainerColor = NuvioTheme.colors.Secondary` và text `OnSecondary` khi focused. Thêm `.focusRestorer().focusGroup()` cho hàng tabs.
+- **Prevention**: Không bao giờ gộp điều kiện cuộn UI (`scrollToItem`) chung với điều kiện cướp focus (`isPendingFocus`); luôn duy trì FocusRequester cố định cho từng item trong LazyRow thay vì tráo đổi instance khi state `selected` thay đổi.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-10 09:40] - Khắc phục lỗi mục Tìm kiếm không bấm giữ được Lên/Xuống, hàng đầu tiên không bấm giữ sang trái được và thi thoảng bấm sang phải focus nhảy lên ô tìm kiếm
 
 - **Type**: Logic & Focus Management

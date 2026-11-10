@@ -562,7 +562,7 @@ class ModernRowContainerLayout(context: Context) : FrameLayout(context) {
 
     override fun clearFocus() {
         super.clearFocus()
-        if (::floatingRingView.isInitialized) {
+        if (::floatingRingView.isInitialized && !hasFocus()) {
             floatingRingView.hideRing(true)
         }
     }
@@ -613,7 +613,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     override fun clearFocus() {
         super.clearFocus()
-        floatingRingView?.hideRing(true)
+        if (!hasFocus()) {
+            floatingRingView?.hideRing(true)
+        }
     }
 
     var isHoldingHorizontalKey: Boolean = false
@@ -630,13 +632,11 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         get() = adapter as? LeanbackRowAdapter
 
     fun notifyCardFocused(cardContainer: View, isLandscape: Boolean, dominantColor: Int) {
-        if (hasFocus()) {
-            floatingRingView?.moveToTarget(cardContainer, isLandscape, dominantColor, animationsEnabled)
-        }
+        floatingRingView?.moveToTarget(cardContainer, isLandscape, dominantColor, animationsEnabled)
     }
 
-    fun ensureChildFocusAndRing(animated: Boolean = false) {
-        if (!hasFocus()) return
+    fun ensureChildFocusAndRing(animated: Boolean = false, retryCount: Int = 0) {
+        if (!isAttachedToWindow) return
         val pos = selectedPosition.coerceAtLeast(0)
         val vh = findViewHolderForAdapterPosition(pos) as? LeanbackCardViewHolder
         if (vh != null) {
@@ -647,16 +647,10 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
             floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animated)
         } else {
-            post {
-                if (hasFocus() && isAttachedToWindow) {
-                    val deferredVh = findViewHolderForAdapterPosition(pos) as? LeanbackCardViewHolder
-                    if (deferredVh != null) {
-                        if (!deferredVh.itemView.hasFocus()) {
-                            deferredVh.itemView.requestFocus()
-                        }
-                        deferredVh.updateFocusVisual(true)
-                        val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-                        floatingRingView?.moveToTarget(deferredVh.cardContainer, isLandscape, deferredVh.currentDominantColor, animated)
+            if (retryCount < 6) {
+                post {
+                    if (isAttachedToWindow) {
+                        ensureChildFocusAndRing(animated, retryCount + 1)
                     }
                 }
             }
@@ -707,15 +701,17 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     hasReleasedKeyAfterArrivingAt0 = false
                 }
 
-                if (hasFocus() && child != null) {
+                val hasGridFocus = hasFocus() || isFocused || (parent as? View)?.hasFocus() == true
+                if (child != null && hasGridFocus) {
                     if (!child.itemView.hasFocus()) {
                         child.itemView.requestFocus()
                     }
                     (child as? LeanbackCardViewHolder)?.let { vh ->
+                        vh.updateFocusVisual(true)
                         val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
                         floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animationsEnabled)
                     }
-                } else if (hasFocus()) {
+                } else if (hasGridFocus) {
                     ensureChildFocusAndRing(animated = animationsEnabled)
                 }
 
@@ -855,11 +851,11 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
-        if (!gainFocus) {
+        if (!gainFocus && !hasFocus()) {
             isHoldingHorizontalKey = false
             pendingTargetPosition = RecyclerView.NO_POSITION
             floatingRingView?.hideRing(false)
-        } else {
+        } else if (gainFocus || hasFocus()) {
             if (selectedPosition <= 0) {
                 hasReleasedKeyAfterArrivingAt0 = true
                 arrivedAt0FromRight = false
@@ -1170,10 +1166,6 @@ class LeanbackCardViewHolder(
         val gridView = adapter.attachedRecyclerView as? InteropHorizontalGridView
         if (hasFocus) {
             gridView?.notifyCardFocused(cardContainer, isLandscape, currentDominantColor)
-        } else {
-            if (gridView?.hasFocus() != true) {
-                gridView?.floatingRingView?.hideRing(false)
-            }
         }
     }
 

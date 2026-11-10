@@ -228,7 +228,11 @@ internal fun ModernHomeRowsList(
                             (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
                         }
                     }
-                    (targetGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(animationsEnabled)
+                    val modernGrid = targetGrid as? InteropHorizontalGridView
+                    modernGrid?.ensureChildFocusAndRing(animationsEnabled)
+                    targetGrid.post {
+                        modernGrid?.ensureChildFocusAndRing(animationsEnabled)
+                    }
                 }
             }
             localPendingFocusRowKey = null
@@ -496,7 +500,11 @@ internal fun ModernHomeRowsList(
                                                     firstGrid.setSelectedPosition(targetCardIndex)
                                                 }
                                                 firstGrid.requestFocus()
-                                                (firstGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(animationsEnabled)
+                                                val modernGrid = firstGrid as? InteropHorizontalGridView
+                                                modernGrid?.ensureChildFocusAndRing(animationsEnabled)
+                                                firstGrid.post {
+                                                    modernGrid?.ensureChildFocusAndRing(animationsEnabled)
+                                                }
                                             }
                                         }
                                     } else {
@@ -544,7 +552,11 @@ internal fun ModernHomeRowsList(
                                         nextGrid.setSelectedPositionSmooth(targetCardIndex)
                                     }
                                     nextGrid.requestFocus()
-                                    (nextGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(shouldAnimate)
+                                    val modernGrid = nextGrid as? InteropHorizontalGridView
+                                    modernGrid?.ensureChildFocusAndRing(shouldAnimate)
+                                    nextGrid.post {
+                                        modernGrid?.ensureChildFocusAndRing(shouldAnimate)
+                                    }
                                 } else {
                                     localPendingFocusRowKey = nextRow.key
                                     localPendingFocusIndex = targetCardIndex
@@ -598,7 +610,11 @@ internal fun ModernHomeRowsList(
                                         prevGrid.setSelectedPositionSmooth(targetCardIndex)
                                     }
                                     prevGrid.requestFocus()
-                                    (prevGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(shouldAnimate)
+                                    val modernGrid = prevGrid as? InteropHorizontalGridView
+                                    modernGrid?.ensureChildFocusAndRing(shouldAnimate)
+                                    prevGrid.post {
+                                        modernGrid?.ensureChildFocusAndRing(shouldAnimate)
+                                    }
                                 } else {
                                     localPendingFocusRowKey = prevRow.key
                                     localPendingFocusIndex = targetCardIndex

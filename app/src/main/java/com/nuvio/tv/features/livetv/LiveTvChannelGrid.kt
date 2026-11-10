@@ -26,6 +26,7 @@ internal fun LiveTvChannelGrid(
     launchingChannelId: String?,
     gridState: LazyGridState,
     channelFocusRequesters: MutableMap<String, FocusRequester>,
+    firstChannelFocusRequester: FocusRequester? = null,
     onChannelClick: (LiveTvChannel) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onRequestNavigateToCategory: () -> Unit,
@@ -53,7 +54,12 @@ internal fun LiveTvChannelGrid(
         ) { itemIndex, channel ->
             val isFav = channel.id in favoriteChannelIds
             val requester = remember(channel.id) {
-                channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
+                if (itemIndex == 0 && firstChannelFocusRequester != null) {
+                    channelFocusRequesters[channel.id] = firstChannelFocusRequester
+                    firstChannelFocusRequester
+                } else {
+                    channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
+                }
             }
 
             TvChannelCard(
