@@ -317,6 +317,7 @@ private fun LiveTvContent(
     val recentChipFocusRequester = remember { FocusRequester() }
     val groupChipFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val playlistDropdownButtonFocusRequester = remember { FocusRequester() }
+    val searchButtonFocusRequester = remember { FocusRequester() }
 
     // Clear unneeded focus requesters when switching filter, category or query
     // avoiding heavy full-list map/recomposition iterations on the Main thread.
@@ -391,6 +392,34 @@ private fun LiveTvContent(
         }
     }
 
+    fun navigateToChannelGrid() {
+        coroutineScope.launch {
+            if (displayedChannels.isEmpty()) return@launch
+            val firstVisible = gridState.firstVisibleItemIndex.coerceIn(0, displayedChannels.lastIndex)
+            val targetChannel = displayedChannels.getOrNull(firstVisible) ?: displayedChannels.first()
+            val targetId = targetChannel.id
+
+            var focused = channelFocusRequesters[targetId]?.let {
+                runCatching { it.requestFocus(); true }.getOrDefault(false)
+            } ?: false
+            if (focused) return@launch
+
+            if (firstVisible > 0) {
+                gridState.scrollToItem(firstVisible)
+            } else {
+                gridState.scrollToItem(0)
+            }
+            for (delayMs in listOf(20L, 50L, 100L, 150L)) {
+                delay(delayMs)
+                val r = channelFocusRequesters[targetId] ?: channelFocusRequesters[displayedChannels.first().id]
+                if (r != null) {
+                    focused = runCatching { r.requestFocus(); true }.getOrDefault(false)
+                    if (focused) return@launch
+                }
+            }
+        }
+    }
+
     // Tự động cuộn đến đúng chip và trỏ về đúng kênh vừa xem trong mục gần đây
     LaunchedEffect(resumeTrigger, pendingFocusRestore) {
         if (pendingFocusRestore || resumeTrigger > 0L) {
@@ -453,8 +482,11 @@ private fun LiveTvContent(
                 onNavigateToSettings = onNavigateToSettings,
                 onRequestNavigateToFilters = {
                     coroutineScope.launch { navigateToActiveChip() }
-                }
+                },
+                searchButtonFocusRequester = searchButtonFocusRequester
             )
+
+            val onChipNavigateUp = remember { { runCatching { searchButtonFocusRequester.requestFocus() }; Unit } }
 
             // ── Filter Chips + Playlist Dropdown Button ──
             LazyRow(
@@ -471,6 +503,8 @@ private fun LiveTvContent(
                         isActive = showPlaylistDropdown,
                         isOpen = showPlaylistDropdown,
                         focusRequester = playlistDropdownButtonFocusRequester,
+                        onNavigateDown = { navigateToChannelGrid() },
+                        onNavigateUp = onChipNavigateUp,
                         onClick = {
                             showPlaylistDropdown = !showPlaylistDropdown
                         }
@@ -492,7 +526,9 @@ private fun LiveTvContent(
                                 LiveTvStorage.saveLastWatchedFilterType(FilterType.PLAYLIST.name)
                                 LiveTvStorage.saveLastWatchedGroup(null)
                             },
-                            focusRequester = allChipFocusRequester
+                            focusRequester = allChipFocusRequester,
+                            onNavigateDown = { navigateToChannelGrid() },
+                            onNavigateUp = onChipNavigateUp
                         )
                     }
                 }
@@ -510,7 +546,9 @@ private fun LiveTvContent(
                             LiveTvStorage.saveLastWatchedFilterType(FilterType.RECENT.name)
                             LiveTvStorage.saveLastWatchedGroup(null)
                         },
-                        focusRequester = recentChipFocusRequester
+                        focusRequester = recentChipFocusRequester,
+                        onNavigateDown = { navigateToChannelGrid() },
+                        onNavigateUp = onChipNavigateUp
                     )
                 }
 
@@ -527,7 +565,9 @@ private fun LiveTvContent(
                             LiveTvStorage.saveLastWatchedFilterType(FilterType.FAVORITES.name)
                             LiveTvStorage.saveLastWatchedGroup(null)
                         },
-                        focusRequester = favoritesChipFocusRequester
+                        focusRequester = favoritesChipFocusRequester,
+                        onNavigateDown = { navigateToChannelGrid() },
+                        onNavigateUp = onChipNavigateUp
                     )
                 }
 
@@ -546,7 +586,9 @@ private fun LiveTvContent(
                                 LiveTvStorage.saveLastWatchedFilterType(FilterType.GROUP.name)
                                 LiveTvStorage.saveLastWatchedGroup(group)
                             },
-                            focusRequester = req
+                            focusRequester = req,
+                            onNavigateDown = { navigateToChannelGrid() },
+                            onNavigateUp = onChipNavigateUp
                         )
                     }
                 }

@@ -66,6 +66,7 @@ internal fun LiveTvHeader(
     onRefresh: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onRequestNavigateToFilters: () -> Unit,
+    searchButtonFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
     val searchInputFocusRequester = remember { FocusRequester() }
@@ -205,7 +206,9 @@ internal fun LiveTvHeader(
                 ),
                 shape = CardDefaults.shape(CircleShape),
                 scale = CardDefaults.scale(focusedScale = 1.0f),
-                modifier = Modifier.onKeyEvent { keyEvent ->
+                modifier = Modifier
+                    .then(if (searchButtonFocusRequester != null) Modifier.focusRequester(searchButtonFocusRequester) else Modifier)
+                    .onKeyEvent { keyEvent ->
                     if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
                         keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
                     ) {

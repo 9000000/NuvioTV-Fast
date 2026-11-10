@@ -578,11 +578,25 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     var floatingRingView: ModernRowFloatingFocusRingView? = null
 
     private val globalFocusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
-        val isStillFocused = hasFocus() || (newFocus != null && isDescendant(newFocus))
-        if (!isStillFocused) {
+        val hasRowFocus = hasFocus() || (newFocus != null && isDescendant(newFocus))
+        if (!hasRowFocus) {
             isHoldingHorizontalKey = false
             pendingTargetPosition = RecyclerView.NO_POSITION
             floatingRingView?.hideRing(false)
+        } else {
+            val focusedChild = newFocus ?: findFocus()
+            if (focusedChild != null && isDescendant(focusedChild)) {
+                val holder = findContainingViewHolder(focusedChild) as? LeanbackCardViewHolder
+                if (holder != null) {
+                    holder.updateFocusVisual(true)
+                    val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+                    floatingRingView?.moveToTarget(holder.cardContainer, isLandscape, holder.currentDominantColor, false)
+                } else {
+                    ensureChildFocusAndRing(animated = false)
+                }
+            } else if (hasFocus()) {
+                ensureChildFocusAndRing(animated = false)
+            }
         }
     }
 
@@ -749,11 +763,18 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     }
 
     override fun requestChildFocus(child: View?, focused: View?) {
-        if (isBusyLayout) {
-            post { super.requestChildFocus(child, focused) }
-            return
-        }
         super.requestChildFocus(child, focused)
+        val target = focused ?: child
+        if (target != null && isDescendant(target)) {
+            val holder = findContainingViewHolder(target) as? LeanbackCardViewHolder
+            if (holder != null) {
+                holder.updateFocusVisual(true)
+                val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+                floatingRingView?.moveToTarget(holder.cardContainer, isLandscape, holder.currentDominantColor, false)
+            } else {
+                ensureChildFocusAndRing(animated = false)
+            }
+        }
     }
 
     override fun focusSearch(focused: View?, direction: Int): View? {
@@ -946,7 +967,13 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     if (total <= 0 || currentPos >= total - 1) {
-                        pendingTargetPosition = RecyclerView.NO_POSITION
+                        val lastIdx = (total - 1).coerceAtLeast(0)
+                        pendingTargetPosition = lastIdx
+                        if (animationsEnabled) {
+                            setSelectedPositionSmooth(lastIdx)
+                        } else {
+                            setSelectedPosition(lastIdx)
+                        }
                         return true
                     }
 
@@ -1702,11 +1729,11 @@ fun LeanbackModernRow(
                 setRowHeight(totalRowHeightPx)
                 setNumRows(1)
                 focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ITEM
-                windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
-                windowAlignmentOffset = 0
+                windowAlignment = BaseGridView.WINDOW_ALIGN_BOTH_EDGE
+                windowAlignmentOffset = startPaddingPx
                 windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
                 itemAlignmentOffset = 0
-                itemAlignmentOffsetPercent = BaseGridView.ITEM_ALIGN_OFFSET_PERCENT_DISABLED
+                itemAlignmentOffsetPercent = 0f
                 setItemSpacing(spacingPx)
                 clipToPadding = false
                 clipChildren = false
@@ -1762,11 +1789,11 @@ fun LeanbackModernRow(
             focusRing.cornerRadiusPx = cornerRadiusPx
             gridView.setRowHeight(totalRowHeightPx)
             gridView.focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ITEM
-            gridView.windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
-            gridView.windowAlignmentOffset = 0
+            gridView.windowAlignment = BaseGridView.WINDOW_ALIGN_BOTH_EDGE
+            gridView.windowAlignmentOffset = startPaddingPx
             gridView.windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
             gridView.itemAlignmentOffset = 0
-            gridView.itemAlignmentOffsetPercent = BaseGridView.ITEM_ALIGN_OFFSET_PERCENT_DISABLED
+            gridView.itemAlignmentOffsetPercent = 0f
             gridView.setItemSpacing(spacingPx)
             if (gridView.paddingLeft != startPaddingPx ||
                 gridView.paddingTop != verticalPaddingPx ||

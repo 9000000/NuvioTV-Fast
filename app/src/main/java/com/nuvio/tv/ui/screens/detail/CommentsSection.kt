@@ -119,6 +119,7 @@ fun CommentsSection(
     canLoadMore: Boolean,
     error: String?,
     upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     entryFocusToken: Int = 0,
     onEntryFocusHandled: () -> Unit = {},
     onRetry: () -> Unit,
@@ -284,7 +285,7 @@ fun CommentsSection(
                     selected = commentsMode == CommentsMode.TITLE,
                     focusRequester = resolvedTitleModeFocusRequester,
                     upFocusRequester = upFocusRequester,
-                    downFocusRequester = commentsTargetFocusRequester,
+                    downFocusRequester = if (comments.isEmpty()) downFocusRequester else commentsTargetFocusRequester,
                     leftFocusRequester = if (isRtl) resolvedEpisodeModeFocusRequester else FocusRequester.Cancel,
                     rightFocusRequester = if (isRtl) FocusRequester.Cancel else resolvedEpisodeModeFocusRequester,
                     onClick = { onCommentsModeSelected(CommentsMode.TITLE) }
@@ -301,7 +302,7 @@ fun CommentsSection(
                     selected = commentsMode == CommentsMode.EPISODE,
                     focusRequester = resolvedEpisodeModeFocusRequester,
                     upFocusRequester = upFocusRequester,
-                    downFocusRequester = commentsTargetFocusRequester,
+                    downFocusRequester = if (comments.isEmpty()) downFocusRequester else commentsTargetFocusRequester,
                     leftFocusRequester = if (isRtl) FocusRequester.Cancel else resolvedTitleModeFocusRequester,
                     rightFocusRequester = if (isRtl) resolvedTitleModeFocusRequester else FocusRequester.Cancel,
                     onClick = {
@@ -372,9 +373,13 @@ fun CommentsSection(
                                 if (canToggleEpisodeComments) {
                                     Modifier.focusProperties {
                                         up = controlsFocusRequester
+                                        if (downFocusRequester != null) down = downFocusRequester
                                     }
                                 } else {
-                                    upFocusModifier
+                                    Modifier.focusProperties {
+                                        if (upFocusRequester != null) up = upFocusRequester
+                                        if (downFocusRequester != null) down = downFocusRequester
+                                    }
                                 }
                             ),
                         colors = ButtonDefaults.colors(
@@ -407,7 +412,16 @@ fun CommentsSection(
                             ) {
                                 lockCommentFocusId = true
                             }
-                            false
+                            if (
+                                downFocusRequester != null &&
+                                event.type == KeyEventType.KeyDown &&
+                                event.key == Key.DirectionDown
+                            ) {
+                                downFocusRequester.requestFocus()
+                                true
+                            } else {
+                                false
+                            }
                         }
                         .onFocusChanged { state ->
                             if (!state.hasFocus) lockCommentFocusId = false

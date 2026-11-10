@@ -1028,11 +1028,11 @@ fun ModernHomeContent(
             }
 
             val localDensity = LocalDensity.current
-            val rowsViewportHeightFraction = if (useLandscapePosters) 0.54f else 0.58f
+            val rowsViewportHeightFraction = if (useLandscapePosters) 0.49f else 0.52f
             val activeCatalogHeight: Dp = if (useLandscapePosters) landscapeCatalogCardHeight else portraitCatalogCardHeight
             val tallestRowCardHeight: Dp = maxOf(activeCatalogHeight, continueWatchingCardHeight)
-            val rowsViewportHeight = remember(screenHeight, rowsViewportHeightFraction, tallestRowCardHeight) {
-                modernRowsViewportHeight(screenHeight, rowsViewportHeightFraction, tallestRowCardHeight)
+            val rowsViewportHeight = remember(screenHeight, rowsViewportHeightFraction) {
+                screenHeight * rowsViewportHeightFraction
             }
             val rowTitleLineHeight = MaterialTheme.typography.titleMedium.lineHeight
             val rowTitleHeight = remember(rowTitleLineHeight, localDensity) {

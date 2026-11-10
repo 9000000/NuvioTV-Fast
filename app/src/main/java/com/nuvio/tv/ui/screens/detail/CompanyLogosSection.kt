@@ -78,6 +78,7 @@ fun CompanyLogosSection(
     onRestoreFocusHandled: () -> Unit = {},
     onCompanyFocused: (revealOverflowPx: Float) -> Unit = {},
     upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     sectionFocusRequester: FocusRequester? = null,
     allowPageScroll: () -> Boolean = { false },
     windowResetKey: String? = null
@@ -215,6 +216,7 @@ fun CompanyLogosSection(
                         company = company,
                         focusRequester = focusRequester,
                         upFocusRequester = upFocusRequester,
+                        downFocusRequester = downFocusRequester,
                         onFocused = {
                             companyId?.let(onLastFocusedCompanyIdChange)
                             onCompanyFocused(if (suppressRestoreScroll) 0f else revealOverflowPx)
@@ -242,6 +244,7 @@ private fun CompanyLogoCard(
     company: MetaCompany,
     focusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit = {},
     onClick: () -> Unit
 ) {
@@ -273,12 +276,26 @@ private fun CompanyLogoCard(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
             )
             .onPreviewKeyEvent { event ->
-                if (
-                    upFocusRequester != null &&
-                    event.type == KeyEventType.KeyDown &&
-                    event.key == Key.DirectionUp
-                ) {
-                    upFocusRequester.requestFocus()
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.DirectionUp -> {
+                            if (upFocusRequester != null) {
+                                upFocusRequester.requestFocus()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        Key.DirectionDown -> {
+                            if (downFocusRequester != null) {
+                                downFocusRequester.requestFocus()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        else -> false
+                    }
                 } else {
                     false
                 }

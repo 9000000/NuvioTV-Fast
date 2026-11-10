@@ -60,7 +60,9 @@ internal fun FilterChipItem(
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Unit)? = null,
+    onNavigateUp: (() -> Unit)? = null
 ) {
     Card(
         onClick = onClick,
@@ -71,7 +73,26 @@ internal fun FilterChipItem(
         ),
         shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
         scale = CardDefaults.scale(focusedScale = 1.0f),
-        modifier = if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
+        modifier = (if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN) {
+                    when (keyEvent.nativeKeyEvent.keyCode) {
+                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (onNavigateDown != null) {
+                                onNavigateDown()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        AndroidKeyEvent.KEYCODE_DPAD_UP -> {
+                            if (onNavigateUp != null) {
+                                onNavigateUp()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                    }
+                }
+                false
+            }
     ) {
         Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)) {
             Text(
@@ -92,6 +113,8 @@ internal fun PlaylistDropdownButton(
     isActive: Boolean,
     isOpen: Boolean,
     focusRequester: FocusRequester,
+    onNavigateDown: (() -> Unit)? = null,
+    onNavigateUp: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     val displayName = selectedName ?: stringResource(R.string.livetv_select_playlist)
@@ -108,13 +131,26 @@ internal fun PlaylistDropdownButton(
         modifier = Modifier
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
-                    keyEvent.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT &&
-                    !isOpen
-                ) {
-                    if (openSidebar != null) {
-                        openSidebar()
-                        return@onPreviewKeyEvent true
+                if (keyEvent.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN) {
+                    when (keyEvent.nativeKeyEvent.keyCode) {
+                        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
+                            if (!isOpen && openSidebar != null) {
+                                openSidebar()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (!isOpen && onNavigateDown != null) {
+                                onNavigateDown()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        AndroidKeyEvent.KEYCODE_DPAD_UP -> {
+                            if (!isOpen && onNavigateUp != null) {
+                                onNavigateUp()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
                     }
                 }
                 false

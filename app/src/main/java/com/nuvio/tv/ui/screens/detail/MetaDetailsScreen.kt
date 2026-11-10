@@ -2060,7 +2060,18 @@ private fun MetaDetailsContent(
         }
     val episodesDownFocusRequester = when {
         hasVisiblePeopleTabs -> activePeopleTabFocusRequester
-        activePeopleTab == PeopleSectionTab.RATINGS -> ratingsContentFocusRequester
+        hasVisiblePeopleSection -> when (activePeopleTab) {
+            PeopleSectionTab.CAST -> castSectionFocusRequester
+            PeopleSectionTab.MORE_LIKE_THIS -> moreLikeSectionFocusRequester
+            PeopleSectionTab.TRAILER -> trailerSectionFocusRequester
+            PeopleSectionTab.COLLECTION -> collectionSectionFocusRequester
+            PeopleSectionTab.RATINGS -> ratingsContentFocusRequester
+        }
+        shouldSplitCollection && collection.isNotEmpty() -> collectionSectionFocusRequester
+        shouldShowCommentsSection -> if (commentsMode == CommentsMode.EPISODE) commentsEpisodeModeFocusRequester else commentsTitleModeFocusRequester
+        isTvShow && meta.networks.isNotEmpty() -> networkSectionFocusRequester
+        meta.productionCompanies.isNotEmpty() -> productionSectionFocusRequester
+        !isTvShow && meta.networks.isNotEmpty() -> networkSectionFocusRequester
         else -> null
     }
     val commentsUpFocusRequester = when {
@@ -2078,6 +2089,30 @@ private fun MetaDetailsContent(
     val canToggleEpisodeComments = isSeries && episodesForSeason.isNotEmpty()
     val commentsSelectedModeFocusRequester =
         if (commentsMode == CommentsMode.EPISODE) commentsEpisodeModeFocusRequester else commentsTitleModeFocusRequester
+
+    val peopleSectionDownFocusRequester = when {
+        shouldSplitCollection && collection.isNotEmpty() -> collectionSectionFocusRequester
+        shouldShowCommentsSection -> if (canToggleEpisodeComments) commentsSelectedModeFocusRequester else commentsRowEntryFocusRequester
+        isTvShow && meta.networks.isNotEmpty() -> networkSectionFocusRequester
+        meta.productionCompanies.isNotEmpty() -> productionSectionFocusRequester
+        !isTvShow && meta.networks.isNotEmpty() -> networkSectionFocusRequester
+        else -> null
+    }
+
+    val collectionSectionDownFocusRequester = when {
+        shouldShowCommentsSection -> if (canToggleEpisodeComments) commentsSelectedModeFocusRequester else commentsRowEntryFocusRequester
+        isTvShow && meta.networks.isNotEmpty() -> networkSectionFocusRequester
+        meta.productionCompanies.isNotEmpty() -> productionSectionFocusRequester
+        !isTvShow && meta.networks.isNotEmpty() -> networkSectionFocusRequester
+        else -> null
+    }
+
+    val commentsDownFocusRequester = when {
+        isTvShow && meta.networks.isNotEmpty() -> networkSectionFocusRequester
+        meta.productionCompanies.isNotEmpty() -> productionSectionFocusRequester
+        !isTvShow && meta.networks.isNotEmpty() -> networkSectionFocusRequester
+        else -> null
+    }
 
     val visiblePeopleTabsList = visiblePeopleTabItems.map { it.tab }
     LaunchedEffect(visiblePeopleTabsList, pendingRestoreType, shouldSplitCollection) {
@@ -2375,10 +2410,18 @@ private fun MetaDetailsContent(
             shouldSplitCollection,
             collection.size,
             shouldShowCommentsSection,
+            canToggleEpisodeComments,
+            commentsSelectedModeFocusRequester,
+            commentsRowEntryFocusRequester,
             activePeopleTabFocusRequester,
             selectedSeasonFocusRequester,
             seasonDownFocusRequester,
-            castSectionFocusRequester
+            castSectionFocusRequester,
+            isTvShow,
+            meta.networks.size,
+            meta.productionCompanies.size,
+            networkSectionFocusRequester,
+            productionSectionFocusRequester
         ) {
             {
                 coroutineScope.launch {
@@ -2409,11 +2452,27 @@ private fun MetaDetailsContent(
                         shouldShowCommentsSection -> {
                             listState.animateScrollToItem(1)
                             repeat(2) { withFrameNanos { } }
-                            runCatching { commentsRowEntryFocusRequester.requestFocus() }
+                            val req = if (canToggleEpisodeComments) commentsSelectedModeFocusRequester else commentsRowEntryFocusRequester
+                            runCatching { req.requestFocus() }
+                        }
+                        isTvShow && meta.networks.isNotEmpty() -> {
+                            listState.animateScrollToItem(1)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { networkSectionFocusRequester.requestFocus() }
+                        }
+                        meta.productionCompanies.isNotEmpty() -> {
+                            listState.animateScrollToItem(1)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { productionSectionFocusRequester.requestFocus() }
+                        }
+                        !isTvShow && meta.networks.isNotEmpty() -> {
+                            listState.animateScrollToItem(1)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { networkSectionFocusRequester.requestFocus() }
                         }
                     }
                 }
-                showSeasonTabs || showEpisodesRow || hasVisiblePeopleSection || (shouldSplitCollection && collection.isNotEmpty()) || shouldShowCommentsSection
+                showSeasonTabs || showEpisodesRow || hasVisiblePeopleSection || (shouldSplitCollection && collection.isNotEmpty()) || shouldShowCommentsSection || meta.networks.isNotEmpty() || meta.productionCompanies.isNotEmpty()
             }
         }
 
@@ -2430,30 +2489,82 @@ private fun MetaDetailsContent(
             }
         }
 
-        val onEpisodesRowNavigateDown = remember(hasVisiblePeopleSection, hasVisiblePeopleTabs, activePeopleTabFocusRequester, castSectionFocusRequester, showSeasonTabs, showEpisodesRow, shouldSplitCollection, collection.size) {
+        val onEpisodesRowNavigateDown = remember(
+            hasVisiblePeopleSection,
+            hasVisiblePeopleTabs,
+            activePeopleTabFocusRequester,
+            castSectionFocusRequester,
+            showSeasonTabs,
+            showEpisodesRow,
+            shouldSplitCollection,
+            collection.size,
+            shouldShowCommentsSection,
+            canToggleEpisodeComments,
+            commentsSelectedModeFocusRequester,
+            commentsRowEntryFocusRequester,
+            isTvShow,
+            meta.networks.size,
+            meta.productionCompanies.size,
+            networkSectionFocusRequester,
+            productionSectionFocusRequester
+        ) {
             {
-                if (hasVisiblePeopleSection) {
-                    coroutineScope.launch {
-                        var castIndex = 1
-                        if (showSeasonTabs) castIndex++
-                        if (showEpisodesRow) castIndex++
-                        listState.animateScrollToItem(castIndex)
-                        repeat(2) { withFrameNanos { } }
-                        val req = if (hasVisiblePeopleTabs) activePeopleTabFocusRequester else castSectionFocusRequester
-                        runCatching { req.requestFocus() }
+                var targetIdx = 1
+                if (showSeasonTabs) targetIdx++
+                if (showEpisodesRow) targetIdx++
+                when {
+                    hasVisiblePeopleSection -> {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(targetIdx)
+                            repeat(2) { withFrameNanos { } }
+                            val req = if (hasVisiblePeopleTabs) activePeopleTabFocusRequester else castSectionFocusRequester
+                            runCatching { req.requestFocus() }
+                        }
+                        true
                     }
-                    true
-                } else if (shouldSplitCollection && collection.isNotEmpty()) {
-                    coroutineScope.launch {
-                        var colIndex = 1
-                        if (showSeasonTabs) colIndex++
-                        if (showEpisodesRow) colIndex++
-                        listState.animateScrollToItem(colIndex)
-                        repeat(2) { withFrameNanos { } }
-                        runCatching { collectionSectionFocusRequester.requestFocus() }
+                    shouldSplitCollection && collection.isNotEmpty() -> {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(targetIdx)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { collectionSectionFocusRequester.requestFocus() }
+                        }
+                        true
                     }
-                    true
-                } else false
+                    shouldShowCommentsSection -> {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(targetIdx)
+                            repeat(2) { withFrameNanos { } }
+                            val req = if (canToggleEpisodeComments) commentsSelectedModeFocusRequester else commentsRowEntryFocusRequester
+                            runCatching { req.requestFocus() }
+                        }
+                        true
+                    }
+                    isTvShow && meta.networks.isNotEmpty() -> {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(targetIdx)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { networkSectionFocusRequester.requestFocus() }
+                        }
+                        true
+                    }
+                    meta.productionCompanies.isNotEmpty() -> {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(targetIdx)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { productionSectionFocusRequester.requestFocus() }
+                        }
+                        true
+                    }
+                    !isTvShow && meta.networks.isNotEmpty() -> {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(targetIdx)
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { networkSectionFocusRequester.requestFocus() }
+                        }
+                        true
+                    }
+                    else -> false
+                }
             }
         }
 
@@ -2774,12 +2885,19 @@ private fun MetaDetailsContent(
         if (hasVisiblePeopleSection) {
                 if (hasVisiblePeopleTabs) {
                     item(key = "cast_more_like_tabs", contentType = "horizontal_row") {
+                        val activeTabDownFocusRequester = when (activePeopleTab) {
+                            PeopleSectionTab.CAST -> castSectionFocusRequester
+                            PeopleSectionTab.MORE_LIKE_THIS -> moreLikeSectionFocusRequester
+                            PeopleSectionTab.TRAILER -> trailerSectionFocusRequester
+                            PeopleSectionTab.COLLECTION -> collectionSectionFocusRequester
+                            PeopleSectionTab.RATINGS -> ratingsContentFocusRequester
+                        }
                         PeopleSectionTabs(
                             activeTab = activePeopleTab,
                             tabs = visiblePeopleTabItems,
                             tabsCanFocus = pendingRestoreType != RestoreTarget.COMPANY_OR_NETWORK,
                             upFocusRequester = seasonDownFocusRequester ?: heroPlayFocusRequester,
-                            ratingsDownFocusRequester = ratingsContentFocusRequester,
+                            contentDownFocusRequester = activeTabDownFocusRequester,
                             onTabFocused = { tab ->
                                 val lockedTab = when (pendingRestoreType) {
                                     RestoreTarget.MORE_LIKE_THIS -> PeopleSectionTab.MORE_LIKE_THIS
@@ -2822,7 +2940,7 @@ private fun MetaDetailsContent(
                                     title = if (hasVisiblePeopleTabs) "" else strTabCast,
                                     leadingCast = directorWriterMembers,
                                     upFocusRequester = if (hasVisiblePeopleTabs) castTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
-                                    downFocusRequester = if (shouldShowCommentsSection && canToggleEpisodeComments) commentsSelectedModeFocusRequester else null,
+                                    downFocusRequester = peopleSectionDownFocusRequester,
                                     sectionFocusRequester = castSectionFocusRequester,
                                     restorePersonId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
@@ -2856,7 +2974,7 @@ private fun MetaDetailsContent(
                                     sourceLabel = moreLikeThisSourceLabel,
                                     posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                                     upFocusRequester = if (hasVisiblePeopleTabs) moreLikeTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
-                                    downFocusRequester = if (shouldShowCommentsSection && canToggleEpisodeComments) commentsSelectedModeFocusRequester else null,
+                                    downFocusRequester = peopleSectionDownFocusRequester,
                                     sectionFocusRequester = moreLikeSectionFocusRequester,
                                     restoreItemId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
@@ -2887,11 +3005,7 @@ private fun MetaDetailsContent(
                                     listState = trailerListState,
                                     posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                                     upFocusRequester = if (hasVisiblePeopleTabs) trailerTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
-                                    downFocusRequester = when {
-                                        shouldSplitCollection && collection.isNotEmpty() -> collectionSectionFocusRequester
-                                        shouldShowCommentsSection && canToggleEpisodeComments -> commentsSelectedModeFocusRequester
-                                        else -> null
-                                    },
+                                    downFocusRequester = peopleSectionDownFocusRequester,
                                     sectionFocusRequester = trailerSectionFocusRequester,
                                     restoreTrailerId = if (restoreSharedTrailerFocusToken > 0) selectedSharedTrailer?.ytId else null,
                                     restoreFocusToken = restoreSharedTrailerFocusToken,
@@ -2911,7 +3025,7 @@ private fun MetaDetailsContent(
                                     listState = collectionListState,
                                     posterCardCornerRadius = posterCardCornerRadiusDp.dp,
                                     upFocusRequester = if (hasVisiblePeopleTabs) collectionTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
-                                    downFocusRequester = if (shouldShowCommentsSection && canToggleEpisodeComments) commentsSelectedModeFocusRequester else null,
+                                    downFocusRequester = peopleSectionDownFocusRequester,
                                     sectionFocusRequester = collectionSectionFocusRequester,
                                     restoreItemId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
@@ -2948,7 +3062,7 @@ private fun MetaDetailsContent(
                                     } else {
                                         seasonDownFocusRequester ?: heroPlayFocusRequester
                                     },
-                                    downFocusRequester = if (shouldShowCommentsSection && canToggleEpisodeComments) commentsSelectedModeFocusRequester else null,
+                                    downFocusRequester = peopleSectionDownFocusRequester,
                                     firstItemFocusRequester = ratingsContentFocusRequester,
                                     ratingsGridFocusRequester = ratingsGridFocusRequester,
                                     modifier = Modifier.heightIn(min = if (!hasItemsBelow) castSectionHeight else NuvioTheme.spacing.none)
@@ -2978,6 +3092,7 @@ private fun MetaDetailsContent(
                         } else {
                             seasonDownFocusRequester ?: heroPlayFocusRequester
                         },
+                        downFocusRequester = collectionSectionDownFocusRequester,
                         sectionFocusRequester = collectionSectionFocusRequester,
                         restoreItemId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
@@ -3020,6 +3135,7 @@ private fun MetaDetailsContent(
                         canLoadMore = canLoadMoreComments,
                         error = commentsError,
                         upFocusRequester = commentsUpFocusRequester,
+                        downFocusRequester = commentsDownFocusRequester,
                         entryFocusToken = commentsEntryFocusToken,
                         onEntryFocusHandled = {
                             commentsEntryFocusToken = 0
@@ -3055,6 +3171,7 @@ private fun MetaDetailsContent(
                             } else {
                                 commentsUpFocusRequester
                             },
+                            downFocusRequester = if (meta.productionCompanies.isNotEmpty()) productionSectionFocusRequester else null,
                             sectionFocusRequester = networkSectionFocusRequester,
                             allowPageScroll = ::allowCompanyPageScroll,
                             windowResetKey = meta.id,
@@ -3081,10 +3198,11 @@ private fun MetaDetailsContent(
                             onRestoreFocusHandled = { clearPendingRestore() },
                             onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             upFocusRequester = when {
-                                shouldShowCommentsSection && meta.networks.isEmpty() -> commentsRowEntryFocusRequester
-                                meta.networks.isEmpty() -> commentsUpFocusRequester
-                                else -> null
+                                meta.networks.isNotEmpty() -> networkSectionFocusRequester
+                                shouldShowCommentsSection -> commentsRowEntryFocusRequester
+                                else -> commentsUpFocusRequester
                             },
+                            downFocusRequester = null,
                             sectionFocusRequester = productionSectionFocusRequester,
                             allowPageScroll = ::allowCompanyPageScroll,
                             windowResetKey = meta.id,
@@ -3115,6 +3233,7 @@ private fun MetaDetailsContent(
                             } else {
                                 commentsUpFocusRequester
                             },
+                            downFocusRequester = if (meta.networks.isNotEmpty()) networkSectionFocusRequester else null,
                             sectionFocusRequester = productionSectionFocusRequester,
                             allowPageScroll = ::allowCompanyPageScroll,
                             windowResetKey = meta.id,
@@ -3141,10 +3260,11 @@ private fun MetaDetailsContent(
                             onRestoreFocusHandled = { clearPendingRestore() },
                             onCompanyFocused = { overflow -> onCompanyRowFocused(overflow) },
                             upFocusRequester = when {
-                                shouldShowCommentsSection && meta.productionCompanies.isEmpty() -> commentsRowEntryFocusRequester
-                                meta.productionCompanies.isEmpty() -> commentsUpFocusRequester
-                                else -> null
+                                meta.productionCompanies.isNotEmpty() -> productionSectionFocusRequester
+                                shouldShowCommentsSection -> commentsRowEntryFocusRequester
+                                else -> commentsUpFocusRequester
                             },
+                            downFocusRequester = null,
                             sectionFocusRequester = networkSectionFocusRequester,
                             allowPageScroll = ::allowCompanyPageScroll,
                             windowResetKey = meta.id,
@@ -3480,7 +3600,7 @@ private fun PeopleSectionTabs(
     tabs: List<PeopleTabItem>,
     tabsCanFocus: Boolean = true,
     upFocusRequester: FocusRequester? = null,
-    ratingsDownFocusRequester: FocusRequester? = null,
+    contentDownFocusRequester: FocusRequester? = null,
     onTabFocused: (PeopleSectionTab) -> Unit
 ) {
     val defaultRequester = tabs.first().focusRequester
@@ -3512,7 +3632,7 @@ private fun PeopleSectionTabs(
                     focusRequester = item.focusRequester,
                     activeFocusRequester = if (activeTab != item.tab) restorerRequester else null,
                     upFocusRequester = upFocusRequester,
-                    downFocusRequester = if (item.tab == PeopleSectionTab.RATINGS) ratingsDownFocusRequester else null,
+                    downFocusRequester = contentDownFocusRequester,
                     onFocused = { onTabFocused(item.tab) }
                 )
             }
