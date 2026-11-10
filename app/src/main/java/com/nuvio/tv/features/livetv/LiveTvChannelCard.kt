@@ -123,7 +123,7 @@ internal fun TvChannelCard(
                 val imageRequest = remember(channel.logoUrl) {
                     ImageRequest.Builder(context)
                         .data(channel.logoUrl)
-                        .size(180, 120) // Downsample high-res logos to thumbnail size, preventing huge memory spikes
+                        .size(500, 400) // High quality thumbnail size for 1080p/4K TV screens, sharp and clear while preventing huge raw image spikes
                         .crossfade(false)
                         .build()
                 }
