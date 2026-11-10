@@ -212,7 +212,8 @@ internal data class SettingsPickerOption<T>(
     val title: String,
     val description: String? = null,
     val trailing: String? = null,
-    val titleFontFamily: FontFamily? = null
+    val titleFontFamily: FontFamily? = null,
+    val warning: String? = null
 )
 
 @Composable
@@ -1013,6 +1014,14 @@ internal fun <T> SettingsSingleChoiceDialog(
                                     Text(
                                         text = option.description,
                                         color = NuvioTheme.colors.TextSecondary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (!option.warning.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                                    Text(
+                                        text = option.warning,
+                                        color = NuvioTheme.colors.Warning,
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }

@@ -2,6 +2,8 @@ package com.nuvio.tv.core.di
 
 import android.os.Build
 import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.core.network.ArcDns
+import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.network.NoDelaySocketFactory
 import com.nuvio.tv.core.profile.ProfileScopedCredentialStore
 import com.nuvio.tv.core.sync.SyncClientIdentity
@@ -35,6 +37,7 @@ object MediaServerModule {
         profileDataStore: ProfileDataStore
     ): ServerRepository {
         val http = OkHttpClient.Builder()
+            .dns(IPv4FirstDns(ArcDns.withSystemRetry))
             .socketFactory(NoDelaySocketFactory)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

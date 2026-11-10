@@ -9,7 +9,7 @@ import java.net.InetAddress
  * before IPv6 (Inet6Address). This avoids 60s timeout delays on networks
  * with broken IPv6 routing (issue #651).
  */
-class IPv4FirstDns(private val delegate: Dns = Dns.SYSTEM) : Dns {
+class IPv4FirstDns(private val delegate: Dns = ArcDns) : Dns {
     override fun lookup(hostname: String): List<InetAddress> {
         val addresses = try {
             delegate.lookup(hostname)

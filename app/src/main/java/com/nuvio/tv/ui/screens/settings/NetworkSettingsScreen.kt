@@ -439,6 +439,10 @@ fun AdvancedSettingsContent(
             }
         }
 
+        item(key = "dns_settings") {
+            DnsSettingsGroup()
+        }
+
         item(key = "performance_settings") {
             SettingsGroupCard(
                 modifier = Modifier.fillMaxWidth(),

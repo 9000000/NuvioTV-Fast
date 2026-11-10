@@ -20,4 +20,6 @@
     <string name="advanced_dns_test_time">%1$s %2$d ms</string>
     <string name="advanced_dns_test_no_answer">%1$s: no answer</string>
     <string name="advanced_dns_test_unreachable">Not reachable</string>
+    <string name="advanced_dns_save">Check and save</string>
+    <string name="advanced_dns_checking">Checking…</string>
 </resources>

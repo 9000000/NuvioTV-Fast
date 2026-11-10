@@ -83,6 +83,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         // Before super.onCreate(): Hilt creates injected services there, and the budget is read once.
         MemoryBudget.init(this)
+        com.nuvio.tv.core.network.ArcDns.init(this)
         super.onCreate()
         com.nuvio.tv.features.livetv.LiveTvStorage.init(this)
         SentryInitializer.start(this, sentrySettingsDataStore)
@@ -122,6 +123,9 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 .followRedirects(true)
                 .followSslRedirects(true)
                 .build()
+                .also {
+                    com.nuvio.tv.core.network.ArcDns.onChange(it.connectionPool::evictAll)
+                }
         }
 
         val imageLoaderRef: () -> ImageLoader = { SingletonImageLoader.get(this) }

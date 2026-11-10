@@ -43,6 +43,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import com.nuvio.tv.core.network.ArcDns
 import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.diagnostics.SentryNetworkBreadcrumbInterceptor
 import java.io.File
@@ -142,6 +143,7 @@ object NetworkModule {
                         else HttpLoggingInterceptor.Level.NONE
             })
             .build()
+            .also { ArcDns.onChange(it.connectionPool::evictAll) }
     }
 
     /**

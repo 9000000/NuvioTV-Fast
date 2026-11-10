@@ -19,4 +19,6 @@
     <string name="advanced_dns_test_time">%1$s %2$d ms</string>
     <string name="advanced_dns_test_no_answer">%1$s: không có phản hồi</string>
     <string name="advanced_dns_test_unreachable">Không thể kết nối</string>
+    <string name="advanced_dns_save">Kiểm tra và lưu</string>
+    <string name="advanced_dns_checking">Đang kiểm tra…</string>
 </resources>

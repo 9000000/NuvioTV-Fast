@@ -722,3 +722,20 @@ unCatching, falsely marking channelFocused = true and skipping fallback focus na
 - **Status**: Fixed
 
 ---
+
+## [2026-11-10 10:52] - Thiếu thuộc tính `warning` trong `SettingsPickerOption` khi tích hợp `DnsSettingsGroup`
+
+- **Type**: Integration
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/settings/SettingsDesignSystem.kt:210`
+- **Agent**: mon
+- **Root Cause**: `DnsSettingsGroup.kt` từ `NuvioTV-Fork` truyền tham số `warning` cho `SettingsPickerOption` (cảnh báo khi chọn AdGuard DNS), nhưng `SettingsPickerOption` trong `SettingsDesignSystem.kt` của nhánh hiện tại chưa có trường `warning`.
+- **Error Message**: 
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/DnsSettingsGroup.kt:116:21 No parameter with name 'warning' found.
+  ```
+- **Fix Applied**: Bổ sung `val warning: String? = null` vào `SettingsPickerOption` và hiển thị dòng cảnh báo với màu `NuvioTheme.colors.Warning` trong `SettingsSingleChoiceDialog`.
+- **Prevention**: Kiểm tra chữ ký data class của các component dùng chung trong `SettingsDesignSystem.kt` khi backport UI từ nhánh fork.
+- **Status**: Fixed
+
+---
