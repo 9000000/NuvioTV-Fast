@@ -431,15 +431,9 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             Color.parseColor("#F59E0B")
         }
 
-        if (isLandscape) {
-            strokeColor = Color.WHITE
-            glowColor = resolvedGlowColor
-            isGlowEnabled = true
-        } else {
-            strokeColor = resolvedGlowColor
-            glowColor = resolvedGlowColor
-            isGlowEnabled = true
-        }
+        strokeColor = resolvedGlowColor
+        glowColor = resolvedGlowColor
+        isGlowEnabled = true
 
         val lp = layoutParams
         if (lp != null && (lp.width != targetWidth || lp.height != targetHeight)) {
@@ -565,6 +559,12 @@ class ModernRowContainerLayout(context: Context) : FrameLayout(context) {
         if (::floatingRingView.isInitialized && !hasFocus()) {
             floatingRingView.hideRing(true)
         }
+    }
+
+    override fun requestChildRectangleOnScreen(child: View, rect: Rect, immediate: Boolean): Boolean {
+        // Prevent child rectangle requests from bubbling up to AndroidComposeView / LazyColumn,
+        // which cancels the smooth vertical animateScrollToItem animation when a row card receives focus.
+        return true
     }
 }
 
@@ -843,10 +843,10 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     }
 
     override fun requestChildRectangleOnScreen(child: View, rect: Rect, immediate: Boolean): Boolean {
-        if (!animationsEnabled) {
-            return super.requestChildRectangleOnScreen(child, rect, true)
-        }
-        return super.requestChildRectangleOnScreen(child, rect, immediate)
+        // HorizontalGridView handles its own internal horizontal scrolling via LayoutManager.
+        // Returning true isolates vertical scroll management to the parent LazyColumn,
+        // avoiding interrupting animateScrollToItem with conflicting bringIntoView requests.
+        return true
     }
 
     override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
@@ -932,6 +932,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                         val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
                         if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
                             if (onNavigateLeftOnFirstItem?.invoke() == true) {
+                                clearFocus()
                                 return true
                             }
                         }

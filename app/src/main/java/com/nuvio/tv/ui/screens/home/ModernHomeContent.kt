@@ -1043,16 +1043,13 @@ fun ModernHomeContent(
             }
             val heroBackdropHeight = remember(screenHeight, rowsViewportHeight, rowTitleHeight) { (screenHeight - rowsViewportHeight + rowTitleHeight + 14.dp).coerceAtMost(screenHeight) }
             val verticalRowBringIntoViewSpec = remember(localDensity, defaultBringIntoViewSpec) {
-                val topInsetPx = with(localDensity) { MODERN_ROW_HEADER_FOCUS_INSET.toPx() }
                 @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
                 object : BringIntoViewSpec {
                     override val scrollAnimationSpec: AnimationSpec<Float> = androidx.compose.animation.core.snap()
                     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-                        val currentLeadingEdge = offset
-                        if (abs(currentLeadingEdge - topInsetPx) < 1f) return 0f
-                        val distance = currentLeadingEdge - topInsetPx
-                        if (distance < 0f && !verticalRowListState.canScrollBackward) return 0f
-                        return distance
+                        // Defer all vertical row scrolling to verticalRowListState.animateScrollToItem to prevent
+                        // partial-offset snap requests from interrupting or freezing row transitions.
+                        return 0f
                     }
                 }
             }

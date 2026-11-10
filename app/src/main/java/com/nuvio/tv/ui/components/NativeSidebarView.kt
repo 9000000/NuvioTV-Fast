@@ -115,6 +115,11 @@ class NativeSidebarView @JvmOverloads constructor(
     }
 
     override fun focusSearch(focused: View?, direction: Int): View? {
+        if (direction == View.FOCUS_RIGHT) {
+            clearFocus()
+            onNavigateRight?.invoke()
+            return null
+        }
         val nextFocus = FocusFinder.getInstance().findNextFocus(this, focused, direction)
         return nextFocus ?: focused
     }
@@ -255,15 +260,17 @@ class NativeSidebarView @JvmOverloads constructor(
         if (hasFocus()) return
         val target = targetRoute ?: currentSelectedRoute ?: currentItems.firstOrNull()?.route
         val targetView = target?.let { itemViews[it] } ?: itemViews.values.firstOrNull() ?: return
-        if (!hasFocus() && targetView.isAttachedToWindow && !targetView.isInLayout) {
-            targetView.requestFocus()
-        } else {
-            targetView.post {
-                if (!hasFocus() && isAttachedToWindow) {
-                    targetView.requestFocus()
-                }
+        val tryFocus = {
+            if (!hasFocus() && isAttachedToWindow) {
+                targetView.requestFocus()
             }
         }
+        if (!hasFocus() && targetView.isAttachedToWindow && !targetView.isInLayout) {
+            targetView.requestFocus()
+        }
+        targetView.post(tryFocus)
+        targetView.postDelayed(tryFocus, 45L)
+        targetView.postDelayed(tryFocus, 100L)
     }
 
     private fun createNavigationItemView(

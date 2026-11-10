@@ -241,10 +241,20 @@ internal fun ModernHomeRowsList(
     }
 
     LaunchedEffect(activeRowKey.value) {
-        val currentKey = activeRowKey.value
+        val currentKey = activeRowKey.value ?: return@LaunchedEffect
         val idx = carouselRows.list.indexOfFirst { it.key == currentKey }
-        if (idx >= 0 && idx != targetRowIndexTracker) {
+        if (idx >= 0) {
             targetRowIndexTracker = idx
+            if (verticalRowListState.firstVisibleItemIndex != idx) {
+                scrollJob?.cancel()
+                scrollJob = coroutineScope.launch {
+                    if (animationsEnabled) {
+                        verticalRowListState.animateScrollToItem(idx)
+                    } else {
+                        verticalRowListState.scrollToItem(idx)
+                    }
+                }
+            }
         }
         rowGrids.forEach { (key, grid) ->
             if (key != currentKey) {

@@ -1627,6 +1627,9 @@ private fun ModernSidebarScaffold(
         if (!showSidebar || !pendingContentFocusTransfer || isSidebarExpanded || sidebarCollapsePending) {
             return@LaunchedEffect
         }
+        runCatching { contentFocusRequester.requestFocus() }
+        delay(35L)
+        runCatching { contentFocusRequester.requestFocus() }
         pendingContentFocusTransfer = false
     }
 
@@ -1682,6 +1685,16 @@ private fun ModernSidebarScaffold(
                             if (keyEvent.type == KeyEventType.KeyUp) longPressBackHeld.value = false
                             return@onPreviewKeyEvent true
                         }
+                    }
+                    if (
+                        isSidebarExpanded &&
+                        keyEvent.type == KeyEventType.KeyDown &&
+                        (keyEvent.key == Key.DirectionRight || keyEvent.key == Key.Back)
+                    ) {
+                        isSidebarExpanded = false
+                        sidebarCollapsePending = false
+                        pendingContentFocusTransfer = true
+                        return@onPreviewKeyEvent true
                     }
                     if (
                         isSidebarExpanded &&
