@@ -123,22 +123,11 @@ abstract class LeanbackBaseViewHolder(
     open fun updateFocusVisual(hasFocus: Boolean) {
         root.removeCallbacks(deferredGlowRunnable)
         val anim = adapter.animationsEnabled()
-        val targetScale = if (anim && hasFocus) 1.08f else 1.0f
+        root.animate().cancel()
+        root.scaleX = 1.0f
+        root.scaleY = 1.0f
 
-        if (anim) {
-            root.animate()
-                .scaleX(targetScale)
-                .scaleY(targetScale)
-                .setDuration(110)
-                .setInterpolator(interpolator)
-                .start()
-        } else {
-            root.animate().cancel()
-            root.scaleX = targetScale
-            root.scaleY = targetScale
-        }
-
-        // Lift focused card so glow and 1.08f scaled borders are never drawn over by adjacent views
+        // Lift focused card so glow and borders are never drawn over by adjacent views
         root.translationZ = if (hasFocus) 12f else 0f
         cardContainer.elevation = 0f
         cardContainer.translationZ = 0f

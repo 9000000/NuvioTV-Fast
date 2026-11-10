@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
@@ -24,6 +25,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
+import android.view.ViewTreeObserver
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -276,12 +278,329 @@ class PlayStoreGlowView(context: Context) : View(context) {
     }
 }
 
+/**
+ * Khung Focus Ring nổi độc lập trên cùng của toàn bộ hàng poster (One focus ring per row).
+ * - Luôn nổi ở trên cùng (elevation cao, nằm ngoài các card con).
+ * - Khi chuyển focus giữa các card: Khung KHÔNG bị biến mất rồi hiện lại, mà thực hiện hoạt họa
+ *   lướt trôi (glide animation 180ms) từ tọa độ card cũ sang card mới.
+ * - Hiển thị viền vàng hổ phách (#F59E0B) cho poster portrait (như Ảnh 1).
+ * - Hiển thị viền trắng (#FFFFFF) + quầng sáng phát quang Neon Glow (#FFB300) cho thẻ landscape (như Ảnh 2).
+ */
+class ModernRowFloatingFocusRingView(context: Context) : View(context) {
+    var cornerRadiusPx: Float = 0f
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidate()
+            }
+        }
+
+    val borderWidthPx: Float = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP, 2.5f, context.resources.displayMetrics
+    )
+
+    var strokeColor: Int = Color.parseColor("#F59E0B")
+        set(value) {
+            if (field != value) {
+                field = value
+                borderPaint.color = value
+                invalidate()
+            }
+        }
+
+    var glowColor: Int = Color.parseColor("#FFB300")
+        set(value) {
+            if (field != value) {
+                field = value
+                updateGlowPaints()
+                invalidate()
+            }
+        }
+
+    var isGlowEnabled: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidate()
+            }
+        }
+
+    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        color = strokeColor
+        strokeWidth = borderWidthPx
+    }
+
+    private val auraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val midPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    private val ringPath = Path()
+    val glowSpreadPx: Float = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics
+    )
+    val glowMarginPx: Float = glowSpreadPx * 1.35f
+
+    var currentTargetView: View? = null
+        private set
+    private var glideAnimator: ValueAnimator? = null
+
+    init {
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+        updateGlowPaints()
+        visibility = GONE
+        isFocusable = false
+        isFocusableInTouchMode = false
+    }
+
+    private fun updateGlowPaints() {
+        val rMid = (glowSpreadPx * 0.35f).coerceAtLeast(1f)
+        val rAura = (glowSpreadPx * 0.65f).coerceAtLeast(1f)
+        midPaint.maskFilter = BlurMaskFilter(rMid, BlurMaskFilter.Blur.NORMAL)
+        auraPaint.maskFilter = BlurMaskFilter(rAura, BlurMaskFilter.Blur.NORMAL)
+        midPaint.strokeWidth = (glowSpreadPx * 0.40f).coerceAtLeast(2f)
+        auraPaint.strokeWidth = (glowSpreadPx * 0.75f).coerceAtLeast(4f)
+        midPaint.color = ColorUtils.setAlphaComponent(glowColor, 185)
+        auraPaint.color = ColorUtils.setAlphaComponent(glowColor, 85)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val pad = glowMarginPx
+        val w = width - (pad * 2)
+        val h = height - (pad * 2)
+        if (w <= 0 || h <= 0) return
+
+        ringPath.reset()
+        if (cornerRadiusPx > 0f) {
+            ringPath.addRoundRect(pad, pad, pad + w, pad + h, cornerRadiusPx, cornerRadiusPx, Path.Direction.CW)
+        } else {
+            ringPath.addRect(pad, pad, pad + w, pad + h, Path.Direction.CW)
+        }
+
+        if (isGlowEnabled) {
+            canvas.drawPath(ringPath, auraPaint)
+            canvas.drawPath(ringPath, midPaint)
+        }
+
+        borderPaint.strokeWidth = borderWidthPx
+        canvas.drawPath(ringPath, borderPaint)
+    }
+
+    fun moveToTarget(target: View, isLandscape: Boolean, dominantColor: Int, animated: Boolean) {
+        currentTargetView = target
+        val parent = parent as? ViewGroup ?: return
+
+        if (target.width <= 0 || target.height <= 0 || parent.width <= 0) {
+            target.post {
+                if (currentTargetView === target) {
+                    moveToTarget(target, isLandscape, dominantColor, animated)
+                }
+            }
+            return
+        }
+
+        val parentLoc = IntArray(2)
+        parent.getLocationInWindow(parentLoc)
+
+        val targetLoc = IntArray(2)
+        target.getLocationInWindow(targetLoc)
+
+        val grid = (parent as? ModernRowContainerLayout)?.gridView
+        val minX = (grid?.paddingLeft ?: 0).toFloat() - glowMarginPx
+        val maxX = (parent.width - (grid?.paddingRight ?: 0) - target.width).toFloat() - glowMarginPx
+
+        val rawTargetX = (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
+        // Cố định ở đầu hàng (minX) hoặc cuối hàng (maxX) khi card cuộn tới biên
+        val targetX = if (maxX > minX) rawTargetX.coerceIn(minX, maxX) else rawTargetX
+        val targetY = (targetLoc[1] - parentLoc[1]).toFloat() - glowMarginPx
+        val targetWidth = target.width + (glowMarginPx * 2).toInt()
+        val targetHeight = target.height + (glowMarginPx * 2).toInt()
+
+        val resolvedGlowColor = if (dominantColor != 0 && dominantColor != Color.WHITE && dominantColor != Color.BLACK) {
+            dominantColor
+        } else {
+            Color.parseColor("#F59E0B")
+        }
+
+        if (isLandscape) {
+            strokeColor = Color.WHITE
+            glowColor = resolvedGlowColor
+            isGlowEnabled = true
+        } else {
+            strokeColor = resolvedGlowColor
+            glowColor = resolvedGlowColor
+            isGlowEnabled = true
+        }
+
+        val lp = layoutParams
+        if (lp != null && (lp.width != targetWidth || lp.height != targetHeight)) {
+            lp.width = targetWidth
+            lp.height = targetHeight
+            layoutParams = lp
+        }
+
+        if (visibility != VISIBLE || alpha <= 0f) {
+            glideAnimator?.cancel()
+            translationX = targetX
+            translationY = targetY
+            alpha = 0f
+            visibility = VISIBLE
+            animate().alpha(1f).setDuration(120).start()
+            return
+        }
+
+        if (!animated) {
+            glideAnimator?.cancel()
+            translationX = targetX
+            translationY = targetY
+            alpha = 1f
+            return
+        }
+
+        // Lướt trôi mượt mà từ vị trí hiện tại sang vị trí mới (180ms - chuẩn NuvioTV-Fork ROW_GLIDE_MS)
+        glideAnimator?.cancel()
+        val startX = translationX
+        val startY = translationY
+        glideAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 180
+            interpolator = DecelerateInterpolator(1.6f)
+            addUpdateListener { anim ->
+                val frac = anim.animatedFraction
+                translationX = startX + (targetX - startX) * frac
+                translationY = startY + (targetY - startY) * frac
+            }
+            start()
+        }
+    }
+
+    fun onParentScrolled(dx: Int) {
+        val target = currentTargetView ?: return
+        if (visibility != VISIBLE) return
+        val parent = parent as? ViewGroup ?: return
+        val grid = (parent as? ModernRowContainerLayout)?.gridView
+        val minX = (grid?.paddingLeft ?: 0).toFloat() - glowMarginPx
+        val maxX = (parent.width - (grid?.paddingRight ?: 0) - target.width).toFloat() - glowMarginPx
+
+        if (maxX <= minX) return
+
+        val parentLoc = IntArray(2)
+        parent.getLocationInWindow(parentLoc)
+        val targetLoc = IntArray(2)
+        target.getLocationInWindow(targetLoc)
+        val currentCardX = (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
+
+        // Khi đi đến đầu hàng (<= minX + 2px) hoặc cuối hàng (>= maxX - 2px):
+        // Cố định viền tuyệt đối tại biên (minX hoặc maxX) để poster tự cuộn tới khớp vào mà KHÔNG bị giật!
+        if (currentCardX <= minX + 2f) {
+            glideAnimator?.cancel()
+            translationX = minX
+            return
+        }
+        if (currentCardX >= maxX - 2f) {
+            glideAnimator?.cancel()
+            translationX = maxX
+            return
+        }
+
+        // Khi ở giữa màn hình và không có animation: neo theo thẻ
+        if (glideAnimator?.isRunning != true) {
+            translationX = currentCardX.coerceIn(minX, maxX)
+        }
+    }
+
+    fun onScrollSettled() {
+        val target = currentTargetView ?: return
+        if (visibility != VISIBLE) return
+        val parent = parent as? ViewGroup ?: return
+        val grid = (parent as? ModernRowContainerLayout)?.gridView
+        val minX = (grid?.paddingLeft ?: 0).toFloat() - glowMarginPx
+        val maxX = (parent.width - (grid?.paddingRight ?: 0) - target.width).toFloat() - glowMarginPx
+
+        if (maxX <= minX) return
+
+        val parentLoc = IntArray(2)
+        parent.getLocationInWindow(parentLoc)
+        val targetLoc = IntArray(2)
+        target.getLocationInWindow(targetLoc)
+        val currentCardX = (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
+
+        val settledX = currentCardX.coerceIn(minX, maxX)
+        if (Math.abs(translationX - settledX) > 1.5f) {
+            animate().translationX(settledX).setDuration(80).start()
+        }
+    }
+
+    fun hideRing(immediate: Boolean = false) {
+        glideAnimator?.cancel()
+        currentTargetView = null
+        if (immediate) {
+            visibility = GONE
+            alpha = 0f
+        } else if (visibility == VISIBLE) {
+            animate().alpha(0f).setDuration(100).withEndAction {
+                visibility = GONE
+            }.start()
+        }
+    }
+}
+
+/**
+ * Container bao bọc HorizontalGridView và ModernRowFloatingFocusRingView trên cùng.
+ */
+class ModernRowContainerLayout(context: Context) : FrameLayout(context) {
+    lateinit var gridView: InteropHorizontalGridView
+    lateinit var floatingRingView: ModernRowFloatingFocusRingView
+
+    override fun clearFocus() {
+        super.clearFocus()
+        if (::floatingRingView.isInitialized) {
+            floatingRingView.hideRing(true)
+        }
+    }
+}
+
 class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) {
     var onNavigateDown: (() -> Boolean)? = null
     var onNavigateUp: (() -> Boolean)? = null
     var onNavigateBack: (() -> Boolean)? = null
     var onNavigateLeftOnFirstItem: (() -> Boolean)? = null
     var animationsEnabled: Boolean = true
+
+    var floatingRingView: ModernRowFloatingFocusRingView? = null
+
+    private val globalFocusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
+        val isStillFocused = hasFocus() || (newFocus != null && isDescendant(newFocus))
+        if (!isStillFocused) {
+            isHoldingHorizontalKey = false
+            pendingTargetPosition = RecyclerView.NO_POSITION
+            floatingRingView?.hideRing(false)
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        viewTreeObserver.addOnGlobalFocusChangeListener(globalFocusListener)
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        viewTreeObserver.removeOnGlobalFocusChangeListener(globalFocusListener)
+        floatingRingView?.hideRing(true)
+    }
+
+    override fun clearFocus() {
+        super.clearFocus()
+        floatingRingView?.hideRing(true)
+    }
 
     var isHoldingHorizontalKey: Boolean = false
         private set
@@ -296,6 +615,40 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     private val rowAdapter: LeanbackRowAdapter?
         get() = adapter as? LeanbackRowAdapter
 
+    fun notifyCardFocused(cardContainer: View, isLandscape: Boolean, dominantColor: Int) {
+        if (hasFocus()) {
+            floatingRingView?.moveToTarget(cardContainer, isLandscape, dominantColor, animationsEnabled)
+        }
+    }
+
+    fun ensureChildFocusAndRing(animated: Boolean = false) {
+        if (!hasFocus()) return
+        val pos = selectedPosition.coerceAtLeast(0)
+        val vh = findViewHolderForAdapterPosition(pos) as? LeanbackCardViewHolder
+        if (vh != null) {
+            if (!vh.itemView.hasFocus()) {
+                vh.itemView.requestFocus()
+            }
+            vh.updateFocusVisual(true)
+            val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+            floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animated)
+        } else {
+            post {
+                if (hasFocus() && isAttachedToWindow) {
+                    val deferredVh = findViewHolderForAdapterPosition(pos) as? LeanbackCardViewHolder
+                    if (deferredVh != null) {
+                        if (!deferredVh.itemView.hasFocus()) {
+                            deferredVh.itemView.requestFocus()
+                        }
+                        deferredVh.updateFocusVisual(true)
+                        val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+                        floatingRingView?.moveToTarget(deferredVh.cardContainer, isLandscape, deferredVh.currentDominantColor, animated)
+                    }
+                }
+            }
+        }
+    }
+
     init {
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         itemAnimator = null
@@ -308,8 +661,18 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
-                    rowAdapter?.onScrollSettled()
+                    post {
+                        if (!isComputingLayout) {
+                            ensureChildFocusAndRing(animated = false)
+                            rowAdapter?.onScrollSettled()
+                            floatingRingView?.onScrollSettled()
+                        }
+                    }
                 }
+            }
+
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                floatingRingView?.onParentScrolled(dx)
             }
         })
 
@@ -334,7 +697,12 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     if (!child.itemView.hasFocus()) {
                         child.itemView.requestFocus()
                     }
-                    (child as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                    (child as? LeanbackCardViewHolder)?.let { vh ->
+                        val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+                        floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animationsEnabled)
+                    }
+                } else if (hasFocus()) {
+                    ensureChildFocusAndRing(animated = animationsEnabled)
                 }
 
                 val totalCount = rowAdapter?.itemCount ?: 0
@@ -363,20 +731,19 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             return false
         }
         val pos = selectedPosition.coerceAtLeast(0)
-        val vh = findViewHolderForAdapterPosition(pos)
+        val vh = findViewHolderForAdapterPosition(pos) as? LeanbackCardViewHolder
         if (vh != null) {
-            if (vh.itemView.requestFocus(direction, previouslyFocusedRect)) {
-                (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+            val granted = vh.itemView.requestFocus(direction, previouslyFocusedRect)
+            if (granted) {
+                vh.updateFocusVisual(true)
+                val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+                floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, false)
                 return true
             }
         }
         val granted = super.requestFocus(direction, previouslyFocusedRect)
         if (granted) {
-            val afterVh = findViewHolderForAdapterPosition(selectedPosition.coerceAtLeast(0))
-            if (afterVh != null) {
-                afterVh.itemView.requestFocus()
-                (afterVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
-            }
+            ensureChildFocusAndRing(animated = false)
         }
         return granted
     }
@@ -470,17 +837,13 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         if (!gainFocus) {
             isHoldingHorizontalKey = false
             pendingTargetPosition = RecyclerView.NO_POSITION
+            floatingRingView?.hideRing(false)
         } else {
             if (selectedPosition <= 0) {
                 hasReleasedKeyAfterArrivingAt0 = true
                 arrivedAt0FromRight = false
             }
-            val pos = selectedPosition.coerceAtLeast(0)
-            val vh = findViewHolderForAdapterPosition(pos)
-            if (vh != null && !vh.itemView.hasFocus()) {
-                vh.itemView.requestFocus()
-                (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
-            }
+            ensureChildFocusAndRing(animated = false)
         }
     }
 
@@ -489,24 +852,38 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
         if (event.action == KeyEvent.ACTION_UP) {
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (isHoldingHorizontalKey) {
-                        stopScroll()
-                        isHoldingHorizontalKey = false
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    isHoldingHorizontalKey = false
+                    val total = rowAdapter?.itemCount ?: 0
+                    val currentSelected = selectedPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
+                    val target = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+                        pendingTargetPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
+                    } else {
+                        currentSelected
                     }
                     pendingTargetPosition = RecyclerView.NO_POSITION
-                    if (selectedPosition <= 0) {
+
+                    if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && target <= 0) {
                         hasReleasedKeyAfterArrivingAt0 = true
                         arrivedAt0FromRight = false
                     }
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (isHoldingHorizontalKey) {
-                        stopScroll()
-                        isHoldingHorizontalKey = false
+
+                    // Tuyệt đối không gọi stopScroll() ngắt cụt gây lệch lửng poster!
+                    // Luôn gọi setSelectedPositionSmooth để Leanback hoàn tất trôi và tự khớp chuẩn vào keyline
+                    if (animationsEnabled) {
+                        setSelectedPositionSmooth(target)
+                    } else {
+                        setSelectedPosition(target)
                     }
-                    pendingTargetPosition = RecyclerView.NO_POSITION
+
+                    val vh = findViewHolderForAdapterPosition(target) as? LeanbackCardViewHolder
+                    if (vh != null) {
+                        if (!vh.itemView.hasFocus()) {
+                            vh.itemView.requestFocus()
+                        }
+                    } else {
+                        ensureChildFocusAndRing(animated = false)
+                    }
                     return true
                 }
             }
@@ -527,16 +904,20 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     if (currentPos <= 0 || total <= 0) {
-                        pendingTargetPosition = RecyclerView.NO_POSITION
+                        pendingTargetPosition = 0
+                        if (selectedPosition != 0) {
+                            if (animationsEnabled) {
+                                setSelectedPositionSmooth(0)
+                            } else {
+                                setSelectedPosition(0)
+                            }
+                        }
                         val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
-                        if (!arrivedRecently && event.repeatCount == 0) {
-                            hasReleasedKeyAfterArrivingAt0 = true
-                            arrivedAt0FromRight = false
+                        if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
                             if (onNavigateLeftOnFirstItem?.invoke() == true) {
                                 return true
                             }
                         }
-                        stopScroll()
                         return true
                     }
 
@@ -554,26 +935,18 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     pendingTargetPosition = target
                     val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
-                        stopScroll()
                         setSelectedPosition(target)
                         nextVh?.itemView?.requestFocus(View.FOCUS_LEFT)
                         return true
                     }
 
-                    if (nextVh != null) {
-                        val focused = nextVh.itemView.requestFocus(View.FOCUS_LEFT)
-                        if (!focused) {
-                            setSelectedPositionSmooth(target)
-                        }
-                    } else {
-                        setSelectedPositionSmooth(target)
-                    }
+                    setSelectedPositionSmooth(target)
+                    nextVh?.itemView?.requestFocus(View.FOCUS_LEFT)
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     if (total <= 0 || currentPos >= total - 1) {
                         pendingTargetPosition = RecyclerView.NO_POSITION
-                        stopScroll()
                         return true
                     }
 
@@ -591,20 +964,13 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     pendingTargetPosition = target
                     val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
-                        stopScroll()
                         setSelectedPosition(target)
                         nextVh?.itemView?.requestFocus(View.FOCUS_RIGHT)
                         return true
                     }
 
-                    if (nextVh != null) {
-                        val focused = nextVh.itemView.requestFocus(View.FOCUS_RIGHT)
-                        if (!focused) {
-                            setSelectedPositionSmooth(target)
-                        }
-                    } else {
-                        setSelectedPositionSmooth(target)
-                    }
+                    setSelectedPositionSmooth(target)
+                    nextVh?.itemView?.requestFocus(View.FOCUS_RIGHT)
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
@@ -762,49 +1128,25 @@ class LeanbackCardViewHolder(
 
     fun updateFocusVisual(hasFocus: Boolean) {
         root.removeCallbacks(deferredGlowRunnable)
-        val anim = adapter.animationsEnabled()
-        val targetScale = if (anim && hasFocus) 1.08f else 1.0f
+        root.animate().cancel()
+        root.scaleX = 1.0f
+        root.scaleY = 1.0f
 
-        if (anim) {
-            root.animate()
-                .scaleX(targetScale)
-                .scaleY(targetScale)
-                .setDuration(110)
-                .setInterpolator(interpolator)
-                .start()
-        } else {
-            root.animate().cancel()
-            root.scaleX = targetScale
-            root.scaleY = targetScale
-        }
+        val isLandscape = adapter.cardWidthPx > adapter.cardHeightPx
 
-        // Lift focused card so glow and 1.08f scaled borders are never drawn over by adjacent views
         root.translationZ = if (hasFocus) 12f else 0f
         cardContainer.elevation = 0f
         cardContainer.translationZ = 0f
+        cardContainer.foreground = null
+        glowView.visibility = View.GONE
 
-        if (anim && hasFocus) {
-            val tintedWhite = ColorUtils.blendARGB(currentDominantColor, Color.WHITE, 0.90f)
-            focusBorderDrawable.setStroke(borderWidthPx, tintedWhite)
-            focusBorderDrawable.cornerRadius = cornerRadiusPx
-            cardContainer.foreground = focusBorderDrawable
-
-            val isFastScrolling = (adapter.attachedRecyclerView as? InteropHorizontalGridView)?.isHoldingHorizontalKey == true
-            if (isFastScrolling) {
-                glowView.visibility = View.GONE
-                root.postDelayed(deferredGlowRunnable, 55L)
-            } else {
-                glowView.glowColor = currentDominantColor
-                glowView.visibility = View.VISIBLE
-            }
-        } else if (hasFocus) {
-            glowView.visibility = View.GONE
-            focusBorderDrawable.setStroke(borderWidthPx, Color.WHITE)
-            focusBorderDrawable.cornerRadius = cornerRadiusPx
-            cardContainer.foreground = focusBorderDrawable
+        val gridView = adapter.attachedRecyclerView as? InteropHorizontalGridView
+        if (hasFocus) {
+            gridView?.notifyCardFocused(cardContainer, isLandscape, currentDominantColor)
         } else {
-            glowView.visibility = View.GONE
-            cardContainer.foreground = null
+            if (gridView?.hasFocus() != true) {
+                gridView?.floatingRingView?.hideRing(false)
+            }
         }
     }
 
@@ -932,11 +1274,26 @@ class LeanbackCardViewHolder(
         }
 
         // Always sync focus visual to current focus state when bound or recycled
-        updateFocusVisual(root.hasFocus())
+        val gridView = adapter.attachedRecyclerView as? InteropHorizontalGridView
+        val isRowFocused = gridView?.hasFocus() == true
+        val targetPos = gridView?.selectedPosition?.coerceAtLeast(0) ?: 0
+        val isCurrentSelectedPos = isRowFocused && (bindingAdapterPosition == targetPos || (bindingAdapterPosition == RecyclerView.NO_POSITION && targetPos == 0))
+
+        if (root.hasFocus() || isCurrentSelectedPos) {
+            if (!root.hasFocus()) {
+                root.requestFocus()
+            }
+            updateFocusVisual(true)
+        } else {
+            updateFocusVisual(false)
+        }
     }
 
     fun unbind() {
         root.removeCallbacks(deferredGlowRunnable)
+        root.animate().cancel()
+        root.scaleX = 1.0f
+        root.scaleY = 1.0f
         imageDisposable?.dispose()
         imageDisposable = null
         glowView.visibility = View.GONE
@@ -1251,7 +1608,7 @@ fun LeanbackModernRow(
     val cornerRadiusPx = with(density) { cornerRadius.toPx() }
     val startPaddingPx = with(density) { startPadding.roundToPx() }
     val spacingPx = with(density) { spacing.roundToPx() }
-    val verticalPaddingDp = 34.dp
+    val verticalPaddingDp = 6.dp
     val verticalPaddingPx = with(density) { verticalPaddingDp.roundToPx() }
     val labelHeightPx = if (showLabels) with(density) { 26.dp.roundToPx() } else 0
     val totalRowHeightPx = cardHeightPx + labelHeightPx + (verticalPaddingPx * 2)
@@ -1302,9 +1659,11 @@ fun LeanbackModernRow(
                         val deferredVh = grid.findViewHolderForAdapterPosition(targetIdx)
                         deferredVh?.itemView?.requestFocus()
                         (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                        grid.ensureChildFocusAndRing(animationsEnabled)
                     }
                 }
             }
+            grid.ensureChildFocusAndRing(animationsEnabled)
         }
     }
 
@@ -1327,18 +1686,27 @@ fun LeanbackModernRow(
             .fillMaxWidth()
             .graphicsLayer { clip = false },
         factory = { context ->
-            InteropHorizontalGridView(context).apply {
+            val container = ModernRowContainerLayout(context).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     totalRowHeightPx
                 )
+                clipChildren = false
+                clipToPadding = false
+            }
+            val gridView = InteropHorizontalGridView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    totalRowHeightPx
+                )
                 setRowHeight(totalRowHeightPx)
                 setNumRows(1)
-                windowAlignment = BaseGridView.WINDOW_ALIGN_LOW_EDGE
-                windowAlignmentOffset = startPaddingPx
+                focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ITEM
+                windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
+                windowAlignmentOffset = 0
                 windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
                 itemAlignmentOffset = 0
-                itemAlignmentOffsetPercent = 0f
+                itemAlignmentOffsetPercent = BaseGridView.ITEM_ALIGN_OFFSET_PERCENT_DISABLED
                 setItemSpacing(spacingPx)
                 clipToPadding = false
                 clipChildren = false
@@ -1354,21 +1722,51 @@ fun LeanbackModernRow(
                 recycledViewPool?.let { setRecycledViewPool(it) }
                 localGridViewRef = this
                 rowGrids?.put(rowKey, this)
-                if (isPendingFocus && items.isNotEmpty()) {
-                    val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-                    executeRowFocus(this, targetIdx)
-                    onClearPendingFocus()
-                }
             }
+            val focusRing = ModernRowFloatingFocusRingView(context).apply {
+                this.cornerRadiusPx = cornerRadiusPx
+                this.elevation = 30f
+                val spread = this.glowSpreadPx
+                val margin = (spread * 1.35f).toInt()
+                this.layoutParams = FrameLayout.LayoutParams(
+                    cardWidthPx + (margin * 2),
+                    cardHeightPx + (margin * 2)
+                )
+            }
+            gridView.floatingRingView = focusRing
+            container.gridView = gridView
+            container.floatingRingView = focusRing
+            container.addView(gridView)
+            container.addView(focusRing)
+
+            if (isPendingFocus && items.isNotEmpty()) {
+                val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+                executeRowFocus(gridView, targetIdx)
+                onClearPendingFocus()
+            }
+            container
         },
-        update = { gridView ->
-            val lp = gridView.layoutParams
+        update = { container ->
+            val gridView = container.gridView
+            val focusRing = container.floatingRingView
+            val lp = container.layoutParams
             if (lp != null && lp.height != totalRowHeightPx) {
                 lp.height = totalRowHeightPx
-                gridView.layoutParams = lp
+                container.layoutParams = lp
             }
+            val gridLp = gridView.layoutParams
+            if (gridLp != null && gridLp.height != totalRowHeightPx) {
+                gridLp.height = totalRowHeightPx
+                gridView.layoutParams = gridLp
+            }
+            focusRing.cornerRadiusPx = cornerRadiusPx
             gridView.setRowHeight(totalRowHeightPx)
-            gridView.windowAlignmentOffset = startPaddingPx
+            gridView.focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ITEM
+            gridView.windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
+            gridView.windowAlignmentOffset = 0
+            gridView.windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
+            gridView.itemAlignmentOffset = 0
+            gridView.itemAlignmentOffsetPercent = BaseGridView.ITEM_ALIGN_OFFSET_PERCENT_DISABLED
             gridView.setItemSpacing(spacingPx)
             if (gridView.paddingLeft != startPaddingPx ||
                 gridView.paddingTop != verticalPaddingPx ||
@@ -1377,14 +1775,12 @@ fun LeanbackModernRow(
             ) {
                 gridView.setPadding(startPaddingPx, verticalPaddingPx, startPaddingPx, verticalPaddingPx)
             }
-            if (gridView is InteropHorizontalGridView) {
-                localGridViewRef = gridView
-                gridView.onNavigateDown = onNavigateDown
-                gridView.onNavigateUp = onNavigateUp
-                gridView.onNavigateBack = onNavigateBack
-                gridView.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
-                gridView.animationsEnabled = animationsEnabled
-            }
+            localGridViewRef = gridView
+            gridView.onNavigateDown = onNavigateDown
+            gridView.onNavigateUp = onNavigateUp
+            gridView.onNavigateBack = onNavigateBack
+            gridView.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
+            gridView.animationsEnabled = animationsEnabled
             gridView.setAnimateChildLayout(animationsEnabled)
             adapter.animationsEnabled = { animationsEnabled }
             adapter.onItemFocused = onItemFocused

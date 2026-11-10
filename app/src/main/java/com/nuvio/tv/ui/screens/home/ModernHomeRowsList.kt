@@ -220,12 +220,15 @@ internal fun ModernHomeRowsList(
                     val vh = targetGrid.findViewHolderForAdapterPosition(targetIdx)
                     if (vh != null) {
                         vh.itemView.requestFocus()
+                        (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
                     } else {
                         targetGrid.post {
                             val deferredVh = targetGrid.findViewHolderForAdapterPosition(targetIdx)
                             deferredVh?.itemView?.requestFocus()
+                            (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
                         }
                     }
+                    (targetGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(animationsEnabled)
                 }
             }
             localPendingFocusRowKey = null
@@ -234,9 +237,15 @@ internal fun ModernHomeRowsList(
     }
 
     LaunchedEffect(activeRowKey.value) {
-        val idx = carouselRows.list.indexOfFirst { it.key == activeRowKey.value }
+        val currentKey = activeRowKey.value
+        val idx = carouselRows.list.indexOfFirst { it.key == currentKey }
         if (idx >= 0 && idx != targetRowIndexTracker) {
             targetRowIndexTracker = idx
+        }
+        rowGrids.forEach { (key, grid) ->
+            if (key != currentKey) {
+                (grid as? InteropHorizontalGridView)?.floatingRingView?.hideRing(false)
+            }
         }
     }
 
@@ -487,6 +496,7 @@ internal fun ModernHomeRowsList(
                                                     firstGrid.setSelectedPosition(targetCardIndex)
                                                 }
                                                 firstGrid.requestFocus()
+                                                (firstGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(animationsEnabled)
                                             }
                                         }
                                     } else {
@@ -517,6 +527,7 @@ internal fun ModernHomeRowsList(
 
                             val nextIdx = rowIndex + 1
                             if (nextIdx < carouselRows.list.size) {
+                                (rowGrids[carouselRows.list[rowIndex].key] as? InteropHorizontalGridView)?.floatingRingView?.hideRing(false)
                                 targetRowIndexTracker = nextIdx
                                 val nextRow = carouselRows.list[nextIdx]
                                 val targetCardIndex = (focusedItemByRowMap[nextRow.key] ?: 0)
@@ -533,6 +544,7 @@ internal fun ModernHomeRowsList(
                                         nextGrid.setSelectedPositionSmooth(targetCardIndex)
                                     }
                                     nextGrid.requestFocus()
+                                    (nextGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(shouldAnimate)
                                 } else {
                                     localPendingFocusRowKey = nextRow.key
                                     localPendingFocusIndex = targetCardIndex
@@ -569,6 +581,7 @@ internal fun ModernHomeRowsList(
 
                             val prevIdx = rowIndex - 1
                             if (prevIdx >= 0) {
+                                (rowGrids[carouselRows.list[rowIndex].key] as? InteropHorizontalGridView)?.floatingRingView?.hideRing(false)
                                 targetRowIndexTracker = prevIdx
                                 val prevRow = carouselRows.list[prevIdx]
                                 val targetCardIndex = (focusedItemByRowMap[prevRow.key] ?: 0)
@@ -585,6 +598,7 @@ internal fun ModernHomeRowsList(
                                         prevGrid.setSelectedPositionSmooth(targetCardIndex)
                                     }
                                     prevGrid.requestFocus()
+                                    (prevGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(shouldAnimate)
                                 } else {
                                     localPendingFocusRowKey = prevRow.key
                                     localPendingFocusIndex = targetCardIndex

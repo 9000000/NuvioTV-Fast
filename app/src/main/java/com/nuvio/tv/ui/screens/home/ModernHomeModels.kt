@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.Collection
@@ -29,6 +30,15 @@ internal const val MODERN_HERO_MEDIA_WIDTH_FRACTION = 0.72f
 internal const val MODERN_TRAILER_OVERSCAN_ZOOM = 1.35f
 internal const val MODERN_HERO_FOCUS_DEBOUNCE_MS = 450L
 internal val MODERN_ROW_HEADER_FOCUS_INSET = 40.dp
+private val MODERN_ROW_CARD_BOTTOM_ROOM = 8.dp
+private const val MODERN_ROWS_VIEWPORT_MAX_FRACTION = 0.65f
+
+/** Rows keep their share of the screen, but grow into the hero when the tallest card would not fit below the header. */
+internal fun modernRowsViewportHeight(screenHeight: Dp, fraction: Float, tallestCardHeight: Dp): Dp {
+    val base = screenHeight * fraction
+    val needed = MODERN_ROW_HEADER_FOCUS_INSET + tallestCardHeight + MODERN_ROW_CARD_BOTTOM_ROOM
+    return maxOf(base, minOf(needed, screenHeight * MODERN_ROWS_VIEWPORT_MAX_FRACTION))
+}
 internal const val MODERN_CONTINUE_WATCHING_ROW_KEY = "continue_watching"
 internal const val MODERN_UPCOMING_ROW_KEY = "upcoming_section"
 internal val MODERN_LANDSCAPE_LOGO_GRADIENT = Brush.verticalGradient(
