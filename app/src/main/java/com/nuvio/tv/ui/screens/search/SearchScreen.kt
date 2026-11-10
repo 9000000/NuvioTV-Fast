@@ -166,6 +166,8 @@ fun SearchScreen(
     var isRecentSearchSectionFocused by remember { mutableStateOf(false) }
     var pendingMoveToFirstResult by remember { mutableStateOf(false) }
     var currentActiveRowIndex by remember { mutableIntStateOf(-1) }
+    var verticalNavJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var lastVerticalStepTimeMs by remember { mutableStateOf(0L) }
     var isVoiceListening by remember { mutableStateOf(false) }
     var voiceRmsLevel by remember { mutableStateOf(0f) }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
@@ -398,7 +400,8 @@ fun SearchScreen(
     }
     val navigateToFirstResult: () -> Unit = {
         keyboardController?.hide()
-        coroutineScope.launch {
+        verticalNavJob?.cancel()
+        verticalNavJob = coroutineScope.launch {
             currentActiveRowIndex = 0
             // Only scroll if the first catalog row (index 1 in LazyColumn) is not already visible
             val isFirstRowVisible = listState.layoutInfo.visibleItemsInfo.any { 
@@ -614,8 +617,7 @@ fun SearchScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .recompositionHighlighter()
-                .dpadRepeatThrottle(),
+                .recompositionHighlighter(),
             state = listState,
             contentPadding = PaddingValues(
                 top = if (isDiscoverMode) 10.dp else NuvioTheme.spacing.lg,
@@ -793,8 +795,8 @@ fun SearchScreen(
                     else -> {
                         itemsIndexed(
                             items = visibleCatalogRows,
-                            key = { index, item ->
-                                "${item.stableKey()}_$index"
+                            key = { _, item ->
+                                "${item.addonBaseUrl}_${item.stableKey()}"
                             },
                             contentType = { _, _ -> "catalog_row" }
                         ) { index, catalogRow ->
@@ -826,16 +828,31 @@ fun SearchScreen(
                                 // Anchor Up to the field; geometric focus varies with the card.
                                 upFocusRequester = if (index == 0) searchFocusRequester else null,
                                 onNavigateDown = {
-                                    val nextIndex = index + 1
+                                    val now = android.os.SystemClock.uptimeMillis()
+                                    val isRapidRepeat = (now - lastVerticalStepTimeMs) < 220L
+                                    lastVerticalStepTimeMs = now
+                                    val baseIndex = if (verticalNavJob?.isActive == true && currentActiveRowIndex >= index) {
+                                        currentActiveRowIndex
+                                    } else {
+                                        index
+                                    }
+                                    val nextIndex = baseIndex + 1
                                     if (nextIndex in visibleCatalogRows.indices) {
                                         currentActiveRowIndex = nextIndex
                                         val nextKey = visibleCatalogRows[nextIndex].stableKey()
                                         val isNextVisible = listState.layoutInfo.visibleItemsInfo.any { 
                                             it.index == nextIndex + 1 && (it.offset + it.size) <= listState.layoutInfo.viewportEndOffset && it.offset >= 0
                                         }
-                                        coroutineScope.launch {
+                                        verticalNavJob?.cancel()
+                                        verticalNavJob = coroutineScope.launch {
                                             if (!isNextVisible) {
-                                                runCatching { listState.animateScrollToItem(nextIndex + 1) }
+                                                runCatching {
+                                                    if (isRapidRepeat) {
+                                                        listState.scrollToItem(nextIndex + 1)
+                                                    } else {
+                                                        listState.animateScrollToItem(nextIndex + 1)
+                                                    }
+                                                }
                                             }
                                             for (attempt in 0..10) {
                                                 withFrameNanos { }
@@ -852,12 +869,27 @@ fun SearchScreen(
                                     }
                                 },
                                 onNavigateUp = {
-                                    if (index == 0) {
+                                    val now = android.os.SystemClock.uptimeMillis()
+                                    val isRapidRepeat = (now - lastVerticalStepTimeMs) < 220L
+                                    lastVerticalStepTimeMs = now
+                                    val baseIndex = if (verticalNavJob?.isActive == true && currentActiveRowIndex in 0..index) {
+                                        currentActiveRowIndex
+                                    } else {
+                                        index
+                                    }
+                                    if (baseIndex <= 0) {
                                         currentActiveRowIndex = -1
                                         val isInputVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == 0 && it.offset >= 0 }
-                                        coroutineScope.launch {
+                                        verticalNavJob?.cancel()
+                                        verticalNavJob = coroutineScope.launch {
                                             if (!isInputVisible) {
-                                                runCatching { listState.animateScrollToItem(0) }
+                                                runCatching {
+                                                    if (isRapidRepeat) {
+                                                        listState.scrollToItem(0)
+                                                    } else {
+                                                        listState.animateScrollToItem(0)
+                                                    }
+                                                }
                                             }
                                             for (attempt in 0..10) {
                                                 withFrameNanos { }
@@ -867,15 +899,22 @@ fun SearchScreen(
                                         }
                                         true
                                     } else {
-                                        val prevIndex = index - 1
+                                        val prevIndex = baseIndex - 1
                                         currentActiveRowIndex = prevIndex
                                         val prevKey = visibleCatalogRows[prevIndex].stableKey()
                                         val isPrevVisible = listState.layoutInfo.visibleItemsInfo.any { 
                                             it.index == prevIndex + 1 && it.offset >= 0 
                                         }
-                                        coroutineScope.launch {
+                                        verticalNavJob?.cancel()
+                                        verticalNavJob = coroutineScope.launch {
                                             if (!isPrevVisible) {
-                                                runCatching { listState.animateScrollToItem(prevIndex + 1) }
+                                                runCatching {
+                                                    if (isRapidRepeat) {
+                                                        listState.scrollToItem(prevIndex + 1)
+                                                    } else {
+                                                        listState.animateScrollToItem(prevIndex + 1)
+                                                    }
+                                                }
                                             }
                                             for (attempt in 0..10) {
                                                 withFrameNanos { }
@@ -1253,7 +1292,28 @@ private fun SearchInputField(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = NuvioTheme.spacing.xxxl)
-            .focusGroup(),
+            .focusGroup()
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                        keyboardController?.hide()
+                        if (canMoveToResults) {
+                            onMoveToResults()
+                            return@onPreviewKeyEvent true
+                        } else if (firstRecentSearchFocusRequester != null) {
+                            runCatching { firstRecentSearchFocusRequester.requestFocus() }
+                            return@onPreviewKeyEvent true
+                        } else if (clearHistoryFocusRequester != null) {
+                            runCatching { clearHistoryFocusRequester.requestFocus() }
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    if (canMoveToResults || firstRecentSearchFocusRequester != null || clearHistoryFocusRequester != null) {
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                false
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (showDiscoverButton) {

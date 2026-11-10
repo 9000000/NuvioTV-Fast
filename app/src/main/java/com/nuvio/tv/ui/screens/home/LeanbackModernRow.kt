@@ -35,7 +35,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -46,6 +49,7 @@ import androidx.core.graphics.ColorUtils
 import androidx.leanback.widget.BaseGridView
 import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.OnChildViewHolderSelectedListener
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
@@ -55,6 +59,7 @@ import coil3.BitmapImage
 import coil3.Image
 import coil3.asDrawable
 import coil3.target.Target
+import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
 
 private val dominantColorCache = LruCache<String, Int>(256)
 
@@ -284,6 +289,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     private var arrivalAt0Time = 0L
     private var arrivedAt0FromRight = false
     private var hasReleasedKeyAfterArrivingAt0 = true
+    private var lastHorizontalRepeatDispatchMs = 0L
+    private var lastVerticalRepeatDispatchMs = 0L
+    private var pendingTargetPosition = RecyclerView.NO_POSITION
 
     private val rowAdapter: LeanbackRowAdapter?
         get() = adapter as? LeanbackRowAdapter
@@ -299,6 +307,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     isHoldingHorizontalKey = false
+                    pendingTargetPosition = RecyclerView.NO_POSITION
                     rowAdapter?.onScrollSettled()
                 }
             }
@@ -311,11 +320,21 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 position: Int,
                 subposition: Int
             ) {
+                if (position == pendingTargetPosition) {
+                    pendingTargetPosition = RecyclerView.NO_POSITION
+                }
                 if (position == 0) {
                     arrivalAt0Time = SystemClock.uptimeMillis()
                 } else {
                     arrivedAt0FromRight = true
                     hasReleasedKeyAfterArrivingAt0 = false
+                }
+
+                if (hasFocus() && child != null) {
+                    if (!child.itemView.hasFocus()) {
+                        child.itemView.requestFocus()
+                    }
+                    (child as? LeanbackCardViewHolder)?.updateFocusVisual(true)
                 }
 
                 val totalCount = rowAdapter?.itemCount ?: 0
@@ -343,7 +362,23 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             post { requestFocus(direction, previouslyFocusedRect) }
             return false
         }
-        return super.requestFocus(direction, previouslyFocusedRect)
+        val pos = selectedPosition.coerceAtLeast(0)
+        val vh = findViewHolderForAdapterPosition(pos)
+        if (vh != null) {
+            if (vh.itemView.requestFocus(direction, previouslyFocusedRect)) {
+                (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                return true
+            }
+        }
+        val granted = super.requestFocus(direction, previouslyFocusedRect)
+        if (granted) {
+            val afterVh = findViewHolderForAdapterPosition(selectedPosition.coerceAtLeast(0))
+            if (afterVh != null) {
+                afterVh.itemView.requestFocus()
+                (afterVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+            }
+        }
+        return granted
     }
 
     override fun requestChildFocus(child: View?, focused: View?) {
@@ -356,9 +391,35 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     override fun focusSearch(focused: View?, direction: Int): View? {
         if (isBusyLayout) {
-            return null
+            return focused ?: findFocus()
         }
-        return super.focusSearch(focused, direction)
+        val total = rowAdapter?.itemCount ?: 0
+        val currentPos = selectedPosition
+        if (direction == View.FOCUS_LEFT && currentPos <= 0) {
+            return focused ?: findFocus()
+        }
+        if (direction == View.FOCUS_RIGHT && total > 0 && currentPos >= total - 1) {
+            return focused ?: findFocus()
+        }
+        val result = super.focusSearch(focused, direction)
+        if (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT) {
+            if (result == null || result === this || !isDescendant(result)) {
+                return focused ?: findFocus()
+            }
+        }
+        if (result === this) {
+            return focused ?: findFocus()
+        }
+        return result
+    }
+
+    private fun isDescendant(view: View): Boolean {
+        var p = view.parent
+        while (p != null) {
+            if (p === this) return true
+            p = p.parent
+        }
+        return false
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
@@ -408,9 +469,18 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
         if (!gainFocus) {
             isHoldingHorizontalKey = false
-        } else if (selectedPosition <= 0) {
-            hasReleasedKeyAfterArrivingAt0 = true
-            arrivedAt0FromRight = false
+            pendingTargetPosition = RecyclerView.NO_POSITION
+        } else {
+            if (selectedPosition <= 0) {
+                hasReleasedKeyAfterArrivingAt0 = true
+                arrivedAt0FromRight = false
+            }
+            val pos = selectedPosition.coerceAtLeast(0)
+            val vh = findViewHolderForAdapterPosition(pos)
+            if (vh != null && !vh.itemView.hasFocus()) {
+                vh.itemView.requestFocus()
+                (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+            }
         }
     }
 
@@ -424,6 +494,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                         stopScroll()
                         isHoldingHorizontalKey = false
                     }
+                    pendingTargetPosition = RecyclerView.NO_POSITION
                     if (selectedPosition <= 0) {
                         hasReleasedKeyAfterArrivingAt0 = true
                         arrivedAt0FromRight = false
@@ -435,6 +506,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                         stopScroll()
                         isHoldingHorizontalKey = false
                     }
+                    pendingTargetPosition = RecyclerView.NO_POSITION
                     return true
                 }
             }
@@ -442,10 +514,20 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
         if (event.action == KeyEvent.ACTION_DOWN) {
             val now = SystemClock.uptimeMillis()
+            val total = rowAdapter?.itemCount ?: 0
+            val focusedChild = findFocus()
+            val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
+            val resolvedHolderPos = holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
+                ?: selectedPosition
+            val currentPos = if (isHoldingHorizontalKey && pendingTargetPosition != RecyclerView.NO_POSITION) {
+                pendingTargetPosition
+            } else {
+                resolvedHolderPos
+            }
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    val currentPos = selectedPosition
-                    if (currentPos <= 0) {
+                    if (currentPos <= 0 || total <= 0) {
+                        pendingTargetPosition = RecyclerView.NO_POSITION
                         val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
                         if (!arrivedRecently && event.repeatCount == 0) {
                             hasReleasedKeyAfterArrivingAt0 = true
@@ -460,38 +542,100 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
                     if (event.repeatCount > 0) {
                         isHoldingHorizontalKey = true
+                        if (now - lastHorizontalRepeatDispatchMs < 55L) {
+                            return true
+                        }
+                        lastHorizontalRepeatDispatchMs = now
+                    } else {
+                        lastHorizontalRepeatDispatchMs = now
                     }
 
+                    val target = (currentPos - 1).coerceAtLeast(0)
+                    pendingTargetPosition = target
+                    val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
-                        val target = (currentPos - 1).coerceAtLeast(0)
                         stopScroll()
                         setSelectedPosition(target)
+                        nextVh?.itemView?.requestFocus(View.FOCUS_LEFT)
                         return true
                     }
+
+                    if (nextVh != null) {
+                        val focused = nextVh.itemView.requestFocus(View.FOCUS_LEFT)
+                        if (!focused) {
+                            setSelectedPositionSmooth(target)
+                        }
+                    } else {
+                        setSelectedPositionSmooth(target)
+                    }
+                    return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (event.repeatCount > 0) {
-                        isHoldingHorizontalKey = true
-                    }
-
-                    if (!animationsEnabled) {
-                        val total = rowAdapter?.itemCount ?: 0
-                        val target = (selectedPosition + 1).coerceAtMost((total - 1).coerceAtLeast(0))
+                    if (total <= 0 || currentPos >= total - 1) {
+                        pendingTargetPosition = RecyclerView.NO_POSITION
                         stopScroll()
-                        setSelectedPosition(target)
                         return true
                     }
+
+                    if (event.repeatCount > 0) {
+                        isHoldingHorizontalKey = true
+                        if (now - lastHorizontalRepeatDispatchMs < 55L) {
+                            return true
+                        }
+                        lastHorizontalRepeatDispatchMs = now
+                    } else {
+                        lastHorizontalRepeatDispatchMs = now
+                    }
+
+                    val target = (currentPos + 1).coerceAtMost((total - 1).coerceAtLeast(0))
+                    pendingTargetPosition = target
+                    val nextVh = findViewHolderForAdapterPosition(target)
+                    if (!animationsEnabled) {
+                        stopScroll()
+                        setSelectedPosition(target)
+                        nextVh?.itemView?.requestFocus(View.FOCUS_RIGHT)
+                        return true
+                    }
+
+                    if (nextVh != null) {
+                        val focused = nextVh.itemView.requestFocus(View.FOCUS_RIGHT)
+                        if (!focused) {
+                            setSelectedPositionSmooth(target)
+                        }
+                    } else {
+                        setSelectedPositionSmooth(target)
+                    }
+                    return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     isHoldingHorizontalKey = false
+                    pendingTargetPosition = RecyclerView.NO_POSITION
+                    if (event.repeatCount > 0) {
+                        if (now - lastVerticalRepeatDispatchMs < 115L) {
+                            return true
+                        }
+                        lastVerticalRepeatDispatchMs = now
+                    } else {
+                        lastVerticalRepeatDispatchMs = now
+                    }
                     if (onNavigateDown?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     isHoldingHorizontalKey = false
+                    pendingTargetPosition = RecyclerView.NO_POSITION
+                    if (event.repeatCount > 0) {
+                        if (now - lastVerticalRepeatDispatchMs < 115L) {
+                            return true
+                        }
+                        lastVerticalRepeatDispatchMs = now
+                    } else {
+                        lastVerticalRepeatDispatchMs = now
+                    }
                     if (onNavigateUp?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_BACK -> {
                     isHoldingHorizontalKey = false
+                    pendingTargetPosition = RecyclerView.NO_POSITION
                     if (onNavigateBack?.invoke() == true) return true
                 }
             }
@@ -519,6 +663,11 @@ class LeanbackCardViewHolder(
         cornerRadius = cornerRadiusPx
     }
 
+    private val placeholderBackgroundDrawable = GradientDrawable().apply {
+        setColor(Color.parseColor("#1A1A1A"))
+        cornerRadius = cornerRadiusPx
+    }
+
     // Trì hoãn nhẹ việc bật Software Layer GlowView khi người dùng đang nhấn giữ phím cuộn liên tục
     private val deferredGlowRunnable = Runnable {
         if (root.hasFocus() && adapter.animationsEnabled()) {
@@ -532,6 +681,7 @@ class LeanbackCardViewHolder(
         if (!radiusChanged) return
         cornerRadiusPx = newRadiusPx
 
+        placeholderBackgroundDrawable.cornerRadius = newRadiusPx
         (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
         focusBorderDrawable.cornerRadius = newRadiusPx
         posterImage.invalidateOutline()
@@ -628,6 +778,8 @@ class LeanbackCardViewHolder(
             root.scaleY = targetScale
         }
 
+        // Lift focused card so glow and 1.08f scaled borders are never drawn over by adjacent views
+        root.translationZ = if (hasFocus) 12f else 0f
         cardContainer.elevation = 0f
         cardContainer.translationZ = 0f
 
@@ -668,8 +820,8 @@ class LeanbackCardViewHolder(
         }
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
-        val cachedColor = dominantColorCache.get(item.key)
-        currentDominantColor = cachedColor ?: Color.parseColor("#38BDF8")
+        val cachedColor = LeanbackColorEngine.getCachedColor(item.key) ?: dominantColorCache.get(item.key)
+        currentDominantColor = cachedColor ?: LeanbackColorEngine.defaultFallbackColor
 
         // Set dimensions
         val cardLp = cardContainer.layoutParams
@@ -691,7 +843,7 @@ class LeanbackCardViewHolder(
         }
 
         // Title
-        if (showLabels && titleText != null) {
+        if (showLabels && titleText != null && item.title.isNotBlank()) {
             titleText.visibility = View.VISIBLE
             titleText.text = item.title
         } else {
@@ -717,40 +869,50 @@ class LeanbackCardViewHolder(
         if (!imageUrl.isNullOrBlank()) {
             val ctx = posterImage.context
             val hasCachedColor = cachedColor != null
+            val boundKey = item.key
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
-                .size(cardWidthPx, cardHeightPx)
+                .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
                 .allowHardware(hasCachedColor)
                 .crossfade(false)
                 .target(
                     object : Target {
                         override fun onStart(placeholder: Image?) {
+                            if (currentItem?.key != boundKey) return
                             if (placeholder != null) {
                                 posterImage.setImageDrawable(placeholder.asDrawable(ctx.resources))
                             }
-                            // Retain previous image while loading to avoid flashing black
                         }
                         override fun onSuccess(result: Image) {
+                            if (currentItem?.key != boundKey) return
                             posterImage.setImageDrawable(result.asDrawable(ctx.resources))
-                            // Gợi ý 2: Triệt tiêu 100% GPU Overdraw khi ảnh đã nạp xong kín thẻ
+                            // Triệt tiêu 100% GPU Overdraw khi ảnh đã nạp xong kín thẻ
                             cardContainer.background = null
-                            val existingColor = dominantColorCache.get(item.key)
+                            val existingColor = LeanbackColorEngine.getCachedColor(boundKey) ?: dominantColorCache.get(boundKey)
                             if (existingColor != null) {
                                 currentDominantColor = existingColor
+                                if (root.hasFocus()) {
+                                    updateFocusVisual(true)
+                                }
                             } else {
                                 val bmp = (result as? BitmapImage)?.bitmap
                                 if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
-                                    val extracted = extractDominantColor(bmp).also {
-                                        dominantColorCache.put(item.key, it)
+                                    LeanbackColorEngine.extractDominantColorAsync(boundKey, bmp) { extracted ->
+                                        dominantColorCache.put(boundKey, extracted)
+                                        if (currentItem?.key == boundKey) {
+                                            currentDominantColor = extracted
+                                            if (root.hasFocus()) {
+                                                updateFocusVisual(true)
+                                            }
+                                        }
                                     }
-                                    currentDominantColor = extracted
+                                } else if (root.hasFocus()) {
+                                    updateFocusVisual(true)
                                 }
-                            }
-                            if (root.hasFocus()) {
-                                updateFocusVisual(true)
                             }
                         }
                         override fun onError(error: Image?) {
+                            if (currentItem?.key != boundKey) return
                             if (error != null) {
                                 posterImage.setImageDrawable(error.asDrawable(ctx.resources))
                             } else {
@@ -776,12 +938,10 @@ class LeanbackCardViewHolder(
         imageDisposable = null
         glowView.visibility = View.GONE
         cardContainer.foreground = null
-        // Phục hồi lại background placeholder khi view được recycle
-        if (cardContainer.background == null) {
-            cardContainer.background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1A1A1A"))
-                cornerRadius = cornerRadiusPx
-            }
+        // Phục hồi lại background placeholder tái sử dụng khi view được recycle
+        placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
+        if (cardContainer.background !== placeholderBackgroundDrawable) {
+            cardContainer.background = placeholderBackgroundDrawable
         }
     }
 }
@@ -852,6 +1012,16 @@ class LeanbackRowAdapter(
     }
 
     fun onScrollSettled() {
+        val rv = attachedRecyclerView
+        if (rv != null) {
+            for (i in 0 until rv.childCount) {
+                val child = rv.getChildAt(i)
+                val vh = rv.getChildViewHolder(child) as? LeanbackCardViewHolder
+                if (vh != null && vh.itemView.hasFocus()) {
+                    vh.updateFocusVisual(true)
+                }
+            }
+        }
         val pending = pendingItems ?: return
         pendingItems = null
         applyItems(pending)
@@ -883,6 +1053,22 @@ class LeanbackRowAdapter(
     ) {
         if (oldSize > 0 && newSize > oldSize && oldItems == newItems.take(oldSize)) {
             notifyItemRangeInserted(oldSize, newSize - oldSize)
+        } else if (oldSize > 0 && newSize > 0 && oldSize <= 300 && newSize <= 300) {
+            try {
+                val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                    override fun getOldListSize(): Int = oldSize
+                    override fun getNewListSize(): Int = newSize
+                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                        return oldItems[oldItemPosition].key == newItems[newItemPosition].key
+                    }
+                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                        return oldItems[oldItemPosition] == newItems[newItemPosition]
+                    }
+                }, false)
+                diffResult.dispatchUpdatesTo(this)
+            } catch (_: Exception) {
+                notifyDataSetChanged()
+            }
         } else {
             notifyDataSetChanged()
         }
@@ -987,21 +1173,21 @@ class LeanbackRowAdapter(
 
         root.addView(cardContainer)
 
-        // Title text
-        val titleText: TextView? = if (showLabels) {
-            TextView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    topMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, context.resources.displayMetrics).toInt()
-                }
-                setTextColor(Color.WHITE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-            }.also { root.addView(it) }
-        } else null
+        // Always create titleText so ViewHolders shared across pools between
+        // showLabels=false and showLabels=true rows never lose their title view.
+        val titleText = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, context.resources.displayMetrics).toInt()
+            }
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            visibility = if (showLabels) View.VISIBLE else View.GONE
+        }.also { root.addView(it) }
 
         val borderWidthPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2.0f, context.resources.displayMetrics).toInt().coerceAtLeast(2)
 
@@ -1119,10 +1305,12 @@ fun LeanbackModernRow(
         }
     }
 
-    LaunchedEffect(isPendingFocus, pendingFocusNonce, items.size) {
+    var localGridViewRef by remember(rowKey) { mutableStateOf<InteropHorizontalGridView?>(null) }
+
+    LaunchedEffect(isPendingFocus, pendingFocusNonce, items.isNotEmpty()) {
         if (isPendingFocus && items.isNotEmpty()) {
             val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-            val gridView = rowGrids?.get(rowKey) as? InteropHorizontalGridView
+            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView)
             if (gridView != null && gridView.isAttachedToWindow) {
                 executeRowFocus(gridView, targetIdx)
                 onClearPendingFocus()
@@ -1161,6 +1349,7 @@ fun LeanbackModernRow(
                 setHasFixedSize(true)
                 setItemViewCacheSize(8)
                 recycledViewPool?.let { setRecycledViewPool(it) }
+                localGridViewRef = this
                 rowGrids?.put(rowKey, this)
                 if (isPendingFocus && items.isNotEmpty()) {
                     val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
@@ -1170,7 +1359,23 @@ fun LeanbackModernRow(
             }
         },
         update = { gridView ->
+            val lp = gridView.layoutParams
+            if (lp != null && lp.height != totalRowHeightPx) {
+                lp.height = totalRowHeightPx
+                gridView.layoutParams = lp
+            }
+            gridView.setRowHeight(totalRowHeightPx)
+            gridView.windowAlignmentOffset = startPaddingPx
+            gridView.setItemSpacing(spacingPx)
+            if (gridView.paddingLeft != startPaddingPx ||
+                gridView.paddingTop != verticalPaddingPx ||
+                gridView.paddingRight != startPaddingPx ||
+                gridView.paddingBottom != verticalPaddingPx
+            ) {
+                gridView.setPadding(startPaddingPx, verticalPaddingPx, startPaddingPx, verticalPaddingPx)
+            }
             if (gridView is InteropHorizontalGridView) {
+                localGridViewRef = gridView
                 gridView.onNavigateDown = onNavigateDown
                 gridView.onNavigateUp = onNavigateUp
                 gridView.onNavigateBack = onNavigateBack
@@ -1198,11 +1403,6 @@ fun LeanbackModernRow(
             adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
             rowGrids?.put(rowKey, gridView)
             adapter.submitItems(items)
-            if (isPendingFocus && items.isNotEmpty() && gridView is InteropHorizontalGridView) {
-                val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-                executeRowFocus(gridView, targetIdx)
-                onClearPendingFocus()
-            }
         }
     )
 }

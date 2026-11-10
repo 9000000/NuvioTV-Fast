@@ -100,9 +100,12 @@ fun MoreLikeThisSection(
                 downFocusRequester?.requestFocus()
                 downFocusRequester != null
             },
-            isPendingFocus = !restoreItemId.isNullOrBlank(),
+            initialFocusPosition = initialIndex,
+            isPendingFocus = !restoreItemId.isNullOrBlank() && restoreFocusToken > 0,
             pendingFocusIndex = initialIndex,
-            pendingFocusNonce = restoreFocusToken
+            pendingFocusNonce = restoreFocusToken,
+            onClearPendingFocus = onRestoreFocusHandled,
+            entryFocusRequester = sectionFocusRequester
         )
 
         sourceLabel

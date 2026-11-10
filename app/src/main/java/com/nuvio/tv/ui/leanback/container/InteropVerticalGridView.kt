@@ -35,6 +35,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
         private set
 
     private var pendingTargetPosition: Int = RecyclerView.NO_POSITION
+    private var lastKeyNavigationTime: Long = 0L
 
     private val universalAdapter: LeanbackUniversalAdapter?
         get() = adapter as? LeanbackUniversalAdapter
@@ -285,10 +286,15 @@ class InteropVerticalGridView @JvmOverloads constructor(
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
+            val now = SystemClock.uptimeMillis()
             val currentFocused = findFocus()
             val holder = if (currentFocused != null) findContainingViewHolder(currentFocused) else null
-            val actualPos = holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
-                ?: selectedPosition
+            val actualPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+                pendingTargetPosition
+            } else {
+                holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
+                    ?: selectedPosition
+            }
             val cols = numColumnsCount.coerceAtLeast(1)
             val currentColumn = if (actualPos >= 0) actualPos % cols else 0
             val isFirstRow = actualPos in 0 until cols
@@ -298,7 +304,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     if (isFirstRow) {
-                        if (onNavigateUpOnFirstRow?.invoke() == true) {
+                        if (event.repeatCount == 0 && onNavigateUpOnFirstRow?.invoke() == true) {
                             return true
                         }
                         stopScroll()
@@ -306,7 +312,9 @@ class InteropVerticalGridView @JvmOverloads constructor(
                     }
                     if (event.repeatCount > 0) {
                         isHoldingVerticalKey = true
+                        if (now - lastKeyNavigationTime < 85L) return true
                     }
+                    lastKeyNavigationTime = now
                     val targetPos = actualPos - cols
                     if (targetPos >= 0) {
                         moveToPosition(targetPos)
@@ -315,7 +323,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     if (isLastRow) {
-                        if (onNavigateDownOnLastRow?.invoke() == true) {
+                        if (event.repeatCount == 0 && onNavigateDownOnLastRow?.invoke() == true) {
                             return true
                         }
                         stopScroll()
@@ -323,7 +331,9 @@ class InteropVerticalGridView @JvmOverloads constructor(
                     }
                     if (event.repeatCount > 0) {
                         isHoldingVerticalKey = true
+                        if (now - lastKeyNavigationTime < 85L) return true
                     }
+                    lastKeyNavigationTime = now
                     val targetPos = (actualPos + cols).coerceAtMost(totalItems - 1)
                     if (targetPos < totalItems) {
                         moveToPosition(targetPos)
@@ -340,6 +350,10 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         stopScroll()
                         return true
                     } else {
+                        if (event.repeatCount > 0 && now - lastKeyNavigationTime < 60L) {
+                            return true
+                        }
+                        lastKeyNavigationTime = now
                         val targetPos = actualPos - 1
                         if (targetPos >= 0) {
                             moveToPosition(targetPos)
@@ -349,12 +363,16 @@ class InteropVerticalGridView @JvmOverloads constructor(
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     if (currentColumn == cols - 1 || actualPos == totalItems - 1) {
-                        if (onNavigateRightOnLastColumn?.invoke() == true) {
+                        if (event.repeatCount == 0 && onNavigateRightOnLastColumn?.invoke() == true) {
                             return true
                         }
                         stopScroll()
                         return true
                     } else {
+                        if (event.repeatCount > 0 && now - lastKeyNavigationTime < 60L) {
+                            return true
+                        }
+                        lastKeyNavigationTime = now
                         val targetPos = actualPos + 1
                         if (targetPos < totalItems) {
                             moveToPosition(targetPos)

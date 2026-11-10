@@ -213,6 +213,7 @@ private fun CastDetailContent(
     }
 
     val firstPosterFocusRequester = remember { FocusRequester() }
+    val portraitFocusRequester = remember { FocusRequester() }
     var isBiographyTruncated by rememberSaveable(person.tmdbId) { mutableStateOf(false) }
 
     // Focus restoration state for filmography row
@@ -268,6 +269,14 @@ private fun CastDetailContent(
                             onBiographyExpandedChange(!isBiographyExpanded)
                         }
                     },
+                    portraitFocusRequester = portraitFocusRequester,
+                    onNavigateDownToFilmography = {
+                        if (allCredits.isNotEmpty() && !isBiographyExpanded) {
+                            runCatching { firstPosterFocusRequester.requestFocus(); true }.getOrDefault(false)
+                        } else {
+                            false
+                        }
+                    },
                     modifier = if (isBiographyExpanded) Modifier.weight(1f) else Modifier
                 )
 
@@ -289,6 +298,13 @@ private fun CastDetailContent(
                             credits = allCredits,
                             posterCardStyle = filmographyPosterStyle,
                             firstItemFocusRequester = firstPosterFocusRequester,
+                            onNavigateUp = {
+                                if (isBiographyExpanded || isBiographyTruncated) {
+                                    runCatching { portraitFocusRequester.requestFocus(); true }.getOrDefault(false)
+                                } else {
+                                    false
+                                }
+                            },
                             restoreItemId = pendingRestoreItemId,
                             restoreFocusToken = restoreFocusToken,
                             onRestoreFocusHandled = { pendingRestoreItemId = null },
@@ -324,9 +340,10 @@ private fun HeroSection(
     isBiographyTruncated: Boolean,
     onBiographyTruncationChanged: (Boolean) -> Unit,
     onPortraitClick: () -> Unit,
+    portraitFocusRequester: FocusRequester,
+    onNavigateDownToFilmography: () -> Boolean = { false },
     modifier: Modifier = Modifier
 ) {
-    val portraitFocusRequester = remember { FocusRequester() }
     val biographyScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -354,8 +371,14 @@ private fun HeroSection(
                     canFocus = isBiographyExpanded || isBiographyTruncated
                 }
                 .onPreviewKeyEvent { event ->
-                    if (!isBiographyExpanded || event.type != KeyEventType.KeyDown) {
+                    if (event.type != KeyEventType.KeyDown) {
                         false
+                    } else if (!isBiographyExpanded) {
+                        if (event.key == Key.DirectionDown) {
+                            onNavigateDownToFilmography()
+                        } else {
+                            false
+                        }
                     } else {
                         when (event.key) {
                             Key.DirectionDown -> {
@@ -575,6 +598,7 @@ private fun FilmographyRow(
     credits: List<MetaPreview>,
     posterCardStyle: PosterCardStyle,
     firstItemFocusRequester: FocusRequester,
+    onNavigateUp: () -> Boolean = { false },
     restoreItemId: String? = null,
     restoreFocusToken: Int = 0,
     onRestoreFocusHandled: () -> Unit = {},
@@ -586,7 +610,7 @@ private fun FilmographyRow(
     val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
     val effectiveHeight = if (globalLandscape) 146.dp else posterCardStyle.height
 
-    val leanbackItems = remember(credits, globalLandscape) {
+    val leanbackItems = remember(credits, globalLandscape, isItemWatched) {
         credits.mapIndexed { index, item ->
             LeanbackCardItem.Poster(
                 key = item.id + item.name + "_$index",
@@ -599,19 +623,17 @@ private fun FilmographyRow(
         }
     }
 
-    val initialPos = remember(restoreItemId, restoreFocusToken) {
+    var initialFocusDone by rememberSaveable { mutableStateOf(false) }
+
+    val initialPos = remember(credits, restoreItemId, restoreFocusToken) {
         if (restoreFocusToken > 0 && restoreItemId != null) {
             credits.indexOfFirst { it.id == restoreItemId }.takeIf { it >= 0 } ?: 0
         } else {
             0
         }
     }
-
-    LaunchedEffect(restoreFocusToken) {
-        if (restoreFocusToken > 0 && restoreItemId != null) {
-            onRestoreFocusHandled()
-        }
-    }
+    val shouldFocusRow = (!initialFocusDone && leanbackItems.isNotEmpty()) ||
+        (restoreFocusToken > 0 && restoreItemId != null)
 
     Box(
         modifier = Modifier
@@ -620,7 +642,7 @@ private fun FilmographyRow(
             .graphicsLayer { clip = false }
     ) {
         LeanbackNativeRow(
-            rowKey = "cast_filmography_${restoreFocusToken}",
+            rowKey = "cast_filmography",
             items = leanbackItems,
             cardWidth = effectiveWidth,
             cardHeight = effectiveHeight,
@@ -633,6 +655,17 @@ private fun FilmographyRow(
             ),
             itemSpacing = NuvioTheme.spacing.md,
             initialFocusPosition = initialPos,
+            isPendingFocus = shouldFocusRow,
+            pendingFocusIndex = initialPos,
+            pendingFocusNonce = restoreFocusToken,
+            entryFocusRequester = firstItemFocusRequester,
+            onClearPendingFocus = {
+                initialFocusDone = true
+                if (restoreItemId != null) {
+                    onRestoreFocusHandled()
+                }
+            },
+            onNavigateUp = onNavigateUp,
             onItemClick = { cardItem ->
                 val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
                 onItemClick(item)

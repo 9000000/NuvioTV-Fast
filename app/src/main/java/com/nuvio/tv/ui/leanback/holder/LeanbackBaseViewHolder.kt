@@ -43,6 +43,23 @@ abstract class LeanbackBaseViewHolder(
         cornerRadius = cornerRadiusPx
     }
 
+    // Reuse a single placeholder background drawable to eliminate GC churn on recycle
+    protected val placeholderBackgroundDrawable = GradientDrawable().apply {
+        setColor(Color.parseColor("#1A1A1A"))
+        cornerRadius = cornerRadiusPx
+    }
+
+    protected fun applyPlaceholderBackgroundShape() {
+        if (isCircle) {
+            placeholderBackgroundDrawable.shape = GradientDrawable.OVAL
+            placeholderBackgroundDrawable.setColor(Color.parseColor("#222226"))
+        } else {
+            placeholderBackgroundDrawable.shape = GradientDrawable.RECTANGLE
+            placeholderBackgroundDrawable.setColor(Color.parseColor("#1A1A1A"))
+            placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
+        }
+    }
+
     // Defer software layer glow by 55ms during rapid navigation
     val deferredGlowRunnable = Runnable {
         if (root.hasFocus() && adapter.animationsEnabled()) {
@@ -91,7 +108,10 @@ abstract class LeanbackBaseViewHolder(
         if (!radiusChanged) return
         cornerRadiusPx = newRadiusPx
 
-        (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
+        applyPlaceholderBackgroundShape()
+        if (!isCircle) {
+            (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
+        }
         focusBorderDrawable.cornerRadius = newRadiusPx
         glowView.cornerRadiusPx = newRadiusPx
 
@@ -166,11 +186,9 @@ abstract class LeanbackBaseViewHolder(
         root.removeCallbacks(deferredGlowRunnable)
         glowView.visibility = View.GONE
         cardContainer.foreground = null
-        if (cardContainer.background == null) {
-            cardContainer.background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1A1A1A"))
-                cornerRadius = cornerRadiusPx
-            }
+        applyPlaceholderBackgroundShape()
+        if (cardContainer.background !== placeholderBackgroundDrawable) {
+            cardContainer.background = placeholderBackgroundDrawable
         }
     }
 }

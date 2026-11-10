@@ -131,6 +131,7 @@ fun CatalogRowSection(
     onNavigateDown: (() -> Boolean)? = null,
     onNavigateUp: (() -> Boolean)? = null,
     allowOpenSidebar: Boolean = false,
+    resetToStartNonce: Int = 0,
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
 ) {
     val catalogRowKey = remember(catalogRow) { catalogRow.stableKey() }
@@ -382,10 +383,15 @@ fun CatalogRowSection(
             restorerFocusedIndex
         } else 0
 
+        var pendingFocusConsumed by remember(catalogRowKey, focusedItemIndex) { mutableStateOf(false) }
+        var lastHandledResetNonce by remember(catalogRowKey) { mutableIntStateOf(0) }
+        val isResetPending = resetToStartNonce > lastHandledResetNonce
+
         val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
 
         LeanbackNativeRow(
             modifier = Modifier
+                .onFocusChanged { rowHasFocusRef.value = it.hasFocus }
                 .then(if (entryFocusRequester != null) Modifier.focusRequester(entryFocusRequester) else Modifier)
                 .focusRequester(resolvedRowFocusRequester),
             rowKey = "catalog_row_${catalogRow.stableKey()}",
@@ -444,8 +450,16 @@ fun CatalogRowSection(
                     false
                 }
             },
-            isPendingFocus = focusedItemIndex >= 0,
-            pendingFocusIndex = targetFocusIndex
+            initialFocusPosition = targetFocusIndex,
+            isPendingFocus = (focusedItemIndex >= 0 && !pendingFocusConsumed) || isResetPending,
+            pendingFocusIndex = if (isResetPending) 0 else targetFocusIndex,
+            pendingFocusNonce = resetToStartNonce,
+            onClearPendingFocus = {
+                pendingFocusConsumed = true
+                if (isResetPending) {
+                    lastHandledResetNonce = resetToStartNonce
+                }
+            }
         )
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -58,6 +59,8 @@ fun LeanbackNativeRow(
     initialFocusPosition: Int = 0,
     pendingFocusNonce: Int = 0,
     entryFocusRequester: FocusRequester? = null,
+    entryFocusNonce: Int = 0,
+    entryFocusIndex: Int = 0,
     onClearPendingFocus: () -> Unit = {},
     recycledViewPool: RecyclerView.RecycledViewPool? = null,
     paddingValues: PaddingValues? = null,
@@ -76,10 +79,19 @@ fun LeanbackNativeRow(
     val spacingPx = with(density) { effectiveSpacing.roundToPx() }
     val verticalPaddingDp = 34.dp
     val verticalPaddingPx = with(density) { verticalPaddingDp.roundToPx() }
-    val labelHeightPx = if (showLabels) with(density) { 26.dp.roundToPx() } else 0
+    val hasSubtitles = remember(items, showLabels) {
+        showLabels && items.any {
+            (it as? LeanbackCardItem.Poster)?.subtitle?.isNotBlank() == true ||
+                (it as? LeanbackCardItem.Avatar)?.subtitle?.isNotBlank() == true
+        }
+    }
+    val labelHeightDp = when {
+        !showLabels -> 0.dp
+        hasSubtitles -> 44.dp
+        else -> 26.dp
+    }
+    val labelHeightPx = with(density) { labelHeightDp.roundToPx() }
     val totalRowHeightPx = cardHeightPx + labelHeightPx + (verticalPaddingPx * 2)
-
-    val labelHeightDp = if (showLabels) 26.dp else 0.dp
     val totalRowHeightDp = cardHeight + labelHeightDp + (verticalPaddingDp * 2)
 
     val effectivePool = recycledViewPool ?: LocalLeanbackRecycledViewPool.current
@@ -145,15 +157,42 @@ fun LeanbackNativeRow(
     }
 
     var localGridViewRef by remember(rowKey) { mutableStateOf<InteropHorizontalGridView?>(null) }
+    var initialScrollApplied by remember(rowKey) { mutableStateOf(false) }
 
-    LaunchedEffect(isPendingFocus, pendingFocusNonce) {
-        val targetIdx = if (isPendingFocus) pendingFocusIndex else initialFocusPosition
+    LaunchedEffect(isPendingFocus, pendingFocusNonce, items.isNotEmpty()) {
         if (isPendingFocus && items.isNotEmpty()) {
-            val safeIdx = targetIdx.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+            val safeIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
             val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView)
             if (gridView != null && gridView.isAttachedToWindow) {
                 executeRowFocus(gridView, safeIdx)
                 onClearPendingFocus()
+            }
+        }
+    }
+
+    LaunchedEffect(initialFocusPosition, items.isNotEmpty()) {
+        if (!initialScrollApplied && !isPendingFocus && items.isNotEmpty() && initialFocusPosition in items.indices) {
+            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView)
+            if (gridView != null && gridView.isAttachedToWindow && !gridView.hasFocus()) {
+                if (initialFocusPosition > 0) {
+                    gridView.setSelectedPosition(initialFocusPosition)
+                }
+                initialScrollApplied = true
+            }
+        }
+    }
+
+    LaunchedEffect(entryFocusNonce, entryFocusIndex, rowKey) {
+        if (entryFocusNonce <= 0) return@LaunchedEffect
+        repeat(8) {
+            withFrameNanos { }
+            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView)
+            if (gridView != null && gridView.isAttachedToWindow && items.isNotEmpty()) {
+                executeRowFocus(
+                    grid = gridView,
+                    targetIdx = entryFocusIndex.coerceIn(0, items.lastIndex)
+                )
+                return@LaunchedEffect
             }
         }
     }
@@ -202,13 +241,29 @@ fun LeanbackNativeRow(
                     val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
                     executeRowFocus(this, targetIdx)
                     onClearPendingFocus()
-                } else if (initialFocusPosition in items.indices) {
-                    executeRowFocus(this, initialFocusPosition)
+                } else if (initialFocusPosition in items.indices && initialFocusPosition > 0) {
+                    setSelectedPosition(initialFocusPosition)
+                    initialScrollApplied = true
                 }
             }
         },
         update = { gridView ->
             localGridViewRef = gridView
+            val lp = gridView.layoutParams
+            if (lp != null && lp.height != totalRowHeightPx) {
+                lp.height = totalRowHeightPx
+                gridView.layoutParams = lp
+            }
+            gridView.setRowHeight(totalRowHeightPx)
+            gridView.windowAlignmentOffset = startPaddingPx
+            gridView.setItemSpacing(spacingPx)
+            if (gridView.paddingLeft != startPaddingPx ||
+                gridView.paddingTop != verticalPaddingPx ||
+                gridView.paddingRight != startPaddingPx ||
+                gridView.paddingBottom != verticalPaddingPx
+            ) {
+                gridView.setPadding(startPaddingPx, verticalPaddingPx, startPaddingPx, verticalPaddingPx)
+            }
             gridView.onNavigateDown = onNavigateDown
             gridView.onNavigateUp = onNavigateUp
             gridView.onNavigateBack = onNavigateBack
@@ -235,11 +290,6 @@ fun LeanbackNativeRow(
             adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
             rowGrids?.put(rowKey, gridView)
             adapter.submitItems(items)
-            if (isPendingFocus && items.isNotEmpty()) {
-                val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-                executeRowFocus(gridView, targetIdx)
-                onClearPendingFocus()
-            }
         }
     )
 }

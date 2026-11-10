@@ -64,6 +64,7 @@ fun LeanbackNativeGrid(
     val endPaddingPx = with(density) { paddingValues.calculateRightPadding(layoutDirection).roundToPx() }
     val topPaddingPx = with(density) { paddingValues.calculateTopPadding().roundToPx() }
     val bottomPaddingPx = with(density) { paddingValues.calculateBottomPadding().roundToPx() }
+    val horizontalSpacingPx = with(density) { horizontalSpacing.roundToPx() }
     val verticalSpacingPx = with(density) { verticalSpacing.roundToPx() }
 
     val effectivePool = recycledViewPool ?: LocalLeanbackRecycledViewPool.current
@@ -166,7 +167,8 @@ fun LeanbackNativeGrid(
                 windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
                 itemAlignmentOffset = 0
                 itemAlignmentOffsetPercent = 0f
-                setItemSpacing(verticalSpacingPx)
+                setHorizontalSpacing(horizontalSpacingPx)
+                setVerticalSpacing(verticalSpacingPx)
                 clipToPadding = false
                 clipChildren = false
                 setPadding(startPaddingPx, topPaddingPx, endPaddingPx, bottomPaddingPx)
@@ -192,6 +194,16 @@ fun LeanbackNativeGrid(
             gridViewRef = gridView
             gridView.numColumnsCount = numColumns
             gridView.setNumColumns(numColumns)
+            gridView.windowAlignmentOffset = topPaddingPx
+            gridView.setHorizontalSpacing(horizontalSpacingPx)
+            gridView.setVerticalSpacing(verticalSpacingPx)
+            if (gridView.paddingLeft != startPaddingPx ||
+                gridView.paddingTop != topPaddingPx ||
+                gridView.paddingRight != endPaddingPx ||
+                gridView.paddingBottom != bottomPaddingPx
+            ) {
+                gridView.setPadding(startPaddingPx, topPaddingPx, endPaddingPx, bottomPaddingPx)
+            }
             gridView.onNavigateUpOnFirstRow = onNavigateUpOnFirstRow
             gridView.onNavigateDownOnLastRow = onNavigateDownOnLastRow
             gridView.onNavigateLeftOnFirstColumn = onNavigateLeftOnFirstColumn

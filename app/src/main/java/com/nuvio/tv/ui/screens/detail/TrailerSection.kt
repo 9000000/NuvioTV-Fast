@@ -103,9 +103,12 @@ fun TrailerSection(
                 downFocusRequester?.requestFocus()
                 downFocusRequester != null
             },
-            isPendingFocus = !restoreTrailerId.isNullOrBlank(),
+            initialFocusPosition = initialIndex,
+            isPendingFocus = !restoreTrailerId.isNullOrBlank() && restoreFocusToken > 0,
             pendingFocusIndex = initialIndex,
-            pendingFocusNonce = restoreFocusToken
+            pendingFocusNonce = restoreFocusToken,
+            onClearPendingFocus = onRestoreFocusHandled,
+            entryFocusRequester = sectionFocusRequester
         )
     }
 }

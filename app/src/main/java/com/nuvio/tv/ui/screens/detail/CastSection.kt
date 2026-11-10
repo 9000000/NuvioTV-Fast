@@ -67,6 +67,13 @@ fun CastSection(
     }
 
     val hasTitle = title.isNotBlank()
+    val initialIndex = remember(leanbackItems, restorePersonId, lastFocusedPersonKey) {
+        when {
+            restorePersonId != null -> allMembers.indexOfFirst { it.tmdbId == restorePersonId }.coerceAtLeast(0)
+            !lastFocusedPersonKey.isNullOrBlank() -> leanbackItems.indexOfFirst { it.key == lastFocusedPersonKey }.coerceAtLeast(0)
+            else -> 0
+        }
+    }
 
     Column(
         modifier = modifier
@@ -112,7 +119,13 @@ fun CastSection(
             onNavigateDown = {
                 downFocusRequester?.requestFocus()
                 downFocusRequester != null
-            }
+            },
+            initialFocusPosition = initialIndex,
+            isPendingFocus = restorePersonId != null && restoreFocusToken > 0,
+            pendingFocusIndex = initialIndex,
+            pendingFocusNonce = restoreFocusToken,
+            onClearPendingFocus = onRestoreFocusHandled,
+            entryFocusRequester = sectionFocusRequester
         )
     }
 }

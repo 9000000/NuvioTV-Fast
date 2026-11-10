@@ -2,7 +2,10 @@ package com.nuvio.tv.ui.leanback.core
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.util.LruCache
+import java.util.concurrent.Executors
 
 /**
  * High-performance Color Extraction Engine for Android TV.
@@ -11,15 +14,51 @@ import android.util.LruCache
  */
 object LeanbackColorEngine {
     private val dominantColorCache = LruCache<String, Int>(512)
-    val defaultFallbackColor: Int = Color.parseColor("#38BDF8") // Electric Cyan fallback
-
-    fun getCachedColor(key: String): Int? = dominantColorCache.get(key)
-
-    fun putCachedColor(key: String, color: Int) {
-        dominantColorCache.put(key, color)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val extractionExecutor = Executors.newFixedThreadPool(2) { runnable ->
+        Thread(runnable, "LeanbackColorExtractor").apply {
+            priority = Thread.NORM_PRIORITY - 1
+            isDaemon = true
+        }
     }
 
-    fun hasCachedColor(key: String): Boolean = dominantColorCache.get(key) != null
+    val defaultFallbackColor: Int = Color.parseColor("#38BDF8") // Electric Cyan fallback
+
+    fun getCachedColor(key: String): Int? = synchronized(dominantColorCache) {
+        dominantColorCache.get(key)
+    }
+
+    fun putCachedColor(key: String, color: Int) {
+        synchronized(dominantColorCache) {
+            dominantColorCache.put(key, color)
+        }
+    }
+
+    fun hasCachedColor(key: String): Boolean = getCachedColor(key) != null
+
+    /**
+     * Asynchronously extracts the dominant neon color off the main thread and caches it by [key].
+     */
+    fun extractDominantColorAsync(
+        key: String,
+        bitmap: Bitmap,
+        onExtracted: (Int) -> Unit
+    ) {
+        val cached = getCachedColor(key)
+        if (cached != null) {
+            onExtracted(cached)
+            return
+        }
+        if (bitmap.isRecycled) return
+        extractionExecutor.execute {
+            if (bitmap.isRecycled) return@execute
+            val extracted = extractDominantColor(bitmap)
+            putCachedColor(key, extracted)
+            mainHandler.post {
+                onExtracted(extracted)
+            }
+        }
+    }
 
     /**
      * Extracts the most vibrant dominant color from a Bitmap using a 16 Hue Bins Histogram.

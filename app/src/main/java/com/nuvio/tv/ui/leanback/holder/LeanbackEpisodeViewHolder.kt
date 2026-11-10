@@ -41,6 +41,7 @@ class LeanbackEpisodeViewHolder(
     glowView: PlayStoreGlowView,
     val thumbnailImage: ImageView,
     val episodeBadge: TextView,
+    val watchedBadgeView: TextView?,
     val titleText: TextView,
     val metaText: TextView?,
     val progressBar: ProgressBar?,
@@ -154,11 +155,19 @@ class LeanbackEpisodeViewHolder(
             progressBar?.visibility = View.GONE
         }
 
+        // Watched indicator badge (top-end)
+        if (epItem?.isWatched == true && watchedBadgeView != null) {
+            watchedBadgeView.visibility = View.VISIBLE
+        } else {
+            watchedBadgeView?.visibility = View.GONE
+        }
+
         // Coil image loading
         val imageUrl = item.imageUrl
         if (!imageUrl.isNullOrBlank()) {
             val ctx = thumbnailImage.context
             val hasCachedColor = cachedColor != null
+            val boundKey = item.key
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
@@ -167,28 +176,39 @@ class LeanbackEpisodeViewHolder(
                 .target(
                     object : Target {
                         override fun onStart(placeholder: Image?) {
+                            if (currentItem?.key != boundKey) return
                             thumbnailImage.setImageDrawable(placeholder?.asDrawable(ctx.resources))
                         }
 
                         override fun onSuccess(result: Image) {
+                            if (currentItem?.key != boundKey) return
                             thumbnailImage.setImageDrawable(result.asDrawable(ctx.resources))
-                            val existingColor = LeanbackColorEngine.getCachedColor(item.key)
+                            cardContainer.background = null
+                            val existingColor = LeanbackColorEngine.getCachedColor(boundKey)
                             if (existingColor != null) {
                                 currentDominantColor = existingColor
+                                if (root.hasFocus()) {
+                                    updateFocusVisual(true)
+                                }
                             } else {
                                 val bmp = (result as? BitmapImage)?.bitmap
                                 if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
-                                    val extracted = LeanbackColorEngine.extractDominantColor(bmp)
-                                    LeanbackColorEngine.putCachedColor(item.key, extracted)
-                                    currentDominantColor = extracted
+                                    LeanbackColorEngine.extractDominantColorAsync(boundKey, bmp) { extracted ->
+                                        if (currentItem?.key == boundKey) {
+                                            currentDominantColor = extracted
+                                            if (root.hasFocus()) {
+                                                updateFocusVisual(true)
+                                            }
+                                        }
+                                    }
+                                } else if (root.hasFocus()) {
+                                    updateFocusVisual(true)
                                 }
-                            }
-                            if (root.hasFocus()) {
-                                updateFocusVisual(true)
                             }
                         }
 
                         override fun onError(error: Image?) {
+                            if (currentItem?.key != boundKey) return
                             thumbnailImage.setImageDrawable(error?.asDrawable(ctx.resources))
                         }
                     }
@@ -371,6 +391,29 @@ class LeanbackEpisodeViewHolder(
             }
             cardContainer.addView(progressBar)
 
+            // Watched indicator badge (top-end)
+            val watchedSizePx = (22f * dp).toInt()
+            val watchedBadgeView = TextView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    watchedSizePx,
+                    watchedSizePx
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.END
+                    topMargin = (8f * dp).toInt()
+                    rightMargin = (8f * dp).toInt()
+                }
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.parseColor("#D910B981"))
+                }
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                text = "✓"
+                visibility = View.GONE
+            }
+            cardContainer.addView(watchedBadgeView)
+
             root.addView(cardContainer)
 
             return LeanbackEpisodeViewHolder(
@@ -379,6 +422,7 @@ class LeanbackEpisodeViewHolder(
                 glowView = glowView,
                 thumbnailImage = thumbnailImage,
                 episodeBadge = episodeBadge,
+                watchedBadgeView = watchedBadgeView,
                 titleText = titleText,
                 metaText = metaText,
                 progressBar = progressBar,

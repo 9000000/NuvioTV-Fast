@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.leanback.adapter
 
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.holder.LeanbackAvatarViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
@@ -116,6 +117,28 @@ class LeanbackUniversalAdapter(
         if (isAppendOnly) {
             try {
                 notifyItemRangeInserted(oldSize, newSize - oldSize)
+                // Also check if any existing prefix items changed their content (e.g. progressPercent or isWatched)
+                for (i in 0 until oldSize) {
+                    if (oldItems[i] != newItems[i]) {
+                        notifyItemChanged(i)
+                    }
+                }
+            } catch (_: Exception) {
+                safeNotifyDataSetChanged()
+            }
+        } else if (oldSize > 0 && newSize > 0 && oldSize <= 300 && newSize <= 300) {
+            try {
+                val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                    override fun getOldListSize(): Int = oldSize
+                    override fun getNewListSize(): Int = newSize
+                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                        return oldItems[oldItemPosition].key == newItems[newItemPosition].key
+                    }
+                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                        return oldItems[oldItemPosition] == newItems[newItemPosition]
+                    }
+                }, false)
+                diffResult.dispatchUpdatesTo(this)
             } catch (_: Exception) {
                 safeNotifyDataSetChanged()
             }

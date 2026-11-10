@@ -414,6 +414,8 @@ fun EpisodesRow(
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester? = null,
     entryFocusRequester: FocusRequester? = null,
+    entryFocusNonce: Int = 0,
+    entryFocusIndex: Int = 0,
     onNavigateDown: (() -> Boolean)? = null,
     episodeFocusRequesters: MutableMap<String, FocusRequester> = mutableMapOf(),
     restoreEpisodeId: String? = null,
@@ -427,34 +429,7 @@ fun EpisodesRow(
 ) {
     val dedupedEpisodes = remember(episodes) { episodes.distinctBy { it.id } }
     var optionsEpisode by remember { mutableStateOf<Video?>(null) }
-    val isOverlayOpen = optionsEpisode != null
     val cardMetrics = rememberEpisodeCardMetrics(posterCardCornerRadiusDp)
-    val density = LocalDensity.current
-    val rowPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
-    val initialEpisodeIndex = remember(dedupedEpisodes, restoreEpisodeId, scrollToEpisodeId, anchorEpisodeId) {
-        val initialEpisodeId = restoreEpisodeId ?: scrollToEpisodeId ?: anchorEpisodeId
-        val targetIndex = dedupedEpisodes.indexOfFirst { it.id == initialEpisodeId }
-        if (restoreEpisodeId != null) {
-            (targetIndex - 1).coerceAtLeast(0)
-        } else {
-            targetIndex.coerceAtLeast(0)
-        }
-    }
-    val lazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = initialEpisodeIndex,
-        prefetchStrategy = rowPrefetchStrategy
-    )
-    val episodeWindowIds = remember(dedupedEpisodes) { dedupedEpisodes.map { it.id } }
-    lazyListState.keepDetailRowWindow(
-        itemIds = episodeWindowIds,
-        lazyKeyAt = { index -> dedupedEpisodes.getOrNull(index)?.id },
-        resetKey = windowResetKey
-    )
-    var lastHorizontalKeyRepeatTime by remember { mutableStateOf(0L) }
-    val episodeIds = remember(dedupedEpisodes) { dedupedEpisodes.mapTo(mutableSetOf()) { it.id } }
-    LaunchedEffect(episodeIds, episodeFocusRequesters) {
-        episodeFocusRequesters.keys.retainAll(episodeIds)
-    }
 
     LaunchedEffect(restoreFocusToken, restoreEpisodeId, dedupedEpisodes) {
         if (restoreFocusToken <= 0 || restoreEpisodeId.isNullOrBlank()) return@LaunchedEffect
@@ -464,58 +439,7 @@ fun EpisodesRow(
             if (dedupedEpisodes.none { it.id == restoreEpisodeId }) {
                 onRestoreFocusHandled()
             }
-            return@LaunchedEffect
         }
-        val index = dedupedEpisodes.indexOfFirst { it.id == restoreEpisodeId }
-        if (index >= 0) {
-            val scrollIndex = (index - 1).coerceAtLeast(0)
-            val peekOffsetPx = if (index > 0) {
-                with(density) { (cardMetrics.cardWidth / 3f).roundToPx().coerceAtLeast(0) }
-            } else 0
-            lazyListState.scrollToItem(scrollIndex, scrollOffset = peekOffsetPx)
-        }
-        repeat(EPISODE_RESTORE_FOCUS_ATTEMPTS) {
-            val requester = episodeFocusRequesters[restoreEpisodeId]
-            if (requester != null && requester.requestFocusAfterFrames(frames = 1)) {
-                delay(EPISODE_RESTORE_FALLBACK_MS)
-                onRestoreFocusHandled()
-                return@LaunchedEffect
-            }
-            withFrameNanos { }
-        }
-    }
-
-    LaunchedEffect(scrollToEpisodeId, dedupedEpisodes) {
-        if (scrollToEpisodeId.isNullOrBlank()) return@LaunchedEffect
-        val index = dedupedEpisodes.indexOfFirst { it.id == scrollToEpisodeId }
-        if (index < 0) return@LaunchedEffect
-        val scrollIndex = (index - 1).coerceAtLeast(0)
-        val peekOffsetPx = if (index > 0) {
-            with(density) { (cardMetrics.cardWidth / 3f).roundToPx().coerceAtLeast(0) }
-        } else 0
-        lazyListState.scrollToItem(scrollIndex, scrollOffset = peekOffsetPx)
-        onScrollToEpisodeHandled()
-    }
-
-    var anchorPlaced by remember { mutableStateOf(false) }
-    LaunchedEffect(dedupedEpisodes) {
-        if (anchorPlaced) return@LaunchedEffect
-        if (!restoreEpisodeId.isNullOrBlank() || !scrollToEpisodeId.isNullOrBlank()) {
-            anchorPlaced = true
-            return@LaunchedEffect
-        }
-        val anchor = anchorEpisodeId ?: run {
-            anchorPlaced = true
-            return@LaunchedEffect
-        }
-        val index = dedupedEpisodes.indexOfFirst { it.id == anchor }
-        if (index < 0) return@LaunchedEffect
-        snapshotFlow { lazyListState.layoutInfo.visibleItemsInfo.map { it.index } }
-            .first { it.isNotEmpty() }
-        if (index !in lazyListState.layoutInfo.visibleItemsInfo.map { it.index }) {
-            lazyListState.scrollToItem(index)
-        }
-        anchorPlaced = true
     }
 
     val context = LocalContext.current
@@ -551,6 +475,8 @@ fun EpisodesRow(
             dedupedEpisodes.indexOfFirst { it.id == targetFocusEpisodeId }.coerceAtLeast(0)
         } else 0
     }
+    val shouldRequestEpisodeFocus = (!restoreEpisodeId.isNullOrBlank() && restoreFocusToken > 0) ||
+        !scrollToEpisodeId.isNullOrBlank()
 
     LeanbackNativeRow(
         rowKey = "episodes_season_${selectedSeason}_${windowResetKey ?: "default"}",
@@ -594,10 +520,21 @@ fun EpisodesRow(
                 false
             }
         },
-        isPendingFocus = !targetFocusEpisodeId.isNullOrBlank(),
+        initialFocusPosition = initialIdx,
+        isPendingFocus = shouldRequestEpisodeFocus,
         pendingFocusIndex = initialIdx,
         pendingFocusNonce = restoreFocusToken,
-        entryFocusRequester = entryFocusRequester
+        onClearPendingFocus = {
+            if (!restoreEpisodeId.isNullOrBlank()) {
+                onRestoreFocusHandled()
+            }
+            if (!scrollToEpisodeId.isNullOrBlank()) {
+                onScrollToEpisodeHandled()
+            }
+        },
+        entryFocusRequester = entryFocusRequester,
+        entryFocusNonce = entryFocusNonce,
+        entryFocusIndex = entryFocusIndex
     )
 
     optionsEpisode?.let { selectedEpisode ->

@@ -40,9 +40,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -199,10 +201,9 @@ private fun TmdbEntityBrowseContent(
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
     val localDensity = LocalDensity.current
     val focusedItemIndexByRail = remember { mutableMapOf<String, Int>() }
-    val railFocusRequesters = remember { mutableMapOf<String, MutableMap<Int, FocusRequester>>() }
-    val railListStates = remember { mutableMapOf<String, LazyListState>() }
+    val railEntryFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     val railsListState = rememberLazyListState()
-    val firstCardFocusRequester = remember(data.header.id) { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
     var initialFocusRequested by rememberSaveable(data.header.id) { mutableStateOf(false) }
 
     // Bring the rail that owns the restored card into the column viewport before the row restore runs.
@@ -286,17 +287,11 @@ private fun TmdbEntityBrowseContent(
                             val railKey = "${rail.mediaType.value}_${rail.railType.value}"
                             val rememberedFocusedIndex = focusedItemIndexByRail[railKey] ?: 0
                             val isRestoreRail = pendingRestoreRailKey == null || pendingRestoreRailKey == railKey
+                            val railEntryFocusRequester = railEntryFocusRequesters.getOrPut(railIndex) { FocusRequester() }
                             EntityRailRow(
                                 rail = rail,
-                                initialFocusRequester = if (railIndex == 0) firstCardFocusRequester else null,
+                                entryFocusRequester = railEntryFocusRequester,
                                 shouldRequestInitialFocus = railIndex == 0 && !initialFocusRequested && pendingRestoreItemId == null,
-                                rowListState = railListStates.getOrPut(railKey) {
-                                    LazyListState(
-                                        firstVisibleItemIndex = rememberedFocusedIndex,
-                                        prefetchStrategy = LazyListPrefetchStrategy(nestedPrefetchItemCount = 2)
-                                    )
-                                },
-                                itemFocusRequesters = railFocusRequesters.getOrPut(railKey) { mutableMapOf() },
                                 rememberedFocusedIndex = rememberedFocusedIndex,
                                 posterCardStyle = posterCardStyle,
                                 watchedMovieIds = watchedMovieIds,
@@ -310,6 +305,34 @@ private fun TmdbEntityBrowseContent(
                                 },
                                 onFocusedItemIndexChanged = { focusedIndex ->
                                     focusedItemIndexByRail[railKey] = focusedIndex
+                                },
+                                onNavigateUp = {
+                                    if (railIndex > 0) {
+                                        val prevIdx = railIndex - 1
+                                        coroutineScope.launch {
+                                            runCatching { railsListState.animateScrollToItem(prevIdx) }
+                                            railEntryFocusRequesters[prevIdx]?.let { req ->
+                                                runCatching { req.requestFocus() }
+                                            }
+                                        }
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                                onNavigateDown = {
+                                    if (railIndex < data.rails.lastIndex) {
+                                        val nextIdx = railIndex + 1
+                                        coroutineScope.launch {
+                                            runCatching { railsListState.animateScrollToItem(nextIdx) }
+                                            railEntryFocusRequesters[nextIdx]?.let { req ->
+                                                runCatching { req.requestFocus() }
+                                            }
+                                        }
+                                        true
+                                    } else {
+                                        false
+                                    }
                                 },
                                 onItemClick = { item ->
                                     pendingRestoreItemId = item.id
@@ -460,10 +483,8 @@ private fun TmdbEntityHero(
 @Composable
 private fun EntityRailRow(
     rail: TmdbEntityRail,
-    initialFocusRequester: FocusRequester?,
+    entryFocusRequester: FocusRequester?,
     shouldRequestInitialFocus: Boolean,
-    rowListState: LazyListState,
-    itemFocusRequesters: MutableMap<Int, FocusRequester>,
     rememberedFocusedIndex: Int,
     posterCardStyle: PosterCardStyle,
     watchedMovieIds: Set<String>,
@@ -473,6 +494,8 @@ private fun EntityRailRow(
     onInitialFocusHandled: () -> Unit,
     onRestoreFocusHandled: () -> Unit,
     onFocusedItemIndexChanged: (Int) -> Unit,
+    onNavigateUp: () -> Boolean = { false },
+    onNavigateDown: () -> Boolean = { false },
     onItemClick: (MetaPreview) -> Unit,
     onItemLongPress: (MetaPreview) -> Unit = {},
     onLoadMore: (TmdbEntityMediaType, TmdbEntityRailType) -> Unit
@@ -499,19 +522,14 @@ private fun EntityRailRow(
         }
     }
 
-    val initialPos = remember(restoreItemId, restoreFocusToken, rememberedFocusedIndex) {
+    val initialPos = remember(rail.items, restoreItemId, restoreFocusToken, rememberedFocusedIndex) {
         if (restoreFocusToken > 0 && restoreItemId != null) {
             rail.items.indexOfFirst { it.id == restoreItemId }.takeIf { it >= 0 } ?: 0
         } else {
             rememberedFocusedIndex.coerceIn(0, (rail.items.size - 1).coerceAtLeast(0))
         }
     }
-
-    LaunchedEffect(restoreFocusToken) {
-        if (restoreFocusToken > 0 && restoreItemId != null) {
-            onRestoreFocusHandled()
-        }
-    }
+    val isPendingFocus = shouldRequestInitialFocus || (restoreFocusToken > 0 && restoreItemId != null)
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -540,6 +558,20 @@ private fun EntityRailRow(
                 paddingValues = PaddingValues(horizontal = NuvioTheme.spacing.xxxl),
                 itemSpacing = NuvioTheme.spacing.md,
                 initialFocusPosition = initialPos,
+                isPendingFocus = isPendingFocus,
+                pendingFocusIndex = initialPos,
+                pendingFocusNonce = if (restoreFocusToken > 0) restoreFocusToken else if (shouldRequestInitialFocus) 1 else 0,
+                entryFocusRequester = entryFocusRequester,
+                onClearPendingFocus = {
+                    if (shouldRequestInitialFocus) {
+                        onInitialFocusHandled()
+                    }
+                    if (restoreFocusToken > 0 && restoreItemId != null) {
+                        onRestoreFocusHandled()
+                    }
+                },
+                onNavigateUp = onNavigateUp,
+                onNavigateDown = onNavigateDown,
                 onItemFocused = { idx, _ ->
                     onFocusedItemIndexChanged(idx)
                 },

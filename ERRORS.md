@@ -1,3 +1,46 @@
+## [2026-11-10 09:40] - Khắc phục lỗi mục Tìm kiếm không bấm giữ được Lên/Xuống, hàng đầu tiên không bấm giữ sang trái được và thi thoảng bấm sang phải focus nhảy lên ô tìm kiếm
+
+- **Type**: Logic & Focus Management
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/util/DpadThrottleModifier.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchScreen.kt`, `app/src/main/java/com/nuvio/tv/ui/components/CatalogRowSection.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `DpadThrottleModifier.kt` & `SearchScreen.kt:618`: Modifier `.dpadRepeatThrottle()` gắn trên `LazyColumn` của `SearchScreen` dùng `onPreviewKeyEvent` chặn toàn bộ sự kiện phím giữ (`native.repeatCount > 0`) cho cả 4 hướng (`DPAD_UP`, `DPAD_DOWN`, `DPAD_LEFT`, `DPAD_RIGHT`), nuốt sự kiện (`return true`) và gọi `focusManager.moveFocus(direction)` của Compose. Vì mỗi hàng kết quả `LeanbackNativeRow` là một `AndroidView` đơn lẻ đối với Compose:
+     - Khi bấm giữ Lên/Xuống (`repeatCount > 0`), sự kiện bị `dpadRepeatThrottle` chặn ở tầng `LazyColumn` trước khi xuống tới `InteropHorizontalGridView.dispatchKeyEvent`, khiến `onNavigateUp` / `onNavigateDown` không bao giờ được gọi.
+     - Khi bấm giữ sang Trái (`repeatCount > 0`) trên hàng đầu tiên, sự kiện `DPAD_LEFT` bị `dpadRepeatThrottle` biến thành `focusManager.moveFocus(FocusDirection.Left)` của Compose thay vì di chuyển qua các ViewHolder con trong `HorizontalGridView`, khiến hàng đầu tiên không thể bấm giữ sang trái.
+     - Khi bấm giữ/nhấn nhanh sang Phải, `focusManager.moveFocus(FocusDirection.Right)` hoặc sự kiện `DPAD_RIGHT` không được tiêu thụ (`super.dispatchKeyEvent` trả về `false`) thoát ra `AndroidComposeView` và tìm thấy `SearchInputField` đang hiển thị ngay phía trên hàng đầu tiên, làm focus nhảy vọt lên ô tìm kiếm.
+  2. `InteropHorizontalGridView.kt`: Trong `dispatchKeyEvent`, `KEYCODE_DPAD_LEFT` và `KEYCODE_DPAD_RIGHT` trước đó phụ thuộc vào `super.dispatchKeyEvent(event)` (vốn trả về `false` để chờ `ViewRootImpl` gọi `focusSearch`) và chưa có `pendingTargetPosition` khi giữ phím, cũng như chưa tiêu thụ sự kiện tại biên phải (`actualPos >= total - 1`).
+  3. `SearchScreen.kt` & `CatalogRowSection.kt`: Key của `itemsIndexed` trong `SearchScreen.kt` nối thêm `_$index` (`"${item.stableKey()}_$index"`), khiến khi các catalog khác trả kết quả về làm thay đổi chỉ số hàng, `AndroidView` đang giữ focus bị hủy và tái tạo làm mất focus về ô tìm kiếm. Đồng thời `rowHasFocusRef` trong `CatalogRowSection.kt` chưa được cập nhật qua `onFocusChanged`, và các coroutine cuộn dọc trong `SearchScreen.kt` chưa hủy job cũ hoặc chuyển sang `scrollToItem` khi giữ phím liên tiếp.
+- **Fix Applied**:
+  1. `DpadThrottleModifier.kt` & `SearchScreen.kt`: Thêm kiểm tra `isFocusInsideLeanbackGrid(hostView)` trong `dpadRepeatThrottle` để nhường 100% quyền xử lý phím cho `BaseGridView` (`InteropHorizontalGridView` / `InteropVerticalGridView`), đồng thời gỡ bỏ `.dpadRepeatThrottle()` khỏi `LazyColumn` của `SearchScreen.kt`.
+  2. `InteropHorizontalGridView.kt` & `LeanbackModernRow.kt`:
+     - Chủ động điều khiển chuyển bước Trái/Phải bằng `pendingTargetPosition`, `nextVh.itemView.requestFocus(direction)` kết hợp `setSelectedPositionSmooth(target)` và luôn `return true` (tiêu thụ 100% sự kiện `DPAD_LEFT` / `DPAD_RIGHT` bao gồm cả tại biên phải `actualPos >= total - 1`), kèm bộ tiết lưu mượt `55ms` (ngang) và `115ms` (dọc) khi `event.repeatCount > 0`.
+     - Trong `focusSearch`, luôn trả về `focused ?: findFocus()` khi kết quả vượt ra ngoài `HorizontalGridView` hoặc `null`.
+  3. `SearchScreen.kt` & `CatalogRowSection.kt`:
+     - Quản lý `verticalNavJob` và `lastVerticalStepTimeMs` trong `SearchScreen.kt`: Khi giữ phím Lên/Xuống liên tiếp (`isRapidRepeat`), tính `baseIndex` lũy tiến từ `currentActiveRowIndex`, hủy job cuộn cũ và dùng `listState.scrollToItem(...)` để lướt dọc liên tục qua các hàng mà không bị nghẽn animation.
+     - Đổi key của `itemsIndexed` trong `SearchScreen.kt` thành `"${item.addonBaseUrl}_${item.stableKey()}"` (bất biến theo catalog, không phụ thuộc `index`) và gắn `.onFocusChanged { rowHasFocusRef.value = it.hasFocus }` trên `LeanbackNativeRow` trong `CatalogRowSection.kt`.
+- **Prevention**: Không bao giờ chặn sự kiện `onPreviewKeyEvent` ở tầng Compose cha để gọi `focusManager.moveFocus` khi focus đang nằm trong `AndroidView` (`BaseGridView`); luôn tiêu thụ hoàn toàn (`return true`) các phím `DPAD_LEFT` / `DPAD_RIGHT` bên trong `InteropHorizontalGridView.dispatchKeyEvent` và không bao giờ gắn `_$index` vào key của `LazyColumn` khi danh sách có thể chèn/lọc động.
+- **Status**: Fixed
+
+---
+
+## [2026-11-10 08:52] - Lỗi thiếu import rememberCoroutineScope & launch trong TmdbEntityBrowseScreen.kt
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/tmdb/TmdbEntityBrowseScreen.kt:204`
+- **Agent**: mon
+- **Root Cause**: Khi bổ sung điều hướng D-pad dọc giữa các hàng rail trong `TmdbEntityBrowseScreen.kt` sử dụng `rememberCoroutineScope()` và `coroutineScope.launch`, chưa kiểm tra danh sách import ở đầu file.
+- **Error Message**:
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/tmdb/TmdbEntityBrowseScreen.kt:204:26 Unresolved reference 'rememberCoroutineScope'.
+  ```
+- **Fix Applied**: Thêm `import androidx.compose.runtime.rememberCoroutineScope` và `import kotlinx.coroutines.launch` vào đầu file `TmdbEntityBrowseScreen.kt`.
+- **Prevention**: Luôn kiểm tra phần import ở đầu file trước khi thêm các API coroutine hoặc Compose runtime mới.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-09 12:15] - Khắc phục triệt để lỗi mục tìm kiếm và khám phá bấm D-pad Lên/Xuống thi thoảng bị mất tiêu điểm (Focus Loss)
 
 - **Type**: Logic & Focus Management

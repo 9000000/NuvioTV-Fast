@@ -2045,6 +2045,10 @@ private fun MetaDetailsContent(
                 ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
         }
     }
+    val episodesRowEntryFocusNonce = remember(meta.id, selectedSeason) { mutableIntStateOf(0) }
+    val seasonDownFocusIndex = episodesForSeason.indexOfFirst { episode ->
+        seasonEpisodeFocusRequesters[episode.id] === seasonDownFocusRequester
+    }.coerceAtLeast(0)
 
     val activePeopleTabFocusRequester = visiblePeopleTabItems
         .firstOrNull { it.tab == activePeopleTab }
@@ -2413,14 +2417,13 @@ private fun MetaDetailsContent(
             }
         }
 
-        val onSeasonTabsNavigateDown = remember(showEpisodesRow, showSeasonTabs, seasonDownFocusRequester, selectedSeasonFocusRequester) {
+        val onSeasonTabsNavigateDown = remember(showEpisodesRow, showSeasonTabs, episodesRowEntryFocusNonce) {
             {
                 if (showEpisodesRow) {
                     coroutineScope.launch {
                         val episodesIndex = if (showSeasonTabs) 2 else 1
                         listState.animateScrollToItem(episodesIndex)
-                        val req = seasonDownFocusRequester ?: selectedSeasonFocusRequester
-                        req.requestFocusAfterFrames()
+                        episodesRowEntryFocusNonce.intValue++
                     }
                     true
                 } else false
@@ -2723,6 +2726,8 @@ private fun MetaDetailsContent(
                             upFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (heroPlayFocusRequester ?: heroPlayButtonFocusRequester),
                             downFocusRequester = episodesDownFocusRequester,
                             entryFocusRequester = seasonDownFocusRequester,
+                            entryFocusNonce = episodesRowEntryFocusNonce.intValue,
+                            entryFocusIndex = seasonDownFocusIndex,
                             onNavigateDown = onEpisodesRowNavigateDown,
                             episodeFocusRequesters = seasonEpisodeFocusRequesters,
                             restoreEpisodeId = visibleEpisodeRestoreId,

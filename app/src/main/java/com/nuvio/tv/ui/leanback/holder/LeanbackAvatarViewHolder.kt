@@ -1,8 +1,10 @@
 package com.nuvio.tv.ui.leanback.holder
 
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
@@ -12,6 +14,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import coil3.BitmapImage
 import coil3.SingletonImageLoader
 import coil3.asDrawable
 import coil3.request.ImageRequest
@@ -105,6 +108,7 @@ class LeanbackAvatarViewHolder(
         if (!imageUrl.isNullOrBlank()) {
             val ctx = avatarImage.context
             val hasCachedColor = cachedColor != null
+            val boundKey = item.key
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(diameter.coerceAtLeast(1), diameter.coerceAtLeast(1))
@@ -113,18 +117,39 @@ class LeanbackAvatarViewHolder(
                 .target(
                     object : Target {
                         override fun onStart(placeholder: coil3.Image?) {
+                            if (currentItem?.key != boundKey) return
                             avatarImage.setImageDrawable(placeholder?.asDrawable(ctx.resources))
                         }
 
                         override fun onSuccess(result: coil3.Image) {
+                            if (currentItem?.key != boundKey) return
                             avatarImage.setImageDrawable(result.asDrawable(ctx.resources))
                             cardContainer.background = null
-                            if (root.hasFocus()) {
-                                updateFocusVisual(true)
+                            val existingColor = LeanbackColorEngine.getCachedColor(boundKey)
+                            if (existingColor != null) {
+                                currentDominantColor = existingColor
+                                if (root.hasFocus()) {
+                                    updateFocusVisual(true)
+                                }
+                            } else {
+                                val bmp = (result as? BitmapImage)?.bitmap
+                                if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
+                                    LeanbackColorEngine.extractDominantColorAsync(boundKey, bmp) { extracted ->
+                                        if (currentItem?.key == boundKey) {
+                                            currentDominantColor = extracted
+                                            if (root.hasFocus()) {
+                                                updateFocusVisual(true)
+                                            }
+                                        }
+                                    }
+                                } else if (root.hasFocus()) {
+                                    updateFocusVisual(true)
+                                }
                             }
                         }
 
                         override fun onError(error: coil3.Image?) {
+                            if (currentItem?.key != boundKey) return
                             avatarImage.setImageDrawable(error?.asDrawable(ctx.resources))
                         }
                     }

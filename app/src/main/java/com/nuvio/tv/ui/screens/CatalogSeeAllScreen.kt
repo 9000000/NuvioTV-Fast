@@ -128,12 +128,10 @@ fun CatalogSeeAllScreen(
         }
     }
 
-    val gridState = rememberLazyGridState()
-    val restoreFocusRequester = remember { FocusRequester() }
     // Persist the focused catalog item by stable id (not grid index) so return-from-Details
     // can re-focus the same poster even if the row reloads or the first cell steals focus.
     var focusedItemKey by rememberSaveable(catalogKey) { mutableStateOf<String?>(null) }
-    var shouldRestoreFocus by rememberSaveable(catalogKey) { mutableStateOf(true) }
+    var restoreFocusNonce by rememberSaveable(catalogKey) { mutableStateOf(0) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val focusedItemIndex = remember(catalogRow?.items, focusedItemKey) {
@@ -144,61 +142,15 @@ fun CatalogSeeAllScreen(
         items.indexOfFirst { catalogItemFocusKey(it) == key }.takeIf { it >= 0 } ?: 0
     }
 
-    // Load more when scrolling near the bottom
-    LaunchedEffect(gridState, catalogRow?.items?.size) {
-        snapshotFlow {
-            val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val total = gridState.layoutInfo.totalItemsCount
-            lastVisible to total
-        }
-            .distinctUntilChanged()
-            .collect { (lastVisible, total) ->
-                if (total > 0 && lastVisible >= total - 10) {
-                    val row = catalogRow
-                    if (row != null && row.hasMore && !row.isLoading) {
-                        if (serverCatalog != null) {
-                            serverCatalog.loadMore()
-                        } else if (isSearchMode) {
-                            searchViewModel.onEvent(
-                                SearchEvent.LoadMoreCatalog(row.catalogId, row.addonId, row.apiType)
-                            )
-                        } else {
-                            viewModel.onEvent(
-                                HomeEvent.OnLoadMoreCatalog(row.catalogId, row.addonId, row.apiType)
-                            )
-                        }
-                    }
-                }
-            }
-    }
-
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                shouldRestoreFocus = true
+            if (event == Lifecycle.Event.ON_RESUME && !focusedItemKey.isNullOrBlank()) {
+                restoreFocusNonce += 1
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    LaunchedEffect(shouldRestoreFocus, catalogRow?.items?.size, focusedItemKey) {
-        if (!shouldRestoreFocus) return@LaunchedEffect
-        val items = catalogRow?.items.orEmpty()
-        if (items.isEmpty()) return@LaunchedEffect
-
-        val targetIndex = focusedItemIndex.coerceIn(0, items.lastIndex)
-        val isTargetVisible = gridState.layoutInfo.visibleItemsInfo.any { it.index == targetIndex }
-        if (!isTargetVisible) {
-            gridState.animateScrollToItem(targetIndex)
-        }
-        repeat(2) { withFrameNanos { } }
-        try {
-            restoreFocusRequester.requestFocus()
-            shouldRestoreFocus = false
-        } catch (_: IllegalStateException) {
         }
     }
 
@@ -304,7 +256,8 @@ fun CatalogSeeAllScreen(
                             }
                         }
                     },
-                    initialFocusPosition = focusedItemIndex
+                    initialFocusPosition = focusedItemIndex,
+                    restoreFocusNonce = restoreFocusNonce
                 )
             }
         } else if (isCatalogLoading) {

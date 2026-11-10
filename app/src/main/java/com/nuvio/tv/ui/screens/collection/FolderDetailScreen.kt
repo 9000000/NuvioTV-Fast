@@ -547,6 +547,7 @@ private fun RowsContent(
     val rowEntryFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val rowFocusedItemIndex = remember { mutableMapOf<String, Int>() }
     val focusedItemByRow = remember { mutableStateMapOf<String, Int>() }
+    val rowResetNonceByRow = remember { mutableStateMapOf<String, Int>() }
     val currentFocusedRowKey = remember { mutableStateOf(focusState.focusedRowKey) }
     val folderScope = rememberCoroutineScope()
 
@@ -557,13 +558,9 @@ private fun RowsContent(
         itemIndex > 0
     }) {
         val rowKey = currentFocusedRowKey.value ?: return@BackHandler
-        val listState = rowStates[rowKey]
         rowFocusedItemIndex[rowKey] = 0
         focusedItemByRow[rowKey] = 0
-        folderScope.launch {
-            listState?.scrollToItem(0, 0)
-            rowFocusRequesters[rowKey]?.let { runCatching { it.requestFocus() } }
-        }
+        rowResetNonceByRow[rowKey] = (rowResetNonceByRow[rowKey] ?: 0) + 1
     }
 
     // Keep a stable ref to the latest sourceTabs so DisposableEffect.onDispose
@@ -798,9 +795,11 @@ private fun RowsContent(
                             },
                             restorerFocusedIndex = rowFocusedItemIndex[rowKey]
                                 ?: if (focusState.hasSavedFocus && focusState.focusedRowKey == rowKey) focusState.focusedItemIndex else -1,
+                            resetToStartNonce = rowResetNonceByRow[rowKey] ?: 0,
                             onItemFocused = { itemIndex ->
                                 currentFocusedRowKey.value = rowKey
                                 rowFocusedItemIndex[rowKey] = itemIndex
+                                focusedItemByRow[rowKey] = itemIndex
                             }
                         )
                     }

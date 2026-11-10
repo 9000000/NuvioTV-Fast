@@ -1028,6 +1028,14 @@ private fun RightStreamSection(
                     StreamSearchField(
                         query = searchQuery,
                         onQueryChange = onSearchQueryChange,
+                        onNavigateDown = {
+                            if (searchFilteredStreams.isEmpty()) {
+                                false
+                            } else {
+                                firstStreamFocusRequestId += 1
+                                true
+                            }
+                        },
                         modifier = Modifier.padding(bottom = NuvioTheme.spacing.xs)
                     )
                 }
@@ -1197,6 +1205,7 @@ private fun StreamSearchEmptyState(
 private fun StreamSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
+    onNavigateDown: () -> Boolean = { false },
     modifier: Modifier = Modifier
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -1271,8 +1280,10 @@ private fun StreamSearchField(
                                 if (isEditing) {
                                     isEditing = false
                                     keyboardController?.hide()
+                                    false
+                                } else {
+                                    onNavigateDown()
                                 }
-                                false
                             }
                             android.view.KeyEvent.KEYCODE_DPAD_UP -> {
                                 if (isEditing) {
