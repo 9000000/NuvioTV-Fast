@@ -91,7 +91,8 @@ class LeanbackPosterViewHolder(
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
 
-        val cachedColor = LeanbackColorEngine.getCachedColor(item.key)
+        val colorCacheKey = item.imageUrl ?: item.key
+        val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
         currentDominantColor = cachedColor ?: LeanbackColorEngine.defaultFallbackColor
 
         // Update layout dimensions
@@ -181,7 +182,7 @@ class LeanbackPosterViewHolder(
                             posterImage.setImageDrawable(result.asDrawable(ctx.resources))
                             // Zero GPU Overdraw: remove background when image covers container
                             cardContainer.background = null
-                            val existingColor = LeanbackColorEngine.getCachedColor(boundKey)
+                            val existingColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
                             if (existingColor != null) {
                                 currentDominantColor = existingColor
                                 if (root.hasFocus()) {
@@ -190,7 +191,7 @@ class LeanbackPosterViewHolder(
                             } else {
                                 val bmp = (result as? BitmapImage)?.bitmap
                                 if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
-                                    LeanbackColorEngine.extractDominantColorAsync(boundKey, bmp) { extracted ->
+                                    LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
                                         if (currentItem?.key == boundKey) {
                                             currentDominantColor = extracted
                                             if (root.hasFocus()) {

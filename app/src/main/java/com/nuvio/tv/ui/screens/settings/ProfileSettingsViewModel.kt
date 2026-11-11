@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.sync.ProfileSyncService
+import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.domain.model.StartupTab
 import com.nuvio.tv.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ProfileSettingsViewModel @Inject constructor(
     private val profileManager: ProfileManager,
-    private val profileSyncService: ProfileSyncService
+    private val profileSyncService: ProfileSyncService,
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
 ) : ViewModel() {
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
@@ -26,6 +29,24 @@ class ProfileSettingsViewModel @Inject constructor(
     val isPrimaryProfileActive: StateFlow<Boolean> = profileManager.activeProfileId
         .map { it == 1 }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val rememberLastProfileEnabled: StateFlow<Boolean> = profileManager.rememberLastProfileEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val startupTab: StateFlow<StartupTab> = layoutPreferenceDataStore.startupTab
+        .stateIn(viewModelScope, SharingStarted.Eagerly, StartupTab.HOME)
+
+    fun setRememberLastProfileEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            profileManager.setRememberLastProfileEnabled(enabled)
+        }
+    }
+
+    fun setStartupTab(tab: StartupTab) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setStartupTab(tab)
+        }
+    }
 
     val canAddProfile: Boolean
         get() = profileManager.canCreateProfile

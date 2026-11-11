@@ -1142,6 +1142,14 @@
     <string name="layout_discover_location_in_search_desc">Discover appears inside the Search tab.</string>
     <string name="layout_discover_location_in_sidebar">Show in Side Panel</string>
     <string name="layout_discover_location_in_sidebar_desc">Discover gets its own item in the side panel.</string>
+    <string name="layout_startup_tab">Default Startup Tab</string>
+    <string name="layout_startup_tab_sub">Choose which screen opens automatically when the app starts</string>
+    <string name="layout_startup_tab_dialog_title">Select Default Startup Tab</string>
+    <string name="layout_startup_tab_home_desc">Open the home screen on launch (Default)</string>
+    <string name="layout_startup_tab_livetv_desc">Open live TV channels on launch</string>
+    <string name="layout_startup_tab_discover_desc">Open the discover catalog on launch</string>
+    <string name="layout_startup_tab_search_desc">Open the search screen on launch</string>
+    <string name="layout_startup_tab_library_desc">Open your library and watchlist on launch</string>
     <string name="layout_poster_labels">Show Poster Labels</string>
     <string name="layout_poster_labels_sub">Show titles under posters in rows, grid, and see-all.</string>
     <string name="layout_addon_name">Show Addon Name</string>

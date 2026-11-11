@@ -227,6 +227,10 @@ internal fun LayoutSidebarSection(
         rememberedLocation = uiState.lastNonOffDiscoverLocation,
         onLocationSelected = { location -> onEvent(LayoutSettingsEvent.SetDiscoverLocation(location)) }
     )
+    StartupTabRow(
+        selectedTab = uiState.startupTab,
+        onTabSelected = { tab -> onEvent(LayoutSettingsEvent.SetStartupTab(tab)) }
+    )
 }
 
 @Composable

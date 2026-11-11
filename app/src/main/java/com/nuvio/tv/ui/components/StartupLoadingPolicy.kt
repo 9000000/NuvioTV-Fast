@@ -22,7 +22,7 @@ fun shouldShowStartupSplash(
     complete: Boolean,
     destination: StartupDestination
 ): Boolean = enabled && !complete &&
-    (destination == StartupDestination.Loading || destination == StartupDestination.Home)
+    (destination == StartupDestination.Loading || destination == StartupDestination.Home || destination == StartupDestination.Content)
 
 fun shouldShowHomeStartupLoader(
     loading: Boolean,

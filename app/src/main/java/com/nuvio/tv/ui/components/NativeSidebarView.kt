@@ -48,10 +48,28 @@ class NativeSidebarView @JvmOverloads constructor(
     private var currentSelectedRoute: String? = null
     private val itemViews = mutableMapOf<String, LinearLayout>()
 
-    private val accentOrange = Color.parseColor("#E65100")
-    private val selectedBgColor = Color.parseColor("#26E65100")
+    var accentColor: Int = Color.parseColor("#E65100")
+        set(value) {
+            if (field != value) {
+                field = value
+                selectedBgColor = Color.argb(
+                    0x26,
+                    Color.red(value),
+                    Color.green(value),
+                    Color.blue(value)
+                )
+                refreshItemVisuals()
+            }
+        }
+    private var selectedBgColor = Color.parseColor("#26E65100")
     private val textPrimary = Color.WHITE
     private val textMuted = Color.parseColor("#9E9E9E")
+
+    private fun refreshItemVisuals() {
+        itemViews.forEach { (itemRoute, view) ->
+            updateItemVisual(view, itemRoute == currentSelectedRoute, view.hasFocus())
+        }
+    }
 
     private val dp = context.resources.displayMetrics.density
     private fun Int.toPx(): Int = (this * dp).toInt()
@@ -144,7 +162,7 @@ class NativeSidebarView @JvmOverloads constructor(
                 layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
 
                 val avatarView = TextView(context).apply {
-                    val avatarColor = runCatching { Color.parseColor(avatarColorHex) }.getOrDefault(accentOrange)
+                    val avatarColor = runCatching { Color.parseColor(avatarColorHex) }.getOrDefault(accentColor)
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
                         setColor(avatarColor)
@@ -396,7 +414,7 @@ class NativeSidebarView @JvmOverloads constructor(
             view.background = this
         }
         val targetColor = when {
-            isFocused -> accentOrange
+            isFocused -> accentColor
             isSelected -> selectedBgColor
             else -> Color.TRANSPARENT
         }
@@ -408,8 +426,8 @@ class NativeSidebarView @JvmOverloads constructor(
                 textView.setTextColor(Color.WHITE)
             }
             isSelected -> {
-                iconView.setColorFilter(accentOrange)
-                textView.setTextColor(accentOrange)
+                iconView.setColorFilter(accentColor)
+                textView.setTextColor(accentColor)
             }
             else -> {
                 iconView.setColorFilter(textMuted)

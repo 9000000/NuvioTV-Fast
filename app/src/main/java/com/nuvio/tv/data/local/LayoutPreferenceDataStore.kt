@@ -27,6 +27,7 @@ import com.nuvio.tv.domain.model.DEFAULT_CARD_DEPTH_EDGE_COVERAGE
 import com.nuvio.tv.domain.model.DEFAULT_CARD_DEPTH_EDGE_STRENGTH
 import com.nuvio.tv.domain.model.DEFAULT_CARD_DEPTH_SHEEN_STRENGTH
 import com.nuvio.tv.domain.model.DiscoverLocation
+import com.nuvio.tv.domain.model.StartupTab
 import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
@@ -76,6 +77,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
     private val customCatalogTitlesKey = stringPreferencesKey("custom_catalog_titles")
     private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
+    private val startupTabKey = stringPreferencesKey("startup_tab")
     private val modernSidebarBlurEnabledKey = booleanPreferencesKey("modern_sidebar_blur_enabled")
     private val modernLandscapePostersEnabledKey = booleanPreferencesKey("modern_landscape_posters_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
@@ -227,6 +229,11 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val sidebarCollapsedByDefault: Flow<Boolean> = profileFlow { prefs ->
         prefs[sidebarCollapsedKey] ?: false
+    }
+
+    val startupTab: Flow<StartupTab> = profileFlow { prefs ->
+        val stored = prefs[startupTabKey] ?: StartupTab.HOME.name
+        runCatching { StartupTab.valueOf(stored) }.getOrDefault(StartupTab.HOME)
     }
 
     val modernSidebarEnabled: Flow<Boolean> = kotlinx.coroutines.flow.flowOf(true)
@@ -569,6 +576,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setSidebarCollapsedByDefault(collapsed: Boolean) {
         store().edit { prefs ->
             prefs[sidebarCollapsedKey] = collapsed
+        }
+    }
+
+    suspend fun setStartupTab(tab: StartupTab) {
+        store().edit { prefs ->
+            prefs[startupTabKey] = tab.name
         }
     }
 

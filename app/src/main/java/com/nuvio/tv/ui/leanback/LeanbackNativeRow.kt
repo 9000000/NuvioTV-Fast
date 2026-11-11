@@ -81,17 +81,7 @@ fun LeanbackNativeRow(
     val spacingPx = with(density) { effectiveSpacing.roundToPx() }
     val verticalPaddingDp = 34.dp
     val verticalPaddingPx = with(density) { verticalPaddingDp.roundToPx() }
-    val hasSubtitles = remember(items, showLabels) {
-        showLabels && items.any {
-            (it as? LeanbackCardItem.Poster)?.subtitle?.isNotBlank() == true ||
-                (it as? LeanbackCardItem.Avatar)?.subtitle?.isNotBlank() == true
-        }
-    }
-    val labelHeightDp = when {
-        !showLabels -> 0.dp
-        hasSubtitles -> 44.dp
-        else -> 26.dp
-    }
+    val labelHeightDp = if (showLabels) 44.dp else 0.dp
     val labelHeightPx = with(density) { labelHeightDp.roundToPx() }
     val totalRowHeightPx = cardHeightPx + labelHeightPx + (verticalPaddingPx * 2)
     val totalRowHeightDp = cardHeight + labelHeightDp + (verticalPaddingDp * 2)

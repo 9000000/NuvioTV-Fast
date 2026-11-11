@@ -13,10 +13,12 @@ object LeanbackPoolManager {
     const val VIEW_TYPE_POSTER = 0
     const val VIEW_TYPE_EPISODE = 1
     const val VIEW_TYPE_AVATAR = 2
+    const val VIEW_TYPE_POSTER_LANDSCAPE = 3
 
     fun createSharedPool(maxPerType: Int = 30): RecyclerView.RecycledViewPool {
         return RecyclerView.RecycledViewPool().apply {
             setMaxRecycledViews(VIEW_TYPE_POSTER, maxPerType)
+            setMaxRecycledViews(VIEW_TYPE_POSTER_LANDSCAPE, maxPerType)
             setMaxRecycledViews(VIEW_TYPE_EPISODE, maxPerType)
             setMaxRecycledViews(VIEW_TYPE_AVATAR, maxPerType)
         }

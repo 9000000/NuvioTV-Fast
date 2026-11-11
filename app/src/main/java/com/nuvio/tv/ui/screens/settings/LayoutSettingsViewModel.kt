@@ -27,6 +27,7 @@ import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
 import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeLayout
+import com.nuvio.tv.domain.model.StartupTab
 import com.nuvio.tv.domain.model.HomeImdbRatingsVisibility
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -47,6 +48,7 @@ data class LayoutSettingsUiState(
     val availableCatalogs: List<CatalogInfo> = emptyList(),
     val heroCatalogKeys: List<String> = emptyList(),
     val sidebarCollapsedByDefault: Boolean = false,
+    val startupTab: StartupTab = StartupTab.HOME,
     val modernSidebarEnabled: Boolean = true,
     val modernSidebarBlurEnabled: Boolean = false,
     val modernLandscapePostersEnabled: Boolean = false,
@@ -106,6 +108,7 @@ sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class ToggleHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
+    data class SetStartupTab(val tab: StartupTab) : LayoutSettingsEvent()
     data class SetModernSidebarBlurEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernLandscapePostersEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernHeroFullScreenBackdropEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -218,6 +221,11 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.sidebarCollapsedByDefault.distinctUntilChanged().collectLatest { collapsed ->
                 updateUiStateIfChanged { it.copy(sidebarCollapsedByDefault = collapsed) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.startupTab.distinctUntilChanged().collectLatest { tab ->
+                updateUiStateIfChanged { it.copy(startupTab = tab) }
             }
         }
         viewModelScope.launch {
@@ -455,6 +463,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.ToggleHeroCatalog -> toggleHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
+            is LayoutSettingsEvent.SetStartupTab -> setStartupTab(event.tab)
             is LayoutSettingsEvent.SetModernSidebarBlurEnabled -> setModernSidebarBlurEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernLandscapePostersEnabled -> setModernLandscapePostersEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernHeroFullScreenBackdropEnabled -> setModernHeroFullScreenBackdropEnabled(event.enabled)
@@ -604,6 +613,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.sidebarCollapsedByDefault == collapsed) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setSidebarCollapsedByDefault(collapsed)
+        }
+    }
+
+    private fun setStartupTab(tab: StartupTab) {
+        if (_uiState.value.startupTab == tab) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setStartupTab(tab)
         }
     }
 

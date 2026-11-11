@@ -36,6 +36,8 @@ class LeanbackUniversalAdapter(
     private var items: List<LeanbackCardItem> = emptyList()
     private var pendingItems: List<LeanbackCardItem>? = null
     var attachedRecyclerView: RecyclerView? = null
+    var isSubmittingItems: Boolean = false
+        private set
 
     val borderWidthPx: Int = 2
     val glowMarginPx: Int = 16
@@ -67,7 +69,9 @@ class LeanbackUniversalAdapter(
             cardHeightPx = newHeightPx
             cornerRadiusPx = newRadiusPx
             showLabels = newShowLabels
-            safeNotifyDataSetChanged()
+            if (items.isNotEmpty()) {
+                notifyItemRangeChanged(0, items.size)
+            }
         }
     }
 
@@ -82,17 +86,7 @@ class LeanbackUniversalAdapter(
         }
 
         if (rv.isComputingLayout || !rv.isAttachedToWindow || rv.scrollState != RecyclerView.SCROLL_STATE_IDLE) {
-            rv.post {
-                val pending = pendingItems ?: return@post
-                if (rv.isAttachedToWindow && !rv.isComputingLayout && rv.scrollState == RecyclerView.SCROLL_STATE_IDLE) {
-                    applyItemsUpdate(pending)
-                } else {
-                    rv.post {
-                        val retryPending = pendingItems ?: return@post
-                        applyItemsUpdate(retryPending)
-                    }
-                }
-            }
+            // Đang cuộn dở hoặc đang layout, giữ lại pendingItems để onScrollSettled xử lý an toàn
             return
         }
 
@@ -114,36 +108,80 @@ class LeanbackUniversalAdapter(
             return
         }
 
-        if (isAppendOnly) {
-            try {
-                notifyItemRangeInserted(oldSize, newSize - oldSize)
-                // Also check if any existing prefix items changed their content (e.g. progressPercent or isWatched)
-                for (i in 0 until oldSize) {
-                    if (oldItems[i] != newItems[i]) {
-                        notifyItemChanged(i)
+        val hadFocus = rv.hasFocus()
+        val prevSelectedPos = when (rv) {
+            is androidx.leanback.widget.BaseGridView -> rv.selectedPosition.coerceAtLeast(0)
+            else -> 0
+        }
+
+        try {
+            isSubmittingItems = true
+            if (isAppendOnly) {
+                try {
+                    notifyItemRangeInserted(oldSize, newSize - oldSize)
+                    for (i in 0 until oldSize) {
+                        if (oldItems[i] != newItems[i]) {
+                            notifyItemChanged(i)
+                        }
+                    }
+                } catch (_: Exception) {
+                    safeNotifyDataSetChanged()
+                }
+            } else if (oldSize > 0 && newSize > 0 && oldSize <= 300 && newSize <= 300) {
+                try {
+                    val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                        override fun getOldListSize(): Int = oldSize
+                        override fun getNewListSize(): Int = newSize
+                        override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                            return oldItems[oldItemPosition].key == newItems[newItemPosition].key
+                        }
+                        override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                            return oldItems[oldItemPosition] == newItems[newItemPosition]
+                        }
+                    }, false)
+                    diffResult.dispatchUpdatesTo(this)
+                } catch (_: Exception) {
+                    safeNotifyDataSetChanged()
+                }
+            } else {
+                safeNotifyDataSetChanged()
+            }
+        } finally {
+            isSubmittingItems = false
+        }
+
+        // Placeholder-to-Data Focus Guard:
+        // Neo tiêu điểm an toàn khi chuyển đổi từ placeholder sang dữ liệu thật
+        if (hadFocus && newItems.isNotEmpty()) {
+            val safePos = prevSelectedPos.coerceIn(0, newItems.lastIndex)
+            rv.post {
+                val focusedChild = rv.findFocus()
+                val cardStillHasFocus = focusedChild != null && focusedChild !== rv
+                val mayTake = when (rv) {
+                    is com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView -> rv.mayTakeFocus()
+                    else -> rv.hasFocus()
+                }
+                if (rv.isAttachedToWindow && !cardStillHasFocus && mayTake) {
+                    if (rv is androidx.leanback.widget.BaseGridView) {
+                        rv.setSelectedPosition(safePos)
+                    }
+                    val vh = rv.findViewHolderForAdapterPosition(safePos)
+                    if (vh != null) {
+                        vh.itemView.requestFocus()
+                        (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                    } else {
+                        rv.post {
+                            val deferredFocusedChild = rv.findFocus()
+                            val deferredCardHasFocus = deferredFocusedChild != null && deferredFocusedChild !== rv
+                            if (rv.isAttachedToWindow && !deferredCardHasFocus) {
+                                val deferredVh = rv.findViewHolderForAdapterPosition(safePos)
+                                deferredVh?.itemView?.requestFocus()
+                                (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                            }
+                        }
                     }
                 }
-            } catch (_: Exception) {
-                safeNotifyDataSetChanged()
             }
-        } else if (oldSize > 0 && newSize > 0 && oldSize <= 300 && newSize <= 300) {
-            try {
-                val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-                    override fun getOldListSize(): Int = oldSize
-                    override fun getNewListSize(): Int = newSize
-                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                        return oldItems[oldItemPosition].key == newItems[newItemPosition].key
-                    }
-                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                        return oldItems[oldItemPosition] == newItems[newItemPosition]
-                    }
-                }, false)
-                diffResult.dispatchUpdatesTo(this)
-            } catch (_: Exception) {
-                safeNotifyDataSetChanged()
-            }
-        } else {
-            safeNotifyDataSetChanged()
         }
     }
 
@@ -176,6 +214,11 @@ class LeanbackUniversalAdapter(
     }
 
     fun onScrollSettled() {
+        val pending = pendingItems
+        if (pending != null) {
+            pendingItems = null
+            applyItemsUpdate(pending)
+        }
         val rv = attachedRecyclerView ?: return
         val count = rv.childCount
         for (i in 0 until count) {
@@ -190,8 +233,11 @@ class LeanbackUniversalAdapter(
     override fun getItemCount(): Int = items.size
 
     override fun getItemViewType(position: Int): Int {
-        return when (items[position]) {
-            is LeanbackCardItem.Poster -> LeanbackPoolManager.VIEW_TYPE_POSTER
+        return when (val item = items[position]) {
+            is LeanbackCardItem.Poster -> {
+                if (item.isLandscape) LeanbackPoolManager.VIEW_TYPE_POSTER_LANDSCAPE
+                else LeanbackPoolManager.VIEW_TYPE_POSTER
+            }
             is LeanbackCardItem.Episode -> LeanbackPoolManager.VIEW_TYPE_EPISODE
             is LeanbackCardItem.Avatar -> LeanbackPoolManager.VIEW_TYPE_AVATAR
         }

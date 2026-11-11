@@ -9,18 +9,25 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.R
 
 @Composable
 internal fun ProfileSettingsContent(
     onManageProfiles: () -> Unit,
-    initialFocusRequester: FocusRequester? = null
+    initialFocusRequester: FocusRequester? = null,
+    viewModel: ProfileSettingsViewModel = hiltViewModel()
 ) {
+    val rememberLastProfileEnabled by viewModel.rememberLastProfileEnabled.collectAsState()
+    val startupTab by viewModel.startupTab.collectAsState()
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
@@ -39,6 +46,16 @@ internal fun ProfileSettingsContent(
                 } else {
                     Modifier
                 }
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.advanced_remember_last_profile),
+                subtitle = stringResource(R.string.advanced_remember_last_profile_subtitle),
+                checked = rememberLastProfileEnabled,
+                onToggle = { viewModel.setRememberLastProfileEnabled(!rememberLastProfileEnabled) }
+            )
+            StartupTabRow(
+                selectedTab = startupTab,
+                onTabSelected = viewModel::setStartupTab
             )
         }
     }

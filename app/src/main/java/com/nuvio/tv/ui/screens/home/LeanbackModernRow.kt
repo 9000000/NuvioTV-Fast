@@ -1199,7 +1199,6 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 class LeanbackCardViewHolder(
     val root: LinearLayout,
     val cardContainer: FrameLayout,
-    val glowView: PlayStoreGlowView,
     val posterImage: ImageView,
     val titleText: TextView?,
     val progressBar: ProgressBar?,
@@ -1220,16 +1219,8 @@ class LeanbackCardViewHolder(
         cornerRadius = cornerRadiusPx
     }
 
-    // Trì hoãn nhẹ việc bật Software Layer GlowView khi người dùng đang nhấn giữ phím cuộn liên tục
-    private val deferredGlowRunnable = Runnable {
-        if (root.hasFocus() && adapter.animationsEnabled()) {
-            glowView.glowColor = currentDominantColor
-            glowView.visibility = View.VISIBLE
-        }
-    }
-
     fun updateCornerRadius(newRadiusPx: Float) {
-        val radiusChanged = cornerRadiusPx != newRadiusPx || glowView.cornerRadiusPx != newRadiusPx
+        val radiusChanged = cornerRadiusPx != newRadiusPx
         if (!radiusChanged) return
         cornerRadiusPx = newRadiusPx
 
@@ -1237,7 +1228,6 @@ class LeanbackCardViewHolder(
         (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
         focusBorderDrawable.cornerRadius = newRadiusPx
         posterImage.invalidateOutline()
-        glowView.cornerRadiusPx = newRadiusPx
 
         val horizMargin = (newRadiusPx * 0.75f).toInt().coerceAtLeast(6)
         (progressBar?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
@@ -1313,7 +1303,6 @@ class LeanbackCardViewHolder(
     }
 
     fun updateFocusVisual(hasFocus: Boolean) {
-        root.removeCallbacks(deferredGlowRunnable)
         root.animate().cancel()
         root.scaleX = 1.0f
         root.scaleY = 1.0f
@@ -1324,7 +1313,6 @@ class LeanbackCardViewHolder(
         cardContainer.elevation = 0f
         cardContainer.translationZ = 0f
         cardContainer.foreground = null
-        glowView.visibility = View.GONE
 
         val gridView = adapter.attachedRecyclerView as? InteropHorizontalGridView
         if (hasFocus) {
@@ -1356,11 +1344,6 @@ class LeanbackCardViewHolder(
             cardLp.width = cardWidthPx
             cardLp.height = cardHeightPx
             cardContainer.layoutParams = cardLp
-
-            val glowLp = glowView.layoutParams as FrameLayout.LayoutParams
-            glowLp.width = cardWidthPx + (glowMarginPx * 2)
-            glowLp.height = cardHeightPx + (glowMarginPx * 2)
-            glowView.layoutParams = glowLp
 
             val rootLp = root.layoutParams
             if (rootLp != null && rootLp.width != cardWidthPx) {
@@ -1472,13 +1455,11 @@ class LeanbackCardViewHolder(
     }
 
     fun unbind() {
-        root.removeCallbacks(deferredGlowRunnable)
         root.animate().cancel()
         root.scaleX = 1.0f
         root.scaleY = 1.0f
         imageDisposable?.dispose()
         imageDisposable = null
-        glowView.visibility = View.GONE
         cardContainer.foreground = null
         // Phục hồi lại background placeholder tái sử dụng khi view được recycle
         placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
@@ -1690,22 +1671,6 @@ class LeanbackRowAdapter(
             clipChildren = false
         }
 
-        // Play Store Glow View (nằm sau posterImage, tỏa ánh sáng ra ngoài nền)
-        val glowView = PlayStoreGlowView(context).apply {
-            this.cornerRadiusPx = this@LeanbackRowAdapter.cornerRadiusPx
-            this.glowSpreadPx = glowSpreadPx
-            this.glowMarginPx = glowMarginPx.toFloat()
-            layoutParams = FrameLayout.LayoutParams(
-                cardWidthPx + (glowMarginPx * 2),
-                cardHeightPx + (glowMarginPx * 2)
-            ).apply {
-                leftMargin = -glowMarginPx
-                topMargin = -glowMarginPx
-            }
-            visibility = View.GONE
-        }
-        cardContainer.addView(glowView)
-
         // Poster image
         val posterImage = ImageView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -1780,7 +1745,6 @@ class LeanbackRowAdapter(
         return LeanbackCardViewHolder(
             root = root,
             cardContainer = cardContainer,
-            glowView = glowView,
             posterImage = posterImage,
             titleText = titleText,
             progressBar = progressBar,

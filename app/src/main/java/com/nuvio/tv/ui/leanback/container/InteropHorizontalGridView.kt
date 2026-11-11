@@ -30,6 +30,10 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var onNavigateLeftOnFirstItem: (() -> Boolean)? = null
     var animationsEnabled: Boolean = true
 
+    var canTakeFocus: (() -> Boolean)? = null
+
+    fun mayTakeFocus(): Boolean = hasFocus() || canTakeFocus?.invoke() != false
+
     var isHoldingHorizontalKey: Boolean = false
         private set
 
@@ -41,10 +45,14 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     private var arrivalAt0Time = 0L
     private var arrivedAt0FromRight = false
     private var hasReleasedKeyAfterArrivingAt0 = true
-    private var lastEdgeLeftPressTime = 0L
     private var lastHorizontalKeyTime = 0L
     private var lastVerticalKeyTime = 0L
     private var pendingTargetPosition = RecyclerView.NO_POSITION
+
+    fun prepareForRowChange() {
+        isHoldingHorizontalKey = false
+        pendingTargetPosition = RecyclerView.NO_POSITION
+    }
 
     private val universalAdapter: LeanbackUniversalAdapter?
         get() = adapter as? LeanbackUniversalAdapter
@@ -181,7 +189,12 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     }
 
     override fun clearChildFocus(child: View?) {
-        if (hasPendingHorizontalNavigation && isAttachedToWindow) {
+        val deliberateRowChange = canTakeFocus?.invoke() == false
+        val shouldProtectFocus = isAttachedToWindow &&
+            !deliberateRowChange &&
+            (hasPendingHorizontalNavigation || universalAdapter?.isSubmittingItems == true)
+
+        if (shouldProtectFocus) {
             val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
                 pendingTargetPosition
             } else {
@@ -290,24 +303,42 @@ class InteropHorizontalGridView @JvmOverloads constructor(
 
         if (event.action == KeyEvent.ACTION_UP) {
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (isHoldingHorizontalKey) {
-                        stopScroll()
-                        isHoldingHorizontalKey = false
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    isHoldingHorizontalKey = false
+                    val total = universalAdapter?.itemCount ?: 0
+                    val currentSelected = selectedPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
+                    val target = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+                        pendingTargetPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
+                    } else {
+                        currentSelected
                     }
                     pendingTargetPosition = RecyclerView.NO_POSITION
-                    if (selectedPosition <= 0) {
+
+                    if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && target <= 0) {
                         hasReleasedKeyAfterArrivingAt0 = true
                         arrivedAt0FromRight = false
                     }
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (isHoldingHorizontalKey) {
-                        stopScroll()
-                        isHoldingHorizontalKey = false
+
+                    // Không gọi stopScroll() gây ngắt cụt và lệch lửng poster.
+                    // Sử dụng setSelectedPositionSmooth để Leanback trôi êm và tự khớp chuẩn vào keyline
+                    if (animationsEnabled) {
+                        setSelectedPositionSmooth(target)
+                    } else {
+                        setSelectedPosition(target)
                     }
-                    pendingTargetPosition = RecyclerView.NO_POSITION
+
+                    val vh = findViewHolderForAdapterPosition(target)
+                    if (vh != null) {
+                        if (!vh.itemView.hasFocus()) {
+                            vh.itemView.requestFocus()
+                        }
+                        (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                    } else {
+                        ensureTargetChildFocused(
+                            target,
+                            if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) View.FOCUS_LEFT else View.FOCUS_RIGHT
+                        )
+                    }
                     return true
                 }
             }
@@ -329,22 +360,21 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     if (actualPos <= 0 || total <= 0) {
-                        pendingTargetPosition = RecyclerView.NO_POSITION
-                        val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 350L)
-                        if (!arrivedRecently && event.repeatCount == 0 && onNavigateLeftOnFirstItem != null) {
-                            val isIntentionalEdgeTrigger = (now - lastEdgeLeftPressTime) < 700L
-                            if (isIntentionalEdgeTrigger) {
-                                lastEdgeLeftPressTime = 0L
-                                hasReleasedKeyAfterArrivingAt0 = true
-                                arrivedAt0FromRight = false
-                                if (onNavigateLeftOnFirstItem?.invoke() == true) {
-                                    return true
-                                }
+                        pendingTargetPosition = 0
+                        if (selectedPosition != 0) {
+                            if (animationsEnabled) {
+                                setSelectedPositionSmooth(0)
                             } else {
-                                lastEdgeLeftPressTime = now
+                                setSelectedPosition(0)
                             }
                         }
-                        stopScroll()
+                        val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
+                        if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
+                            if (onNavigateLeftOnFirstItem?.invoke() == true) {
+                                clearFocus()
+                                return true
+                            }
+                        }
                         return true
                     }
 
@@ -360,18 +390,14 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     pendingTargetPosition = target
                     val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
-                        stopScroll()
                         setSelectedPosition(target)
                         nextVh?.itemView?.requestFocus(View.FOCUS_LEFT)
                         return true
                     }
+                    setSelectedPositionSmooth(target)
                     if (nextVh != null) {
-                        val focused = nextVh.itemView.requestFocus(View.FOCUS_LEFT)
-                        if (!focused) {
-                            setSelectedPositionSmooth(target)
-                        }
+                        nextVh.itemView.requestFocus(View.FOCUS_LEFT)
                     } else {
-                        setSelectedPositionSmooth(target)
                         ensureTargetChildFocused(target, View.FOCUS_LEFT)
                     }
                     return true
@@ -379,7 +405,6 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     if (total <= 0 || actualPos >= total - 1) {
                         pendingTargetPosition = RecyclerView.NO_POSITION
-                        stopScroll()
                         return true
                     }
 

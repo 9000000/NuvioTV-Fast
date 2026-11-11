@@ -1093,6 +1093,14 @@
     <string name="layout_discover_location_in_search_desc">Hiển thị mục Khám phá trong thẻ Tìm kiếm.</string>
     <string name="layout_discover_location_in_sidebar">Hiển thị trong Bảng bên</string>
     <string name="layout_discover_location_in_sidebar_desc">Khám phá có mục riêng trong bảng bên.</string>
+    <string name="layout_startup_tab">Tab khởi động mặc định</string>
+    <string name="layout_startup_tab_sub">Chọn màn hình tự động mở khi bắt đầu ứng dụng</string>
+    <string name="layout_startup_tab_dialog_title">Chọn tab khởi động mặc định</string>
+    <string name="layout_startup_tab_home_desc">Mở Trang chủ khi khởi động (Mặc định)</string>
+    <string name="layout_startup_tab_livetv_desc">Mở Truyền hình trực tiếp khi khởi động</string>
+    <string name="layout_startup_tab_discover_desc">Mở mục Khám phá khi khởi động</string>
+    <string name="layout_startup_tab_search_desc">Mở Tìm kiếm khi khởi động</string>
+    <string name="layout_startup_tab_library_desc">Mở Thư viện &amp; danh sách xem khi khởi động</string>
     <string name="layout_poster_labels">Hiển thị nhãn Poster</string>
     <string name="layout_poster_labels_sub">Hiển thị tiêu đề bên dưới poster trong hàng, lưới và xem tất cả.</string>
     <string name="layout_addon_name">Hiển thị tên tiện ích</string>

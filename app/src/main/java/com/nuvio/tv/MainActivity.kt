@@ -82,6 +82,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -170,6 +171,7 @@ import com.nuvio.tv.domain.model.MemberAccess
 import com.nuvio.tv.domain.model.ProfileBackgroundSelection
 import com.nuvio.tv.domain.model.resolveProfileBackgroundSelection
 import com.nuvio.tv.domain.model.PosterBorderStyle
+import com.nuvio.tv.domain.model.StartupTab
 import com.nuvio.tv.domain.model.SettingsUiStyle
 import com.nuvio.tv.domain.model.resolveAppTheme
 import com.nuvio.tv.domain.model.resolveCustomThemeColors
@@ -259,6 +261,7 @@ private data class MainUiPrefs(
     val modernSidebarEnabled: Boolean = true,
     val modernSidebarBlurPref: Boolean = false,
     val discoverLocation: DiscoverLocation? = null,
+    val startupTab: StartupTab = StartupTab.HOME,
     val smoothBringIntoViewEnabled: Boolean = true,
     val fastHorizontalNavigationEnabled: Boolean = false,
     val composeHighlighterEnabled: Boolean = false,
@@ -555,20 +558,26 @@ open class MainActivity : ComponentActivity() {
                         experienceModeLoaded = true,
                     )
                 }
-                val layoutAndFeaturesFlow = combine(
-                    layoutPreferenceDataStore.hasChosenLayout,
+                val sidebarPrefsFlow = combine(
                     layoutPreferenceDataStore.sidebarCollapsedByDefault,
                     layoutPreferenceDataStore.modernSidebarEnabled,
                     layoutPreferenceDataStore.modernSidebarBlurEnabled,
                     layoutPreferenceDataStore.discoverLocation,
-                ) { hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation ->
+                    layoutPreferenceDataStore.startupTab
+                ) { sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref, discoverLocation, startupTab ->
                     MainUiPrefs(
-                        hasChosenLayout = hasChosenLayout,
                         sidebarCollapsed = sidebarCollapsed,
                         modernSidebarEnabled = modernSidebarEnabled,
                         modernSidebarBlurPref = modernSidebarBlurPref,
                         discoverLocation = discoverLocation,
+                        startupTab = startupTab
                     )
+                }
+                val layoutAndFeaturesFlow = combine(
+                    layoutPreferenceDataStore.hasChosenLayout,
+                    sidebarPrefsFlow
+                ) { hasChosenLayout, sidebarPrefs ->
+                    sidebarPrefs.copy(hasChosenLayout = hasChosenLayout)
                 }
                 val extraFeaturesFlow = combine(
                     experienceModeDataStore.addonSetupSkipped,
@@ -617,6 +626,7 @@ open class MainActivity : ComponentActivity() {
                         modernSidebarEnabled = layoutPrefs.modernSidebarEnabled,
                         modernSidebarBlurPref = layoutPrefs.modernSidebarBlurPref,
                         discoverLocation = layoutPrefs.discoverLocation,
+                        startupTab = layoutPrefs.startupTab,
                         addonSetupSkipped = extraPrefs.addonSetupSkipped,
                         smoothBringIntoViewEnabled = extraPrefs.smoothBringIntoViewEnabled,
                         fastHorizontalNavigationEnabled = extraPrefs.fastHorizontalNavigationEnabled,
@@ -666,6 +676,7 @@ open class MainActivity : ComponentActivity() {
                 }
                 val highlighterEnabled = BuildConfig.IS_DEBUG_BUILD && mainUiPrefs.composeHighlighterEnabled
                 com.nuvio.tv.ui.util.RecompositionHighlighterFlag.enabled = highlighterEnabled
+                val sharedLeanbackPool = com.nuvio.tv.ui.leanback.pool.rememberSharedLeanbackPool(maxPerType = 30)
                 val profileBgSelection = resolveProfileBackgroundSelection(
                     profile = activeProfile,
                     entitlements = mainUiPrefs.memberAccess.entitlements
@@ -755,7 +766,8 @@ open class MainActivity : ComponentActivity() {
                     LocalSplashBackground provides splashBackground,
                     LocalStartupLoadingState provides startupLoadingState,
                     LocalStartupSplashEnabled provides startupSplashEnabled,
-                    LocalGpuOffscreenCompositing provides mainUiPrefs.gpuOffscreenCompositingEnabled
+                    LocalGpuOffscreenCompositing provides mainUiPrefs.gpuOffscreenCompositingEnabled,
+                    com.nuvio.tv.ui.leanback.pool.LocalLeanbackRecycledViewPool provides sharedLeanbackPool
                 ) {
                 val transparentPlayerBackdrop = PlayerWindowBackdrop.isTransparentRequested
                 Surface(
@@ -899,9 +911,19 @@ open class MainActivity : ComponentActivity() {
                         mainUiPrefs.modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                     val hideBuiltInHeadersForFloatingPill = !sidebarCollapsed
 
+                    val showLiveTvInDrawer by com.nuvio.tv.features.livetv.LiveTvRepository.isNavigationEnabled.collectAsState()
+
                     val startDestination = when {
                         needsExperienceSelection -> Screen.ExperienceModeSelection.route
-                        layoutChosen -> Screen.Home.route
+                        layoutChosen -> {
+                            when (mainUiPrefs.startupTab) {
+                                StartupTab.LIVE_TV -> if (showLiveTvInDrawer) Screen.LiveTv.route else Screen.Home.route
+                                StartupTab.DISCOVER -> if (discoverLocation == DiscoverLocation.IN_SIDEBAR) Screen.Discover.route else Screen.Home.route
+                                StartupTab.SEARCH -> Screen.Search.route
+                                StartupTab.LIBRARY -> Screen.Library.route
+                                StartupTab.HOME -> Screen.Home.route
+                            }
+                        }
                         else -> Screen.LayoutSelection.route
                     }
                     val navController = rememberNavController()
@@ -1100,8 +1122,6 @@ open class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-
-                    val showLiveTvInDrawer by com.nuvio.tv.features.livetv.LiveTvRepository.isNavigationEnabled.collectAsState()
 
                     val rootRoutes = remember(discoverLocation, showLiveTvInDrawer) {
                         buildSet {
@@ -1759,11 +1779,13 @@ private fun ModernSidebarScaffold(
                     .selectableGroup()
             ) {
                 if (showExpandedPanel) {
+                    val sidebarAccentColor = NuvioTheme.colors.Secondary.toArgb()
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
                             NativeSidebarView(ctx).apply {
                                 this.isFloating = true
+                                this.accentColor = sidebarAccentColor
                                 nativeSidebarRef = this
                                 setHeader(
                                     profileName = activeProfileName,
@@ -1801,6 +1823,7 @@ private fun ModernSidebarScaffold(
                         },
                         update = { view ->
                             nativeSidebarRef = view
+                            view.accentColor = sidebarAccentColor
                             view.setHeader(
                                 profileName = activeProfileName,
                                 avatarColorHex = activeProfileColorHex,

@@ -275,10 +275,38 @@ class InteropVerticalGridView @JvmOverloads constructor(
 
         if (event.action == KeyEvent.ACTION_UP) {
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (isHoldingVerticalKey) {
-                        stopScroll()
-                        isHoldingVerticalKey = false
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    isHoldingVerticalKey = false
+                    val total = universalAdapter?.itemCount ?: 0
+                    val currentSelected = selectedPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
+                    val target = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+                        pendingTargetPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
+                    } else {
+                        currentSelected
+                    }
+                    pendingTargetPosition = RecyclerView.NO_POSITION
+
+                    // Thả phím: trượt mượt mà về vị trí đích, không gọi stopScroll() gây gián đoạn snap keyline
+                    if (animationsEnabled) {
+                        setSelectedPositionSmooth(target)
+                    } else {
+                        setSelectedPosition(target)
+                    }
+
+                    val vh = findViewHolderForAdapterPosition(target)
+                    if (vh != null) {
+                        if (!vh.itemView.hasFocus()) {
+                            vh.itemView.requestFocus()
+                        }
+                        (vh as? com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                    } else {
+                        post {
+                            if (isAttachedToWindow) {
+                                val deferredVh = findViewHolderForAdapterPosition(target)
+                                deferredVh?.itemView?.requestFocus()
+                                (deferredVh as? com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                            }
+                        }
                     }
                     return true
                 }
@@ -307,7 +335,6 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         if (event.repeatCount == 0 && onNavigateUpOnFirstRow?.invoke() == true) {
                             return true
                         }
-                        stopScroll()
                         return true
                     }
                     if (event.repeatCount > 0) {
@@ -326,7 +353,6 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         if (event.repeatCount == 0 && onNavigateDownOnLastRow?.invoke() == true) {
                             return true
                         }
-                        stopScroll()
                         return true
                     }
                     if (event.repeatCount > 0) {
@@ -347,7 +373,6 @@ class InteropVerticalGridView @JvmOverloads constructor(
                                 return true
                             }
                         }
-                        stopScroll()
                         return true
                     } else {
                         if (event.repeatCount > 0 && now - lastKeyNavigationTime < 60L) {
@@ -366,7 +391,6 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         if (event.repeatCount == 0 && onNavigateRightOnLastColumn?.invoke() == true) {
                             return true
                         }
-                        stopScroll()
                         return true
                     } else {
                         if (event.repeatCount > 0 && now - lastKeyNavigationTime < 60L) {
