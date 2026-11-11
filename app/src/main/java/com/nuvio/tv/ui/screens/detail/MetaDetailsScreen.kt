@@ -1327,7 +1327,7 @@ private fun MetaDetailsContent(
             episodesForSeason = episodesForSeason
         )
     }
-    val isPlayEnabled = playbackAvailability.canStream(meta.apiType, heroVideo?.id ?: meta.id, meta.id, heroVideo)
+    val isPlayEnabled = !playbackAvailability.isLoaded || playbackAvailability.canStream(meta.apiType, heroVideo?.id ?: meta.id, meta.id, heroVideo)
     val canPlayEpisode = remember(playbackAvailability, meta.apiType, meta.id) {
         { video: Video -> playbackAvailability.canStream(meta.apiType, video.id, meta.id, video) }
     }
@@ -2212,7 +2212,8 @@ private fun MetaDetailsContent(
         initialHeroFocusRequested,
         isTrailerPlaying,
         detailReturnEpisodeFocusRequest?.season,
-        detailReturnEpisodeFocusRequest?.episode
+        detailReturnEpisodeFocusRequest?.episode,
+        isPlayEnabled
     ) {
         if (
             !initialHeroFocusRequested &&
@@ -2222,10 +2223,14 @@ private fun MetaDetailsContent(
             detailReturnEpisodeFocusRequest?.episode == null &&
             !isTrailerPlaying
         ) {
-            repeat(3) {
+            repeat(8) {
                 if (initialHeroFocusRequested) return@repeat
-                heroPlayButtonFocusRequester.requestFocusAfterFrames()
-                delay(80)
+                val success = heroPlayButtonFocusRequester.requestFocusAfterFrames()
+                if (success) {
+                    initialHeroFocusRequested = true
+                    return@repeat
+                }
+                delay(50)
             }
         }
     }
@@ -2899,7 +2904,7 @@ private fun MetaDetailsContent(
                         PeopleSectionTabs(
                             activeTab = activePeopleTab,
                             tabs = visiblePeopleTabItems,
-                            tabsCanFocus = pendingRestoreType != RestoreTarget.COMPANY_OR_NETWORK,
+                            tabsCanFocus = initialHeroFocusRequested && pendingRestoreType != RestoreTarget.COMPANY_OR_NETWORK,
                             upFocusRequester = seasonDownFocusRequester ?: heroPlayFocusRequester,
                             contentDownFocusRequester = activeTabDownFocusRequester,
                             onTabFocused = { tab ->
@@ -2948,7 +2953,7 @@ private fun MetaDetailsContent(
                                     sectionFocusRequester = castSectionFocusRequester,
                                     restorePersonId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
-                                    blockDefaultRestore = pendingRestoreType != null && pendingRestoreType != RestoreTarget.CAST_MEMBER,
+                                    blockDefaultRestore = !initialHeroFocusRequested || (pendingRestoreType != null && pendingRestoreType != RestoreTarget.CAST_MEMBER),
                                     lastFocusedPersonKey = lastFocusedCastKey,
                                     onLastFocusedPersonKeyChange = { lastFocusedCastKey = it },
                                     onRestoreFocusHandled = {
@@ -2982,7 +2987,7 @@ private fun MetaDetailsContent(
                                     sectionFocusRequester = moreLikeSectionFocusRequester,
                                     restoreItemId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
-                                    blockDefaultRestore = pendingRestoreType != null && pendingRestoreType != RestoreTarget.MORE_LIKE_THIS,
+                                    blockDefaultRestore = !initialHeroFocusRequested || (pendingRestoreType != null && pendingRestoreType != RestoreTarget.MORE_LIKE_THIS),
                                     lastFocusedItemId = lastFocusedMoreLikeItemId,
                                     onLastFocusedItemIdChange = { lastFocusedMoreLikeItemId = it },
                                     onRestoreFocusHandled = {

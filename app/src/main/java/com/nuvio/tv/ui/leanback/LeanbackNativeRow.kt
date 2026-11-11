@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -65,6 +66,7 @@ fun LeanbackNativeRow(
     recycledViewPool: RecyclerView.RecycledViewPool? = null,
     paddingValues: PaddingValues? = null,
     itemSpacing: Dp? = null,
+    isFocusEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -200,7 +202,9 @@ fun LeanbackNativeRow(
     AndroidView(
         modifier = modifier
             .then(
-                if (entryFocusRequester != null) {
+                if (!isFocusEnabled) {
+                    Modifier.focusProperties { canFocus = false }
+                } else if (entryFocusRequester != null) {
                     Modifier.focusRequester(entryFocusRequester)
                 } else {
                     Modifier
@@ -235,6 +239,15 @@ fun LeanbackNativeRow(
                 setHasFixedSize(true)
                 setItemViewCacheSize(8)
                 effectivePool?.let { setRecycledViewPool(it) }
+                if (!isFocusEnabled) {
+                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                    isFocusable = false
+                    isFocusableInTouchMode = false
+                } else {
+                    descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                }
                 localGridViewRef = this
                 rowGrids?.put(rowKey, this)
                 if (isPendingFocus && items.isNotEmpty()) {
@@ -249,6 +262,15 @@ fun LeanbackNativeRow(
         },
         update = { gridView ->
             localGridViewRef = gridView
+            if (!isFocusEnabled) {
+                gridView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                gridView.isFocusable = false
+                gridView.isFocusableInTouchMode = false
+            } else {
+                gridView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                gridView.isFocusable = true
+                gridView.isFocusableInTouchMode = true
+            }
             val lp = gridView.layoutParams
             if (lp != null && lp.height != totalRowHeightPx) {
                 lp.height = totalRowHeightPx

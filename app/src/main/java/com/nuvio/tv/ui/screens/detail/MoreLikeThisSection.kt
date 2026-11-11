@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -64,6 +65,13 @@ fun MoreLikeThisSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (blockDefaultRestore) {
+                    Modifier.focusProperties { canFocus = false }
+                } else {
+                    Modifier
+                }
+            )
             .padding(top = NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.sm)
     ) {
         LeanbackNativeRow(
@@ -76,6 +84,7 @@ fun MoreLikeThisSection(
             animationsEnabled = NuvioTheme.animationsEnabled,
             startPadding = NuvioTheme.spacing.xxxl,
             spacing = NuvioTheme.spacing.md,
+            isFocusEnabled = !blockDefaultRestore,
             onItemFocused = { _, cardItem ->
                 val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
                 onLastFocusedItemIdChange(item.id)

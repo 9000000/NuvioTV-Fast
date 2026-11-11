@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -78,6 +79,13 @@ fun CastSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .then(
+                if (blockDefaultRestore) {
+                    Modifier.focusProperties { canFocus = false }
+                } else {
+                    Modifier
+                }
+            )
             .padding(top = if (hasTitle) 20.dp else NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.sm)
     ) {
         if (hasTitle) {
@@ -100,6 +108,7 @@ fun CastSection(
             animationsEnabled = NuvioTheme.animationsEnabled,
             startPadding = NuvioTheme.spacing.xxxl,
             spacing = 18.dp,
+            isFocusEnabled = !blockDefaultRestore,
             onItemFocused = { _, cardItem ->
                 val member = cardItem.payload as? MetaCastMember ?: return@LeanbackNativeRow
                 onLastFocusedPersonKeyChange(cardItem.key)
