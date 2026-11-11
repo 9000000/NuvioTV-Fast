@@ -612,6 +612,18 @@ internal fun ModernRowSection(
             if (!needsFocusRestore.value) return@LaunchedEffect
             needsFocusRestore.value = false
             blockingFocusExit.value = false
+            val grid = rowGrids?.get(row.key) as? InteropHorizontalGridView
+            if (grid != null && grid.isAttachedToWindow && row.items.list.isNotEmpty()) {
+                val targetIdx = (focusedItemByRow[row.key] ?: 0).coerceIn(0, row.items.list.lastIndex)
+                grid.post {
+                    // Only re-anchor focus while this row still owns it; the user may have
+                    // moved to another row while the data was being applied.
+                    if (grid.isAttachedToWindow && isActiveRow()) {
+                        grid.setSelectedPosition(targetIdx)
+                        grid.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
+                    }
+                }
+            }
         }
 
         val isRowScrollingState = remember(rowListState) {
@@ -635,7 +647,7 @@ internal fun ModernRowSection(
             val grid = rowGrids?.get(row.key)
             if (grid != null && grid.isAttachedToWindow) {
                 grid.post {
-                    if (grid.isAttachedToWindow) {
+                    if (grid.isAttachedToWindow && isActiveRow()) {
                         if (animationsEnabled) {
                             grid.setSelectedPositionSmooth(targetIndex)
                         } else {
@@ -647,8 +659,10 @@ internal fun ModernRowSection(
                             vh.itemView.requestFocus()
                         } else {
                             grid.post {
-                                val deferredVh = grid.findViewHolderForAdapterPosition(targetIndex)
-                                deferredVh?.itemView?.requestFocus()
+                                if (grid.isAttachedToWindow && isActiveRow()) {
+                                    val deferredVh = grid.findViewHolderForAdapterPosition(targetIndex)
+                                    deferredVh?.itemView?.requestFocus()
+                                }
                             }
                         }
                     }
@@ -973,6 +987,8 @@ internal fun ModernRowSection(
             spacing = NuvioTheme.spacing.md,
             onItemFocused = { index, item ->
                 onRowItemFocused(row.key, index, isContinueWatchingRow)
+                // A stray focus event from a non-target row was rejected: don't update hero/selection.
+                if (!isActiveRow()) return@LeanbackModernRow
                 item.metaPreview?.let { onItemFocus(it) }
                 when (val p = item.payload) {
                     is ModernPayload.Catalog -> {
@@ -1031,6 +1047,7 @@ internal fun ModernRowSection(
             pendingFocusIndex = pendingFocusIndex,
             pendingFocusNonce = pendingFocusNonce,
             onClearPendingFocus = onClearPendingFocus,
+            canTakeFocus = isActiveRow,
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(rowFocusRequester)

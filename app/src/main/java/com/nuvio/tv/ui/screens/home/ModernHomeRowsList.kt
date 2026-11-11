@@ -69,7 +69,6 @@ import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.util.StableList
 import com.nuvio.tv.ui.util.StableMap
 import com.nuvio.tv.ui.util.StableRef
-import com.nuvio.tv.ui.util.dpadVerticalFastScroll
 import com.nuvio.tv.ui.util.recompositionHighlighter
 import com.nuvio.tv.ui.components.rememberPlaceholderShimmerOffsetState
 import kotlinx.coroutines.Dispatchers
@@ -184,13 +183,23 @@ internal fun ModernHomeRowsList(
     var localPendingFocusIndex by remember { mutableIntStateOf(0) }
     var localPendingFocusNonce by remember { mutableIntStateOf(0) }
     var targetRowIndexTracker by remember { mutableIntStateOf(0) }
+    // Single source of truth for "which row should own focus", updated synchronously on every
+    // deliberate row change (activeRowKey is Compose state and lags one frame behind).
+    val navTargetRowKey = remember { java.util.concurrent.atomic.AtomicReference<String?>(null) }
+    // Last row that actually reported focus. Kept next to navTargetRowKey so the focus
+    // callbacks never have to wait a frame for activeRowKey (Compose state) to catch up.
+    val currentRowKeyTracker = remember { java.util.concurrent.atomic.AtomicReference<String?>(null) }
     var lastNavTimeMs by remember { mutableLongStateOf(0L) }
-    val deliberateVerticalNavTimeMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
 
     LaunchedEffect(pendingRowFocusNonce.value) {
         val targetKey = pendingRowFocusKey.value ?: return@LaunchedEffect
         val targetIdx = pendingRowFocusIndex.value ?: 0
-        deliberateVerticalNavTimeMs.set(System.currentTimeMillis())
+        navTargetRowKey.set(targetKey)
+        currentRowKeyTracker.set(targetKey)
+        // Publish the target immediately: the target row may not be composed yet, and without
+        // this the Compose-side active row would keep pointing at the row we just left.
+        latestOnActiveRowKeyChange.value(targetKey)
+        latestOnActiveItemIndexChange.value(targetIdx)
         localPendingFocusRowKey = targetKey
         localPendingFocusIndex = targetIdx
         localPendingFocusNonce++
@@ -212,12 +221,9 @@ internal fun ModernHomeRowsList(
         val targetGrid = rowGrids[targetKey]
         if (targetGrid != null && targetGrid.isAttachedToWindow) {
             targetGrid.post {
-                if (targetGrid.isAttachedToWindow) {
-                    if (animationsEnabled) {
-                        targetGrid.setSelectedPositionSmooth(targetIdx)
-                    } else {
-                        targetGrid.setSelectedPosition(targetIdx)
-                    }
+                // The user may have moved on before this post ran; never pull focus back.
+                if (targetGrid.isAttachedToWindow && navTargetRowKey.get() == targetKey) {
+                    targetGrid.setSelectedPosition(targetIdx)
                     targetGrid.requestFocus()
                     val vh = targetGrid.findViewHolderForAdapterPosition(targetIdx)
                     if (vh != null) {
@@ -225,9 +231,11 @@ internal fun ModernHomeRowsList(
                         (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
                     } else {
                         targetGrid.post {
-                            val deferredVh = targetGrid.findViewHolderForAdapterPosition(targetIdx)
-                            deferredVh?.itemView?.requestFocus()
-                            (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                            if (targetGrid.isAttachedToWindow && navTargetRowKey.get() == targetKey) {
+                                val deferredVh = targetGrid.findViewHolderForAdapterPosition(targetIdx)
+                                deferredVh?.itemView?.requestFocus()
+                                (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                            }
                         }
                     }
                     val modernGrid = targetGrid as? InteropHorizontalGridView
@@ -239,15 +247,28 @@ internal fun ModernHomeRowsList(
             }
             localPendingFocusRowKey = null
         }
+        // Always release the pending request, even when the target grid is not attached yet.
+        // The row-level pending focus (localPendingFocusRowKey) hands it off once the row
+        // composes; leaving the request armed made a later recomposition steal focus back
+        // to a row the user had already left.
         onPendingRowFocusCleared()
     }
 
     LaunchedEffect(activeRowKey.value) {
         val currentKey = activeRowKey.value ?: return@LaunchedEffect
+        if (navTargetRowKey.get() == null) {
+            navTargetRowKey.set(currentKey)
+            currentRowKeyTracker.set(currentKey)
+        }
+        // The intended row can already be one step ahead of activeRowKey when a row change
+        // was requested from a key callback; hide the ring based on that, not the lagging value.
+        val ringOwnerKey = navTargetRowKey.get()
+            ?.takeIf { key -> carouselRows.list.any { it.key == key } }
+            ?: currentKey
         val idx = carouselRows.list.indexOfFirst { it.key == currentKey }
         if (idx >= 0) {
-            targetRowIndexTracker = idx
-            if (verticalRowListState.firstVisibleItemIndex != idx) {
+            if (targetRowIndexTracker != idx && verticalRowListState.firstVisibleItemIndex != idx) {
+                targetRowIndexTracker = idx
                 scrollJob?.cancel()
                 scrollJob = coroutineScope.launch {
                     if (animationsEnabled) {
@@ -259,7 +280,7 @@ internal fun ModernHomeRowsList(
             }
         }
         rowGrids.forEach { (key, grid) ->
-            if (key != currentKey) {
+            if (key != ringOwnerKey) {
                 (grid as? InteropHorizontalGridView)?.floatingRingView?.hideRing(false)
             }
         }
@@ -325,6 +346,15 @@ internal fun ModernHomeRowsList(
 
     val latestOnRequestLazyCatalogLoad = rememberUpdatedState(onRequestLazyCatalogLoad)
     val latestCarouselRowsForLazy = rememberUpdatedState(carouselRows)
+    // The row that currently owns (or is about to own) focus. Falls back to activeRowKey when the
+    // nav target was removed from the list.
+    val effectiveActiveRowKey: () -> String? = remember {
+        {
+            navTargetRowKey.get()
+                ?.takeIf { key -> latestCarouselRowsForLazy.value.list.any { it.key == key } }
+                ?: activeRowKey.value
+        }
+    }
     LaunchedEffect(verticalRowListState) {
         val prefetchAheadForLazy = 2
         snapshotFlow {
@@ -352,9 +382,11 @@ internal fun ModernHomeRowsList(
         }
     }
 
-    val focusRestorerRequester = remember(activeRowKey) {
+    val focusRestorerRequester = remember {
         {
-            activeRowKey.value?.let { rowFocusRequesters[it] } ?: FocusRequester.Default
+            // Prefer the navigation target: activeRowKey state can still point at the row the
+            // user just left while focus is already moving to the next one.
+            effectiveActiveRowKey()?.let { rowFocusRequesters[it] } ?: FocusRequester.Default
         }
     }
 
@@ -410,9 +442,10 @@ internal fun ModernHomeRowsList(
                     }
                     val firstRowKey = carouselRows.list.firstOrNull()?.key
                     val lastRowKey = carouselRows.list.lastOrNull()?.key
+                    val currentRowKey = effectiveActiveRowKey()
                     if (event.type == KeyEventType.KeyDown &&
                         event.key == Key.DirectionUp &&
-                        activeRowKey.value == firstRowKey
+                        currentRowKey == firstRowKey
                     ) {
                         if (requestUpdateBannerFocus?.invoke() == true) {
                             return@onPreviewKeyEvent true
@@ -422,13 +455,13 @@ internal fun ModernHomeRowsList(
                         event.key == Key.DirectionUp &&
                         effectiveExpandEnabled &&
                         expandedCatalogFocusKey.value != null &&
-                        activeRowKey.value == firstRowKey
+                        currentRowKey == firstRowKey
                     ) return@onPreviewKeyEvent true
                     if (event.type == KeyEventType.KeyDown &&
                         event.key == Key.DirectionDown &&
                         effectiveExpandEnabled &&
                         expandedCatalogFocusKey.value != null &&
-                        activeRowKey.value == lastRowKey
+                        currentRowKey == lastRowKey
                     ) return@onPreviewKeyEvent true
                     val blockKey = if (layoutDirection == LayoutDirection.Rtl)
                         Key.DirectionRight else Key.DirectionLeft
@@ -467,7 +500,7 @@ internal fun ModernHomeRowsList(
                         if (isSidebarExpandedState.value) {
                             false
                         } else {
-                            val currentActiveRowKey = activeRowKey.value
+                            val currentActiveRowKey = effectiveActiveRowKey()
                             val currentRowFocusedItem = currentActiveRowKey?.let { focusedItemByRowMap[it] } ?: 0
                             if (currentRowFocusedItem > 0 && currentActiveRowKey != null) {
                                 focusedItemByRowMap[currentActiveRowKey] = 0
@@ -475,7 +508,10 @@ internal fun ModernHomeRowsList(
                                 val currentGrid = rowGrids[currentActiveRowKey]
                                 if (currentGrid != null) {
                                     currentGrid.post {
-                                        if (currentGrid.isAttachedToWindow) {
+                                        // Bail out if the user already moved to another row.
+                                        if (currentGrid.isAttachedToWindow &&
+                                            navTargetRowKey.get() == currentActiveRowKey
+                                        ) {
                                             if (animationsEnabled) {
                                                 currentGrid.setSelectedPositionSmooth(0)
                                             } else {
@@ -492,7 +528,11 @@ internal fun ModernHomeRowsList(
                                 if (firstRow != null) {
                                     val targetCardIndex = (focusedItemByRowMap[firstRow.key] ?: 0)
                                         .coerceIn(0, (firstRow.items.list.size - 1).coerceAtLeast(0))
-                                    deliberateVerticalNavTimeMs.set(System.currentTimeMillis())
+                                    val currentGrid = rowGrids[currentActiveRowKey] as? InteropHorizontalGridView
+                                    currentGrid?.prepareForRowChange()
+                                    currentGrid?.floatingRingView?.hideRing(false)
+                                    navTargetRowKey.set(firstRow.key)
+                                    currentRowKeyTracker.set(firstRow.key)
                                     latestOnActiveRowKeyChange.value(firstRow.key)
                                     latestOnActiveItemIndexChange.value(targetCardIndex)
                                     scrollJob?.cancel()
@@ -506,7 +546,9 @@ internal fun ModernHomeRowsList(
                                     val firstGrid = rowGrids[firstRow.key]
                                     if (firstGrid != null) {
                                         firstGrid.post {
-                                            if (firstGrid.isAttachedToWindow) {
+                                            if (firstGrid.isAttachedToWindow &&
+                                                navTargetRowKey.get() == firstRow.key
+                                            ) {
                                                 if (animationsEnabled) {
                                                     firstGrid.setSelectedPositionSmooth(targetCardIndex)
                                                 } else {
@@ -535,151 +577,174 @@ internal fun ModernHomeRowsList(
                 }
 
                 val onNavigateDown = remember(rowIndex, carouselRows.list, animationsEnabled) {
-                    {
+                    fun navigateDown(): Boolean {
                         onUserNavigated()
                         val now = System.currentTimeMillis()
                         // Giới hạn tần suất lặp phím khi bấm giữ im (tối thiểu 85ms giữa các hàng)
-                        if (now - lastNavTimeMs < 85L) {
-                            true
+                        if (now - lastNavTimeMs < 85L) return true
+                        val isRapid = (now - lastNavTimeMs) < 180L
+                        lastNavTimeMs = now
+                        val shouldAnimate = animationsEnabled && !isRapid
+
+                        val nextIdx = rowIndex + 1
+                        if (nextIdx >= carouselRows.list.size) return false
+                        val nextRow = carouselRows.list[nextIdx]
+                        if (nextRow.items.list.isEmpty()) {
+                            // Catalog đang rỗng/tải: chặn focus rơi tự do xuống dưới và
+                            // kích hoạt tải ngay bằng đúng legacy key mà ViewModel chờ.
+                            val addonId = nextRow.addonId
+                            val apiType = nextRow.apiType
+                            val catalogId = nextRow.catalogId
+                            if (addonId != null && apiType != null && catalogId != null) {
+                                latestOnRequestLazyCatalogLoad.value(
+                                    catalogRowLegacyKey(addonId, apiType, catalogId)
+                                )
+                            }
+                            return true
+                        }
+
+                        val currentGrid = rowGrids[row.key] as? InteropHorizontalGridView
+                        currentGrid?.prepareForRowChange()
+                        currentGrid?.floatingRingView?.hideRing(false)
+                        targetRowIndexTracker = nextIdx
+                        navTargetRowKey.set(nextRow.key)
+                        currentRowKeyTracker.set(nextRow.key)
+                        val targetCardIndex = (focusedItemByRowMap[nextRow.key] ?: 0)
+                            .coerceIn(0, (nextRow.items.list.size - 1).coerceAtLeast(0))
+
+                        latestOnActiveRowKeyChange.value(nextRow.key)
+                        latestOnActiveItemIndexChange.value(targetCardIndex)
+
+                        val nextGrid = rowGrids[nextRow.key]
+                        if (nextGrid != null && nextGrid.isAttachedToWindow) {
+                            nextGrid.setSelectedPosition(targetCardIndex)
+                            nextGrid.requestFocus()
+                            val modernGrid = nextGrid as? InteropHorizontalGridView
+                            modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
+                            nextGrid.post {
+                                modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
+                            }
                         } else {
-                            val isRapid = (now - lastNavTimeMs) < 180L
-                            lastNavTimeMs = now
-                            val shouldAnimate = animationsEnabled && !isRapid
+                            localPendingFocusRowKey = nextRow.key
+                            localPendingFocusIndex = targetCardIndex
+                            localPendingFocusNonce++
+                        }
 
-                            val nextIdx = rowIndex + 1
-                            if (nextIdx < carouselRows.list.size) {
-                                (rowGrids[carouselRows.list[rowIndex].key] as? InteropHorizontalGridView)?.floatingRingView?.hideRing(false)
-                                targetRowIndexTracker = nextIdx
-                                val nextRow = carouselRows.list[nextIdx]
-                                val targetCardIndex = (focusedItemByRowMap[nextRow.key] ?: 0)
-                                    .coerceIn(0, (nextRow.items.list.size - 1).coerceAtLeast(0))
-
-                                deliberateVerticalNavTimeMs.set(now)
-                                latestOnActiveRowKeyChange.value(nextRow.key)
-                                latestOnActiveItemIndexChange.value(targetCardIndex)
-
-                                val nextGrid = rowGrids[nextRow.key]
-                                if (nextGrid != null) {
-                                    if (!shouldAnimate) {
-                                        nextGrid.setSelectedPosition(targetCardIndex)
-                                    } else {
-                                        nextGrid.setSelectedPositionSmooth(targetCardIndex)
-                                    }
-                                    nextGrid.requestFocus()
-                                    val modernGrid = nextGrid as? InteropHorizontalGridView
-                                    modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
-                                    nextGrid.post {
-                                        modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
-                                    }
-                                } else {
-                                    localPendingFocusRowKey = nextRow.key
-                                    localPendingFocusIndex = targetCardIndex
-                                    localPendingFocusNonce++
-                                }
-
-                                scrollJob?.cancel()
-                                scrollJob = coroutineScope.launch {
-                                    if (!shouldAnimate) {
-                                        verticalRowListState.scrollToItem(nextIdx)
-                                    } else {
-                                        verticalRowListState.animateScrollToItem(nextIdx)
-                                    }
-                                }
-                                true
+                        scrollJob?.cancel()
+                        scrollJob = coroutineScope.launch {
+                            if (!shouldAnimate) {
+                                verticalRowListState.scrollToItem(nextIdx)
                             } else {
-                                false
+                                verticalRowListState.animateScrollToItem(nextIdx)
                             }
                         }
+                        return true
                     }
+                    ::navigateDown
                 }
 
                 val onNavigateUp = remember(rowIndex, carouselRows.list, animationsEnabled, requestUpdateBannerFocus) {
-                    {
+                    fun navigateUp(): Boolean {
                         onUserNavigated()
                         val now = System.currentTimeMillis()
                         // Giới hạn tần suất lặp phím khi bấm giữ im (tối thiểu 85ms giữa các hàng)
-                        if (now - lastNavTimeMs < 85L) {
-                            true
+                        if (now - lastNavTimeMs < 85L) return true
+                        val isRapid = (now - lastNavTimeMs) < 180L
+                        lastNavTimeMs = now
+                        val shouldAnimate = animationsEnabled && !isRapid
+
+                        val prevIdx = rowIndex - 1
+                        if (prevIdx < 0) {
+                            return requestUpdateBannerFocus?.invoke() == true
+                        }
+                        val prevRow = carouselRows.list[prevIdx]
+                        if (prevRow.items.list.isEmpty()) {
+                            // Catalog đang rỗng/tải: chặn focus rơi tự do lên trên và
+                            // kích hoạt tải ngay bằng đúng legacy key mà ViewModel chờ.
+                            val addonId = prevRow.addonId
+                            val apiType = prevRow.apiType
+                            val catalogId = prevRow.catalogId
+                            if (addonId != null && apiType != null && catalogId != null) {
+                                latestOnRequestLazyCatalogLoad.value(
+                                    catalogRowLegacyKey(addonId, apiType, catalogId)
+                                )
+                            }
+                            return true
+                        }
+
+                        val currentGrid = rowGrids[row.key] as? InteropHorizontalGridView
+                        currentGrid?.prepareForRowChange()
+                        currentGrid?.floatingRingView?.hideRing(false)
+                        targetRowIndexTracker = prevIdx
+                        navTargetRowKey.set(prevRow.key)
+                        currentRowKeyTracker.set(prevRow.key)
+                        val targetCardIndex = (focusedItemByRowMap[prevRow.key] ?: 0)
+                            .coerceIn(0, (prevRow.items.list.size - 1).coerceAtLeast(0))
+
+                        latestOnActiveRowKeyChange.value(prevRow.key)
+                        latestOnActiveItemIndexChange.value(targetCardIndex)
+
+                        val prevGrid = rowGrids[prevRow.key]
+                        if (prevGrid != null && prevGrid.isAttachedToWindow) {
+                            prevGrid.setSelectedPosition(targetCardIndex)
+                            prevGrid.requestFocus()
+                            val modernGrid = prevGrid as? InteropHorizontalGridView
+                            modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
+                            prevGrid.post {
+                                modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
+                            }
                         } else {
-                            val isRapid = (now - lastNavTimeMs) < 180L
-                            lastNavTimeMs = now
-                            val shouldAnimate = animationsEnabled && !isRapid
+                            localPendingFocusRowKey = prevRow.key
+                            localPendingFocusIndex = targetCardIndex
+                            localPendingFocusNonce++
+                        }
 
-                            val prevIdx = rowIndex - 1
-                            if (prevIdx >= 0) {
-                                (rowGrids[carouselRows.list[rowIndex].key] as? InteropHorizontalGridView)?.floatingRingView?.hideRing(false)
-                                targetRowIndexTracker = prevIdx
-                                val prevRow = carouselRows.list[prevIdx]
-                                val targetCardIndex = (focusedItemByRowMap[prevRow.key] ?: 0)
-                                    .coerceIn(0, (prevRow.items.list.size - 1).coerceAtLeast(0))
-
-                                deliberateVerticalNavTimeMs.set(now)
-                                latestOnActiveRowKeyChange.value(prevRow.key)
-                                latestOnActiveItemIndexChange.value(targetCardIndex)
-
-                                val prevGrid = rowGrids[prevRow.key]
-                                if (prevGrid != null) {
-                                    if (!shouldAnimate) {
-                                        prevGrid.setSelectedPosition(targetCardIndex)
-                                    } else {
-                                        prevGrid.setSelectedPositionSmooth(targetCardIndex)
-                                    }
-                                    prevGrid.requestFocus()
-                                    val modernGrid = prevGrid as? InteropHorizontalGridView
-                                    modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
-                                    prevGrid.post {
-                                        modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
-                                    }
-                                } else {
-                                    localPendingFocusRowKey = prevRow.key
-                                    localPendingFocusIndex = targetCardIndex
-                                    localPendingFocusNonce++
-                                }
-
-                                scrollJob?.cancel()
-                                scrollJob = coroutineScope.launch {
-                                    if (!shouldAnimate) {
-                                        verticalRowListState.scrollToItem(prevIdx)
-                                    } else {
-                                        verticalRowListState.animateScrollToItem(prevIdx)
-                                    }
-                                }
-                                true
+                        scrollJob?.cancel()
+                        scrollJob = coroutineScope.launch {
+                            if (!shouldAnimate) {
+                                verticalRowListState.scrollToItem(prevIdx)
                             } else {
-                                if (requestUpdateBannerFocus?.invoke() == true) {
-                                    true
-                                } else {
-                                    false
-                                }
+                                verticalRowListState.animateScrollToItem(prevIdx)
                             }
                         }
+                        return true
                     }
+                    ::navigateUp
                 }
                 val stableOnContinueWatchingOptions = remember(onContinueWatchingOptions) {
                     { item: ContinueWatchingItem -> onContinueWatchingOptions(item) }
                 }
                 val stableOnRowItemFocused = remember {
                     { rowKey: String, index: Int, isContinueWatchingRow: Boolean ->
-                        val currentActiveKey = activeRowKey.value
-                        val rowBecameActive = currentActiveKey != null && currentActiveKey != rowKey
+                        // Only the row we deliberately handed focus to may claim it. A focus
+                        // event from any other row is stray (deferred ring/focus work from a
+                        // row the user already left), so restore the intended row instead of
+                        // following it. navTargetRowKey is written synchronously from the key
+                        // handlers, so this no longer depends on a timing window.
+                        val rows = latestCarouselRowsForLazy.value.list
+                        fun knownKey(key: String?): String? =
+                            key?.takeIf { candidate -> rows.any { it.key == candidate } }
+                        val intendedKey = knownKey(navTargetRowKey.get())
+                            ?: knownKey(currentRowKeyTracker.get())
+                            ?: knownKey(activeRowKey.value)
                         val now = System.currentTimeMillis()
-                        val isDeliberate = (now - deliberateVerticalNavTimeMs.get()) < 1500L
 
-                        if (rowBecameActive && !isDeliberate) {
-                            // Accidental row jump blocked while navigating horizontally!
-                            // Immediately restore focus back to the currently active row.
-                            val activeGrid = rowGrids[currentActiveKey]
+                        if (intendedKey != null && intendedKey != rowKey) {
+                            val activeGrid = rowGrids[intendedKey]
                             if (activeGrid != null && activeGrid.isAttachedToWindow) {
                                 activeGrid.requestFocus()
                                 (activeGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(animated = false)
                             }
                         } else {
-                            if (rowBecameActive) {
-                                deliberateVerticalNavTimeMs.set(0L)
-                            }
+                            navTargetRowKey.set(rowKey)
+                            currentRowKeyTracker.set(rowKey)
                             val itemChanged = activeItemIndex.value != index
-                            
-                            if (rowBecameActive || itemChanged) {
+                            // activeRowKey normally already points here because the key handler
+                            // published it synchronously; this fallback keeps hero/focus state
+                            // correct for focus that arrived without going through a nav handler.
+                            val rowStateChanged = activeRowKey.value != rowKey
+
+                            if (rowStateChanged || itemChanged) {
                                 val timeSinceLastHeroNav = now - lastHeroNavigationAtMs.value
                                 onHeroFocusSettleDelayChange(
                                     if (lastHeroNavigationAtMs.value != 0L &&
@@ -710,7 +775,10 @@ internal fun ModernHomeRowsList(
                     }
                 }
                 val isActiveRowLambda = remember(row.key) {
-                    { row.key == activeRowKey.value }
+                    // Uses the same source of truth as the focus handoff, so the row we just
+                    // left stops being treated as active the moment the key handler decides
+                    // to move. Otherwise deferred focus work in the old row can win the race.
+                    { row.key == effectiveActiveRowKey() }
                 }
                 val stableOnCatalogSelectionFocused = remember {
                     { selection: FocusedCatalogSelection ->

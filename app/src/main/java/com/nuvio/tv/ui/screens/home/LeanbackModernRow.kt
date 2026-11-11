@@ -62,6 +62,7 @@ import coil3.Image
 import coil3.asDrawable
 import coil3.target.Target
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import kotlinx.coroutines.awaitCancellation
 
 private val dominantColorCache = LruCache<String, Int>(256)
 
@@ -607,8 +608,11 @@ class ModernRowContainerLayout(context: Context) : FrameLayout(context) {
     }
 
     override fun clearChildFocus(child: View?) {
-        if (::gridView.isInitialized && gridView.hasPendingHorizontalNavigation) {
-            // Prevent clearing focus up to ViewRootImpl / LazyColumn while horizontal navigation is underway!
+        if (::gridView.isInitialized &&
+            gridView.canTakeFocus?.invoke() != false &&
+            (gridView.hasPendingHorizontalNavigation || gridView.isSubmittingItems)
+        ) {
+            // Prevent clearing focus up to ViewRootImpl / LazyColumn during horizontal navigation or dataset updates.
             return
         }
         super.clearChildFocus(child)
@@ -671,13 +675,34 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         }
     }
 
+    /**
+     * Returns true when this row is the current navigation target. Deferred focus work
+     * (posts, retries, scroll-idle callbacks) must only grab focus when this row already
+     * owns focus or is the target, otherwise it steals focus back from the row the user moved to.
+     */
+    var canTakeFocus: (() -> Boolean)? = null
+
+    fun mayTakeFocus(): Boolean = hasFocus() || canTakeFocus?.invoke() != false
+
     val hasPendingHorizontalNavigation: Boolean
         get() = isHoldingHorizontalKey ||
             pendingTargetPosition != RecyclerView.NO_POSITION ||
             scrollState != RecyclerView.SCROLL_STATE_IDLE
 
+    val isSubmittingItems: Boolean
+        get() = rowAdapter?.isSubmittingItems == true
+
     override fun clearChildFocus(child: View?) {
-        if (hasPendingHorizontalNavigation && isAttachedToWindow) {
+        // Focus leaves this row either because the focused card was removed mid-scroll
+        // (protect it) or because a deliberate row change already pointed focus at another
+        // row (let it go). canTakeFocus is updated synchronously by the key handlers, while
+        // hasFocus()/scroll state are still stale during the handoff.
+        val deliberateRowChange = canTakeFocus?.invoke() == false
+        val shouldProtectFocus = isAttachedToWindow &&
+            !deliberateRowChange &&
+            (hasPendingHorizontalNavigation || isSubmittingItems)
+
+        if (shouldProtectFocus) {
             val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
                 pendingTargetPosition
             } else {
@@ -715,8 +740,18 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         floatingRingView?.moveToTarget(cardContainer, isLandscape, dominantColor, animationsEnabled)
     }
 
+    /**
+     * Called just before the key handler hands focus to another row. Clears the transient
+     * horizontal state so closeChildFocus()/scroll callbacks from this row cannot pull focus
+     * back while the target row is taking it, which made vertical navigation bounce.
+     */
+    fun prepareForRowChange() {
+        isHoldingHorizontalKey = false
+        pendingTargetPosition = RecyclerView.NO_POSITION
+    }
+
     fun ensureChildFocusAndRing(targetPos: Int = -1, animated: Boolean = false, retryCount: Int = 0) {
-        if (!isAttachedToWindow) return
+        if (!isAttachedToWindow || !mayTakeFocus()) return
         val pos = if (targetPos >= 0) targetPos else {
             if (pendingTargetPosition != RecyclerView.NO_POSITION) pendingTargetPosition
             else selectedPosition.coerceAtLeast(0)
@@ -732,7 +767,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         } else {
             if (retryCount < 8) {
                 post {
-                    if (isAttachedToWindow) {
+                    if (isAttachedToWindow && mayTakeFocus()) {
                         ensureChildFocusAndRing(targetPos, animated, retryCount + 1)
                     }
                 }
@@ -741,7 +776,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     }
 
     fun ensureTargetChildFocused(targetPos: Int, direction: Int, retryCount: Int = 0) {
-        if (!isAttachedToWindow) return
+        if (!isAttachedToWindow || !mayTakeFocus()) return
         val vh = findViewHolderForAdapterPosition(targetPos) as? LeanbackCardViewHolder
         if (vh != null) {
             if (!vh.itemView.hasFocus()) {
@@ -753,7 +788,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         } else {
             if (retryCount < 10) {
                 post {
-                    if (isAttachedToWindow) {
+                    if (isAttachedToWindow && mayTakeFocus()) {
                         ensureTargetChildFocused(targetPos, direction, retryCount + 1)
                     }
                 }
@@ -806,8 +841,8 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     hasReleasedKeyAfterArrivingAt0 = false
                 }
 
-                val hasGridFocus = hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
-                    isHoldingHorizontalKey || isPendingTarget
+                val hasGridFocus = (hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
+                    isHoldingHorizontalKey || isPendingTarget) && mayTakeFocus()
                 if (child != null && hasGridFocus) {
                     if (!child.itemView.hasFocus()) {
                         child.itemView.requestFocus()
@@ -843,7 +878,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
         if (isBusyLayout) {
-            post { requestFocus(direction, previouslyFocusedRect) }
+            post { if (mayTakeFocus()) requestFocus(direction, previouslyFocusedRect) }
             return false
         }
         val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
@@ -1471,6 +1506,8 @@ class LeanbackRowAdapter(
 
     private var items: List<ModernCarouselItem> = emptyList()
     private var pendingItems: List<ModernCarouselItem>? = null
+    var isSubmittingItems: Boolean = false
+        private set
 
     fun getItem(position: Int): ModernCarouselItem? = items.getOrNull(position)
 
@@ -1558,26 +1595,68 @@ class LeanbackRowAdapter(
         newSize: Int,
         newItems: List<ModernCarouselItem>
     ) {
-        if (oldSize > 0 && newSize > oldSize && oldItems == newItems.take(oldSize)) {
-            notifyItemRangeInserted(oldSize, newSize - oldSize)
-        } else if (oldSize > 0 && newSize > 0 && oldSize <= 300 && newSize <= 300) {
-            try {
-                val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-                    override fun getOldListSize(): Int = oldSize
-                    override fun getNewListSize(): Int = newSize
-                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                        return oldItems[oldItemPosition].key == newItems[newItemPosition].key
-                    }
-                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                        return oldItems[oldItemPosition] == newItems[newItemPosition]
-                    }
-                }, false)
-                diffResult.dispatchUpdatesTo(this)
-            } catch (_: Exception) {
+        val rv = attachedRecyclerView as? InteropHorizontalGridView
+        val hadFocus = rv?.hasFocus() == true
+        val prevSelectedPos = rv?.selectedPosition?.coerceAtLeast(0) ?: 0
+
+        try {
+            isSubmittingItems = true
+            if (oldSize > 0 && newSize > oldSize && oldItems == newItems.take(oldSize)) {
+                notifyItemRangeInserted(oldSize, newSize - oldSize)
+            } else if (oldSize > 0 && newSize > 0 && oldSize <= 300 && newSize <= 300) {
+                try {
+                    val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                        override fun getOldListSize(): Int = oldSize
+                        override fun getNewListSize(): Int = newSize
+                        override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                            return oldItems[oldItemPosition].key == newItems[newItemPosition].key
+                        }
+                        override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                            return oldItems[oldItemPosition] == newItems[newItemPosition]
+                        }
+                    }, false)
+                    diffResult.dispatchUpdatesTo(this)
+                } catch (_: Exception) {
+                    notifyDataSetChanged()
+                }
+            } else {
                 notifyDataSetChanged()
             }
-        } else {
-            notifyDataSetChanged()
+        } finally {
+            isSubmittingItems = false
+        }
+
+        // Placeholder-to-Data Focus Guard:
+        // Nếu hàng này đang nắm giữ tiêu điểm khi dữ liệu thay đổi (chuyển từ thẻ placeholder sang thẻ thật),
+        // lập tức neo tiêu điểm và viền sáng vào thẻ mới tại vị trí tương ứng, ngăn chặn 100% việc rò rỉ focus!
+        if (hadFocus && rv != null && newItems.isNotEmpty()) {
+            val safePos = prevSelectedPos.coerceIn(0, newItems.lastIndex)
+            rv.post {
+                // If a card still owns focus, the update did not disturb it. Re-anchoring here
+                // would undo a horizontal move the user made after the data was submitted.
+                val focusedChild = rv.findFocus()
+                val cardStillHasFocus = focusedChild != null && focusedChild !== rv
+                if (rv.isAttachedToWindow && !cardStillHasFocus && rv.mayTakeFocus()) {
+                    rv.setSelectedPosition(safePos)
+                    val vh = rv.findViewHolderForAdapterPosition(safePos)
+                    if (vh != null) {
+                        vh.itemView.requestFocus()
+                        (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                    } else {
+                        rv.post {
+                            val deferredFocusedChild = rv.findFocus()
+                            val deferredCardHasFocus = deferredFocusedChild != null && deferredFocusedChild !== rv
+                            if (rv.isAttachedToWindow && !deferredCardHasFocus && rv.mayTakeFocus()) {
+                                val deferredVh = rv.findViewHolderForAdapterPosition(safePos)
+                                deferredVh?.itemView?.requestFocus()
+                                (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                                rv.ensureChildFocusAndRing(targetPos = safePos, animated = false)
+                            }
+                        }
+                    }
+                    rv.ensureChildFocusAndRing(targetPos = safePos, animated = false)
+                }
+            }
         }
     }
 
@@ -1746,6 +1825,7 @@ fun LeanbackModernRow(
     pendingFocusIndex: Int = 0,
     pendingFocusNonce: Int = 0,
     onClearPendingFocus: () -> Unit = {},
+    canTakeFocus: (() -> Boolean)? = null,
     recycledViewPool: RecyclerView.RecycledViewPool? = null,
     modifier: Modifier = Modifier
 ) {
@@ -1789,27 +1869,10 @@ fun LeanbackModernRow(
 
     fun executeRowFocus(grid: InteropHorizontalGridView, targetIdx: Int) {
         grid.post {
-            if (!grid.isAttachedToWindow) return@post
-            if (animationsEnabled) {
-                grid.setSelectedPositionSmooth(targetIdx)
-            } else {
-                grid.setSelectedPosition(targetIdx)
-            }
+            // Skip if the user already navigated to a different row in the meantime.
+            if (!grid.isAttachedToWindow || !grid.mayTakeFocus()) return@post
+            grid.setSelectedPosition(targetIdx)
             grid.requestFocus()
-            val vh = grid.findViewHolderForAdapterPosition(targetIdx)
-            if (vh != null) {
-                vh.itemView.requestFocus()
-                (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
-            } else {
-                grid.post {
-                    if (grid.isAttachedToWindow) {
-                        val deferredVh = grid.findViewHolderForAdapterPosition(targetIdx)
-                        deferredVh?.itemView?.requestFocus()
-                        (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
-                        grid.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
-                    }
-                }
-            }
             grid.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
         }
     }
@@ -1820,9 +1883,27 @@ fun LeanbackModernRow(
         if (isPendingFocus && items.isNotEmpty()) {
             val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
             val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView)
-            if (gridView != null && gridView.isAttachedToWindow) {
-                executeRowFocus(gridView, targetIdx)
-                onClearPendingFocus()
+            if (gridView != null) {
+                if (gridView.isAttachedToWindow) {
+                    executeRowFocus(gridView, targetIdx)
+                    onClearPendingFocus()
+                } else {
+                    val attachListener = object : View.OnAttachStateChangeListener {
+                        override fun onViewAttachedToWindow(v: View) {
+                            v.removeOnAttachStateChangeListener(this)
+                            executeRowFocus(gridView, targetIdx)
+                            onClearPendingFocus()
+                        }
+                        override fun onViewDetachedFromWindow(v: View) {}
+                    }
+                    gridView.addOnAttachStateChangeListener(attachListener)
+                    // Remove the listener if this effect is cancelled (row recycled / pending cleared).
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        gridView.removeOnAttachStateChangeListener(attachListener)
+                    }
+                }
             }
         }
     }
@@ -1863,6 +1944,7 @@ fun LeanbackModernRow(
                 this.onNavigateUp = onNavigateUp
                 this.onNavigateBack = onNavigateBack
                 this.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
+                this.canTakeFocus = canTakeFocus
                 this.animationsEnabled = animationsEnabled
                 setHasFixedSize(true)
                 setItemViewCacheSize(8)
@@ -1927,6 +2009,7 @@ fun LeanbackModernRow(
             gridView.onNavigateUp = onNavigateUp
             gridView.onNavigateBack = onNavigateBack
             gridView.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
+            gridView.canTakeFocus = canTakeFocus
             gridView.animationsEnabled = animationsEnabled
             gridView.setAnimateChildLayout(animationsEnabled)
             adapter.animationsEnabled = { animationsEnabled }
