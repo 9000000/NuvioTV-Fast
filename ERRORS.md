@@ -1,3 +1,28 @@
+## [2026-11-11 09:15] - Khắc phục triệt để lỗi đôi khi lướt xuống viền sáng bị kẹt không trỏ về đúng vị trí
+
+- **Type**: UI/UX, Animation Race & Coordinate Alignment
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `LeanbackModernRow.kt`: Trong `hideRing(false)`, animation mờ dần `animate().alpha(0f).setDuration(100).withEndAction { visibility = GONE }` không bị cancel khi `moveToTarget()` được gọi ngay sau đó. Sau 100ms, `withEndAction` của lệnh cũ chạy và ép `visibility = GONE`, giấu mất viền sáng vừa hiện hoặc khiến viền sáng bị kẹt tắt ngúm giữa chừng. Đồng thời khi `alpha > 0f`, code cũ kích hoạt `glideAnimator` từ tọa độ cũ rác của hàng đích thay vì snap vào vị trí thẻ mục tiêu.
+  2. `moveToTarget()` sử dụng `getLocationInWindow` toàn cục trên Window. Khi người dùng lướt xuống, Compose `LazyColumn` bắt đầu hoạt họa cuộn dọc `animateScrollToItem`. Sự chênh lệch thời gian giữa Compose render pass và AndroidView layout pass khiến tọa độ Y bị lệch hàng chục pixel (hoặc văng ra ngoài màn hình nếu View chưa attach). Do `onParentScrolled` và `onScrollSettled` chỉ cập nhật trục X (`translationX`), tọa độ Y bị kẹt lệch mãi mãi.
+  3. `ModernHomeRowsList.kt` & `LeanbackModernRow.kt`: Khi lướt xuống, `onNavigateDown` gọi `ensureChildFocusAndRing(shouldAnimate)` nhưng hàm này trước đó không nhận `targetPos`, dẫn đến việc đọc `val pos = selectedPosition.coerceAtLeast(0)`. Do hoạt họa cuộn ngang của hàng đích chưa chạy xong, `selectedPosition` vẫn là 0, khiến `ensureChildFocusAndRing` ép focus và viền sáng vào Thẻ 0 ở đầu hàng thay vì thẻ mục tiêu (`targetCardIndex`).
+- **Fix Applied**:
+  1. `ModernRowFloatingFocusRingView`:
+     - Trong `moveToTarget`: Gọi ngay `animate().cancel()` và `glideAnimator?.cancel()` trước khi thực hiện bất kỳ thao tác nào, triệt tiêu 100% việc `withEndAction { visibility = GONE }` chạy đè.
+     - Thay thế tính toán tọa độ Window bằng `parent.offsetDescendantRectToMyCoords(target, rect)`, tính toán khoảng cách tương đối nội bộ chính xác tuyệt đối từng pixel, miễn nhiễm hoàn toàn trước hoạt họa cuộn dọc của `LazyColumn`.
+     - Bổ sung kiểm tra an toàn `isAttachedToWindow` trước khi đo đạc; nếu viền sáng đang ẩn hoặc `alpha < 0.8f` hoặc `!animated`, snap ngay tức khắc `translationX = targetX, translationY = targetY` và fade in mượt mà (120ms).
+  2. `LeanbackModernRow.kt`:
+     - Bổ sung tham số `targetPos: Int = -1` cho `ensureChildFocusAndRing`, ưu tiên `targetPos` trước khi fallback về `pendingTargetPosition` hoặc `selectedPosition`. Thêm retry loop 8 frame cho đến khi thẻ mục tiêu bind xong.
+     - Trong `requestFocus`: Ưu tiên tìm ViewHolder tại `pendingTargetPosition` hoặc `selectedPosition`.
+  3. `ModernHomeRowsList.kt`:
+     - Trong `onNavigateDown`, `onNavigateUp`, `onNavigateBack`, và `LaunchedEffect(pendingRowFocusNonce)`: Luôn truyền chính xác `targetPos = targetCardIndex` và `animated = false` vào `ensureChildFocusAndRing`, loại bỏ hoàn toàn việc trượt chéo nội bộ sai lệch khi chuyển hàng dọc.
+- **Prevention**: Luôn cô lập tính toán tọa độ con-cha bằng `offsetDescendantRectToMyCoords` thay vì tọa độ Window khi nằm trong container cuộn lồng nhau; luôn hủy triệt để `ViewPropertyAnimator` trước khi kích hoạt animation mới; đồng bộ rõ ràng mục tiêu chuyển hàng (`targetPos`) thay vì giả định `selectedPosition`.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-11 09:00] - Khắc phục triệt để lỗi D-pad Trái/Phải màn hình Home thi thoảng bị nhảy xuống hàng dưới (Đợt 2: Xử lý tận gốc Order-of-Execution, Off-screen Card Polling & Intent-based Navigation Guard)
 
 - **Type**: Logic, Lifecycle & Focus Containment

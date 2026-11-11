@@ -399,29 +399,53 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         currentTargetView = target
         val parent = parent as? ViewGroup ?: return
 
-        if (target.width <= 0 || target.height <= 0 || parent.width <= 0) {
+        if (!target.isAttachedToWindow || !parent.isAttachedToWindow || target.width <= 0 || target.height <= 0 || parent.width <= 0) {
             target.post {
-                if (currentTargetView === target) {
+                if (currentTargetView === target && isAttachedToWindow) {
                     moveToTarget(target, isLandscape, dominantColor, animated)
                 }
             }
             return
         }
 
-        val parentLoc = IntArray(2)
-        parent.getLocationInWindow(parentLoc)
+        // Cancel previous animations to prevent old hideRing withEndAction from overriding visibility
+        animate().cancel()
+        glideAnimator?.cancel()
 
-        val targetLoc = IntArray(2)
-        target.getLocationInWindow(targetLoc)
+        val rect = Rect(0, 0, target.width, target.height)
+        val success = try {
+            parent.offsetDescendantRectToMyCoords(target, rect)
+            true
+        } catch (_: Exception) {
+            false
+        }
 
         val grid = (parent as? ModernRowContainerLayout)?.gridView
         val minX = (grid?.paddingLeft ?: 0).toFloat() - glowMarginPx
         val maxX = (parent.width - (grid?.paddingRight ?: 0) - target.width).toFloat() - glowMarginPx
 
-        val rawTargetX = (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
-        // Cố định ở đầu hàng (minX) hoặc cuối hàng (maxX) khi card cuộn tới biên
+        val rawTargetX = if (success) {
+            rect.left.toFloat() - glowMarginPx
+        } else {
+            val parentLoc = IntArray(2)
+            parent.getLocationInWindow(parentLoc)
+            val targetLoc = IntArray(2)
+            target.getLocationInWindow(targetLoc)
+            (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
+        }
+
         val targetX = if (maxX > minX) rawTargetX.coerceIn(minX, maxX) else rawTargetX
-        val targetY = (targetLoc[1] - parentLoc[1]).toFloat() - glowMarginPx
+
+        val rawTargetY = if (success) {
+            rect.top.toFloat() - glowMarginPx
+        } else {
+            val parentLoc = IntArray(2)
+            parent.getLocationInWindow(parentLoc)
+            val targetLoc = IntArray(2)
+            target.getLocationInWindow(targetLoc)
+            (targetLoc[1] - parentLoc[1]).toFloat() - glowMarginPx
+        }
+        val targetY = rawTargetY
         val targetWidth = target.width + (glowMarginPx * 2).toInt()
         val targetHeight = target.height + (glowMarginPx * 2).toInt()
 
@@ -442,26 +466,22 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             layoutParams = lp
         }
 
-        if (visibility != VISIBLE || alpha <= 0f) {
-            glideAnimator?.cancel()
+        // If ring is not fully visible or animated is false, snap directly to coordinates and fade in
+        if (visibility != VISIBLE || alpha < 0.8f || !animated) {
             translationX = targetX
             translationY = targetY
-            alpha = 0f
-            visibility = VISIBLE
-            animate().alpha(1f).setDuration(120).start()
-            return
-        }
-
-        if (!animated) {
-            glideAnimator?.cancel()
-            translationX = targetX
-            translationY = targetY
-            alpha = 1f
+            if (visibility != VISIBLE || alpha <= 0f) {
+                alpha = 0f
+                visibility = VISIBLE
+                animate().alpha(1f).setDuration(120).start()
+            } else {
+                alpha = 1f
+                visibility = VISIBLE
+            }
             return
         }
 
         // Lướt trôi mượt mà từ vị trí hiện tại sang vị trí mới (180ms - chuẩn NuvioTV-Fork ROW_GLIDE_MS)
-        glideAnimator?.cancel()
         val startX = translationX
         val startY = translationY
         glideAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -486,11 +506,23 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
 
         if (maxX <= minX) return
 
-        val parentLoc = IntArray(2)
-        parent.getLocationInWindow(parentLoc)
-        val targetLoc = IntArray(2)
-        target.getLocationInWindow(targetLoc)
-        val currentCardX = (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
+        val rect = Rect(0, 0, target.width, target.height)
+        val success = try {
+            parent.offsetDescendantRectToMyCoords(target, rect)
+            true
+        } catch (_: Exception) {
+            false
+        }
+
+        val currentCardX = if (success) {
+            rect.left.toFloat() - glowMarginPx
+        } else {
+            val parentLoc = IntArray(2)
+            parent.getLocationInWindow(parentLoc)
+            val targetLoc = IntArray(2)
+            target.getLocationInWindow(targetLoc)
+            (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
+        }
 
         // Khi đi đến đầu hàng (<= minX + 2px) hoặc cuối hàng (>= maxX - 2px):
         // Cố định viền tuyệt đối tại biên (minX hoặc maxX) để poster tự cuộn tới khớp vào mà KHÔNG bị giật!
@@ -521,11 +553,23 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
 
         if (maxX <= minX) return
 
-        val parentLoc = IntArray(2)
-        parent.getLocationInWindow(parentLoc)
-        val targetLoc = IntArray(2)
-        target.getLocationInWindow(targetLoc)
-        val currentCardX = (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
+        val rect = Rect(0, 0, target.width, target.height)
+        val success = try {
+            parent.offsetDescendantRectToMyCoords(target, rect)
+            true
+        } catch (_: Exception) {
+            false
+        }
+
+        val currentCardX = if (success) {
+            rect.left.toFloat() - glowMarginPx
+        } else {
+            val parentLoc = IntArray(2)
+            parent.getLocationInWindow(parentLoc)
+            val targetLoc = IntArray(2)
+            target.getLocationInWindow(targetLoc)
+            (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
+        }
 
         val settledX = currentCardX.coerceIn(minX, maxX)
         if (Math.abs(translationX - settledX) > 1.5f) {
@@ -534,6 +578,7 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     }
 
     fun hideRing(immediate: Boolean = false) {
+        animate().cancel()
         glideAnimator?.cancel()
         currentTargetView = null
         if (immediate) {
@@ -670,9 +715,12 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         floatingRingView?.moveToTarget(cardContainer, isLandscape, dominantColor, animationsEnabled)
     }
 
-    fun ensureChildFocusAndRing(animated: Boolean = false, retryCount: Int = 0) {
+    fun ensureChildFocusAndRing(targetPos: Int = -1, animated: Boolean = false, retryCount: Int = 0) {
         if (!isAttachedToWindow) return
-        val pos = selectedPosition.coerceAtLeast(0)
+        val pos = if (targetPos >= 0) targetPos else {
+            if (pendingTargetPosition != RecyclerView.NO_POSITION) pendingTargetPosition
+            else selectedPosition.coerceAtLeast(0)
+        }
         val vh = findViewHolderForAdapterPosition(pos) as? LeanbackCardViewHolder
         if (vh != null) {
             if (!vh.itemView.hasFocus()) {
@@ -682,10 +730,10 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
             floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animated)
         } else {
-            if (retryCount < 6) {
+            if (retryCount < 8) {
                 post {
                     if (isAttachedToWindow) {
-                        ensureChildFocusAndRing(animated, retryCount + 1)
+                        ensureChildFocusAndRing(targetPos, animated, retryCount + 1)
                     }
                 }
             }
@@ -770,7 +818,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                         floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animationsEnabled)
                     }
                 } else if (hasGridFocus) {
-                    ensureChildFocusAndRing(animated = animationsEnabled)
+                    ensureChildFocusAndRing(targetPos = position, animated = animationsEnabled)
                 }
 
                 val totalCount = rowAdapter?.itemCount ?: 0
@@ -798,8 +846,12 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             post { requestFocus(direction, previouslyFocusedRect) }
             return false
         }
-        val pos = selectedPosition.coerceAtLeast(0)
-        val vh = findViewHolderForAdapterPosition(pos) as? LeanbackCardViewHolder
+        val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+            pendingTargetPosition
+        } else {
+            selectedPosition.coerceAtLeast(0)
+        }
+        val vh = findViewHolderForAdapterPosition(targetPos) as? LeanbackCardViewHolder
         if (vh != null) {
             val granted = vh.itemView.requestFocus(direction, previouslyFocusedRect)
             if (granted) {
@@ -811,7 +863,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         }
         val granted = super.requestFocus(direction, previouslyFocusedRect)
         if (granted) {
-            ensureChildFocusAndRing(animated = false)
+            ensureChildFocusAndRing(targetPos = targetPos, animated = false)
         }
         return granted
     }
@@ -1754,11 +1806,11 @@ fun LeanbackModernRow(
                         val deferredVh = grid.findViewHolderForAdapterPosition(targetIdx)
                         deferredVh?.itemView?.requestFocus()
                         (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
-                        grid.ensureChildFocusAndRing(animationsEnabled)
+                        grid.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
                     }
                 }
             }
-            grid.ensureChildFocusAndRing(animationsEnabled)
+            grid.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
         }
     }
 
