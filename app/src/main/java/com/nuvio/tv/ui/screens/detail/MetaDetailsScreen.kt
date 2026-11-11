@@ -2804,7 +2804,7 @@ private fun MetaDetailsContent(
                 }
             }
             if (showEpisodesRow) {
-                item(key = "episodes_$selectedSeason", contentType = "episodes") {
+                item(key = "episodes_row", contentType = "episodes") {
                     val visibleEpisodeRestoreId = if (pendingRestoreType == RestoreTarget.EPISODE) {
                         resolveVisibleEpisodeRestoreId(
                             requestedId = pendingRestoreEpisodeId,

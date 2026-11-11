@@ -137,7 +137,20 @@ class LeanbackEpisodeViewHolder(
             val parts = mutableListOf<String>()
             epItem?.runtimeMinutes?.let { if (it > 0) parts.add("${it}m") }
             epItem?.imdbRating?.let { if (it.isNotBlank()) parts.add("★ $it") }
-            epItem?.releaseDate?.let { if (it.isNotBlank()) parts.add(it) }
+            epItem?.releaseDate?.let { dateStr ->
+                if (dateStr.isNotBlank()) {
+                    val formatted = if (dateStr.contains('T')) {
+                        com.nuvio.tv.core.util.parseEpisodeReleaseLocalDate(dateStr)?.let { localDate ->
+                            val locale = java.util.Locale.getDefault()
+                            val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMMMy")
+                            java.time.format.DateTimeFormatter.ofPattern(pattern, locale).format(localDate)
+                        } ?: dateStr.substringBefore('T')
+                    } else {
+                        dateStr
+                    }
+                    parts.add(formatted)
+                }
+            }
 
             if (parts.isNotEmpty()) {
                 metaText.visibility = View.VISIBLE

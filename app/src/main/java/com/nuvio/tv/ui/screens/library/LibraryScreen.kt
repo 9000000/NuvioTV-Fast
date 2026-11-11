@@ -113,6 +113,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.TextStyle
+import com.nuvio.tv.LocalOpenSidebar
 import com.nuvio.tv.R
 
 private const val KEY_REPEAT_THROTTLE_MS = 80L
@@ -143,6 +144,7 @@ fun LibraryScreen(
     val watchedMovieIds by viewModel.watchedMovieIds.collectAsState()
     val watchedSeriesIds by viewModel.watchedSeriesIds.collectAsState()
     val activityContext = LocalContext.current
+    val openSidebar = LocalOpenSidebar.current
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember(uiState.showManageDialog) { mutableStateOf(false) }
     var expandedPicker by remember { mutableStateOf<String?>(null) }
@@ -496,6 +498,28 @@ fun LibraryScreen(
                     isWatched = if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds,
                     focusRequester = posterFocusRequesters[focusKey],
                     showLabel = true,
+                    modifier = Modifier.onPreviewKeyEvent { event ->
+                        val native = event.nativeKeyEvent
+                        if (native.action == AndroidKeyEvent.ACTION_DOWN &&
+                            native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT
+                        ) {
+                            val itemInfo = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == focusKey }
+                            val isFirstColumn = if (itemInfo != null) {
+                                if (itemInfo.column == 0) {
+                                    true
+                                } else {
+                                    val sameRow = gridState.layoutInfo.visibleItemsInfo.filter { it.row == itemInfo.row }
+                                    sameRow.minByOrNull { it.offset.x }?.key == focusKey
+                                }
+                            } else false
+
+                            if (isFirstColumn && openSidebar != null) {
+                                openSidebar()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        false
+                    },
                     onFocused = {
                         lastFocusedPosterKey = focusKey
                         viewModel.prefetchMetaOnFocus(item.id, item.type)
@@ -532,7 +556,13 @@ fun LibraryScreen(
                 },
                 onItemClick = { itemId, itemType, addonBaseUrl -> onNavigateToDetail(itemId, itemType, addonBaseUrl) },
                 onSeeAll = { row -> onNavigateToCatalogSeeAll(row.catalogId, row.addonId, row.apiType) },
-                onItemLongPress = { item, addonBaseUrl -> viewModel.posterOptions.show(item, addonBaseUrl) }
+                onItemLongPress = { item, addonBaseUrl -> viewModel.posterOptions.show(item, addonBaseUrl) },
+                onNavigateLeftOnFirstItem = {
+                    if (openSidebar != null) {
+                        openSidebar()
+                        true
+                    } else false
+                }
             )
         } else {
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -612,6 +642,12 @@ fun LibraryScreen(
                             1 -> viewModel.resolveCloudPlayback(item, playableFiles.first(), routeCloudPlayback)
                             else -> activeCloudItem = item
                         }
+                    },
+                    onNavigateLeft = {
+                        if (openSidebar != null) {
+                            openSidebar()
+                            true
+                        } else false
                     }
                 )
             }
@@ -988,12 +1024,26 @@ private fun CloudLibraryLoadingState() {
 private fun CloudLibraryCard(
     item: CloudLibraryItem,
     isResolving: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onNavigateLeft: (() -> Boolean)? = null
 ) {
     val fileLine = cloudLibraryFileLine(item)
     Card(
         onClick = { if (!isResolving) onClick() },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onNavigateLeft != null) {
+                    Modifier.onPreviewKeyEvent { event ->
+                        val native = event.nativeKeyEvent
+                        if (native.action == AndroidKeyEvent.ACTION_DOWN &&
+                            native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT
+                        ) {
+                            onNavigateLeft()
+                        } else false
+                    }
+                } else Modifier
+            ),
         shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
         colors = CardDefaults.colors(
             containerColor = NuvioTheme.colors.BackgroundCard,

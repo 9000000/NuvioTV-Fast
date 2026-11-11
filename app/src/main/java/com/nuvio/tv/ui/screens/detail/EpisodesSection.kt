@@ -461,7 +461,7 @@ fun EpisodesRow(
                 runtimeMinutes = episode.runtime,
                 progressPercent = progressPercent,
                 isWatched = isMarkedWatched,
-                releaseDate = episode.released,
+                releaseDate = episode.released?.let(::formatEpisodeCardDate),
                 imdbRating = imdbRating?.let { String.format(Locale.US, "%.1f", it) },
                 payload = episode
             )

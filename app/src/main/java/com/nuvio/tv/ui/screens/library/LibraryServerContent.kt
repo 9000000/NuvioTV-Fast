@@ -32,7 +32,8 @@ internal fun LazyGridScope.libraryServerContent(
     isWatched: (MetaPreview) -> Boolean,
     onItemClick: (String, String, String) -> Unit,
     onSeeAll: (CatalogRow) -> Unit,
-    onItemLongPress: (MetaPreview, String) -> Unit
+    onItemLongPress: (MetaPreview, String) -> Unit,
+    onNavigateLeftOnFirstItem: (() -> Boolean)? = null
 ) {
     when {
         shelves == null -> item(span = { GridItemSpan(maxLineSpan) }) {
@@ -68,7 +69,8 @@ internal fun LazyGridScope.libraryServerContent(
                         modifier = Modifier.bleed(rowInset),
                         focusedItemIndex = focusTarget?.takeIf { it.first == shelf.key }?.second ?: -1,
                         restorerFocusedIndex = focusedIndexes[shelf.key] ?: -1,
-                        onItemFocused = { index -> onItemFocused(shelf.key, index) }
+                        onItemFocused = { index -> onItemFocused(shelf.key, index) },
+                        onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
                     )
                 }
             } else if (failure != null) {

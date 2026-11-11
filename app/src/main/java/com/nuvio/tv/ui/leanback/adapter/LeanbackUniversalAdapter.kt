@@ -45,11 +45,29 @@ class LeanbackUniversalAdapter(
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
         attachedRecyclerView = recyclerView
+        val pending = pendingItems
+        if (pending != null) {
+            pendingItems = null
+            applyItemsUpdate(pending)
+        } else if (items.isNotEmpty()) {
+            safeNotifyDataSetChanged()
+        }
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         super.onDetachedFromRecyclerView(recyclerView)
         attachedRecyclerView = null
+    }
+
+    fun flushPendingUpdates() {
+        val pending = pendingItems ?: return
+        val rv = attachedRecyclerView
+        if (rv != null && (rv.isComputingLayout || rv.isInLayout)) {
+            rv.post { flushPendingUpdates() }
+            return
+        }
+        pendingItems = null
+        applyItemsUpdate(pending)
     }
 
     fun getItem(position: Int): LeanbackCardItem? = items.getOrNull(position)
@@ -80,13 +98,22 @@ class LeanbackUniversalAdapter(
         pendingItems = newItems
 
         val rv = attachedRecyclerView
-        if (rv == null) {
+        if (rv == null || !rv.isAttachedToWindow) {
             applyItemsUpdate(newItems)
             return
         }
 
-        if (rv.isComputingLayout || !rv.isAttachedToWindow || rv.scrollState != RecyclerView.SCROLL_STATE_IDLE) {
-            // Đang cuộn dở hoặc đang layout, giữ lại pendingItems để onScrollSettled xử lý an toàn
+        if (rv.isComputingLayout || rv.isInLayout) {
+            rv.post {
+                val pending = pendingItems ?: return@post
+                pendingItems = null
+                applyItemsUpdate(pending)
+            }
+            return
+        }
+
+        if (rv.scrollState != RecyclerView.SCROLL_STATE_IDLE) {
+            // Đang cuộn dở, giữ lại pendingItems để onScrollSettled xử lý an toàn
             return
         }
 

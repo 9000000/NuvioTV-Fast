@@ -240,6 +240,12 @@ fun LeanbackNativeRow(
                 }
                 localGridViewRef = this
                 rowGrids?.put(rowKey, this)
+                addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: android.view.View) {
+                        adapter.flushPendingUpdates()
+                    }
+                    override fun onViewDetachedFromWindow(v: android.view.View) {}
+                })
                 if (isPendingFocus && items.isNotEmpty()) {
                     val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
                     executeRowFocus(this, targetIdx)
