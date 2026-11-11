@@ -423,7 +423,8 @@ fun EpisodesRow(
     scrollToEpisodeId: String? = null,
     onScrollToEpisodeHandled: () -> Unit = {},
     anchorEpisodeId: String? = null,
-    windowResetKey: String? = null
+    windowResetKey: String? = null,
+    isFocusEnabled: Boolean = true
 ) {
     val dedupedEpisodes = remember(episodes) { episodes.distinctBy { it.id } }
     var optionsEpisode by remember { mutableStateOf<Video?>(null) }
@@ -491,6 +492,7 @@ fun EpisodesRow(
         animationsEnabled = NuvioTheme.animationsEnabled,
         startPadding = cardMetrics.rowHorizontalPadding,
         spacing = cardMetrics.itemSpacing,
+        isFocusEnabled = isFocusEnabled,
         onItemFocused = { _, cardItem ->
             val ep = cardItem.payload as? Video ?: return@LeanbackNativeRow
             onEpisodeFocused(ep.id)

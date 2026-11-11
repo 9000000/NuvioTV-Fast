@@ -1612,11 +1612,12 @@ private fun AddonCardContent(
         }
 
         if (!addon.description.isNullOrBlank()) {
+            val description = addon.description
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
             Text(
-                text = addon.description ?: "",
+                text = description,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    textDirection = (addon.description ?: "").contentTextDirection()
+                    textDirection = description.contentTextDirection()
                 ),
                 color = NuvioTheme.colors.TextSecondary
             )

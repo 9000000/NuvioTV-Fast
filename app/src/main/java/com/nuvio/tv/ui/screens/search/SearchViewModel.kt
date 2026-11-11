@@ -773,7 +773,8 @@ class SearchViewModel @Inject constructor(
                     pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
                     // Ignore per-catalog errors unless we have nothing to show.
                     if (catalogsMap.isEmpty()) {
-                        _uiState.update { it.copy(error = result.message ?: context.getString(com.nuvio.tv.R.string.search_error_failed)) }
+                        val errorMessage = result.message.ifBlank { context.getString(com.nuvio.tv.R.string.search_error_failed) }
+                        _uiState.update { it.copy(error = errorMessage) }
                     }
                     scheduleCatalogRowsUpdate()
                 }

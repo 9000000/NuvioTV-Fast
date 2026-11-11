@@ -996,11 +996,11 @@ class StreamScreenViewModel @Inject constructor(
             if (directFlowActive && !resolvedAutoPlayTarget && lastSuccessData != null && !isUnlimitedTimeout) {
                 // If torrents are still pending cache check, the next emission
                 // will carry the result — don't tear down yet.
-                val hasCheckingTorrents = lastSuccessData?.any { group ->
+                val hasCheckingTorrents = lastSuccessData.any { group ->
                     group.streams.any { s ->
                         s.isTorrent() && s.debridCacheStatus?.state == com.nuvio.tv.domain.model.StreamDebridCacheState.CHECKING
                     }
-                } == true
+                }
                 if (!hasCheckingTorrents) {
                     autoPlayHandledForSession = true
                     directAutoPlayFlowEnabledForSession = false
@@ -2078,10 +2078,10 @@ class StreamScreenViewModel @Inject constructor(
                     try {
                         activeCall.execute().use { response ->
                             if (response.isSuccessful) {
-                                val byteStream = response.body?.byteStream()
+                                val byteStream = response.body.byteStream()
                                 val buffer = ByteArray(16384)
                                 while (this@launch.isActive) {
-                                    val read = byteStream?.read(buffer) ?: -1
+                                    val read = byteStream.read(buffer)
                                     if (read == -1) break
                                 }
                             }

@@ -1747,11 +1747,8 @@ private fun MetaDetailsContent(
             meta = meta,
             request = request
         )
-        if (targetEpisode == null) {
-            initialHeroFocusRequested = true
-            return@LaunchedEffect
-        }
-        if (episodesForSeason.isEmpty()) {
+        if (targetEpisode == null || episodesForSeason.isEmpty()) {
+            heroPlayButtonFocusRequester.requestFocusAfterFrames()
             initialHeroFocusRequested = true
             return@LaunchedEffect
         }
@@ -2223,7 +2220,7 @@ private fun MetaDetailsContent(
             detailReturnEpisodeFocusRequest?.episode == null &&
             !isTrailerPlaying
         ) {
-            repeat(8) {
+            repeat(20) {
                 if (initialHeroFocusRequested) return@repeat
                 val success = heroPlayButtonFocusRequester.requestFocusAfterFrames()
                 if (success) {
@@ -2801,7 +2798,7 @@ private fun MetaDetailsContent(
                             upFocusRequester = heroPlayFocusRequester,
                             downFocusRequester = seasonDownFocusRequester,
                             onNavigateDown = onSeasonTabsNavigateDown,
-                            isFocusEnabled = pendingRestoreType != RestoreTarget.EPISODE
+                            isFocusEnabled = (initialHeroFocusRequested || pendingRestoreType != null) && pendingRestoreType != RestoreTarget.EPISODE
                         )
                     }
                 }
@@ -2820,6 +2817,7 @@ private fun MetaDetailsContent(
                     Box(modifier = Modifier.bringIntoViewResponder(episodeRowStayVerticalResponder)) {
                         EpisodesRow(
                             episodes = episodesForSeason,
+                            isFocusEnabled = initialHeroFocusRequested || pendingRestoreType == RestoreTarget.EPISODE,
                             episodeProgressMap = episodeProgressMap,
                             episodeRatings = visibleEpisodeImdbRatings,
                             watchedEpisodes = watchedEpisodes,
@@ -3038,7 +3036,7 @@ private fun MetaDetailsContent(
                                     sectionFocusRequester = collectionSectionFocusRequester,
                                     restoreItemId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
-                                    blockDefaultRestore = pendingRestoreType != null && pendingRestoreType != RestoreTarget.COLLECTION,
+                                    blockDefaultRestore = !initialHeroFocusRequested || (pendingRestoreType != null && pendingRestoreType != RestoreTarget.COLLECTION),
                                     lastFocusedItemId = lastFocusedCollectionItemId,
                                     onLastFocusedItemIdChange = { lastFocusedCollectionItemId = it },
                                     onRestoreFocusHandled = {
@@ -3105,7 +3103,7 @@ private fun MetaDetailsContent(
                         sectionFocusRequester = collectionSectionFocusRequester,
                         restoreItemId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
-                        blockDefaultRestore = pendingRestoreType != null && pendingRestoreType != RestoreTarget.COLLECTION,
+                        blockDefaultRestore = !initialHeroFocusRequested || (pendingRestoreType != null && pendingRestoreType != RestoreTarget.COLLECTION),
                         lastFocusedItemId = lastFocusedCollectionItemId,
                         onLastFocusedItemIdChange = { lastFocusedCollectionItemId = it },
                         onRestoreFocusHandled = {

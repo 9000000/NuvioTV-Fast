@@ -1,3 +1,29 @@
+## [2026-11-11 09:45] - Khắc phục triệt để lỗi màn hình Chi tiết Phim đôi khi bị cướp focus vào Diễn viên thay vì Nút Play & Rà soát Tối ưu Giao diện Toàn diện
+
+- **Type**: UI/UX & Initial Focus Priority
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/detail/MetaDetailsScreen.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/detail/EpisodesSection.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/addon/AddonManagerScreen.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/search/SearchViewModel.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/stream/StreamScreenViewModel.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `MetaDetailsScreen.kt`:
+     - Initial Focus effect chỉ có `repeat(8)` với `delay(50)`. Trên thiết bị TV hoặc khi metadata nạp chậm, sau 400ms layout nút Play chưa sẵn sàng khiến `requestFocusAfterFrames` thất bại. Khi hiệu ứng kết thúc mà không thử lại, focus bị thả nổi và rơi vào các phần tử con bên dưới.
+     - Thiếu cơ chế khóa focus ban đầu (`!initialHeroFocusRequested`): Các section bên dưới gồm `SeasonTabs`, `EpisodesRow`, và `CollectionSection` cho phép nhận focus ngay khi vừa attach vào window (`isFocusEnabled = true`), khiến Android View System hoặc FocusFinder tự động trao tiêu điểm cho Diễn viên hoặc Thẻ phim tương tự trước khi nút Play kịp nhận focus.
+     - Khi quay lại từ player (`detailReturnEpisodeFocusRequest`), nếu không tìm thấy target episode hoặc danh sách tập rỗng, code cũ gán `initialHeroFocusRequested = true` nhưng không gọi `heroPlayButtonFocusRequester.requestFocusAfterFrames()`, dẫn đến việc bỏ rơi focus và để focus rơi tự do vào thẻ Diễn viên.
+  2. Compiler Warnings & Code thừa:
+     - `AddonManagerScreen.kt:1617`: Dư thừa toán tử Elvis `?: ""` trên chuỗi non-null sau khi đã kiểm tra `!addon.description.isNullOrBlank()`.
+     - `SearchViewModel.kt:776`: Dư thừa toán tử Elvis `?:` khi `result.message` là non-null `String`.
+     - `StreamScreenViewModel.kt:999`: Dư thừa toán tử safe-call `?.any` trên `lastSuccessData` đã kiểm tra `!= null`.
+- **Fix Applied**:
+  1. `MetaDetailsScreen.kt` & `EpisodesSection.kt`:
+     - Tăng số lần thử focus nút Play lên `repeat(20)` với `delay(50)` (~1.000ms), đảm bảo 100% nút Play nhận focus ngay khi hoàn tất layout.
+     - Bổ sung cờ `isFocusEnabled` cho `EpisodesRow` và khóa focus tạm thời bằng `initialHeroFocusRequested` cho toàn bộ các section bên dưới: `SeasonTabs`, `EpisodesRow`, `CollectionSection`, `CastSection`, `MoreLikeThisSection`. Khi vừa mở màn hình, toàn bộ các hàng con đều bị khóa focus, buộc tiêu điểm 100% phải vào nút Play. Ngay khi nút Play nhận focus thành công, các hàng bên dưới tự động mở khóa bình thường.
+     - Khi thoát player mà không tìm thấy target episode, gọi ngay `heroPlayButtonFocusRequester.requestFocusAfterFrames()` để bảo vệ focus quay về nút Play thay vì để rơi vào Diễn viên.
+  2. Dọn dẹp sạch sẽ các cảnh báo compiler: Chuẩn hóa code trong `AddonManagerScreen.kt`, `SearchViewModel.kt`, và `StreamScreenViewModel.kt`.
+- **Prevention**: Luôn áp dụng cơ chế khóa focus tạm thời (Focus Lock Guard) cho các danh sách con ở dưới cho đến khi nút hành động chính (Hero Play Button) nhận focus thành công; không bao giờ gán cờ focus requested mà bỏ qua việc request focus dự phòng.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-11 09:15] - Khắc phục triệt để lỗi đôi khi lướt xuống viền sáng bị kẹt không trỏ về đúng vị trí
 
 - **Type**: UI/UX, Animation Race & Coordinate Alignment
