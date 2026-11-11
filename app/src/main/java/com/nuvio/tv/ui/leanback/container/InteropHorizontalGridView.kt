@@ -33,6 +33,11 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var isHoldingHorizontalKey: Boolean = false
         private set
 
+    val hasPendingHorizontalNavigation: Boolean
+        get() = isHoldingHorizontalKey ||
+            pendingTargetPosition != RecyclerView.NO_POSITION ||
+            scrollState != RecyclerView.SCROLL_STATE_IDLE
+
     private var arrivalAt0Time = 0L
     private var arrivedAt0FromRight = false
     private var hasReleasedKeyAfterArrivingAt0 = true
@@ -68,6 +73,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 position: Int,
                 subposition: Int
             ) {
+                val isPendingTarget = (position == pendingTargetPosition) || (pendingTargetPosition != RecyclerView.NO_POSITION)
                 if (position == pendingTargetPosition) {
                     pendingTargetPosition = RecyclerView.NO_POSITION
                 }
@@ -78,8 +84,12 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     hasReleasedKeyAfterArrivingAt0 = false
                 }
 
-                if (child != null && hasFocus()) {
-                    child.itemView.requestFocus()
+                val hasGridFocus = hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
+                    isHoldingHorizontalKey || isPendingTarget
+                if (child != null && hasGridFocus) {
+                    if (!child.itemView.hasFocus()) {
+                        child.itemView.requestFocus()
+                    }
                     (child as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
                 }
 
@@ -94,6 +104,25 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     }
 
     override fun getRootView(): View = this
+
+    fun ensureTargetChildFocused(targetPos: Int, direction: Int, retryCount: Int = 0) {
+        if (!isAttachedToWindow) return
+        val vh = findViewHolderForAdapterPosition(targetPos)
+        if (vh != null) {
+            if (!vh.itemView.hasFocus()) {
+                vh.itemView.requestFocus(direction)
+            }
+            (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+        } else {
+            if (retryCount < 10) {
+                post {
+                    if (isAttachedToWindow) {
+                        ensureTargetChildFocused(targetPos, direction, retryCount + 1)
+                    }
+                }
+            }
+        }
+    }
 
     private val isBusyLayout: Boolean
         get() = isComputingLayout || isInLayout || !isAttachedToWindow
@@ -151,26 +180,47 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         super.requestChildFocus(child, focused)
     }
 
+    override fun clearChildFocus(child: View?) {
+        if (hasPendingHorizontalNavigation && isAttachedToWindow) {
+            val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+                pendingTargetPosition
+            } else {
+                selectedPosition.coerceAtLeast(0)
+            }
+            val targetVh = findViewHolderForAdapterPosition(targetPos)
+            if (targetVh != null && targetVh.itemView !== child) {
+                targetVh.itemView.requestFocus()
+                return
+            }
+            if (!hasFocus() || findFocus() === child) {
+                isFocusable = true
+                isFocusableInTouchMode = true
+                super.requestFocus()
+            }
+            return
+        }
+        super.clearChildFocus(child)
+    }
+
     override fun focusSearch(focused: View?, direction: Int): View? {
         if (isBusyLayout) {
-            return focused ?: findFocus()
+            return focused ?: findFocus() ?: this
         }
         val total = universalAdapter?.itemCount ?: 0
         val currentPos = selectedPosition
         if (direction == View.FOCUS_LEFT && currentPos <= 0) {
-            return focused ?: findFocus()
+            return focused ?: findFocus() ?: this
         }
         if (direction == View.FOCUS_RIGHT && total > 0 && currentPos >= total - 1) {
-            return focused ?: findFocus()
+            return focused ?: findFocus() ?: this
         }
         val result = super.focusSearch(focused, direction)
-        if (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT) {
-            if (result == null || result === this || !isChildOfThis(result)) {
-                return focused ?: findFocus()
-            }
-        }
-        if (result === this) {
-            return focused ?: findFocus()
+        if (result == null || result === this || !isChildOfThis(result)) {
+            val fallback = focused?.takeIf { isChildOfThis(it) }
+                ?: findFocus()?.takeIf { isChildOfThis(it) }
+                ?: findViewHolderForAdapterPosition(currentPos)?.itemView
+                ?: this
+            return fallback
         }
         return result
     }
@@ -322,6 +372,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         }
                     } else {
                         setSelectedPositionSmooth(target)
+                        ensureTargetChildFocused(target, View.FOCUS_LEFT)
                     }
                     return true
                 }
@@ -356,6 +407,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         }
                     } else {
                         setSelectedPositionSmooth(target)
+                        ensureTargetChildFocused(target, View.FOCUS_RIGHT)
                     }
                     return true
                 }

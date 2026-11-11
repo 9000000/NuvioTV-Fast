@@ -185,10 +185,12 @@ internal fun ModernHomeRowsList(
     var localPendingFocusNonce by remember { mutableIntStateOf(0) }
     var targetRowIndexTracker by remember { mutableIntStateOf(0) }
     var lastNavTimeMs by remember { mutableLongStateOf(0L) }
+    val deliberateVerticalNavTimeMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
 
     LaunchedEffect(pendingRowFocusNonce.value) {
         val targetKey = pendingRowFocusKey.value ?: return@LaunchedEffect
         val targetIdx = pendingRowFocusIndex.value ?: 0
+        deliberateVerticalNavTimeMs.set(System.currentTimeMillis())
         localPendingFocusRowKey = targetKey
         localPendingFocusIndex = targetIdx
         localPendingFocusNonce++
@@ -490,6 +492,7 @@ internal fun ModernHomeRowsList(
                                 if (firstRow != null) {
                                     val targetCardIndex = (focusedItemByRowMap[firstRow.key] ?: 0)
                                         .coerceIn(0, (firstRow.items.list.size - 1).coerceAtLeast(0))
+                                    deliberateVerticalNavTimeMs.set(System.currentTimeMillis())
                                     latestOnActiveRowKeyChange.value(firstRow.key)
                                     latestOnActiveItemIndexChange.value(targetCardIndex)
                                     scrollJob?.cancel()
@@ -551,6 +554,7 @@ internal fun ModernHomeRowsList(
                                 val targetCardIndex = (focusedItemByRowMap[nextRow.key] ?: 0)
                                     .coerceIn(0, (nextRow.items.list.size - 1).coerceAtLeast(0))
 
+                                deliberateVerticalNavTimeMs.set(now)
                                 latestOnActiveRowKeyChange.value(nextRow.key)
                                 latestOnActiveItemIndexChange.value(targetCardIndex)
 
@@ -609,6 +613,7 @@ internal fun ModernHomeRowsList(
                                 val targetCardIndex = (focusedItemByRowMap[prevRow.key] ?: 0)
                                     .coerceIn(0, (prevRow.items.list.size - 1).coerceAtLeast(0))
 
+                                deliberateVerticalNavTimeMs.set(now)
                                 latestOnActiveRowKeyChange.value(prevRow.key)
                                 latestOnActiveItemIndexChange.value(targetCardIndex)
 
@@ -655,37 +660,53 @@ internal fun ModernHomeRowsList(
                 }
                 val stableOnRowItemFocused = remember {
                     { rowKey: String, index: Int, isContinueWatchingRow: Boolean ->
-                        val rowBecameActive = activeRowKey.value != rowKey
-                        val itemChanged = activeItemIndex.value != index
-                        
-                        if (rowBecameActive || itemChanged) {
-                            val now = System.currentTimeMillis()
-                            val timeSinceLastHeroNav = now - lastHeroNavigationAtMs.value
-                            onHeroFocusSettleDelayChange(
-                                if (lastHeroNavigationAtMs.value != 0L &&
-                                    timeSinceLastHeroNav in 1 until 130L // MODERN_HERO_RAPID_NAV_THRESHOLD_MS
-                                ) 400L // MODERN_HERO_RAPID_NAV_SETTLE_MS
-                                else 450L // MODERN_HERO_FOCUS_DEBOUNCE_MS
-                            )
-                            onLastHeroNavigationAtMsChange(now)
-                            onActiveRowKeyChange(rowKey)
-                            onActiveItemIndexChange(index)
-                        }
+                        val currentActiveKey = activeRowKey.value
+                        val rowBecameActive = currentActiveKey != null && currentActiveKey != rowKey
+                        val now = System.currentTimeMillis()
+                        val isDeliberate = (now - deliberateVerticalNavTimeMs.get()) < 1500L
 
-                        // Always keep the focusedItemByRow map in sync for ALL rows
-                        if (focusedItemByRowMap[rowKey] != index) {
-                            focusedItemByRowMap[rowKey] = index
-                        }
+                        if (rowBecameActive && !isDeliberate) {
+                            // Accidental row jump blocked while navigating horizontally!
+                            // Immediately restore focus back to the currently active row.
+                            val activeGrid = rowGrids[currentActiveKey]
+                            if (activeGrid != null && activeGrid.isAttachedToWindow) {
+                                activeGrid.requestFocus()
+                                (activeGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(animated = false)
+                            }
+                        } else {
+                            if (rowBecameActive) {
+                                deliberateVerticalNavTimeMs.set(0L)
+                            }
+                            val itemChanged = activeItemIndex.value != index
+                            
+                            if (rowBecameActive || itemChanged) {
+                                val timeSinceLastHeroNav = now - lastHeroNavigationAtMs.value
+                                onHeroFocusSettleDelayChange(
+                                    if (lastHeroNavigationAtMs.value != 0L &&
+                                        timeSinceLastHeroNav in 1 until 130L // MODERN_HERO_RAPID_NAV_THRESHOLD_MS
+                                    ) 400L // MODERN_HERO_RAPID_NAV_SETTLE_MS
+                                    else 450L // MODERN_HERO_FOCUS_DEBOUNCE_MS
+                                )
+                                onLastHeroNavigationAtMsChange(now)
+                                onActiveRowKeyChange(rowKey)
+                                onActiveItemIndexChange(index)
+                            }
 
-                        if (isContinueWatchingRow) {
-                            if (lastFocusedContinueWatchingIndex.value != index) {
-                                onLastFocusedContinueWatchingIndexChange(index)
+                            // Always keep the focusedItemByRow map in sync for ALL rows
+                            if (focusedItemByRowMap[rowKey] != index) {
+                                focusedItemByRowMap[rowKey] = index
                             }
-                            if (focusedCatalogSelection.value != null) {
-                                onFocusedCatalogSelectionChange(null)
+
+                            if (isContinueWatchingRow) {
+                                if (lastFocusedContinueWatchingIndex.value != index) {
+                                    onLastFocusedContinueWatchingIndexChange(index)
+                                }
+                                if (focusedCatalogSelection.value != null) {
+                                    onFocusedCatalogSelectionChange(null)
+                                }
                             }
+                            onRowItemFocusedInternal(rowKey, index, isContinueWatchingRow)
                         }
-                        onRowItemFocusedInternal(rowKey, index, isContinueWatchingRow)
                     }
                 }
                 val isActiveRowLambda = remember(row.key) {

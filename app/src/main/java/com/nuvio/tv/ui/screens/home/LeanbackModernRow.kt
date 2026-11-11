@@ -561,6 +561,14 @@ class ModernRowContainerLayout(context: Context) : FrameLayout(context) {
         }
     }
 
+    override fun clearChildFocus(child: View?) {
+        if (::gridView.isInitialized && gridView.hasPendingHorizontalNavigation) {
+            // Prevent clearing focus up to ViewRootImpl / LazyColumn while horizontal navigation is underway!
+            return
+        }
+        super.clearChildFocus(child)
+    }
+
     override fun requestChildRectangleOnScreen(child: View, rect: Rect, immediate: Boolean): Boolean {
         // Prevent child rectangle requests from bubbling up to AndroidComposeView / LazyColumn,
         // which cancels the smooth vertical animateScrollToItem animation when a row card receives focus.
@@ -618,6 +626,33 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         }
     }
 
+    val hasPendingHorizontalNavigation: Boolean
+        get() = isHoldingHorizontalKey ||
+            pendingTargetPosition != RecyclerView.NO_POSITION ||
+            scrollState != RecyclerView.SCROLL_STATE_IDLE
+
+    override fun clearChildFocus(child: View?) {
+        if (hasPendingHorizontalNavigation && isAttachedToWindow) {
+            val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+                pendingTargetPosition
+            } else {
+                selectedPosition.coerceAtLeast(0)
+            }
+            val targetVh = findViewHolderForAdapterPosition(targetPos)
+            if (targetVh != null && targetVh.itemView !== child) {
+                targetVh.itemView.requestFocus()
+                return
+            }
+            if (!hasFocus() || findFocus() === child) {
+                isFocusable = true
+                isFocusableInTouchMode = true
+                super.requestFocus()
+            }
+            return
+        }
+        super.clearChildFocus(child)
+    }
+
     var isHoldingHorizontalKey: Boolean = false
         private set
 
@@ -651,6 +686,27 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 post {
                     if (isAttachedToWindow) {
                         ensureChildFocusAndRing(animated, retryCount + 1)
+                    }
+                }
+            }
+        }
+    }
+
+    fun ensureTargetChildFocused(targetPos: Int, direction: Int, retryCount: Int = 0) {
+        if (!isAttachedToWindow) return
+        val vh = findViewHolderForAdapterPosition(targetPos) as? LeanbackCardViewHolder
+        if (vh != null) {
+            if (!vh.itemView.hasFocus()) {
+                vh.itemView.requestFocus(direction)
+            }
+            vh.updateFocusVisual(true)
+            val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+            floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animationsEnabled)
+        } else {
+            if (retryCount < 10) {
+                post {
+                    if (isAttachedToWindow) {
+                        ensureTargetChildFocused(targetPos, direction, retryCount + 1)
                     }
                 }
             }
@@ -691,6 +747,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 position: Int,
                 subposition: Int
             ) {
+                val isPendingTarget = (position == pendingTargetPosition) || (pendingTargetPosition != RecyclerView.NO_POSITION)
                 if (position == pendingTargetPosition) {
                     pendingTargetPosition = RecyclerView.NO_POSITION
                 }
@@ -701,7 +758,8 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     hasReleasedKeyAfterArrivingAt0 = false
                 }
 
-                val hasGridFocus = hasFocus() || isFocused || (parent as? View)?.hasFocus() == true
+                val hasGridFocus = hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
+                    isHoldingHorizontalKey || isPendingTarget
                 if (child != null && hasGridFocus) {
                     if (!child.itemView.hasFocus()) {
                         child.itemView.requestFocus()
@@ -775,24 +833,25 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     override fun focusSearch(focused: View?, direction: Int): View? {
         if (isBusyLayout) {
-            return focused ?: findFocus()
+            return focused ?: findFocus() ?: this
         }
         val total = rowAdapter?.itemCount ?: 0
         val currentPos = selectedPosition
         if (direction == View.FOCUS_LEFT && currentPos <= 0) {
-            return focused ?: findFocus()
+            return focused ?: findFocus() ?: this
         }
         if (direction == View.FOCUS_RIGHT && total > 0 && currentPos >= total - 1) {
-            return focused ?: findFocus()
+            return focused ?: findFocus() ?: this
         }
         val result = super.focusSearch(focused, direction)
-        if (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT) {
-            if (result == null || result === this || !isDescendant(result)) {
-                return focused ?: findFocus()
-            }
-        }
-        if (result === this) {
-            return focused ?: findFocus()
+        // HorizontalGridView must NEVER let focus escape to another row via focusSearch!
+        // Row-to-row navigation (UP/DOWN) is managed exclusively by onNavigateUp / onNavigateDown callbacks.
+        if (result == null || result === this || !isDescendant(result)) {
+            val fallback = focused?.takeIf { isDescendant(it) }
+                ?: findFocus()?.takeIf { isDescendant(it) }
+                ?: findViewHolderForAdapterPosition(currentPos)?.itemView
+                ?: this
+            return fallback
         }
         return result
     }
@@ -954,12 +1013,20 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
                         setSelectedPosition(target)
-                        nextVh?.itemView?.requestFocus(View.FOCUS_LEFT)
+                        if (nextVh != null) {
+                            nextVh.itemView.requestFocus(View.FOCUS_LEFT)
+                        } else {
+                            ensureTargetChildFocused(target, View.FOCUS_LEFT)
+                        }
                         return true
                     }
 
                     setSelectedPositionSmooth(target)
-                    nextVh?.itemView?.requestFocus(View.FOCUS_LEFT)
+                    if (nextVh != null) {
+                        nextVh.itemView.requestFocus(View.FOCUS_LEFT)
+                    } else {
+                        ensureTargetChildFocused(target, View.FOCUS_LEFT)
+                    }
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
@@ -989,12 +1056,20 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
                         setSelectedPosition(target)
-                        nextVh?.itemView?.requestFocus(View.FOCUS_RIGHT)
+                        if (nextVh != null) {
+                            nextVh.itemView.requestFocus(View.FOCUS_RIGHT)
+                        } else {
+                            ensureTargetChildFocused(target, View.FOCUS_RIGHT)
+                        }
                         return true
                     }
 
                     setSelectedPositionSmooth(target)
-                    nextVh?.itemView?.requestFocus(View.FOCUS_RIGHT)
+                    if (nextVh != null) {
+                        nextVh.itemView.requestFocus(View.FOCUS_RIGHT)
+                    } else {
+                        ensureTargetChildFocused(target, View.FOCUS_RIGHT)
+                    }
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {

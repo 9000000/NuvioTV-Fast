@@ -1,3 +1,47 @@
+## [2026-11-11 09:00] - Khắc phục triệt để lỗi D-pad Trái/Phải màn hình Home thi thoảng bị nhảy xuống hàng dưới (Đợt 2: Xử lý tận gốc Order-of-Execution, Off-screen Card Polling & Intent-based Navigation Guard)
+
+- **Type**: Logic, Lifecycle & Focus Containment
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `LeanbackModernRow.kt` & `InteropHorizontalGridView.kt`: Trong `onChildViewHolderSelected`, `pendingTargetPosition` bị đặt lại thành `NO_POSITION` ở dòng đầu tiên trước khi kiểm tra `isPendingTarget`. Khi cuộn ngang đơn lẻ, `hasGridFocus` tính ra `false`, khiến thẻ mục tiêu mới trôi vào viewport mà không hề được gọi `child.itemView.requestFocus()`.
+  2. Trong `dispatchKeyEvent`: Khi người dùng bấm sang thẻ nằm ngoài viewport (off-screen, ví dụ từ thẻ 5 sang thẻ 6), `findViewHolderForAdapterPosition` ban đầu trả về `null`. Mã cũ chỉ dùng một lệnh `post` duy nhất (16ms), trong khi hoạt họa trôi thẻ mất 180-250ms. Lệnh `post` bỏ cuộc ngay sau 1 frame, thẻ cũ bị RecyclerView detach trong lúc vẫn đang giữ focus -> Android Framework kích hoạt thuật toán cứu hộ focus khẩn cấp `ViewRootImpl.clearChildFocus()` -> `focusSearch(null, FOCUS_DOWN)` nhảy xuống thẻ của hàng bên dưới.
+  3. `ModernHomeRowsList.kt`: Thiếu cơ chế kiểm tra chủ đích điều hướng dọc. Hàm `stableOnRowItemFocused` đổi `activeRowKey` bất cứ khi nào có một thẻ ở hàng khác nhận focus. Khi có sự cố rò rỉ từ ViewRootImpl, màn hình bị cuộn tụt xuống hàng dưới dù người dùng chỉ bấm Trái hoặc Phải.
+- **Fix Applied**:
+  1. `LeanbackModernRow.kt` & `InteropHorizontalGridView.kt`:
+     - Lưu cờ `val isPendingTarget = (position == pendingTargetPosition) || (pendingTargetPosition != RecyclerView.NO_POSITION)` trước khi reset `pendingTargetPosition`, đảm bảo `hasGridFocus` luôn tính đúng và gọi `child.itemView.requestFocus()` khi thẻ mục tiêu trôi tới.
+     - Thay thế lệnh `post` đơn lẻ bằng hàm `ensureTargetChildFocused(targetPos, direction, retryCount)` với vòng lặp thử lại tối đa 10 frame (~160ms), đảm bảo thẻ mục tiêu luôn nhận focus ngay khi vừa hoàn tất bind/layout.
+  2. `ModernHomeRowsList.kt`:
+     - Triển khai **Intent-based Vertical Navigation Guard**: Sử dụng `deliberateVerticalNavTimeMs: AtomicLong` ghi nhận thời điểm người dùng thực sự bấm các phím điều hướng dọc (`onNavigateDown`, `onNavigateUp`, `onNavigateBack`, hoặc khôi phục trạng thái hàng).
+     - Trong `stableOnRowItemFocused`: Nếu một hàng khác nhận focus mà không có hành động điều hướng dọc có chủ đích (`!isDeliberate`), lập tức từ chối đổi `activeRowKey`, không kích hoạt cuộn màn hình, và tự động gọi `activeGrid.requestFocus()` cùng `ensureChildFocusAndRing(animated = false)` để kéo focus và viền sáng trở lại hàng hiện tại.
+- **Prevention**: Luôn đảm bảo thẻ mục tiêu ngoài viewport được theo dõi và trao focus bằng polling loop trong suốt thời gian animation cuộn; cô lập hoàn toàn sự kiện chuyển hàng ở tầng danh sách bằng cơ chế xác thực chủ đích điều hướng (Intent-based Guard) để miễn nhiễm 100% trước mọi sự cố rò rỉ focus ngoài ý muốn của hệ điều hành.
+- **Status**: Fixed
+
+---
+
+## [2026-11-11 08:15] - Khắc phục lỗi D-pad Trái/Phải trên màn hình Home thi thoảng bị nhảy xuống hàng dưới
+
+- **Type**: Logic & Focus Containment
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt`
+- **Agent**: mon
+- **Root Cause**:
+  1. `LeanbackModernRow.kt`: Trong `dispatchKeyEvent` khi bấm `KEYCODE_DPAD_LEFT` hoặc `KEYCODE_DPAD_RIGHT`, hàm tính toán `target` và gọi `val nextVh = findViewHolderForAdapterPosition(target)`. Khi người dùng di chuyển D-pad ngang với tốc độ vừa/nhanh hoặc tới poster ở rìa màn hình, ViewHolder của thẻ mục tiêu chưa kịp inflate/bind nên `nextVh` trả về `null`. Lệnh `nextVh?.itemView?.requestFocus()` không thực thi, khiến tiêu điểm vẫn nằm lại ở thẻ cũ (`currentPos`).
+  2. Khi `setSelectedPositionSmooth(target)` bắt đầu cuộn ngang, thẻ cũ (`currentPos`) trôi ra ngoài viewport và bị RecyclerView gỡ bỏ/tái chế (recycle/detach). Khi một View có focus bị gỡ bỏ, RecyclerView gọi `clearChildFocus`. Do `InteropHorizontalGridView` và `ModernRowContainerLayout` không override `clearChildFocus`, sự kiện xóa tiêu điểm nổi bọt lên tận `ViewRootImpl`. Lúc này `ViewRootImpl.mFocusedView` bằng `null`, kích hoạt thuật toán cứu hộ tiêu điểm khẩn cấp: `focusSearch(null, View.FOCUS_DOWN)`.
+  3. Trong `InteropHorizontalGridView.focusSearch`, hàm chỉ kiểm tra chặn thoát tiêu điểm đối với hướng `FOCUS_LEFT` và `FOCUS_RIGHT`. Đối với `FOCUS_DOWN` và `FOCUS_UP`, hàm cho phép vượt ra ngoài (`super.focusSearch`). Thuật toán `FocusFinder` quét theo trục dọc từ vị trí thẻ cũ và tìm thấy thẻ ở hàng ngay bên dưới, trao tiêu điểm cho thẻ đó.
+  4. Thẻ hàng dưới nhận focus kích hoạt `onRowItemFocused` -> `activeRowKey.value` đổi sang hàng dưới -> `LaunchedEffect(activeRowKey.value)` trong `ModernHomeRowsList.kt` kích hoạt `verticalRowListState.animateScrollToItem(idx)` làm toàn bộ màn hình Home tự động trôi tụt xuống hàng dưới dù người dùng chỉ bấm Trái hoặc Phải.
+- **Fix Applied**:
+  1. `InteropHorizontalGridView` & `ModernRowContainerLayout`: Override `clearChildFocus`. Khi đang có điều hướng ngang (`hasPendingHorizontalNavigation = isHoldingHorizontalKey || pendingTargetPosition != NO_POSITION || scrollState != SCROLL_STATE_IDLE`), chặn triệt để việc xóa tiêu điểm nổi bọt lên `ViewRootImpl`/Compose. Nếu thẻ mục tiêu chưa sẵn sàng, giữ tiêu điểm tạm thời trên GridView thay vì để `mFocusedView == null`.
+  2. `focusSearch`: Đóng chặt hoàn toàn biên không gian của `HorizontalGridView`. Bất kể hướng tìm kiếm nào (`LEFT`, `RIGHT`, `DOWN`, `UP`), nếu kết quả không phải là con cháu của GridView (`!isDescendant(result)`), không bao giờ cho phép trả về view bên ngoài; luôn trả về thẻ hợp lệ trong hàng (`fallback`) hoặc chính GridView.
+  3. `dispatchKeyEvent`: Bổ sung cơ chế `post { deferredVh?.itemView?.requestFocus(...) }` khi `nextVh == null`, đảm bảo thẻ mục tiêu được nhận focus ngay tức khắc khi vừa được RecyclerView bind xong.
+  4. `addOnChildViewHolderSelectedListener`: Bổ sung cờ `isHoldingHorizontalKey || pendingTargetPosition != NO_POSITION` vào `hasGridFocus` để đảm bảo thẻ được chọn luôn nhận focus ngay cả khi trạng thái focus tạm thời chưa đồng bộ trong chu kỳ layout.
+  5. Áp dụng đồng bộ các giải pháp trên cho cả `LeanbackModernRow.kt` (màn hình Home) và `InteropHorizontalGridView.kt` (Leanback Native dùng chung trong màn hình Chi tiết).
+- **Prevention**: Trong các RecyclerView ngang (`HorizontalGridView`) lồng trong `LazyColumn`/Compose, luôn luôn override `clearChildFocus` và `focusSearch` để cô lập hoàn toàn không gian tiêu điểm bên trong hàng, không để các đợt cuộn ngang hoặc tái chế view kích hoạt thuật toán tìm kiếm tiêu điểm khẩn cấp của `ViewRootImpl`.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-10 20:15] - Sửa triệt để tính năng "Làm mới Tiện ích" không hoạt động khi bấm vào
 
 - **Type**: Logic & Integration
