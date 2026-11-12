@@ -69,12 +69,57 @@ class EpisodeReleaseDateParserTest {
                 useTmdbReleaseDates = true
             )
         )
-        assertNull(
+        assertEquals(
+            "2026-07-16",
             selectEpisodeReleaseValue(
                 addonReleased = null,
                 tmdbAirDate = "2026-07-16",
                 useTmdbReleaseDates = false
             )
+        )
+        assertNull(
+            selectEpisodeReleaseValue(
+                addonReleased = null,
+                tmdbAirDate = null,
+                useTmdbReleaseDates = false
+            )
+        )
+    }
+
+    @Test
+    fun `unparseable addon release falls back to tmdb date`() {
+        assertEquals(
+            "2026-07-16",
+            selectEpisodeReleaseValue(
+                addonReleased = "not-a-date",
+                tmdbAirDate = "2026-07-16",
+                useTmdbReleaseDates = false
+            )
+        )
+    }
+
+    @Test
+    fun `common provider date formats are parsed`() {
+        assertEquals(LocalDate.of(2026, 11, 9), parseEpisodeReleaseLocalDate("09/11/2026", eastern))
+        assertEquals(LocalDate.of(2026, 11, 9), parseEpisodeReleaseLocalDate("9-11-2026", eastern))
+        assertEquals(LocalDate.of(2026, 11, 9), parseEpisodeReleaseLocalDate("9.11.2026", eastern))
+        assertEquals(LocalDate.of(2026, 11, 9), parseEpisodeReleaseLocalDate("2026/11/09", eastern))
+        assertEquals(LocalDate.of(2026, 11, 9), parseEpisodeReleaseLocalDate("2026-11-9", eastern))
+        assertEquals(LocalDate.of(2026, 11, 9), parseEpisodeReleaseLocalDate("20261109", eastern))
+        assertEquals(LocalDate.of(2026, 11, 9), parseEpisodeReleaseLocalDate("9 tháng 11, 2026", eastern))
+        assertEquals(LocalDate.of(2026, 11, 9), parseEpisodeReleaseLocalDate("Nov 9, 2026", eastern))
+    }
+
+    @Test
+    fun `epoch second and millisecond releases are parsed`() {
+        val utc = ZoneId.of("UTC")
+        assertEquals(
+            LocalDate.of(2026, 11, 9),
+            parseEpisodeReleaseLocalDate("1794182400", utc)
+        )
+        assertEquals(
+            LocalDate.of(2026, 11, 9),
+            parseEpisodeReleaseLocalDate("1794182400000", utc)
         )
     }
 

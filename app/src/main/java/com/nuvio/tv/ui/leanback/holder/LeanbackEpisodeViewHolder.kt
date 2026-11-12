@@ -23,12 +23,15 @@ import coil3.asDrawable
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.crossfade
+import coil3.request.transformations
 import coil3.target.Target
+import com.nuvio.tv.R
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
 import com.nuvio.tv.ui.leanback.core.PillProgressBarDrawable
 import com.nuvio.tv.ui.leanback.core.PlayStoreGlowView
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
+import com.nuvio.tv.ui.util.BlurTransformation
 
 /**
  * Leanback ViewHolder for TV Episode cards (16:9 Landscape).
@@ -43,6 +46,8 @@ class LeanbackEpisodeViewHolder(
     val episodeBadge: TextView,
     val watchedBadgeView: TextView?,
     val titleText: TextView,
+    val descriptionText: TextView?,
+    val dateText: TextView?,
     val metaText: TextView?,
     val progressBar: ProgressBar?,
     cornerRadiusPx: Float,
@@ -118,12 +123,25 @@ class LeanbackEpisodeViewHolder(
 
         val epItem = item as? LeanbackCardItem.Episode
 
-        // Episode Badge (e.g. "EP 3" or "S1 E3")
-        val badge = epItem?.episodeLabel
+        // Episode Badge (e.g. "S1 E3") plus availability state.
+        val baseBadge = epItem?.episodeLabel
             ?: if (epItem?.episodeNumber != null) "EP ${epItem.episodeNumber}" else null
+        val isUnavailable = epItem?.isAvailable == false
+        val unavailableLabel = if (isUnavailable) {
+            root.context.getString(R.string.episodes_unavailable)
+        } else {
+            null
+        }
+        val badge = listOfNotNull(baseBadge, unavailableLabel)
+            .filter { it.isNotBlank() }
+            .joinToString(" • ")
+            .takeIf { it.isNotBlank() }
         if (!badge.isNullOrBlank()) {
             episodeBadge.visibility = View.VISIBLE
             episodeBadge.text = badge
+            (episodeBadge.background as? GradientDrawable)?.setColor(
+                if (isUnavailable) Color.parseColor("#CC5D4037") else Color.parseColor("#B3202024")
+            )
         } else {
             episodeBadge.visibility = View.GONE
         }
@@ -132,25 +150,34 @@ class LeanbackEpisodeViewHolder(
         titleText.text = item.title
         titleText.isSelected = root.hasFocus() // Enables horizontal marquee on focus
 
-        // Meta (runtime or release date)
+        // Episode overview
+        if (descriptionText != null) {
+            val description = epItem?.description?.trim().orEmpty()
+            if (description.isNotEmpty()) {
+                descriptionText.visibility = View.VISIBLE
+                descriptionText.text = description
+            } else {
+                descriptionText.visibility = View.GONE
+            }
+        }
+
+        // Release date chip. It gets its own view so runtime/rating can never push it out of
+        // the single-line meta row below the title.
+        if (dateText != null) {
+            val dateLabel = epItem?.releaseDate?.takeIf { it.isNotBlank() }
+            if (dateLabel != null) {
+                dateText.visibility = View.VISIBLE
+                dateText.text = dateLabel
+            } else {
+                dateText.visibility = View.GONE
+            }
+        }
+
+        // Meta (runtime and rating)
         if (metaText != null) {
             val parts = mutableListOf<String>()
-            epItem?.runtimeMinutes?.let { if (it > 0) parts.add("${it}m") }
-            epItem?.imdbRating?.let { if (it.isNotBlank()) parts.add("★ $it") }
-            epItem?.releaseDate?.let { dateStr ->
-                if (dateStr.isNotBlank()) {
-                    val formatted = if (dateStr.contains('T')) {
-                        com.nuvio.tv.core.util.parseEpisodeReleaseLocalDate(dateStr)?.let { localDate ->
-                            val locale = java.util.Locale.getDefault()
-                            val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMMMy")
-                            java.time.format.DateTimeFormatter.ofPattern(pattern, locale).format(localDate)
-                        } ?: dateStr.substringBefore('T')
-                    } else {
-                        dateStr
-                    }
-                    parts.add(formatted)
-                }
-            }
+            formatRuntimeMinutes(epItem?.runtimeMinutes)?.let(parts::add)
+            epItem?.imdbRating?.takeIf { it.isNotBlank() }?.let { parts.add("★ $it") }
 
             if (parts.isNotEmpty()) {
                 metaText.visibility = View.VISIBLE
@@ -181,12 +208,18 @@ class LeanbackEpisodeViewHolder(
         if (!imageUrl.isNullOrBlank()) {
             val ctx = thumbnailImage.context
             val hasCachedColor = cachedColor != null
+            val shouldBlurThumbnail = epItem?.blurThumbnail == true
             val boundKey = item.key
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
-                .allowHardware(hasCachedColor)
+                .allowHardware(hasCachedColor && !shouldBlurThumbnail)
                 .crossfade(false)
+                .apply {
+                    if (shouldBlurThumbnail) {
+                        transformations(BlurTransformation())
+                    }
+                }
                 .target(
                     object : Target {
                         override fun onStart(placeholder: Image?) {
@@ -329,48 +362,9 @@ class LeanbackEpisodeViewHolder(
             }
             cardContainer.addView(gradientView)
 
-            // Episode Badge (e.g. "EP 1")
-            val episodeBadge = TextView(context).apply {
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    gravity = Gravity.BOTTOM or Gravity.START
-                    leftMargin = (10f * dp).toInt()
-                    bottomMargin = (42f * dp).toInt()
-                }
-                setPadding((6f * dp).toInt(), (2f * dp).toInt(), (6f * dp).toInt(), (2f * dp).toInt())
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#B3202024"))
-                    cornerRadius = 4f * dp
-                }
-                setTextColor(Color.WHITE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-            }
-            cardContainer.addView(episodeBadge)
-
-            // Title inside card bottom
-            val titleText = TextView(context).apply {
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    gravity = Gravity.BOTTOM or Gravity.START
-                    leftMargin = (10f * dp).toInt()
-                    rightMargin = (10f * dp).toInt()
-                    bottomMargin = (22f * dp).toInt()
-                }
-                setTextColor(Color.WHITE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.MARQUEE
-                marqueeRepeatLimit = -1
-                isSingleLine = true
-            }
-            cardContainer.addView(titleText)
-
-            // Meta text (runtime, rating)
-            val metaText = TextView(context).apply {
+            // Episode text block (badge, title, overview, meta) anchored above the progress bar.
+            val textContainer = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT
@@ -380,12 +374,75 @@ class LeanbackEpisodeViewHolder(
                     rightMargin = (10f * dp).toInt()
                     bottomMargin = (8f * dp).toInt()
                 }
+            }
+
+            // Episode Badge (e.g. "EP 1")
+            val episodeBadge = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = (4f * dp).toInt()
+                }
+                setPadding((6f * dp).toInt(), (2f * dp).toInt(), (6f * dp).toInt(), (2f * dp).toInt())
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#B3202024"))
+                    cornerRadius = 4f * dp
+                }
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            }
+            textContainer.addView(episodeBadge)
+
+            // Title inside card bottom
+            val titleText = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1
+                isSingleLine = true
+            }
+            textContainer.addView(titleText)
+
+            // Episode overview. The old Compose card showed it, and it is what lets viewers
+            // decide which episode to watch without opening the options overlay.
+            val descriptionText = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (2f * dp).toInt()
+                }
+                setTextColor(Color.parseColor("#D8FFFFFF"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setLineSpacing(0f, 1.15f)
+                maxLines = 3
+                ellipsize = TextUtils.TruncateAt.END
+                visibility = View.GONE
+            }
+            textContainer.addView(descriptionText)
+
+            // Meta text (runtime, rating)
+            val metaText = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (2f * dp).toInt()
+                }
                 setTextColor(Color.parseColor("#A0A0A5"))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }
-            cardContainer.addView(metaText)
+            textContainer.addView(metaText)
+
+            cardContainer.addView(textContainer)
 
             // Progress bar
             val pbHeightPx = (3.5f * dp)
@@ -404,6 +461,31 @@ class LeanbackEpisodeViewHolder(
                 visibility = View.GONE
             }
             cardContainer.addView(progressBar)
+
+            // Release date chip (top-start). It is a separate view so runtime/rating can never
+            // push the air date out of the card's single-line meta row.
+            val dateText = TextView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.START
+                    leftMargin = (8f * dp).toInt()
+                    rightMargin = (38f * dp).toInt()
+                    topMargin = (8f * dp).toInt()
+                }
+                setPadding((6f * dp).toInt(), (2f * dp).toInt(), (6f * dp).toInt(), (2f * dp).toInt())
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#B3202024"))
+                    cornerRadius = 4f * dp
+                }
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                visibility = View.GONE
+            }
+            cardContainer.addView(dateText)
 
             // Watched indicator badge (top-end)
             val watchedSizePx = (22f * dp).toInt()
@@ -438,6 +520,8 @@ class LeanbackEpisodeViewHolder(
                 episodeBadge = episodeBadge,
                 watchedBadgeView = watchedBadgeView,
                 titleText = titleText,
+                descriptionText = descriptionText,
+                dateText = dateText,
                 metaText = metaText,
                 progressBar = progressBar,
                 cornerRadiusPx = cornerRadiusPx,
@@ -446,6 +530,17 @@ class LeanbackEpisodeViewHolder(
                 adapter = adapter
             )
         }
+    }
+}
+
+private fun formatRuntimeMinutes(runtimeMinutes: Int?): String? {
+    if (runtimeMinutes == null || runtimeMinutes <= 0) return null
+    val hours = runtimeMinutes / 60
+    val minutes = runtimeMinutes % 60
+    return when {
+        hours > 0 && minutes > 0 -> "${hours}h ${minutes}m"
+        hours > 0 -> "${hours}h"
+        else -> "${minutes}m"
     }
 }
 

@@ -67,6 +67,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.request.transformations
 import com.nuvio.tv.R
+import com.nuvio.tv.core.util.isEpisodeReleaseAired
 import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
@@ -189,6 +190,26 @@ internal fun EpisodeOptionsOverlay(
         }
         else -> stringResource(R.string.episodes_dialog_subtitle)
     }
+    val releaseDateLabel = remember(episode.released) {
+        episode.released?.let(::formatReleaseDate)?.takeIf { it.isNotBlank() }
+    }
+    val runtimeLabel = remember(episode.runtime) {
+        formatEpisodeRuntime(episode.runtime)
+    }
+    val isUnavailable = episode.available == false
+    val isUpcoming = remember(episode.released) {
+        isEpisodeReleaseAired(episode.released) == false
+    }
+    val unavailableLabel = stringResource(R.string.episodes_unavailable)
+    val upcomingLabel = stringResource(R.string.cw_upcoming)
+    val episodeMetaLabel = buildList {
+        releaseDateLabel?.let(::add)
+        runtimeLabel?.let(::add)
+        when {
+            isUnavailable -> add(unavailableLabel)
+            isUpcoming -> add(upcomingLabel)
+        }
+    }.joinToString(" • ").takeIf { it.isNotBlank() }
     val actions = buildList {
         if (showWatchedActions) {
             add(
@@ -442,6 +463,18 @@ internal fun EpisodeOptionsOverlay(
                                 )
                             }
                         }
+                    }
+
+                    if (episodeMetaLabel != null) {
+                        Text(
+                            text = episodeMetaLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (isUnavailable || isUpcoming) {
+                                Color(0xFFE0B252)
+                            } else {
+                                Color.White.copy(alpha = 0.72f)
+                            }
+                        )
                     }
 
                     Text(

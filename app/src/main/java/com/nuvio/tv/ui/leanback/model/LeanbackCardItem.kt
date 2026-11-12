@@ -34,6 +34,7 @@ sealed interface LeanbackCardItem {
         override val key: String,
         override val title: String,
         override val imageUrl: String?,
+        val description: String? = null,
         val episodeNumber: Int? = null,
         val seasonNumber: Int? = null,
         val episodeLabel: String? = null,
@@ -42,6 +43,8 @@ sealed interface LeanbackCardItem {
         val isWatched: Boolean = false,
         val releaseDate: String? = null,
         val imdbRating: String? = null,
+        val isAvailable: Boolean = true,
+        val blurThumbnail: Boolean = false,
         override val payload: Any? = null
     ) : LeanbackCardItem
 

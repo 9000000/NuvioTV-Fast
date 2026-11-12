@@ -73,7 +73,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nuvio.tv.core.util.parseEpisodeReleaseLocalDate
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -415,6 +414,7 @@ fun EpisodesRow(
     entryFocusNonce: Int = 0,
     entryFocusIndex: Int = 0,
     onNavigateDown: (() -> Boolean)? = null,
+    onNavigateUp: (() -> Boolean)? = null,
     episodeFocusRequesters: MutableMap<String, FocusRequester> = mutableMapOf(),
     restoreEpisodeId: String? = null,
     restoreFocusToken: Int = 0,
@@ -442,7 +442,14 @@ fun EpisodesRow(
     }
 
     val context = LocalContext.current
-    val leanbackEpisodes = remember(dedupedEpisodes, episodeProgressMap, episodeRatings, watchedEpisodes, context) {
+    val leanbackEpisodes = remember(
+        dedupedEpisodes,
+        episodeProgressMap,
+        episodeRatings,
+        watchedEpisodes,
+        blurUnwatchedEpisodes,
+        context
+    ) {
         dedupedEpisodes.map { episode ->
             val seasonEp = episode.season?.let { s -> episode.episode?.let { e -> s to e } }
             val progress = seasonEp?.let { episodeProgressMap[it] }
@@ -450,19 +457,32 @@ fun EpisodesRow(
             val isMarkedWatched = seasonEp?.let { watchedEpisodes.contains(it) } ?: false
             val progressPercent = progress?.progressPercent?.toInt()
                 ?: if (progress != null && progress.duration > 0) ((progress.position.toFloat() / progress.duration) * 100).toInt() else null
+            val seasonNumber = episode.season
+            val episodeNumber = episode.episode
 
             LeanbackCardItem.Episode(
                 key = episode.id,
                 title = episode.title.localizeEpisodeTitle(context),
                 imageUrl = episode.thumbnail,
-                episodeNumber = episode.episode,
-                seasonNumber = episode.season,
-                episodeLabel = episode.episode?.let { "EP $it" },
+                description = episode.overview?.trim()?.takeIf { it.isNotEmpty() },
+                episodeNumber = episodeNumber,
+                seasonNumber = seasonNumber,
+                episodeLabel = when {
+                    seasonNumber != null && episodeNumber != null ->
+                        context.getString(R.string.season_episode_format, seasonNumber, episodeNumber)
+
+                    episodeNumber != null ->
+                        "${context.getString(R.string.episodes_episode)} $episodeNumber"
+
+                    else -> null
+                },
                 runtimeMinutes = episode.runtime,
                 progressPercent = progressPercent,
                 isWatched = isMarkedWatched,
-                releaseDate = episode.released?.let(::formatEpisodeCardDate),
+                releaseDate = episode.released?.let(::formatReleaseDate)?.takeIf { it.isNotBlank() },
                 imdbRating = imdbRating?.let { String.format(Locale.US, "%.1f", it) },
+                isAvailable = episode.available != false,
+                blurThumbnail = blurUnwatchedEpisodes && !isMarkedWatched,
                 payload = episode
             )
         }
@@ -512,8 +532,12 @@ fun EpisodesRow(
             optionsEpisode = ep
         },
         onNavigateUp = {
-            upFocusRequester.requestFocus()
-            true
+            if (onNavigateUp != null && onNavigateUp()) {
+                true
+            } else {
+                runCatching { upFocusRequester.requestFocus() }
+                true
+            }
         },
         onNavigateDown = {
             if (onNavigateDown != null && onNavigateDown()) {
@@ -640,10 +664,10 @@ private fun EpisodeCard(
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
     val formattedDate = remember(episode.released) {
-        episode.released?.let(::formatEpisodeCardDate).orEmpty()
+        episode.released?.let(::formatReleaseDate).orEmpty()
     }
     val runtimeLabel = remember(episode.runtime) {
-        episode.runtime?.takeIf { it > 0 }?.let(::formatEpisodeRuntime)
+        formatEpisodeRuntime(episode.runtime)
     }
     val ratingLabel = remember(imdbRating) {
         imdbRating?.takeIf { it > 0.0 }?.let { String.format(Locale.US, "%.1f", it) }
@@ -1294,25 +1318,6 @@ private fun rememberEpisodeCardMetrics(posterCardCornerRadiusDp: Int = 12): Epis
             )
         }
     }
-}
-
-private fun formatEpisodeRuntime(runtimeMinutes: Int): String {
-    if (runtimeMinutes <= 0) return ""
-    val hours = runtimeMinutes / 60
-    val minutes = runtimeMinutes % 60
-    return when {
-        hours > 0 && minutes > 0 -> "${hours}h ${minutes}m"
-        hours > 0 -> "${hours}h"
-        else -> "${minutes}m"
-    }
-}
-
-private fun formatEpisodeCardDate(isoDate: String): String {
-    val locale = Locale.getDefault()
-    val bestPattern = android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMMMy")
-    val formatter = java.time.format.DateTimeFormatter.ofPattern(bestPattern, locale)
-    val localDate = parseEpisodeReleaseLocalDate(isoDate) ?: return ""
-    return formatter.format(localDate)
 }
 
 private fun isSelectKey(keyCode: Int): Boolean {

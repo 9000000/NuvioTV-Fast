@@ -2494,6 +2494,33 @@ private fun MetaDetailsContent(
             }
         }
 
+        val onEpisodesRowNavigateUp = remember(
+            showSeasonTabs,
+            selectedSeason,
+            selectedSeasonFocusRequester,
+            seasonFocusRequesters,
+            heroPlayButtonFocusRequester
+        ) {
+            {
+                // The episode row is tall enough that scrolling to it pushes the season tabs
+                // off screen, which disposes their focus requesters. Scroll back up before
+                // requesting focus, otherwise DPAD_UP would be swallowed with no visible change.
+                if (showSeasonTabs) {
+                    coroutineScope.launch {
+                        listState.animateScrollToItem(1)
+                        val req = seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester
+                        req.requestFocusAfterFrames()
+                    }
+                } else {
+                    coroutineScope.launch {
+                        listState.animateScrollToItem(0)
+                        heroPlayButtonFocusRequester.requestFocusAfterFrames()
+                    }
+                }
+                true
+            }
+        }
+
         val onEpisodesRowNavigateDown = remember(
             hasVisiblePeopleSection,
             hasVisiblePeopleTabs,
@@ -2847,6 +2874,7 @@ private fun MetaDetailsContent(
                             entryFocusNonce = episodesRowEntryFocusNonce.intValue,
                             entryFocusIndex = seasonDownFocusIndex,
                             onNavigateDown = onEpisodesRowNavigateDown,
+                            onNavigateUp = onEpisodesRowNavigateUp,
                             episodeFocusRequesters = seasonEpisodeFocusRequesters,
                             restoreEpisodeId = visibleEpisodeRestoreId,
                             restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
