@@ -18,7 +18,6 @@ import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.SystemClock
 import android.text.TextUtils
-import android.util.LruCache
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -63,221 +62,6 @@ import coil3.asDrawable
 import coil3.target.Target
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
 import kotlinx.coroutines.awaitCancellation
-
-private val dominantColorCache = LruCache<String, Int>(256)
-
-/**
- * Trích xuất màu chủ đạo rực rỡ nhất từ Bitmap bằng Histogram 16 Hue Bins.
- * Đảm bảo màu diện tích lớn nhất (như nền vàng rực rỡ) sẽ luôn chiến thắng,
- * đồng thời giữ nguyên khả năng bắt các màu neon nổi bật trên nền đen.
- */
-fun extractDominantColor(bitmap: Bitmap): Int {
-    if (bitmap.isRecycled) return Color.WHITE
-    return runCatching {
-        val stepX = (bitmap.width / 14).coerceAtLeast(1)
-        val stepY = (bitmap.height / 14).coerceAtLeast(1)
-        val hsv = FloatArray(3)
-        val numBins = 16
-        val binScores = FloatArray(numBins)
-        val binBestWeight = FloatArray(numBins)
-        val binRepresentative = IntArray(numBins)
-
-        for (x in 0 until bitmap.width step stepX) {
-            for (y in 0 until bitmap.height step stepY) {
-                val pixel = bitmap.getPixel(x, y)
-                val alpha = (pixel ushr 24) and 0xFF
-                if (alpha < 128) continue
-                Color.colorToHSV(pixel, hsv)
-                val sat = hsv[1]
-                val brightness = hsv[2]
-                // Loại bỏ màu đen kịt và màu xám/trắng không có sắc độ
-                if (sat > 0.22f && brightness > 0.18f) {
-                    // Trọng số ưu tiên độ bão hòa màu và độ sáng
-                    val weight = sat * sat * brightness
-                    val bin = (((hsv[0] + 11.25f) % 360f) / 22.5f).toInt().coerceIn(0, numBins - 1)
-                    binScores[bin] += weight
-                    if (weight > binBestWeight[bin]) {
-                        binBestWeight[bin] = weight
-                        binRepresentative[bin] = pixel
-                    }
-                }
-            }
-        }
-
-        var bestBin = -1
-        var maxBinScore = 0f
-        for (i in 0 until numBins) {
-            if (binScores[i] > maxBinScore) {
-                maxBinScore = binScores[i]
-                bestBin = i
-            }
-        }
-
-        val dominantColor = if (bestBin >= 0 && binRepresentative[bestBin] != 0) {
-            binRepresentative[bestBin]
-        } else {
-            Color.parseColor("#38BDF8") // Fallback: Electric Cyan
-        }
-
-        Color.colorToHSV(dominantColor, hsv)
-        // Tăng độ bão hòa và đẩy độ sáng lên cực đại để ra chất đèn Neon phát quang rực rỡ
-        hsv[1] = (hsv[1] * 1.20f).coerceIn(0.75f, 1.0f)
-        hsv[2] = 1.0f
-        Color.HSVToColor(hsv)
-    }.getOrDefault(Color.parseColor("#38BDF8"))
-}
-
-/**
- * View vẽ hào quang ánh sáng đèn Neon chân thực (Gaussian Neon Bloom) tỏa ra phía ngoài poster.
- * - Sử dụng Skia BlurMaskFilter.Blur.OUTER trên Software Layer:
- *   + Ở TRONG GIỮ NGUYÊN HOÀN TOÀN: Blur.OUTER chỉ vẽ ra ngoài biên dạng, không vẽ bất kỳ pixel nào bên trong.
- *   + Kết hợp clipOutPath loại bỏ 100% diện tích bên trong poster, đảm bảo poster sắc nét hoàn hảo
- *     và CPU không phải tính toán Gaussian Blur vô ích dưới lớp poster.
- *   + Tỏa ra ngoài với 3 tầng tán xạ Gaussian mịn màng (Core, Mid, Ambient Aura),
- *     tạo hiệu ứng phát sáng đèn neon liên tục, không có các vòng tròn đồng tâm giật cục.
- * - Đổi màu phát quang linh hoạt theo màu chủ đạo rực rỡ trích xuất từ poster.
- */
-class PlayStoreGlowView(context: Context) : View(context) {
-    var glowColor: Int = Color.WHITE
-        set(value) {
-            if (field != value) {
-                field = value
-                updatePaints()
-                invalidate()
-            }
-        }
-    var cornerRadiusPx: Float = 0f
-        set(value) {
-            if (field != value) {
-                field = value
-                invalidate()
-            }
-        }
-    var glowSpreadPx: Float = 0f
-        set(value) {
-            if (field != value) {
-                field = value
-                updateFilters()
-                invalidate()
-            }
-        }
-    var glowMarginPx: Float = 0f
-        set(value) {
-            if (field != value) {
-                field = value
-                invalidate()
-            }
-        }
-
-    private val cardPath = Path()
-
-    // 3 bộ lọc Gaussian blur cho hiệu ứng ánh sáng Neon thực tế (chuẩn Play Store TV & Cyberpunk):
-    // 1. Aura: Quầng sáng tán xạ khí quyển mềm mại tỏa rộng ra nền đen (FILL, Blur.NORMAL)
-    // 2. Mid: Đai quang học dày dặn ôm trọn 4 cạnh và bù năng lượng 4 góc bo (STROKE, Blur.NORMAL)
-    // 3. Core: Sợi dây tim neon phát quang cường độ cao ôm sát mép poster (STROKE, Blur.NORMAL)
-    private var coreFilter: BlurMaskFilter? = null
-    private var midFilter: BlurMaskFilter? = null
-    private var auraFilter: BlurMaskFilter? = null
-
-    private val auraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val midPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-
-    init {
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
-        updatePaints()
-    }
-
-    private fun updateFilters() {
-        if (glowSpreadPx <= 0f) {
-            coreFilter = null
-            midFilter = null
-            auraFilter = null
-            corePaint.maskFilter = null
-            midPaint.maskFilter = null
-            auraPaint.maskFilter = null
-            return
-        }
-        val rCore = (glowSpreadPx * 0.15f).coerceAtLeast(1f)
-        val rMid = (glowSpreadPx * 0.35f).coerceAtLeast(1f)
-        val rAura = (glowSpreadPx * 0.65f).coerceAtLeast(1f)
-        coreFilter = BlurMaskFilter(rCore, BlurMaskFilter.Blur.NORMAL)
-        midFilter = BlurMaskFilter(rMid, BlurMaskFilter.Blur.NORMAL)
-        auraFilter = BlurMaskFilter(rAura, BlurMaskFilter.Blur.NORMAL)
-        corePaint.maskFilter = coreFilter
-        midPaint.maskFilter = midFilter
-        auraPaint.maskFilter = auraFilter
-
-        auraPaint.strokeWidth = (glowSpreadPx * 0.75f).coerceAtLeast(4f)
-        midPaint.strokeWidth = (glowSpreadPx * 0.40f).coerceAtLeast(2f)
-        corePaint.strokeWidth = TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP, 3.5f, resources.displayMetrics
-        ).coerceAtLeast(2f)
-    }
-
-    private fun updatePaints() {
-        if (glowColor == 0) return
-        val coreColor = ColorUtils.blendARGB(glowColor, Color.WHITE, 0.15f)
-        corePaint.color = ColorUtils.setAlphaComponent(coreColor, 255)
-        midPaint.color = ColorUtils.setAlphaComponent(glowColor, 185)
-        auraPaint.color = ColorUtils.setAlphaComponent(glowColor, 85)
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        if (glowColor == 0 || glowSpreadPx <= 0f) return
-        val margin = if (glowMarginPx > 0f) glowMarginPx else glowSpreadPx
-        val cardLeft = margin
-        val cardTop = margin
-        val cardRight = width - margin
-        val cardBottom = height - margin
-
-        cardPath.reset()
-        if (cornerRadiusPx > 0f) {
-            cardPath.addRoundRect(
-                cardLeft,
-                cardTop,
-                cardRight,
-                cardBottom,
-                cornerRadiusPx,
-                cornerRadiusPx,
-                Path.Direction.CW
-            )
-        } else {
-            cardPath.addRect(
-                cardLeft,
-                cardTop,
-                cardRight,
-                cardBottom,
-                Path.Direction.CW
-            )
-        }
-
-        // Vẽ từ tầng tán xạ xa (Aura) đến tầng vầng sáng quang học (Mid) rồi sợi tim Neon rực rỡ (Core).
-        // KHÔNG dùng clipOutPath: để ánh sáng neon bắt nguồn liên tục từ dưới lưng tấm poster tỏa ra ngoài,
-        // ôm trọn vẹn 100% cả 4 góc bo cong lẫn 4 cạnh, triệt tiêu hoàn toàn các khoảng đen hở góc.
-        if (auraPaint.maskFilter != null) {
-            canvas.drawPath(cardPath, auraPaint)
-        }
-        if (midPaint.maskFilter != null) {
-            canvas.drawPath(cardPath, midPaint)
-        }
-        if (corePaint.maskFilter != null) {
-            canvas.drawPath(cardPath, corePaint)
-        }
-    }
-}
 
 /**
  * Khung Focus Ring nổi độc lập trên cùng của toàn bộ hàng poster (One focus ring per row).
@@ -356,7 +140,6 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     private var glideAnimator: ValueAnimator? = null
 
     init {
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
         updateGlowPaints()
         visibility = GONE
         isFocusable = false
@@ -397,6 +180,9 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     }
 
     fun moveToTarget(target: View, isLandscape: Boolean, dominantColor: Int, animated: Boolean) {
+        if (layerType != LAYER_TYPE_SOFTWARE) {
+            setLayerType(LAYER_TYPE_SOFTWARE, null)
+        }
         currentTargetView = target
         val parent = parent as? ViewGroup ?: return
 
@@ -585,9 +371,15 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         if (immediate) {
             visibility = GONE
             alpha = 0f
+            if (layerType != LAYER_TYPE_NONE) {
+                setLayerType(LAYER_TYPE_NONE, null)
+            }
         } else if (visibility == VISIBLE) {
             animate().alpha(0f).setDuration(100).withEndAction {
                 visibility = GONE
+                if (layerType != LAYER_TYPE_NONE) {
+                    setLayerType(LAYER_TYPE_NONE, null)
+                }
             }.start()
         }
     }
@@ -1335,7 +1127,7 @@ class LeanbackCardViewHolder(
         }
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
-        val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey) ?: dominantColorCache.get(colorCacheKey)
+        val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
         currentDominantColor = cachedColor ?: LeanbackColorEngine.defaultFallbackColor
 
         // Set dimensions
@@ -1383,7 +1175,7 @@ class LeanbackCardViewHolder(
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
-                .allowHardware(hasCachedColor)
+                .allowHardware(false)
                 .crossfade(false)
                 .target(
                     object : Target {
@@ -1398,7 +1190,7 @@ class LeanbackCardViewHolder(
                             posterImage.setImageDrawable(result.asDrawable(ctx.resources))
                             // Triệt tiêu 100% GPU Overdraw khi ảnh đã nạp xong kín thẻ
                             cardContainer.background = null
-                            val existingColor = LeanbackColorEngine.getCachedColor(boundColorKey) ?: dominantColorCache.get(boundColorKey)
+                            val existingColor = LeanbackColorEngine.getCachedColor(boundColorKey)
                             if (existingColor != null) {
                                 currentDominantColor = existingColor
                                 if (root.hasFocus()) {
@@ -1408,7 +1200,6 @@ class LeanbackCardViewHolder(
                                 val bmp = (result as? BitmapImage)?.bitmap
                                 if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
                                     LeanbackColorEngine.extractDominantColorAsync(boundColorKey, bmp) { extracted ->
-                                        dominantColorCache.put(boundColorKey, extracted)
                                         if (currentItem?.key == boundKey) {
                                             currentDominantColor = extracted
                                             if (root.hasFocus()) {
@@ -1460,6 +1251,7 @@ class LeanbackCardViewHolder(
         root.scaleY = 1.0f
         imageDisposable?.dispose()
         imageDisposable = null
+        posterImage.setImageDrawable(null)
         cardContainer.foreground = null
         // Phục hồi lại background placeholder tái sử dụng khi view được recycle
         placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
@@ -1610,7 +1402,7 @@ class LeanbackRowAdapter(
         // Placeholder-to-Data Focus Guard:
         // Nếu hàng này đang nắm giữ tiêu điểm khi dữ liệu thay đổi (chuyển từ thẻ placeholder sang thẻ thật),
         // lập tức neo tiêu điểm và viền sáng vào thẻ mới tại vị trí tương ứng, ngăn chặn 100% việc rò rỉ focus!
-        if (hadFocus && rv != null && newItems.isNotEmpty()) {
+        if (hadFocus && newItems.isNotEmpty()) {
             val safePos = prevSelectedPos.coerceIn(0, newItems.lastIndex)
             rv.post {
                 // If a card still owns focus, the update did not disturb it. Re-anchoring here

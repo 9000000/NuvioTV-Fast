@@ -10,8 +10,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 private const val ROW_FOCUS_DEBOUNCE_MS = 250L
+private val mdbFetchSemaphore = Semaphore(3)
 
 internal fun HomeViewModel.onFocusedRowChangedForMdbBatch(rowKey: String?) {
     if (rowKey == null) return
@@ -31,7 +34,10 @@ internal fun HomeViewModel.onCatalogRowItemsChanged(rowKey: String) {
 
     viewModelScope.launch(Dispatchers.IO) {
         val row = readCatalogRow(rowKey) ?: return@launch
-        val newItems = row.items.filter { it.mdbListRatings == null && it.id !in mdbBatchNegativeIds }
+        // Only prefetch the head 12 items of a newly loaded catalog to avoid overwhelming
+        // the network and causing state update storms. Further items are prefetched on demand
+        // when rows/items are focused.
+        val newItems = row.items.take(12).filter { it.mdbListRatings == null && it.id !in mdbBatchNegativeIds }
         if (newItems.isEmpty()) return@launch
         batchFetchRatingsForItems(newItems)
     }
@@ -80,20 +86,22 @@ private suspend fun HomeViewModel.batchFetchRatingsForItems(items: List<MetaPrev
         coroutineScope {
             items.map { item ->
                 async(Dispatchers.IO) {
-                    try {
-                        val result = mdbListRepository.getRatingsForMeta(
-                            meta = item.toMdbMeta(),
-                            fallbackItemId = item.id,
-                            fallbackItemType = item.apiType
-                        )
-                        if (result != null) {
-                            updateCatalogItemMdbListRatings(item.id, result.ratings)
-                        } else {
-                            mdbBatchNegativeIds.add(item.id)
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) { }
+                    mdbFetchSemaphore.withPermit {
+                        try {
+                            val result = mdbListRepository.getRatingsForMeta(
+                                meta = item.toMdbMeta(),
+                                fallbackItemId = item.id,
+                                fallbackItemType = item.apiType
+                            )
+                            if (result != null) {
+                                updateCatalogItemMdbListRatings(item.id, result.ratings)
+                            } else {
+                                mdbBatchNegativeIds.add(item.id)
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) { }
+                    }
                 }
             }.awaitAll()
         }

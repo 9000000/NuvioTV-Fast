@@ -271,7 +271,6 @@ class LeanbackUniversalAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): LeanbackBaseViewHolder {
-        val parentLayout = (parent as? LinearLayout) ?: LinearLayout(parent.context)
         val dp = parent.context.resources.displayMetrics.density
         val glowSpreadDp = 18f
         val glowSpreadPx = glowSpreadDp * dp
@@ -281,7 +280,7 @@ class LeanbackUniversalAdapter(
         return when (viewType) {
             LeanbackPoolManager.VIEW_TYPE_EPISODE -> {
                 LeanbackEpisodeViewHolder.create(
-                    parent = parentLayout,
+                    parent = parent,
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
                     cornerRadiusPx = cornerRadiusPx,
@@ -293,7 +292,7 @@ class LeanbackUniversalAdapter(
             }
             LeanbackPoolManager.VIEW_TYPE_AVATAR -> {
                 LeanbackAvatarViewHolder.create(
-                    parent = parentLayout,
+                    parent = parent,
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
                     cornerRadiusPx = cornerRadiusPx,
@@ -305,7 +304,7 @@ class LeanbackUniversalAdapter(
             }
             else -> {
                 LeanbackPosterViewHolder.create(
-                    parent = parentLayout,
+                    parent = parent,
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
                     cornerRadiusPx = this@LeanbackUniversalAdapter.cornerRadiusPx,

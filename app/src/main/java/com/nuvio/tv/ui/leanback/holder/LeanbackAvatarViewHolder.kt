@@ -9,6 +9,7 @@ import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -113,7 +114,7 @@ class LeanbackAvatarViewHolder(
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(diameter.coerceAtLeast(1), diameter.coerceAtLeast(1))
-                .allowHardware(hasCachedColor)
+                .allowHardware(false)
                 .crossfade(false)
                 .target(
                     object : Target {
@@ -169,11 +170,12 @@ class LeanbackAvatarViewHolder(
         super.unbind()
         imageDisposable?.dispose()
         imageDisposable = null
+        avatarImage.setImageDrawable(null)
     }
 
     companion object {
         fun create(
-            parent: LinearLayout,
+            parent: ViewGroup,
             cardWidthPx: Int,
             cardHeightPx: Int,
             cornerRadiusPx: Float,
