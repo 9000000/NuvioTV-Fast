@@ -17,7 +17,7 @@ import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.local.displayName
 import com.nuvio.tv.ui.theme.NuvioPrimitives
 
-private val subtitleColors = listOf(
+internal val SubtitleSettingsTextColors = listOf(
     Color.White,
     Color(0xFFD9D9D9),
     Color.Yellow,
@@ -29,15 +29,7 @@ private val subtitleColors = listOf(
     Color(0xFF90EE90)
 )
 
-private val subtitleBackgroundColors = listOf(
-    Color.Transparent,
-    Color.Black,
-    Color(0x80000000),
-    NuvioPrimitives.neutral900,
-    NuvioPrimitives.neutral800
-)
-
-private val subtitleOutlineColors = listOf(
+internal val SubtitleSettingsOutlineColors = listOf(
     Color.Black,
     NuvioPrimitives.neutral900,
     NuvioPrimitives.neutral750,
@@ -98,78 +90,11 @@ internal fun PlaybackSubtitlesSection(
 
     SettingsSectionLabel(text = stringResource(R.string.sub_style_label))
     SettingsActionRow(
-        title = stringResource(R.string.sub_font),
-        subtitle = stringResource(R.string.sub_font_sub),
-        value = getSubtitleFontDisplayName(style.font, customFontName),
-        enabled = enabled,
-        onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_FONT) }
-    )
-    SliderSettingsItem(
-        title = stringResource(R.string.sub_size),
-        value = style.size,
-        valueText = "${style.size}%",
-        minValue = 50,
-        maxValue = 200,
-        step = 10,
-        onValueChange = { size -> onUpdate { setSubtitleSize(size) } },
+        title = stringResource(R.string.sub_appearance),
+        subtitle = stringResource(R.string.sub_appearance_desc),
+        onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_APPEARANCE) },
         enabled = enabled
     )
-    SliderSettingsItem(
-        title = stringResource(R.string.sub_vertical_offset),
-        value = style.verticalOffset,
-        valueText = "${style.verticalOffset}%",
-        minValue = -20,
-        maxValue = 50,
-        step = 1,
-        onValueChange = { offset -> onUpdate { setSubtitleVerticalOffset(offset) } },
-        enabled = enabled
-    )
-    SettingsToggleRow(
-        title = stringResource(R.string.sub_bold),
-        subtitle = stringResource(R.string.sub_bold_sub),
-        checked = style.bold,
-        onToggle = { onUpdate { setSubtitleBold(!style.bold) } },
-        enabled = enabled
-    )
-    ColorSettingsItem(
-        title = stringResource(R.string.sub_text_color),
-        currentColor = Color(style.textColor),
-        onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_TEXT_COLOR) },
-        enabled = enabled
-    )
-    ColorSettingsItem(
-        title = stringResource(R.string.sub_bg_color),
-        currentColor = Color(style.backgroundColor),
-        showTransparent = style.backgroundColor == Color.Transparent.toArgb(),
-        onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_BACKGROUND_COLOR) },
-        enabled = enabled
-    )
-    SettingsToggleRow(
-        title = stringResource(R.string.sub_outline),
-        subtitle = stringResource(R.string.sub_outline_sub),
-        checked = style.outlineEnabled,
-        onToggle = { onUpdate { setSubtitleOutlineEnabled(!style.outlineEnabled) } },
-        enabled = enabled
-    )
-    if (style.outlineEnabled) {
-        ColorSettingsItem(
-            title = stringResource(R.string.sub_outline_color),
-            currentColor = Color(style.outlineColor),
-            onClick = { onOpenDialog(PlaybackDialog.SUBTITLE_OUTLINE_COLOR) },
-            enabled = enabled
-        )
-        SliderSettingsItem(
-            title = stringResource(R.string.sub_outline_width),
-            subtitle = stringResource(R.string.sub_outline_width_sub),
-            value = style.outlineWidth,
-            valueText = "${style.outlineWidth}px",
-            minValue = 1,
-            maxValue = 50,
-            step = 1,
-            onValueChange = { width -> onUpdate { setSubtitleOutlineWidth(width) } },
-            enabled = enabled
-        )
-    }
     SettingsToggleRow(
         title = stringResource(R.string.sub_hdr_style),
         subtitle = stringResource(R.string.sub_hdr_style_sub),
@@ -295,40 +220,14 @@ internal fun SubtitleSettingsDialogs(
             },
             onDismiss = onDismiss
         )
-        PlaybackDialog.SUBTITLE_TEXT_COLOR -> ColorSelectionDialog(
-            title = stringResource(R.string.sub_text_color),
-            colors = subtitleColors,
-            selectedColor = Color(style.textColor),
-            onColorSelected = { color ->
-                onUpdate { setSubtitleTextColor(color.toArgb()) }
-                onDismiss()
-            },
-            onDismiss = onDismiss
-        )
-        PlaybackDialog.SUBTITLE_BACKGROUND_COLOR -> ColorSelectionDialog(
-            title = stringResource(R.string.sub_bg_color),
-            colors = subtitleBackgroundColors,
-            selectedColor = Color(style.backgroundColor),
-            showTransparentOption = true,
-            onColorSelected = { color ->
-                onUpdate { setSubtitleBackgroundColor(color.toArgb()) }
-                onDismiss()
-            },
-            onDismiss = onDismiss
-        )
-        PlaybackDialog.SUBTITLE_OUTLINE_COLOR -> ColorSelectionDialog(
-            title = stringResource(R.string.sub_outline_color),
-            colors = subtitleOutlineColors,
-            selectedColor = Color(style.outlineColor),
-            onColorSelected = { color ->
-                onUpdate { setSubtitleOutlineColor(color.toArgb()) }
-                onDismiss()
-            },
+        PlaybackDialog.SUBTITLE_APPEARANCE -> SubtitleAppearanceDialog(
+            style = style,
+            onUpdate = onUpdate,
             onDismiss = onDismiss
         )
         PlaybackDialog.SUBTITLE_HDR_TEXT_COLOR -> ColorSelectionDialog(
             title = stringResource(R.string.sub_hdr_text_color),
-            colors = subtitleColors,
+            colors = SubtitleSettingsTextColors,
             selectedColor = Color(style.hdrTextColor),
             onColorSelected = { color ->
                 onUpdate { setSubtitleHdrTextColor(color.toArgb()) }

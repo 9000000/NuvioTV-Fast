@@ -7,7 +7,9 @@ import com.nuvio.tv.data.local.TraktAuthState
 import com.nuvio.tv.data.remote.api.TraktApi
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertFalse
@@ -27,12 +29,15 @@ class TraktAuthServiceTest {
         coEvery { authSessionNoticeDataStore.markTraktReconnectRequired() } returns Unit
         coEvery { traktApi.refreshToken(any()) } returns Response.error(400, "invalid_grant".toResponseBody())
 
-        val service = TraktAuthService(
-            context = mockk<Context>(relaxed = true),
-            traktApi = traktApi,
-            traktAuthDataStore = traktAuthDataStore,
-            authSessionNoticeDataStore = authSessionNoticeDataStore
+        val service = spyk(
+            TraktAuthService(
+                context = mockk<Context>(relaxed = true),
+                traktApi = traktApi,
+                traktAuthDataStore = traktAuthDataStore,
+                authSessionNoticeDataStore = authSessionNoticeDataStore
+            )
         )
+        every { service.hasRequiredCredentials() } returns true
 
         assertFalse(service.refreshTokenIfNeeded(force = true))
         assertFalse(service.refreshTokenIfNeeded(force = true))
@@ -42,13 +47,40 @@ class TraktAuthServiceTest {
         coVerify(exactly = 1) { traktAuthDataStore.clearAuth() }
     }
 
+    @Test
+    fun `refresh token server error keeps credentials and allows a later retry`() = runTest {
+        val traktApi = mockk<TraktApi>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val authSessionNoticeDataStore = mockk<AuthSessionNoticeDataStore>()
+        val authState = authenticatedState()
+
+        coEvery { traktAuthDataStore.getCurrentState() } returns authState
+        coEvery { traktApi.refreshToken(any()) } returns Response.error(503, "unavailable".toResponseBody())
+
+        val service = spyk(
+            TraktAuthService(
+                context = mockk<Context>(relaxed = true),
+                traktApi = traktApi,
+                traktAuthDataStore = traktAuthDataStore,
+                authSessionNoticeDataStore = authSessionNoticeDataStore
+            )
+        )
+        every { service.hasRequiredCredentials() } returns true
+
+        assertFalse(service.refreshTokenIfNeeded(force = true))
+        assertFalse(service.refreshTokenIfNeeded(force = true))
+
+        coVerify(exactly = 2) { traktApi.refreshToken(any()) }
+        coVerify(exactly = 0) { authSessionNoticeDataStore.markTraktReconnectRequired() }
+        coVerify(exactly = 0) { traktAuthDataStore.clearAuth() }
+    }
+
     private fun authenticatedState(): TraktAuthState {
         return TraktAuthState(
             accessToken = "access-token",
             refreshToken = "refresh-token",
-            tokenType = "bearer",
-            createdAt = 1L,
-            expiresIn = 3600
+            createdAt = 1000L,
+            expiresIn = 7200
         )
     }
 }

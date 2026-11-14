@@ -344,6 +344,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setExoChaptersEnabled(enabled)
     }
 
+    suspend fun setChapterTitleEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setChapterTitleEnabled(enabled)
+    }
+
     suspend fun setUseLibass(enabled: Boolean) {
         playerSettingsDataStore.setUseLibass(enabled)
     }
@@ -414,6 +418,30 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setSubtitleFont(font: String) {
         playerSettingsDataStore.setSubtitleFont(font)
+    }
+
+    suspend fun setSubtitleFontId(fontId: String) {
+        playerSettingsDataStore.setSubtitleFontId(fontId)
+    }
+
+    suspend fun setSubtitleBackgroundRadius(radius: Int) {
+        playerSettingsDataStore.setSubtitleBackgroundRadius(radius)
+    }
+
+    suspend fun setSubtitleShadowEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setSubtitleShadowEnabled(enabled)
+    }
+
+    suspend fun setSubtitleShadowOpacity(opacity: Int) {
+        playerSettingsDataStore.setSubtitleShadowOpacity(opacity)
+    }
+
+    suspend fun setSubtitleShadowSize(size: Int) {
+        playerSettingsDataStore.setSubtitleShadowSize(size)
+    }
+
+    suspend fun resetSubtitleAppearance() {
+        playerSettingsDataStore.resetSubtitleAppearance()
     }
 
     suspend fun setSubtitleHdrStyleEnabled(enabled: Boolean) {
@@ -628,6 +656,18 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamAutoPlayNextEpisodeFallbackEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStreamAutoPlayNextEpisodeFallbackEnabled(enabled)
+    }
+
+    suspend fun setStreamAutoPlayFallbackOnFailure(enabled: Boolean) {
+        playerSettingsDataStore.setStreamAutoPlayFallbackOnFailure(enabled)
+    }
+
+    suspend fun setStreamAutoPlayFallbackMaxSources(count: Int) {
+        playerSettingsDataStore.setStreamAutoPlayFallbackMaxSources(count)
+    }
+
+    suspend fun setStreamAutoPlayFallbackStartupTimeoutSeconds(seconds: Int) {
+        playerSettingsDataStore.setStreamAutoPlayFallbackStartupTimeoutSeconds(seconds)
     }
 
     suspend fun setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled: Boolean) {

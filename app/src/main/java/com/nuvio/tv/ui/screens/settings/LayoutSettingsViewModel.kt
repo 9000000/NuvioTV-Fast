@@ -21,6 +21,7 @@ import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.domain.model.CardDepthStyle
 import com.nuvio.tv.domain.model.CardDepthSurface
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
+import com.nuvio.tv.domain.model.ContinueWatchingClickAction
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
 import com.nuvio.tv.domain.model.DiscoverLocation
 import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
@@ -90,6 +91,7 @@ data class LayoutSettingsUiState(
     val showUnairedNextUp: Boolean = true,
     val continueWatchingEnabled: Boolean = true,
     val continueWatchingSortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
+    val continueWatchingClickAction: ContinueWatchingClickAction = ContinueWatchingClickAction.STREAM,
     val continueWatchingCardStyle: ContinueWatchingCardStyle = ContinueWatchingCardStyle.CARD,
     val customPosterUrlPattern: String = "",
     val customPosterEnabledScreens: Set<com.nuvio.tv.core.poster.CustomPosterScreen> =
@@ -155,6 +157,7 @@ sealed class LayoutSettingsEvent {
     data class SetShowUnairedNextUp(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetContinueWatchingEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetContinueWatchingSortMode(val mode: ContinueWatchingSortMode) : LayoutSettingsEvent()
+    data class SetContinueWatchingClickAction(val action: ContinueWatchingClickAction) : LayoutSettingsEvent()
     data class SetContinueWatchingCardStyle(val style: ContinueWatchingCardStyle) : LayoutSettingsEvent()
     data class SetAlwaysShowLandscapeClearlogo(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHeroDescriptionAutoScrollEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -421,6 +424,13 @@ class LayoutSettingsViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.continueWatchingClickAction
+                .distinctUntilChanged()
+                .collect { action ->
+                    updateUiStateIfChanged { it.copy(continueWatchingClickAction = action) }
+                }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.continueWatchingCardStyle
                 .distinctUntilChanged()
                 .collect { style ->
@@ -507,6 +517,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetShowUnairedNextUp -> setShowUnairedNextUp(event.enabled)
             is LayoutSettingsEvent.SetContinueWatchingEnabled -> setContinueWatchingEnabled(event.enabled)
             is LayoutSettingsEvent.SetContinueWatchingSortMode -> setContinueWatchingSortMode(event.mode)
+            is LayoutSettingsEvent.SetContinueWatchingClickAction -> setContinueWatchingClickAction(event.action)
             is LayoutSettingsEvent.SetContinueWatchingCardStyle -> setContinueWatchingCardStyle(event.style)
             is LayoutSettingsEvent.SetAlwaysShowLandscapeClearlogo -> setAlwaysShowLandscapeClearlogo(event.enabled)
             is LayoutSettingsEvent.SetHeroDescriptionAutoScrollEnabled -> setHeroDescriptionAutoScrollEnabled(event.enabled)
@@ -931,6 +942,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.continueWatchingSortMode == mode) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setContinueWatchingSortMode(mode)
+        }
+    }
+
+    private fun setContinueWatchingClickAction(action: ContinueWatchingClickAction) {
+        if (_uiState.value.continueWatchingClickAction == action) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setContinueWatchingClickAction(action)
         }
     }
 

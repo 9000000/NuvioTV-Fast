@@ -222,6 +222,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 val LocalSidebarExpanded = compositionLocalOf { false }
+val LocalRootContentInset = compositionLocalOf { 0.dp }
 val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 val LocalOpenSidebar = compositionLocalOf<(() -> Unit)?> { null }
 val LocalRequestUpdateBannerFocus = compositionLocalOf<(() -> Boolean)?> { null }
@@ -403,7 +404,11 @@ open class MainActivity : ComponentActivity() {
         }
 
         // Extract extras set by the Continue Watching launcher channel preview programs.
-        val launchContentId = intent?.getStringExtra("contentId")
+        val isFreshLaunch = isFreshLaunchIntent(
+            hasSavedInstanceState = savedInstanceState != null,
+            intentFlags = intent?.flags ?: 0
+        )
+        val launchContentId = intent?.getStringExtra("contentId")?.takeIf { isFreshLaunch }
         val launchContentType = intent?.getStringExtra("contentType")
         val launchMode = intent?.getStringExtra("launchMode")
         val launchVideoId = intent?.getStringExtra("videoId")
@@ -1759,7 +1764,8 @@ private fun ModernSidebarScaffold(
                 NuvioNavHost(
                     navController = navController,
                     startDestination = startDestination,
-                    hideBuiltInHeaders = hideBuiltInHeaders
+                    hideBuiltInHeaders = hideBuiltInHeaders,
+                    discoverIsRoot = Screen.Discover.route in rootRoutes
                 )
             }
         }

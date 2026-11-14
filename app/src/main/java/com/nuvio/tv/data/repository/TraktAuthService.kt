@@ -35,7 +35,7 @@ sealed interface TraktTokenPollResult {
 }
 
 @Singleton
-class TraktAuthService @Inject constructor(
+open class TraktAuthService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val traktApi: TraktApi,
     private val traktAuthDataStore: TraktAuthDataStore,
@@ -117,7 +117,7 @@ class TraktAuthService @Inject constructor(
         return BuildConfig.TRAKT_REDIRECT_URI.ifBlank { "urn:ietf:wg:oauth:2.0:oob" }
     }
 
-    fun hasRequiredCredentials(): Boolean {
+    open fun hasRequiredCredentials(): Boolean {
         return BuildConfig.TRAKT_CLIENT_ID.isNotBlank() && BuildConfig.TRAKT_CLIENT_SECRET.isNotBlank()
     }
 
@@ -287,9 +287,12 @@ class TraktAuthService @Inject constructor(
 
             val tokenBody = response.body()
             if (!response.isSuccessful || tokenBody == null) {
-                trace("refreshTokenIfNeeded: failed code=${response.code()}")
-                if (response.code() == 400 || response.code() == 401 || response.code() == 403) {
-                    invalidateCredentials(response.code())
+                val code = response.code()
+                if (code == 400 || code == 401 || code == 403) {
+                    Log.w("TraktAuthService", "Token refresh rejected with HTTP $code; clearing credentials")
+                    invalidateCredentials(code)
+                } else {
+                    Log.w("TraktAuthService", "Token refresh failed with HTTP $code; keeping credentials")
                 }
                 return@withLock false
             }
