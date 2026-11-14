@@ -2,6 +2,7 @@ package com.nuvio.tv
 
 import android.app.ActivityManager
 import android.app.Application
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.os.Build
 import android.os.StrictMode
@@ -97,6 +98,25 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         LocaleCache.localeTag = tag ?: ""
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        try {
+            val memoryCache = SingletonImageLoader.get(this).memoryCache ?: return
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+                memoryCache.clear()
+            } else if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+                memoryCache.trimToSize(memoryCache.size / 2)
+            }
+        } catch (_: Exception) { }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        try {
+            SingletonImageLoader.get(this).memoryCache?.clear()
+        } catch (_: Exception) { }
+    }
+
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         val imageOkHttpClient by lazy {
@@ -186,9 +206,9 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
             }
             .crossfade(false)
             .precision(coil3.size.Precision.INEXACT)
-            .allowHardware(Build.VERSION.SDK_INT >= 28)
+            .allowHardware(false)
             .allowRgb565(imagePerformancePreferences.rgb565Enabled)
-            .bitmapFactoryMaxParallelism(4)
+            .bitmapFactoryMaxParallelism(3)
             .build()
     }
 }

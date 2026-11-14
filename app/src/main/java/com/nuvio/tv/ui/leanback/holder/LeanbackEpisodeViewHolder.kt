@@ -213,7 +213,7 @@ class LeanbackEpisodeViewHolder(
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
-                .allowHardware(hasCachedColor && !shouldBlurThumbnail)
+                .allowHardware(false)
                 .crossfade(false)
                 .apply {
                     if (shouldBlurThumbnail) {
@@ -279,6 +279,7 @@ class LeanbackEpisodeViewHolder(
         super.unbind()
         imageDisposable?.dispose()
         imageDisposable = null
+        thumbnailImage.setImageDrawable(null)
     }
 
     companion object {

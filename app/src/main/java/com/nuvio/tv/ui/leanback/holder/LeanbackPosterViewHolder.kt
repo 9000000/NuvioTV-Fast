@@ -166,7 +166,7 @@ class LeanbackPosterViewHolder(
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
-                .allowHardware(hasCachedColor)
+                .allowHardware(false)
                 .crossfade(false)
                 .target(
                     object : Target {
@@ -225,6 +225,7 @@ class LeanbackPosterViewHolder(
         super.unbind()
         imageDisposable?.dispose()
         imageDisposable = null
+        posterImage.setImageDrawable(null)
     }
 
     companion object {

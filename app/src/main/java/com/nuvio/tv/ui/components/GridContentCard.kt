@@ -65,6 +65,7 @@ import com.nuvio.tv.ui.util.rememberLongPressKeyTracker
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -292,10 +293,13 @@ fun GridContentCard(
                                     onDrawBehind { drawRect(gradient) }
                                 }
                         )
-                        val logoRequest = remember(item.logo) {
+                        val logoRequestWidthPx = remember(requestWidthPx) { (requestWidthPx * 0.62f).roundToInt().coerceAtLeast(1) }
+                        val logoRequestHeightPx = remember(requestHeightPx) { (requestHeightPx * 0.34f).roundToInt().coerceAtLeast(1) }
+                        val logoRequest = remember(item.logo, logoRequestWidthPx, logoRequestHeightPx) {
                             ImageRequest.Builder(context)
                                 .data(item.logo)
                                 .crossfade(true)
+                                .size(width = logoRequestWidthPx, height = logoRequestHeightPx)
                                 .build()
                         }
                         AsyncImage(

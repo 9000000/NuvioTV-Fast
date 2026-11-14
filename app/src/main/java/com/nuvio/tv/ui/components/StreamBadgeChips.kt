@@ -82,7 +82,7 @@ private fun getBadgeImageLoader(context: android.content.Context): ImageLoader {
         }
         .precision(Precision.INEXACT)
         .crossfade(false)
-        .allowHardware(true)
+        .allowHardware(false)
         .allowRgb565(true)
         .build()
     badgeImageLoader = loader

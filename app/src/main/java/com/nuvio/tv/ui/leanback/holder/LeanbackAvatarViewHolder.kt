@@ -113,7 +113,7 @@ class LeanbackAvatarViewHolder(
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(diameter.coerceAtLeast(1), diameter.coerceAtLeast(1))
-                .allowHardware(hasCachedColor)
+                .allowHardware(false)
                 .crossfade(false)
                 .target(
                     object : Target {
@@ -169,6 +169,7 @@ class LeanbackAvatarViewHolder(
         super.unbind()
         imageDisposable?.dispose()
         imageDisposable = null
+        avatarImage.setImageDrawable(null)
     }
 
     companion object {
