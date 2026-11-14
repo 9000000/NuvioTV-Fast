@@ -196,7 +196,6 @@ class PlayStoreGlowView(context: Context) : View(context) {
     }
 
     init {
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
         updatePaints()
     }
 
@@ -208,7 +207,13 @@ class PlayStoreGlowView(context: Context) : View(context) {
             corePaint.maskFilter = null
             midPaint.maskFilter = null
             auraPaint.maskFilter = null
+            if (layerType != LAYER_TYPE_NONE) {
+                setLayerType(LAYER_TYPE_NONE, null)
+            }
             return
+        }
+        if (layerType != LAYER_TYPE_SOFTWARE) {
+            setLayerType(LAYER_TYPE_SOFTWARE, null)
         }
         val rCore = (glowSpreadPx * 0.15f).coerceAtLeast(1f)
         val rMid = (glowSpreadPx * 0.35f).coerceAtLeast(1f)
@@ -1383,7 +1388,7 @@ class LeanbackCardViewHolder(
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
-                .allowHardware(hasCachedColor)
+                .allowHardware(false)
                 .crossfade(false)
                 .target(
                     object : Target {
@@ -1460,6 +1465,7 @@ class LeanbackCardViewHolder(
         root.scaleY = 1.0f
         imageDisposable?.dispose()
         imageDisposable = null
+        posterImage.setImageDrawable(null)
         cardContainer.foreground = null
         // Phục hồi lại background placeholder tái sử dụng khi view được recycle
         placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx

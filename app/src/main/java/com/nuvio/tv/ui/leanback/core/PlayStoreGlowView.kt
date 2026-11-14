@@ -91,7 +91,6 @@ class PlayStoreGlowView @JvmOverloads constructor(
     }
 
     init {
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
         updatePaints()
     }
 
@@ -103,7 +102,13 @@ class PlayStoreGlowView @JvmOverloads constructor(
             corePaint.maskFilter = null
             midPaint.maskFilter = null
             auraPaint.maskFilter = null
+            if (layerType != LAYER_TYPE_NONE) {
+                setLayerType(LAYER_TYPE_NONE, null)
+            }
             return
+        }
+        if (layerType != LAYER_TYPE_SOFTWARE) {
+            setLayerType(LAYER_TYPE_SOFTWARE, null)
         }
         val rCore = (glowSpreadPx * 0.15f).coerceAtLeast(1f)
         val rMid = (glowSpreadPx * 0.35f).coerceAtLeast(1f)
