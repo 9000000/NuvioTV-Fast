@@ -211,7 +211,8 @@ fun LeanbackNativeRow(
                 )
                 setRowHeight(totalRowHeightPx)
                 setNumRows(1)
-                windowAlignment = BaseGridView.WINDOW_ALIGN_LOW_EDGE
+                focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ALIGNED
+                windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
                 windowAlignmentOffset = startPaddingPx
                 windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
                 itemAlignmentOffset = 0
@@ -273,6 +274,8 @@ fun LeanbackNativeRow(
                 gridView.layoutParams = lp
             }
             gridView.setRowHeight(totalRowHeightPx)
+            gridView.focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ALIGNED
+            gridView.windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
             gridView.windowAlignmentOffset = startPaddingPx
             gridView.setItemSpacing(spacingPx)
             if (gridView.paddingLeft != startPaddingPx ||

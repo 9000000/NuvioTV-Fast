@@ -282,10 +282,10 @@ class PlayStoreGlowView(context: Context) : View(context) {
 /**
  * Khung Focus Ring nổi độc lập trên cùng của toàn bộ hàng poster (One focus ring per row).
  * - Luôn nổi ở trên cùng (elevation cao, nằm ngoài các card con).
- * - Khi chuyển focus giữa các card: Khung KHÔNG bị biến mất rồi hiện lại, mà thực hiện hoạt họa
- *   lướt trôi (glide animation 180ms) từ tọa độ card cũ sang card mới.
- * - Hiển thị viền vàng hổ phách (#F59E0B) cho poster portrait (như Ảnh 1).
- * - Hiển thị viền trắng (#FFFFFF) + quầng sáng phát quang Neon Glow (#FFB300) cho thẻ landscape (như Ảnh 2).
+ * - Cố định giữ nguyên 1 chỗ bên trái màn hình (căn theo startPadding).
+ * - Khi chuyển focus giữa các card: Khung viền sáng đứng yên bên trái, danh sách poster tự cuộn
+ *   đưa card đang chọn vào khớp ngay dưới khung viền.
+ * - Hiển thị viền vàng hổ phách (#F59E0B) hoặc quầng sáng phát quang Neon Glow theo màu thẻ.
  */
 class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     var cornerRadiusPx: Float = 0f
@@ -423,19 +423,6 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
 
         val grid = (parent as? ModernRowContainerLayout)?.gridView
         val minX = (grid?.paddingLeft ?: 0).toFloat() - glowMarginPx
-        val maxX = (parent.width - (grid?.paddingRight ?: 0) - target.width).toFloat() - glowMarginPx
-
-        val rawTargetX = if (success) {
-            rect.left.toFloat() - glowMarginPx
-        } else {
-            val parentLoc = IntArray(2)
-            parent.getLocationInWindow(parentLoc)
-            val targetLoc = IntArray(2)
-            target.getLocationInWindow(targetLoc)
-            (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
-        }
-
-        val targetX = if (maxX > minX) rawTargetX.coerceIn(minX, maxX) else rawTargetX
 
         val rawTargetY = if (success) {
             rect.top.toFloat() - glowMarginPx
@@ -467,115 +454,34 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             layoutParams = lp
         }
 
-        // If ring is not fully visible or animated is false, snap directly to coordinates and fade in
-        if (visibility != VISIBLE || alpha < 0.8f || !animated) {
-            translationX = targetX
-            translationY = targetY
-            if (visibility != VISIBLE || alpha <= 0f) {
-                alpha = 0f
-                visibility = VISIBLE
-                animate().alpha(1f).setDuration(120).start()
-            } else {
-                alpha = 1f
-                visibility = VISIBLE
-            }
-            return
-        }
+        // Cố định khung viền sáng tại đúng 1 chỗ bên trái (minX), không di chuyển theo trục X
+        translationX = minX
+        translationY = targetY
 
-        // Lướt trôi mượt mà từ vị trí hiện tại sang vị trí mới (180ms - chuẩn NuvioTV-Fork ROW_GLIDE_MS)
-        val startX = translationX
-        val startY = translationY
-        glideAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 180
-            interpolator = DecelerateInterpolator(1.6f)
-            addUpdateListener { anim ->
-                val frac = anim.animatedFraction
-                translationX = startX + (targetX - startX) * frac
-                translationY = startY + (targetY - startY) * frac
-            }
-            start()
+        if (visibility != VISIBLE || alpha <= 0f) {
+            alpha = 0f
+            visibility = VISIBLE
+            animate().alpha(1f).setDuration(120).start()
+        } else {
+            alpha = 1f
+            visibility = VISIBLE
         }
     }
 
     fun onParentScrolled(dx: Int) {
-        val target = currentTargetView ?: return
         if (visibility != VISIBLE) return
         val parent = parent as? ViewGroup ?: return
         val grid = (parent as? ModernRowContainerLayout)?.gridView
         val minX = (grid?.paddingLeft ?: 0).toFloat() - glowMarginPx
-        val maxX = (parent.width - (grid?.paddingRight ?: 0) - target.width).toFloat() - glowMarginPx
-
-        if (maxX <= minX) return
-
-        val rect = Rect(0, 0, target.width, target.height)
-        val success = try {
-            parent.offsetDescendantRectToMyCoords(target, rect)
-            true
-        } catch (_: Exception) {
-            false
-        }
-
-        val currentCardX = if (success) {
-            rect.left.toFloat() - glowMarginPx
-        } else {
-            val parentLoc = IntArray(2)
-            parent.getLocationInWindow(parentLoc)
-            val targetLoc = IntArray(2)
-            target.getLocationInWindow(targetLoc)
-            (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
-        }
-
-        // Khi đi đến đầu hàng (<= minX + 2px) hoặc cuối hàng (>= maxX - 2px):
-        // Cố định viền tuyệt đối tại biên (minX hoặc maxX) để poster tự cuộn tới khớp vào mà KHÔNG bị giật!
-        if (currentCardX <= minX + 2f) {
-            glideAnimator?.cancel()
-            translationX = minX
-            return
-        }
-        if (currentCardX >= maxX - 2f) {
-            glideAnimator?.cancel()
-            translationX = maxX
-            return
-        }
-
-        // Khi ở giữa màn hình và không có animation: neo theo thẻ
-        if (glideAnimator?.isRunning != true) {
-            translationX = currentCardX.coerceIn(minX, maxX)
-        }
+        translationX = minX
     }
 
     fun onScrollSettled() {
-        val target = currentTargetView ?: return
         if (visibility != VISIBLE) return
         val parent = parent as? ViewGroup ?: return
         val grid = (parent as? ModernRowContainerLayout)?.gridView
         val minX = (grid?.paddingLeft ?: 0).toFloat() - glowMarginPx
-        val maxX = (parent.width - (grid?.paddingRight ?: 0) - target.width).toFloat() - glowMarginPx
-
-        if (maxX <= minX) return
-
-        val rect = Rect(0, 0, target.width, target.height)
-        val success = try {
-            parent.offsetDescendantRectToMyCoords(target, rect)
-            true
-        } catch (_: Exception) {
-            false
-        }
-
-        val currentCardX = if (success) {
-            rect.left.toFloat() - glowMarginPx
-        } else {
-            val parentLoc = IntArray(2)
-            parent.getLocationInWindow(parentLoc)
-            val targetLoc = IntArray(2)
-            target.getLocationInWindow(targetLoc)
-            (targetLoc[0] - parentLoc[0]).toFloat() - glowMarginPx
-        }
-
-        val settledX = currentCardX.coerceIn(minX, maxX)
-        if (Math.abs(translationX - settledX) > 1.5f) {
-            animate().translationX(settledX).setDuration(80).start()
-        }
+        translationX = minX
     }
 
     fun hideRing(immediate: Boolean = false) {
@@ -1893,8 +1799,8 @@ fun LeanbackModernRow(
                 )
                 setRowHeight(totalRowHeightPx)
                 setNumRows(1)
-                focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ITEM
-                windowAlignment = BaseGridView.WINDOW_ALIGN_BOTH_EDGE
+                focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ALIGNED
+                windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
                 windowAlignmentOffset = startPaddingPx
                 windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
                 itemAlignmentOffset = 0
@@ -1954,8 +1860,8 @@ fun LeanbackModernRow(
             }
             focusRing.cornerRadiusPx = cornerRadiusPx
             gridView.setRowHeight(totalRowHeightPx)
-            gridView.focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ITEM
-            gridView.windowAlignment = BaseGridView.WINDOW_ALIGN_BOTH_EDGE
+            gridView.focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ALIGNED
+            gridView.windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
             gridView.windowAlignmentOffset = startPaddingPx
             gridView.windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
             gridView.itemAlignmentOffset = 0
