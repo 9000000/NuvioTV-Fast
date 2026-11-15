@@ -227,7 +227,6 @@ private fun LiveTvGuideContent(
     val quickChannelListState = rememberLazyListState()
 
     val channelListState = rememberLazyListState()
-    val drawerListState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
 
     val coroutineScope = rememberCoroutineScope()
@@ -330,19 +329,6 @@ private fun LiveTvGuideContent(
         }
     }
 
-    // Keep category drawer scrolled near active index when navigating UP/DOWN
-    LaunchedEffect(drawerIndex) {
-        if (groups.isNotEmpty()) {
-            if (drawerIndex == 0) {
-                drawerListState.animateScrollToItem(0, scrollOffset = 0)
-            } else if (drawerIndex == groups.lastIndex) {
-                drawerListState.animateScrollToItem(groups.lastIndex, scrollOffset = 0)
-            } else {
-                drawerListState.animateScrollToItem((drawerIndex - 2).coerceAtLeast(0))
-            }
-        }
-    }
-
     // Timeline 2-hour window aligned to half-hour boundary with horizontal scrolling support
     val halfHourMs = 30 * 60 * 1000L
     var windowOffsetMs by remember { mutableLongStateOf(0L) }
@@ -396,6 +382,7 @@ private fun LiveTvGuideContent(
         if (targetCh != null && settings.showPreview && playback.channelKey != targetCh.key) {
             viewModel.play(targetCh, targetGroupId)
         }
+        runCatching { focusRequester.requestFocus() }
     }
 
     fun onOkPressed() {
@@ -783,17 +770,23 @@ private fun LiveTvGuideContent(
                 when (focusArea) {
                     GuideFocusArea.DRAWER -> when {
                         e.key == Key.DirectionUp -> {
-                            drawerIndex = (drawerIndex - 1).coerceAtLeast(0)
-                            selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
-                            val targetChannels = getChannelsForGroup(selectedGroupId)
-                            channelIndex = findTargetChannelIndex(targetChannels)
+                            lastDpadTime = System.currentTimeMillis()
+                            if (drawerIndex > 0) {
+                                drawerIndex--
+                                selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
+                                val targetChannels = getChannelsForGroup(selectedGroupId)
+                                channelIndex = findTargetChannelIndex(targetChannels)
+                            }
                             true
                         }
                         e.key == Key.DirectionDown -> {
-                            drawerIndex = (drawerIndex + 1).coerceAtMost(groups.lastIndex)
-                            selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
-                            val targetChannels = getChannelsForGroup(selectedGroupId)
-                            channelIndex = findTargetChannelIndex(targetChannels)
+                            lastDpadTime = System.currentTimeMillis()
+                            if (drawerIndex < groups.lastIndex) {
+                                drawerIndex++
+                                selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
+                                val targetChannels = getChannelsForGroup(selectedGroupId)
+                                channelIndex = findTargetChannelIndex(targetChannels)
+                            }
                             true
                         }
                         e.key == Key.DirectionRight -> {
@@ -978,12 +971,21 @@ private fun LiveTvGuideContent(
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Slide-out Categories Drawer
                 if (focusArea == GuideFocusArea.DRAWER) {
-                    CategoryDrawer(
+                    LeanbackCategoryDrawer(
                         groups = groups,
                         drawerIndex = drawerIndex,
-                        drawerListState = drawerListState,
+                        selectedGroupId = selectedGroupId,
+                        onCategoryFocused = { idx, grp ->
+                            drawerIndex = idx
+                            selectedGroupId = grp.id
+                            val targetChannels = getChannelsForGroup(grp.id)
+                            channelIndex = findTargetChannelIndex(targetChannels)
+                        },
                         onSelectGroup = { idx ->
                             selectGroupAndFocusChannels(idx)
+                        },
+                        onNavigateRight = {
+                            selectGroupAndFocusChannels(drawerIndex)
                         }
                     )
                 }
@@ -1276,66 +1278,6 @@ private fun TopGuideHeader(
     }
 }
 
-@Composable
-private fun CategoryDrawer(
-    groups: List<ChannelGroup>,
-    drawerIndex: Int,
-    drawerListState: LazyListState,
-    onSelectGroup: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .width(240.dp)
-            .fillMaxHeight()
-            .background(Color(0xFF141418))
-            .padding(12.dp)
-    ) {
-        LiveText(
-            text = "DANH MỤC",
-            size = 13.sp,
-            weight = FontWeight.Bold,
-            color = Color.LightGray,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-        )
-        LazyColumn(
-            state = drawerListState,
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            itemsIndexed(groups) { idx, grp ->
-                val isFocused = idx == drawerIndex
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isFocused) NuvioTheme.colors.Primary else Color.Transparent)
-                        .clickable { onSelectGroup(idx) }
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        LiveText(
-                            text = grp.name,
-                            size = 14.sp,
-                            weight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isFocused) NuvioTheme.colors.OnPrimary else Color.White
-                        )
-                        LiveText(
-                            text = "${grp.channelCount}",
-                            size = 12.sp,
-                            color = if (isFocused) NuvioTheme.colors.OnPrimary.copy(alpha = 0.8f) else Color.Gray
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun ChannelRowItem(

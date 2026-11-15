@@ -6,6 +6,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.holder.LeanbackAvatarViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
+import com.nuvio.tv.ui.leanback.holder.LeanbackChannelViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackEpisodeViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackPosterViewHolder
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
@@ -267,6 +268,7 @@ class LeanbackUniversalAdapter(
             }
             is LeanbackCardItem.Episode -> LeanbackPoolManager.VIEW_TYPE_EPISODE
             is LeanbackCardItem.Avatar -> LeanbackPoolManager.VIEW_TYPE_AVATAR
+            is LeanbackCardItem.Channel -> LeanbackPoolManager.VIEW_TYPE_CHANNEL
         }
     }
 
@@ -279,6 +281,18 @@ class LeanbackUniversalAdapter(
         val dynamicBorderWidthPx = (2f * dp).toInt().coerceAtLeast(2)
 
         return when (viewType) {
+            LeanbackPoolManager.VIEW_TYPE_CHANNEL -> {
+                LeanbackChannelViewHolder.create(
+                    parent = parentLayout,
+                    cardWidthPx = cardWidthPx,
+                    cardHeightPx = cardHeightPx,
+                    cornerRadiusPx = cornerRadiusPx,
+                    borderWidthPx = dynamicBorderWidthPx,
+                    glowMarginPx = dynamicGlowMarginPx,
+                    showLabels = showLabels,
+                    adapter = this
+                )
+            }
             LeanbackPoolManager.VIEW_TYPE_EPISODE -> {
                 LeanbackEpisodeViewHolder.create(
                     parent = parentLayout,

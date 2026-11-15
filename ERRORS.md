@@ -151,4 +151,27 @@
 
 ---
 
+## [2026-11-15 16:15] - Mất Phản Hồi D-Pad Khi Vào Live TV Do Chặn Key Phía Compose & Focus Conflict
+
+- **Type**: Agent
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideScreen.kt:736` & `app/src/main/java/com/nuvio/tv/features/livetv/LeanbackCategoryDrawer.kt:126`
+- **Agent**: mon
+- **Root Cause**: Khi chuyển đổi `CategoryDrawer` sang Leanback Native, root `Box` của Compose vẫn chiếm focus qua `focusRequester.requestFocus()` trong khi `onPreviewKeyEvent` lại đặt `if (focusArea == GuideFocusArea.DRAWER) return@onPreviewKeyEvent false` và xóa nhánh xử lý phím của Drawer. Do Compose root Box đang giữ focus hệ thống nhưng từ chối xử lý sự kiện phím, các lệnh phím D-Pad từ điều khiển từ xa (Lên, Xuống, Trái, Phải, OK) đều bị bỏ qua khiến toàn bộ màn hình bị đơ cứng.
+- **Error Message**: 
+  ```
+  User reported: lỗi không thao tác được gì hết
+  ```
+- **Fix Applied**: 
+  1. Khôi phục hoàn toàn bộ lắng nghe và điều phối phím D-Pad trong Compose root Box cho `GuideFocusArea.DRAWER`: Lên/Xuống cập nhật `drawerIndex`, Phải/OK gọi `selectGroupAndFocusChannels(drawerIndex)`.
+  2. Đồng bộ hóa mượt mà: `LeanbackCategoryDrawer` lắng nghe `drawerIndex` và gọi `grid.setSelectedPositionSmooth(drawerIndex)` để cuộn mượt 60 FPS mà không can thiệp hay cướp quyền focus của Compose.
+  3. Đặt `isFocusable = false` và `descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS` trên `InteropVerticalGridView` trong drawer để triệt tiêu hoàn toàn xung đột focus giữa Android View và Jetpack Compose.
+- **Prevention**: Khi tích hợp View Interop (Compose + AndroidView), phải xác định rõ ràng thực thể nào là Single Source of Truth làm chủ sự kiện phím; không bao giờ trả về `return false` ở tầng cha nếu tầng con chưa được trao quyền focus hệ thống một cách chủ động.
+- **Status**: Fixed
+
+---
+
+
+---
+
 

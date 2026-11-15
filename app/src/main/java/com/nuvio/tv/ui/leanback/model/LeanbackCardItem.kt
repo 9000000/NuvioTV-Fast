@@ -58,5 +58,17 @@ sealed interface LeanbackCardItem {
         val subtitle: String? = null,
         override val payload: Any? = null
     ) : LeanbackCardItem
+
+    /**
+     * Live TV Channel card with logo, channel name bar, favorite star, and launching indicator.
+     */
+    data class Channel(
+        override val key: String,
+        override val title: String,
+        override val imageUrl: String?,
+        val isFavorite: Boolean = false,
+        val isLaunching: Boolean = false,
+        override val payload: Any? = null
+    ) : LeanbackCardItem
 }
 
