@@ -299,8 +299,8 @@ private fun LiveTvGuideContent(
     }
 
     // Background pre-resolve of focused channel to achieve 0ms instant playback when user presses OK
-    LaunchedEffect(channelIndex, channels, focusArea) {
-        if (focusArea == GuideFocusArea.CHANNELS && channels.isNotEmpty()) {
+    LaunchedEffect(channelIndex, channels, focusArea, showQuickChannels) {
+        if ((focusArea == GuideFocusArea.CHANNELS || showQuickChannels) && channels.isNotEmpty()) {
             val ch = channels.getOrNull(channelIndex) ?: return@LaunchedEffect
             delay(220)
             withContext(Dispatchers.IO) {
@@ -476,6 +476,8 @@ private fun LiveTvGuideContent(
                         e.key == Key.Back -> {
                             if (showQuickChannels) {
                                 showQuickChannels = false
+                                val playingIdx = channels.indexOfFirst { it.key == playback.channelKey }
+                                if (playingIdx >= 0) channelIndex = playingIdx
                                 true
                             } else {
                                 isFullscreen = false
@@ -487,7 +489,6 @@ private fun LiveTvGuideContent(
                             if (showQuickChannels) {
                                 if (channelIndex > 0) {
                                     channelIndex--
-                                    channels.getOrNull(channelIndex)?.let { viewModel.play(it, selectedGroupId) }
                                 }
                             } else {
                                 if (channels.isNotEmpty()) {
@@ -502,7 +503,6 @@ private fun LiveTvGuideContent(
                             if (showQuickChannels) {
                                 if (channelIndex < channels.lastIndex) {
                                     channelIndex++
-                                    channels.getOrNull(channelIndex)?.let { viewModel.play(it, selectedGroupId) }
                                 }
                             } else {
                                 if (channels.isNotEmpty()) {
@@ -515,6 +515,8 @@ private fun LiveTvGuideContent(
                         }
                         e.key == Key.DirectionLeft -> {
                             if (!showQuickChannels) {
+                                val playingIdx = channels.indexOfFirst { it.key == playback.channelKey }
+                                if (playingIdx >= 0) channelIndex = playingIdx
                                 showQuickChannels = true
                                 showOsd = false
                             }
@@ -523,6 +525,8 @@ private fun LiveTvGuideContent(
                         e.key == Key.DirectionRight -> {
                             if (showQuickChannels) {
                                 showQuickChannels = false
+                                val playingIdx = channels.indexOfFirst { it.key == playback.channelKey }
+                                if (playingIdx >= 0) channelIndex = playingIdx
                             } else {
                                 showOsd = !showOsd
                             }
@@ -530,6 +534,11 @@ private fun LiveTvGuideContent(
                         }
                         isOk -> {
                             if (showQuickChannels) {
+                                channels.getOrNull(channelIndex)?.let { ch ->
+                                    if (ch.key != playback.channelKey) {
+                                        viewModel.play(ch, selectedGroupId)
+                                    }
+                                }
                                 showQuickChannels = false
                             } else {
                                 showOsd = !showOsd
