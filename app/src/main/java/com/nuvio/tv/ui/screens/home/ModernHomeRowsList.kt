@@ -390,6 +390,27 @@ internal fun ModernHomeRowsList(
         }
     }
 
+    var wasSidebarExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(isSidebarExpanded) {
+        if (wasSidebarExpanded && !isSidebarExpanded) {
+            val targetKey = effectiveActiveRowKey()
+            if (targetKey != null) {
+                val grid = rowGrids[targetKey]
+                val savedIndex = (focusedItemByRowMap[targetKey] ?: 0)
+                if (grid != null && grid.isAttachedToWindow) {
+                    grid.setSelectedPosition(savedIndex)
+                    grid.requestFocus()
+                    (grid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(targetPos = savedIndex, animated = false)
+                } else {
+                    localPendingFocusRowKey = targetKey
+                    localPendingFocusIndex = savedIndex
+                    localPendingFocusNonce++
+                }
+            }
+        }
+        wasSidebarExpanded = isSidebarExpanded
+    }
+
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
 
     // Only run the shared shimmer while a row on screen actually draws it: rememberInfiniteTransition
@@ -482,9 +503,11 @@ internal fun ModernHomeRowsList(
                 key = { _, row -> row.key },
                 contentType = { _, row -> row.apiType ?: "modern_home_row" }
             ) { rowIndex, row ->
-                val onNavigateLeftOnFirstItem = remember(openSidebar) {
+                val onNavigateLeftOnFirstItem = remember(openSidebar, row.key) {
                     {
                         onUserNavigated()
+                        navTargetRowKey.set(row.key)
+                        currentRowKeyTracker.set(row.key)
                         if (openSidebar != null) {
                             openSidebar()
                             true
@@ -774,11 +797,11 @@ internal fun ModernHomeRowsList(
                         }
                     }
                 }
-                val isActiveRowLambda = remember(row.key, isSidebarExpanded) {
+                val isActiveRowLambda = remember(row.key) {
                     // Uses the same source of truth as the focus handoff, so the row we just
                     // left stops being treated as active the moment the key handler decides
-                    // to move. When sidebar is open, no home rows can take focus.
-                    { !isSidebarExpandedState.value && row.key == effectiveActiveRowKey() }
+                    // to move.
+                    { row.key == effectiveActiveRowKey() }
                 }
                 val stableOnCatalogSelectionFocused = remember {
                     { selection: FocusedCatalogSelection ->

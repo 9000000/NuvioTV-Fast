@@ -590,7 +590,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     private var isNavigatingToSidebar: Boolean = false
 
-    fun mayTakeFocus(): Boolean = !isNavigatingToSidebar && (hasFocus() || canTakeFocus?.invoke() != false)
+    fun mayTakeFocus(): Boolean = hasFocus() || canTakeFocus?.invoke() != false
 
     val hasPendingHorizontalNavigation: Boolean
         get() = isHoldingHorizontalKey ||
@@ -788,9 +788,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         get() = isComputingLayout || isInLayout || !isAttachedToWindow
 
     override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
-        if (!mayTakeFocus()) return false
         isNavigatingToSidebar = false
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        if (!mayTakeFocus()) return false
         if (isBusyLayout) {
             post { if (mayTakeFocus()) requestFocus(direction, previouslyFocusedRect) }
             return false
@@ -945,7 +945,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     isHoldingHorizontalKey = false
-                    if (isNavigatingToSidebar || canTakeFocus?.invoke() == false) {
+                    if (isNavigatingToSidebar) {
+                        isNavigatingToSidebar = false
+                        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                         return true
                     }
                     val total = rowAdapter?.itemCount ?: 0
