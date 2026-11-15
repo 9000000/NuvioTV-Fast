@@ -18,6 +18,7 @@ object LiveTvStorage {
     private const val KEY_NAV_ENABLED = "nav_enabled"
     private const val KEY_STALKER_SETTINGS = "stalker_settings"
     private const val KEY_XTREAM_SETTINGS = "xtream_settings"
+    private const val KEY_LIVETV_SETTINGS = "livetv_settings"
     private const val KEY_LAST_REFRESH_TIME = "last_channels_refresh_time"
     private const val KEY_CACHE_CONFIG_SIGNATURE = "cache_config_signature"
 
@@ -110,6 +111,16 @@ object LiveTvStorage {
     }
     fun saveXtreamSettings(settings: LiveTvXtreamSettings) {
         if (isReady) prefs.edit().putString(KEY_XTREAM_SETTINGS, gson.toJson(settings)).apply()
+    }
+
+    fun loadLiveTvSettings(): LiveTvSettings {
+        if (!isReady) return LiveTvSettings()
+        val json = prefs.getString(KEY_LIVETV_SETTINGS, null) ?: return LiveTvSettings()
+        return runCatching { gson.fromJson(json, LiveTvSettings::class.java) }.getOrDefault(LiveTvSettings())
+    }
+
+    fun saveLiveTvSettings(settings: LiveTvSettings) {
+        if (isReady) prefs.edit().putString(KEY_LIVETV_SETTINGS, gson.toJson(settings)).apply()
     }
 
     fun loadLastRefreshTime(): Long =

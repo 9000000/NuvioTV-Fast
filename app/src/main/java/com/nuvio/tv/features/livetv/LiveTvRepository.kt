@@ -128,6 +128,7 @@ object LiveTvRepository {
         val savedFilterType = LiveTvStorage.loadLastWatchedFilterType()
         val stalker = LiveTvStorage.loadStalkerSettings()
         val xtream = LiveTvStorage.loadXtreamSettings()
+        val liveSettings = LiveTvStorage.loadLiveTvSettings()
         val navEnabled = LiveTvStorage.loadNavigationEnabled() ?: true
         _isNavigationEnabled.value = navEnabled
 
@@ -147,6 +148,7 @@ object LiveTvRepository {
             recentChannelIds = recentIds,
             isNavigationEnabled = navEnabled,
             isLoading = true,
+            settings = liveSettings,
         )
         publishNavigationVisibility()
 
@@ -165,6 +167,11 @@ object LiveTvRepository {
                 }
             }
         }
+    }
+
+    fun updateLiveTvSettings(settings: LiveTvSettings) {
+        LiveTvStorage.saveLiveTvSettings(settings)
+        _uiState.update { it.copy(settings = settings) }
     }
 
     fun onScreenEntered() {
@@ -710,6 +717,7 @@ object LiveTvRepository {
             if (channels.isNotEmpty()) {
                 withContext(Dispatchers.IO) {
                     LiveTvStorage.saveChannelsCache(channels, signature)
+                    persistPlaylists(playlists)
                 }
             }
         }
@@ -777,7 +785,7 @@ object LiveTvRepository {
         return if (legacyUrl.isBlank()) emptyList() else listOf(createUrlPlaylist(legacyUrl))
     }
 
-    private fun persistPlaylists(playlists: List<LiveTvPlaylist>) {
+    internal fun persistPlaylists(playlists: List<LiveTvPlaylist>) {
         LiveTvStorage.savePlaylistsBlob(encodePlaylists(playlists))
         LiveTvStorage.savePlaylistUrl(playlists.firstUrlSource())
     }
@@ -859,6 +867,7 @@ private fun encodePlaylists(playlists: List<LiveTvPlaylist>): String =
             playlist.type.name,
             playlist.source,
             playlist.isEnabled.toString(),
+            playlist.epgUrl.orEmpty(),
         ).joinToString(playlistFieldSeparator) { escapePlaylistField(it) }
     }
 
@@ -877,6 +886,7 @@ private fun decodePlaylists(blob: String): List<LiveTvPlaylist> =
                 type = type,
                 source = fields.getOrNull(3)?.takeIf(String::isNotBlank) ?: return@mapNotNull null,
                 isEnabled = decodePlaylistEnabled(fields.getOrNull(4)),
+                epgUrl = fields.getOrNull(5)?.takeIf(String::isNotBlank),
             )
         }
 

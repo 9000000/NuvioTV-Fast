@@ -104,6 +104,12 @@ internal object M3uStreamParser {
                 if (!ua.isNullOrBlank()) playlistDefaultHeaders["User-Agent"] = ua
                 val ref = readM3uAttribute(line, "http-referrer") ?: readM3uAttribute(line, "referrer") ?: readM3uAttribute(line, "referer")
                 if (!ref.isNullOrBlank()) playlistDefaultHeaders["Referer"] = ref
+                val epg = readM3uAttribute(line, "url-tvg")
+                    ?: readM3uAttribute(line, "x-tvg-url")
+                    ?: readM3uAttribute(line, "tvg-url")
+                if (!epg.isNullOrBlank() && playlist != null) {
+                    playlist.epgUrl = epg.trim()
+                }
             }
             line.startsWith("#EXTINF", ignoreCase = true) -> {
                 val info = parseExtInf(line)
@@ -199,6 +205,11 @@ internal object M3uStreamParser {
             streamType = detectedStreamType,
             drmType = detectedDrmType,
             drmKey = effectiveKey,
+            tvgId = info?.tvgId,
+            tvgName = info?.tvgName,
+            number = info?.number ?: 0,
+            catchup = info?.catchup,
+            tvgShiftMinutes = (info?.tvgShift ?: 0) * 60,
         )
     }
 
@@ -342,6 +353,11 @@ private data class M3uInfo(
     val licenseKey: String? = null,
     val manifestType: String? = null,
     val headers: Map<String, String> = emptyMap(),
+    val tvgId: String? = null,
+    val tvgName: String? = null,
+    val number: Int = 0,
+    val tvgShift: Int = 0,
+    val catchup: CatchupInfo? = null,
 )
 
 private fun parseExtInf(line: String): M3uInfo {
@@ -352,6 +368,17 @@ private fun parseExtInf(line: String): M3uInfo {
         }
     val logoUrl = readM3uAttribute(line, "tvg-logo") ?: readM3uAttribute(line, "logo")
     val group = readM3uAttribute(line, "group-title") ?: readM3uAttribute(line, "group")
+
+    val tvgId = readM3uAttribute(line, "tvg-id")
+    val tvgName = readM3uAttribute(line, "tvg-name")
+    val number = (readM3uAttribute(line, "tvg-chno") ?: readM3uAttribute(line, "channel-number"))?.toIntOrNull() ?: 0
+    val tvgShift = readM3uAttribute(line, "tvg-shift")?.toIntOrNull() ?: 0
+    val catchupType = readM3uAttribute(line, "catchup")
+    val catchup = if (catchupType != null) {
+        val days = readM3uAttribute(line, "catchup-days")?.toIntOrNull() ?: 0
+        val source = readM3uAttribute(line, "catchup-source")
+        CatchupInfo(type = catchupType, source = source, days = days)
+    } else null
 
     val inlineLicenseType = readM3uAttribute(line, "license_type")
         ?: readM3uAttribute(line, "drm_type")
@@ -383,6 +410,11 @@ private fun parseExtInf(line: String): M3uInfo {
         licenseKey = inlineLicenseKey,
         manifestType = inlineManifestType,
         headers = inlineHeaders,
+        tvgId = tvgId,
+        tvgName = tvgName,
+        number = number,
+        tvgShift = tvgShift,
+        catchup = catchup,
     )
 }
 

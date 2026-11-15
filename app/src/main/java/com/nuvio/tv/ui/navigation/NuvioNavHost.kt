@@ -214,11 +214,11 @@ private fun PlaybackNavHost(
     ) {
         composable(Screen.LiveTv.route) {
             val liveTvScope = rememberCoroutineScope()
-            LiveTvScreen(
+            com.nuvio.tv.features.livetv.LiveTvGuideScreen(
                 onChannelSelected = { channel ->
                     liveTvScope.launch {
                         val playableChannel = runCatching {
-                            LiveTvRepository.prepareForPlayback(channel)
+                            com.nuvio.tv.features.livetv.LiveTvRepository.prepareForPlayback(channel)
                         }.getOrDefault(channel)
                         val effectiveType = playableChannel.streamType?.takeIf(String::isNotBlank)
                             ?: when {
