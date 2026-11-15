@@ -280,13 +280,13 @@ class LiveTvPlaybackController @Inject constructor(
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
 
-        // Low latency buffer control for Live TV
+        // Low latency buffer control for Live TV (Fast startup)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 /* minBufferMs = */ 3_000,
                 /* maxBufferMs = */ 10_000,
-                /* bufferForPlaybackMs = */ 1_000,
-                /* bufferForPlaybackAfterRebufferMs = */ 1_500
+                /* bufferForPlaybackMs = */ 500,
+                /* bufferForPlaybackAfterRebufferMs = */ 1_000
             )
             .setBackBuffer(0, false)
             .build()

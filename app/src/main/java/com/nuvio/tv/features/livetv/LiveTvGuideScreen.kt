@@ -73,9 +73,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.ui.theme.NuvioTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -240,6 +242,7 @@ private fun LiveTvGuideContent(
     val quickChannelListState = rememberLazyListState()
 
     val channelListState = rememberLazyListState()
+    val drawerListState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
 
     val coroutineScope = rememberCoroutineScope()
@@ -281,22 +284,29 @@ private fun LiveTvGuideContent(
         }
     }
 
-    // Auto-tune first channel into Preview if enabled and nothing is currently tuned (only when not in Drawer)
-    LaunchedEffect(channels, settings.showPreview, focusArea) {
-        if (settings.showPreview && focusArea != GuideFocusArea.DRAWER && playback.channelKey == null && channels.isNotEmpty()) {
-            val lastId = user.lastChannelKey
-            val initial = channels.firstOrNull { it.id == lastId } ?: channels.first()
-            viewModel.play(initial, selectedGroupId)
+    // Keep category drawer scrolled near active index when navigating UP/DOWN
+    LaunchedEffect(drawerIndex) {
+        if (groups.isNotEmpty()) {
+            val safeIdx = drawerIndex.coerceIn(0, groups.lastIndex)
+            if (safeIdx == 0) {
+                drawerListState.scrollToItem(0)
+            } else if (safeIdx == groups.lastIndex) {
+                drawerListState.scrollToItem(groups.lastIndex)
+            } else {
+                drawerListState.scrollToItem((safeIdx - 2).coerceAtLeast(0))
+            }
         }
     }
 
-    // Auto-tune into Preview when navigating channels with debounce (450ms) to prevent lag (only when not in Drawer)
-    LaunchedEffect(channelIndex, selectedGroupId, settings.showPreview, focusArea) {
-        if (settings.showPreview && focusArea != GuideFocusArea.DRAWER && channels.isNotEmpty()) {
-            delay(450)
-            val ch = channels.getOrNull(channelIndex)
-            if (ch != null && playback.channelKey != ch.key) {
-                viewModel.play(ch, selectedGroupId)
+    // Background pre-resolve of focused channel to achieve 0ms instant playback when user presses OK
+    LaunchedEffect(channelIndex, channels, focusArea) {
+        if (focusArea == GuideFocusArea.CHANNELS && channels.isNotEmpty()) {
+            val ch = channels.getOrNull(channelIndex) ?: return@LaunchedEffect
+            delay(220)
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    LiveTvRepository.prepareForPlayback(ch)
+                }
             }
         }
     }
@@ -391,10 +401,6 @@ private fun LiveTvGuideContent(
         val targetChannelIdx = findTargetChannelIndex(targetChannels)
         channelIndex = targetChannelIdx
 
-        val targetCh = targetChannels.getOrNull(targetChannelIdx)
-        if (targetCh != null && settings.showPreview && playback.channelKey != targetCh.key) {
-            viewModel.play(targetCh, targetGroupId)
-        }
         runCatching { focusRequester.requestFocus() }
     }
 
@@ -786,9 +792,6 @@ private fun LiveTvGuideContent(
                             lastDpadTime = System.currentTimeMillis()
                             if (drawerIndex > 0) {
                                 drawerIndex--
-                                selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
-                                val targetChannels = getChannelsForGroup(selectedGroupId)
-                                channelIndex = findTargetChannelIndex(targetChannels)
                             }
                             true
                         }
@@ -796,9 +799,6 @@ private fun LiveTvGuideContent(
                             lastDpadTime = System.currentTimeMillis()
                             if (drawerIndex < groups.lastIndex) {
                                 drawerIndex++
-                                selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
-                                val targetChannels = getChannelsForGroup(selectedGroupId)
-                                channelIndex = findTargetChannelIndex(targetChannels)
                             }
                             true
                         }
@@ -929,6 +929,9 @@ private fun LiveTvGuideContent(
                 onOpenFullscreen = {
                     isFullscreen = true
                     showOsd = true
+                },
+                onPlayPreview = {
+                    focusedChannel?.let { viewModel.play(it, selectedGroupId) }
                 }
             )
 
@@ -984,21 +987,13 @@ private fun LiveTvGuideContent(
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Slide-out Categories Drawer
                 if (focusArea == GuideFocusArea.DRAWER) {
-                    LeanbackCategoryDrawer(
+                    CategoryDrawer(
                         groups = groups,
                         drawerIndex = drawerIndex,
                         selectedGroupId = selectedGroupId,
-                        onCategoryFocused = { idx, grp ->
-                            drawerIndex = idx
-                            selectedGroupId = grp.id
-                            val targetChannels = getChannelsForGroup(grp.id)
-                            channelIndex = findTargetChannelIndex(targetChannels)
-                        },
+                        drawerListState = drawerListState,
                         onSelectGroup = { idx ->
                             selectGroupAndFocusChannels(idx)
-                        },
-                        onNavigateRight = {
-                            selectGroupAndFocusChannels(drawerIndex)
                         }
                     )
                 }
@@ -1008,6 +1003,8 @@ private fun LiveTvGuideContent(
                     val totalWidth = maxWidth
                     val channelColWidth = 280.dp
                     val gridWidth = (totalWidth - channelColWidth).coerceAtLeast(100.dp)
+                    // Luôn hiển thị chính xác 9 kênh trên màn hình
+                    val nineChannelRowHeight = (maxHeight / 9f).coerceIn(44.dp, 64.dp)
 
                     if (channels.isEmpty()) {
                         Box(
@@ -1057,7 +1054,7 @@ private fun LiveTvGuideContent(
                     } else {
                         LazyColumn(
                             state = channelListState,
-                            contentPadding = PaddingValues(top = 6.dp, bottom = 56.dp),
+                            contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                         itemsIndexed(channels, key = { _, ch -> ch.key }) { index, ch ->
@@ -1076,7 +1073,7 @@ private fun LiveTvGuideContent(
                                 windowDurationMs = windowDurationMs,
                                 maxFutureMs = maxFutureMs,
                                 now = now,
-                                rowHeightDp = rowHeightDp,
+                                rowHeightDp = nineChannelRowHeight,
                                 channelColWidth = channelColWidth,
                                 gridWidth = gridWidth,
                                 onClick = {
@@ -1144,6 +1141,77 @@ private fun formatRange(startMs: Long, stopMs: Long): String {
 }
 
 @Composable
+private fun CategoryDrawer(
+    groups: List<ChannelGroup>,
+    drawerIndex: Int,
+    selectedGroupId: String,
+    drawerListState: LazyListState,
+    onSelectGroup: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .width(240.dp)
+            .fillMaxHeight()
+            .background(Color(0xFF141418))
+            .padding(12.dp)
+    ) {
+        LiveText(
+            text = "DANH MỤC",
+            size = 13.sp,
+            weight = FontWeight.Bold,
+            color = Color.LightGray,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+        )
+        LazyColumn(
+            state = drawerListState,
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            itemsIndexed(groups) { idx, grp ->
+                val isFocused = idx == drawerIndex
+                val isSelected = grp.id == selectedGroupId
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            when {
+                                isFocused -> NuvioTheme.colors.Primary
+                                isSelected -> Color.White.copy(alpha = 0.15f)
+                                else -> Color.Transparent
+                            }
+                        )
+                        .clickable { onSelectGroup(idx) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LiveText(
+                            text = grp.name,
+                            size = 14.sp,
+                            weight = if (isFocused || isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isFocused || isSelected) Color.White else Color.LightGray,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                        LiveText(
+                            text = "${grp.channelCount}",
+                            size = 12.sp,
+                            color = if (isFocused) Color.White.copy(alpha = 0.8f) else Color.Gray
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TopGuideHeader(
     focusedChannel: LiveTvChannel?,
     focusedProgram: EpgProgram?,
@@ -1152,6 +1220,7 @@ private fun TopGuideHeader(
     playback: LivePlaybackState,
     player: androidx.media3.common.Player?,
     onOpenFullscreen: () -> Unit,
+    onPlayPreview: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -1267,7 +1336,13 @@ private fun TopGuideHeader(
                         color = Color.White.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    .clickable { onOpenFullscreen() }
+                    .clickable {
+                        if (playback.channelKey == null) {
+                            onPlayPreview()
+                        } else {
+                            onOpenFullscreen()
+                        }
+                    }
             ) {
                 LivePlayerSurface(
                     player = player,

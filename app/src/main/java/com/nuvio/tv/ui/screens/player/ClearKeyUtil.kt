@@ -93,6 +93,8 @@ internal object ClearKeyUtil {
         return null
     }
 
+    private val clearKeyCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     /**
      * Fetches ClearKey JWK JSON from an HTTP URL endpoint (e.g. cleankey.php).
      */
@@ -100,6 +102,8 @@ internal object ClearKeyUtil {
         if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
             return null
         }
+
+        clearKeyCache[url]?.let { return it }
 
         // Fast path: embedded id parameter
         val queryId = runCatching {
@@ -125,7 +129,8 @@ internal object ClearKeyUtil {
             }
             if (conn.responseCode in 200..299) {
                 val body = conn.inputStream.bufferedReader().use { it.readText() }
-                normalizeToJwkJson(body)
+                val parsed = normalizeToJwkJson(body)
+                parsed?.also { clearKeyCache[url] = it }
             } else {
                 Log.w(TAG, "ClearKey URL returned HTTP ${conn.responseCode}: $url")
                 null

@@ -489,11 +489,15 @@ object LiveTvRepository {
         val detectedType: String?
     )
 
+    private val streamResolutionCache = java.util.concurrent.ConcurrentHashMap<String, StreamResolutionResult>()
+
     private suspend fun resolveStreamMetadata(
         initialUrl: String,
         headers: Map<String, String>,
         playlistSourceUrl: String?
     ): StreamResolutionResult = withContext(Dispatchers.IO) {
+        streamResolutionCache[initialUrl]?.let { return@withContext it }
+
         runCatching {
             // Register playlist host as known-good so DynamicHostFallback can fallback to it
             if (!playlistSourceUrl.isNullOrBlank()) {
@@ -508,9 +512,7 @@ object LiveTvRepository {
                 }
             )
 
-            // 2. Fast Startup (như Mobile): Nếu URL tĩnh đã có extension chuẩn (.m3u8, .mpd, .ts, .flv, .mp4, .mkv)
-            // và không phải dynamic gateway script (.php, .ashx, /get...), trả về ngay lập tức (0ms)!
-            // DNS resolution sẽ được IPv4FirstDns & ExoPlayer xử lý tự nhiên khi phát, loại bỏ hoàn toàn blocking delay.
+            // 2. Fast Startup: Nếu URL tĩnh đã có extension chuẩn (.m3u8, .mpd, .ts...) và không phải dynamic gateway
             val hasStaticExtension = currentUrl.contains(".m3u8", ignoreCase = true) ||
                 currentUrl.contains(".mpd", ignoreCase = true) ||
                 currentUrl.contains(".ts", ignoreCase = true) ||
@@ -518,15 +520,13 @@ object LiveTvRepository {
                 currentUrl.contains(".mp4", ignoreCase = true) ||
                 currentUrl.contains(".mkv", ignoreCase = true)
 
-            val isDynamicUrl = currentUrl.contains(".php", ignoreCase = true) ||
-                currentUrl.contains(".ashx", ignoreCase = true) ||
-                currentUrl.contains(".asp", ignoreCase = true) ||
-                currentUrl.contains(".aspx", ignoreCase = true) ||
-                currentUrl.contains(".jsp", ignoreCase = true) ||
+            val isDynamicGateway = currentUrl.contains("?id=", ignoreCase = true) ||
+                currentUrl.contains("&id=", ignoreCase = true) ||
                 currentUrl.contains("/get", ignoreCase = true) ||
+                (!hasStaticExtension && (currentUrl.contains(".php", ignoreCase = true) || currentUrl.contains("/live/", ignoreCase = true))) ||
                 !hasStaticExtension
 
-            if (!isDynamicUrl) {
+            if (!isDynamicGateway) {
                 val type = when {
                     currentUrl.contains(".m3u8", ignoreCase = true) -> "m3u8"
                     currentUrl.contains(".mpd", ignoreCase = true) -> "mpd"
@@ -536,21 +536,34 @@ object LiveTvRepository {
                     currentUrl.contains(".mkv", ignoreCase = true) -> "mkv"
                     else -> null
                 }
-                return@withContext StreamResolutionResult(currentUrl, type)
+                val result = StreamResolutionResult(currentUrl, type)
+                streamResolutionCache[initialUrl] = result
+                return@withContext result
             }
 
-            // 3. Dynamic Stream Resolver: chỉ dành cho link thực sự động (.php, /get, không rõ extension)
-            // Cần follow redirects và dò MIME từ server với timeout ngắn (1500ms) để không gây khựng giao diện
+            // 3. Dynamic Stream Resolver (HEAD request siêu tốc, không tải body)
             var redirectCount = 0
             var detectedType: String? = null
             while (redirectCount < 5) {
-                val connection = (URL(currentUrl).openConnection() as? HttpURLConnection) ?: break
+                var connection = (URL(currentUrl).openConnection() as? HttpURLConnection) ?: break
+                connection.requestMethod = "HEAD"
                 connection.instanceFollowRedirects = false
                 headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
-                connection.connectTimeout = 1500
-                connection.readTimeout = 1500
+                connection.connectTimeout = 1000
+                connection.readTimeout = 1000
                 try {
-                    val code = connection.responseCode
+                    var code = connection.responseCode
+                    if (code == 405) {
+                        connection.disconnect()
+                        connection = (URL(currentUrl).openConnection() as? HttpURLConnection) ?: break
+                        connection.requestMethod = "GET"
+                        connection.instanceFollowRedirects = false
+                        headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
+                        connection.connectTimeout = 1000
+                        connection.readTimeout = 1000
+                        code = connection.responseCode
+                    }
+
                     val contentType = connection.contentType?.lowercase()
                     if (code in 300..399) {
                         val location = connection.getHeaderField("Location")
@@ -591,7 +604,9 @@ object LiveTvRepository {
                 }
             }
 
-            StreamResolutionResult(currentUrl, detectedType)
+            val result = StreamResolutionResult(currentUrl, detectedType)
+            streamResolutionCache[initialUrl] = result
+            result
         }.getOrDefault(StreamResolutionResult(initialUrl, null))
     }
 
