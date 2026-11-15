@@ -32,6 +32,8 @@ class InteropHorizontalGridView @JvmOverloads constructor(
 
     var canTakeFocus: (() -> Boolean)? = null
 
+    private var isNavigatingToSidebar: Boolean = false
+
     fun mayTakeFocus(): Boolean = hasFocus() || canTakeFocus?.invoke() != false
 
     var isHoldingHorizontalKey: Boolean = false
@@ -117,7 +119,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     override fun getRootView(): View = this
 
     fun ensureTargetChildFocused(targetPos: Int, direction: Int, retryCount: Int = 0) {
-        if (!isAttachedToWindow) return
+        if (!isAttachedToWindow || !mayTakeFocus()) return
         val vh = findViewHolderForAdapterPosition(targetPos)
         if (vh != null) {
             if (!vh.itemView.hasFocus()) {
@@ -127,7 +129,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         } else {
             if (retryCount < 10) {
                 post {
-                    if (isAttachedToWindow) {
+                    if (isAttachedToWindow && mayTakeFocus()) {
                         ensureTargetChildFocused(targetPos, direction, retryCount + 1)
                     }
                 }
@@ -139,8 +141,11 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         get() = isComputingLayout || isInLayout || !isAttachedToWindow
 
     override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
+        isNavigatingToSidebar = false
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        if (!mayTakeFocus()) return false
         if (isBusyLayout) {
-            post { requestFocus(direction, previouslyFocusedRect) }
+            post { if (mayTakeFocus()) requestFocus(direction, previouslyFocusedRect) }
             return false
         }
         val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
@@ -167,7 +172,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         setSelectedPosition(targetPos)
         ensureTargetChildFocused(targetPos, direction)
         post {
-            if (isAttachedToWindow) {
+            if (isAttachedToWindow && mayTakeFocus()) {
                 ensureTargetChildFocused(targetPos, direction)
             }
         }
@@ -183,7 +188,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     }
 
     override fun clearChildFocus(child: View?) {
-        val deliberateRowChange = canTakeFocus?.invoke() == false
+        val deliberateRowChange = isNavigatingToSidebar || canTakeFocus?.invoke() == false
         val shouldProtectFocus = isAttachedToWindow &&
             !deliberateRowChange &&
             (hasPendingHorizontalNavigation || universalAdapter?.isSubmittingItems == true)
@@ -299,6 +304,14 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     isHoldingHorizontalKey = false
+                    if (isNavigatingToSidebar) {
+                        isNavigatingToSidebar = false
+                        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                        return true
+                    }
+                    if (!mayTakeFocus()) {
+                        return true
+                    }
                     val total = universalAdapter?.itemCount ?: 0
                     val currentSelected = selectedPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
                     val target = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
@@ -365,6 +378,10 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
                         if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
                             if (onNavigateLeftOnFirstItem?.invoke() == true) {
+                                isNavigatingToSidebar = true
+                                isHoldingHorizontalKey = false
+                                pendingTargetPosition = RecyclerView.NO_POSITION
+                                descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                                 clearFocus()
                                 return true
                             }

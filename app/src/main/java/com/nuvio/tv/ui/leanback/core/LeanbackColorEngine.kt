@@ -52,7 +52,11 @@ object LeanbackColorEngine {
         if (bitmap.isRecycled) return
         extractionExecutor.execute {
             if (bitmap.isRecycled) return@execute
-            val extracted = extractDominantColor(bitmap)
+            val extracted = try {
+                extractDominantColor(bitmap)
+            } catch (_: Exception) {
+                defaultFallbackColor
+            }
             putCachedColor(key, extracted)
             mainHandler.post {
                 onExtracted(extracted)
@@ -65,8 +69,9 @@ object LeanbackColorEngine {
      * Weights pixels by sat * sat * brightness to prioritize radiant neon tones over dark or muddy pixels.
      */
     fun extractDominantColor(bitmap: Bitmap): Int {
-        if (bitmap.isRecycled) return Color.WHITE
+        if (bitmap.isRecycled) return defaultFallbackColor
         return runCatching {
+            if (bitmap.isRecycled) return defaultFallbackColor
             val stepX = (bitmap.width / 14).coerceAtLeast(1)
             val stepY = (bitmap.height / 14).coerceAtLeast(1)
             val hsv = FloatArray(3)

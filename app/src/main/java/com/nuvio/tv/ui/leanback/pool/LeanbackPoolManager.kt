@@ -15,7 +15,7 @@ object LeanbackPoolManager {
     const val VIEW_TYPE_AVATAR = 2
     const val VIEW_TYPE_POSTER_LANDSCAPE = 3
 
-    fun createSharedPool(maxPerType: Int = 30): RecyclerView.RecycledViewPool {
+    fun createSharedPool(maxPerType: Int = 18): RecyclerView.RecycledViewPool {
         return RecyclerView.RecycledViewPool().apply {
             setMaxRecycledViews(VIEW_TYPE_POSTER, maxPerType)
             setMaxRecycledViews(VIEW_TYPE_POSTER_LANDSCAPE, maxPerType)
@@ -28,7 +28,7 @@ object LeanbackPoolManager {
 val LocalLeanbackRecycledViewPool = staticCompositionLocalOf<RecyclerView.RecycledViewPool?> { null }
 
 @Composable
-fun rememberSharedLeanbackPool(maxPerType: Int = 30): RecyclerView.RecycledViewPool {
+fun rememberSharedLeanbackPool(maxPerType: Int = 18): RecyclerView.RecycledViewPool {
     return remember { LeanbackPoolManager.createSharedPool(maxPerType) }
 }
 

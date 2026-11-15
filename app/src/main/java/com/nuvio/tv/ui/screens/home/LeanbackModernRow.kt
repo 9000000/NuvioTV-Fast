@@ -11,7 +11,6 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.SystemClock
 import android.text.TextUtils
@@ -58,6 +57,7 @@ import coil3.Image
 import coil3.asDrawable
 import coil3.target.Target
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import com.nuvio.tv.ui.leanback.core.PillProgressBarDrawable
 import kotlinx.coroutines.awaitCancellation
 
 private val dominantColorCache = LruCache<String, Int>(256)
@@ -1321,7 +1321,7 @@ class LeanbackRowAdapter(
         // Placeholder-to-Data Focus Guard:
         // Nếu hàng này đang nắm giữ tiêu điểm khi dữ liệu thay đổi (chuyển từ thẻ placeholder sang thẻ thật),
         // lập tức neo tiêu điểm và viền sáng vào thẻ mới tại vị trí tương ứng, ngăn chặn 100% việc rò rỉ focus!
-        if (hadFocus && rv != null && newItems.isNotEmpty()) {
+        if (hadFocus && newItems.isNotEmpty()) {
             val safePos = prevSelectedPos.coerceIn(0, newItems.lastIndex)
             rv.post {
                 // If a card still owns focus, the update did not disturb it. Re-anchoring here
@@ -1414,21 +1414,7 @@ class LeanbackRowAdapter(
             }
             max = 100
             progress = 0
-            
-            // Thiết lập Drawable bo tròn viên thuốc cho cả track và progress
-            val trackPill = GradientDrawable().apply {
-                setColor(Color.parseColor("#4D000000")) // Đen mờ 30%
-                cornerRadius = h / 2f
-            }
-            val progPill = GradientDrawable().apply {
-                setColor(Color.parseColor("#38BDF8")) // Electric Cyan
-                cornerRadius = h / 2f
-            }
-            val clipProg = android.graphics.drawable.ClipDrawable(progPill, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL)
-            progressDrawable = LayerDrawable(arrayOf(trackPill, clipProg)).apply {
-                setId(0, android.R.id.background)
-                setId(1, android.R.id.progress)
-            }
+            progressDrawable = PillProgressBarDrawable.create(h.toFloat())
             visibility = View.GONE
         }
         cardContainer.addView(progressBar)

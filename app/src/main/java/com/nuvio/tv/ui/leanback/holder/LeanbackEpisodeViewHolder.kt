@@ -1,6 +1,5 @@
 package com.nuvio.tv.ui.leanback.holder
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Outline
