@@ -1321,9 +1321,13 @@ open class MainActivity : ComponentActivity() {
                             LaunchedEffect(isTrailerPlaying) {
                                 if (!isTrailerPlaying) ambientIdleController.onInteraction()
                             }
+                            val isPlayerActive = currentRoute?.startsWith("player/") == true
+                            val isLiveTvActive = currentRoute == Screen.LiveTv.route ||
+                                currentRoute?.startsWith("${Screen.LiveTv.route}/") == true
                             AmbientModeHost(
                                 controller = ambientIdleController,
-                                allowed = currentRoute?.startsWith("player/") != true &&
+                                allowed = !isPlayerActive &&
+                                    !isLiveTvActive &&
                                     autoNextOverlay == null &&
                                     !isTrailerPlaying,
                                 onShown = { trailerPlayerPool.stop() }

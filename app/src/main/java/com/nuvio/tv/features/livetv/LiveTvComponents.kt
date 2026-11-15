@@ -262,6 +262,7 @@ internal fun LivePlayerSurface(
                 useController = false
                 this.resizeMode = resizeMode
                 this.player = player
+                keepScreenOn = player != null
             }
         },
         update = { view ->
@@ -269,6 +270,11 @@ internal fun LivePlayerSurface(
                 view.player = player
             }
             view.resizeMode = resizeMode
+            view.keepScreenOn = player != null
+        },
+        onRelease = { view ->
+            view.keepScreenOn = false
+            view.player = null
         }
     )
 }

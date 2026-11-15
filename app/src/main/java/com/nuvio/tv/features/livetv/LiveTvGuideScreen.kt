@@ -63,6 +63,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -108,6 +109,18 @@ fun LiveTvGuideScreen(
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.stopPlayback()
             viewModel.playback.detach()
+        }
+    }
+
+    // Keep screen on while playing Live TV to prevent system screensaver/sleep
+    val view = LocalView.current
+    DisposableEffect(view, playback.channelKey) {
+        val shouldKeepOn = playback.channelKey != null
+        if (shouldKeepOn) {
+            view.keepScreenOn = true
+        }
+        onDispose {
+            view.keepScreenOn = false
         }
     }
 
