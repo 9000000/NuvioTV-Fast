@@ -1045,6 +1045,7 @@ internal fun ModernRowSection(
             rowGrids = rowGrids,
             isPendingFocus = isPendingFocus,
             pendingFocusIndex = pendingFocusIndex,
+            initialFocusPosition = focusedItemByRow[row.key] ?: 0,
             pendingFocusNonce = pendingFocusNonce,
             onClearPendingFocus = onClearPendingFocus,
             canTakeFocus = isActiveRow,

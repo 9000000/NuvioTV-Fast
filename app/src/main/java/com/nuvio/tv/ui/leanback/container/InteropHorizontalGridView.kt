@@ -48,6 +48,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     private var lastHorizontalKeyTime = 0L
     private var lastVerticalKeyTime = 0L
     private var pendingTargetPosition = RecyclerView.NO_POSITION
+    var restoredPosition: Int = 0
 
     fun prepareForRowChange() {
         isHoldingHorizontalKey = false
@@ -91,6 +92,8 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     arrivedAt0FromRight = true
                     hasReleasedKeyAfterArrivingAt0 = false
                 }
+
+                restoredPosition = position
 
                 val hasGridFocus = hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
                     isHoldingHorizontalKey || isPendingTarget
@@ -140,41 +143,32 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             post { requestFocus(direction, previouslyFocusedRect) }
             return false
         }
-        // If coming from another view with geometry rect (e.g. D-pad vertical movement),
-        // let super find the card with closest geometric alignment (same column).
-        if (previouslyFocusedRect != null) {
-            val result = super.requestFocus(direction, previouslyFocusedRect)
-            if (result) {
-                val focusedChild = findFocus()
-                if (focusedChild !== this) {
-                    val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
-                    (holder as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
-                    return true
-                }
-            }
+        val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+            pendingTargetPosition
+        } else if (restoredPosition > 0) {
+            restoredPosition
+        } else {
+            selectedPosition.coerceAtLeast(0)
         }
-        // Programmatic focus (e.g. from search submit / enter): target the current selectedPosition
-        val targetPos = selectedPosition.coerceAtLeast(0)
         val vh = findViewHolderForAdapterPosition(targetPos)
         if (vh != null) {
-            val focused = vh.itemView.requestFocus(direction, previouslyFocusedRect)
+            val focused = vh.itemView.requestFocus(direction)
             if (focused) {
                 (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
                 return true
             }
         }
+        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        isFocusable = true
+        isFocusableInTouchMode = true
         val result = super.requestFocus(direction, previouslyFocusedRect)
-        if (result) {
-            val focusedChild = findFocus()
-            if (focusedChild !== this) {
-                val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
-                (holder as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
-            } else {
-                val deferredVh = findViewHolderForAdapterPosition(targetPos)
-                if (deferredVh != null) {
-                    deferredVh.itemView.requestFocus()
-                    (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
-                }
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+
+        setSelectedPosition(targetPos)
+        ensureTargetChildFocused(targetPos, direction)
+        post {
+            if (isAttachedToWindow) {
+                ensureTargetChildFocused(targetPos, direction)
             }
         }
         return result

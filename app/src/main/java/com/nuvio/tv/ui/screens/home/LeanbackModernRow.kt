@@ -638,6 +638,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     private var lastHorizontalRepeatDispatchMs = 0L
     private var lastVerticalRepeatDispatchMs = 0L
     private var pendingTargetPosition = RecyclerView.NO_POSITION
+    var restoredPosition: Int = 0
 
     private val rowAdapter: LeanbackRowAdapter?
         get() = adapter as? LeanbackRowAdapter
@@ -747,6 +748,8 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     hasReleasedKeyAfterArrivingAt0 = false
                 }
 
+                restoredPosition = position
+
                 val hasGridFocus = (hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
                     isHoldingHorizontalKey || isPendingTarget) && mayTakeFocus()
                 if (child != null && hasGridFocus) {
@@ -789,12 +792,14 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         }
         val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
             pendingTargetPosition
+        } else if (restoredPosition > 0) {
+            restoredPosition
         } else {
             selectedPosition.coerceAtLeast(0)
         }
         val vh = findViewHolderForAdapterPosition(targetPos) as? LeanbackCardViewHolder
         if (vh != null) {
-            val granted = vh.itemView.requestFocus(direction, previouslyFocusedRect)
+            val granted = vh.itemView.requestFocus(direction)
             if (granted) {
                 vh.updateFocusVisual(true)
                 val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
@@ -802,9 +807,21 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                 return true
             }
         }
+
+        // Nếu ViewHolder của targetPos chưa sẵn sàng:
+        // Chặn tạm thời không cho focus rơi vào thẻ 0 (hoặc thẻ con khác)
+        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        isFocusable = true
+        isFocusableInTouchMode = true
         val granted = super.requestFocus(direction, previouslyFocusedRect)
-        if (granted) {
-            ensureChildFocusAndRing(targetPos = targetPos, animated = false)
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+
+        setSelectedPosition(targetPos)
+        ensureChildFocusAndRing(targetPos = targetPos, animated = false)
+        post {
+            if (isAttachedToWindow && mayTakeFocus()) {
+                ensureChildFocusAndRing(targetPos = targetPos, animated = false)
+            }
         }
         return granted
     }
@@ -1693,6 +1710,7 @@ fun LeanbackModernRow(
     rowGrids: MutableMap<String, HorizontalGridView>? = null,
     isPendingFocus: Boolean = false,
     pendingFocusIndex: Int = 0,
+    initialFocusPosition: Int = 0,
     pendingFocusNonce: Int = 0,
     onClearPendingFocus: () -> Unit = {},
     canTakeFocus: (() -> Boolean)? = null,
@@ -1748,6 +1766,7 @@ fun LeanbackModernRow(
     }
 
     var localGridViewRef by remember(rowKey) { mutableStateOf<InteropHorizontalGridView?>(null) }
+    var initialScrollApplied by remember(rowKey) { mutableStateOf(false) }
 
     LaunchedEffect(isPendingFocus, pendingFocusNonce, items.isNotEmpty()) {
         if (isPendingFocus && items.isNotEmpty()) {
@@ -1774,6 +1793,18 @@ fun LeanbackModernRow(
                         gridView.removeOnAttachStateChangeListener(attachListener)
                     }
                 }
+            }
+        }
+    }
+
+    LaunchedEffect(initialFocusPosition, items.isNotEmpty()) {
+        if (!initialScrollApplied && !isPendingFocus && items.isNotEmpty() && initialFocusPosition in items.indices) {
+            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView)
+            if (gridView != null && gridView.isAttachedToWindow && !gridView.hasFocus()) {
+                if (initialFocusPosition > 0) {
+                    gridView.setSelectedPosition(initialFocusPosition)
+                }
+                initialScrollApplied = true
             }
         }
     }
@@ -1838,10 +1869,14 @@ fun LeanbackModernRow(
             container.addView(gridView)
             container.addView(focusRing)
 
+            gridView.restoredPosition = initialFocusPosition
             if (isPendingFocus && items.isNotEmpty()) {
                 val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
                 executeRowFocus(gridView, targetIdx)
                 onClearPendingFocus()
+            } else if (initialFocusPosition in items.indices && initialFocusPosition > 0) {
+                gridView.setSelectedPosition(initialFocusPosition)
+                initialScrollApplied = true
             }
             container
         },
@@ -1875,6 +1910,12 @@ fun LeanbackModernRow(
                 gridView.setPadding(startPaddingPx, verticalPaddingPx, startPaddingPx, verticalPaddingPx)
             }
             localGridViewRef = gridView
+            if (initialFocusPosition in items.indices) {
+                gridView.restoredPosition = initialFocusPosition
+                if (initialFocusPosition > 0 && !gridView.hasFocus() && gridView.selectedPosition != initialFocusPosition) {
+                    gridView.setSelectedPosition(initialFocusPosition)
+                }
+            }
             gridView.onNavigateDown = onNavigateDown
             gridView.onNavigateUp = onNavigateUp
             gridView.onNavigateBack = onNavigateBack

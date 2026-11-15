@@ -247,6 +247,7 @@ fun LeanbackNativeRow(
                     }
                     override fun onViewDetachedFromWindow(v: android.view.View) {}
                 })
+                restoredPosition = initialFocusPosition
                 if (isPendingFocus && items.isNotEmpty()) {
                     val targetIdx = pendingFocusIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
                     executeRowFocus(this, targetIdx)
@@ -259,6 +260,12 @@ fun LeanbackNativeRow(
         },
         update = { gridView ->
             localGridViewRef = gridView
+            if (initialFocusPosition in items.indices) {
+                gridView.restoredPosition = initialFocusPosition
+                if (initialFocusPosition > 0 && !gridView.hasFocus() && gridView.selectedPosition != initialFocusPosition) {
+                    gridView.setSelectedPosition(initialFocusPosition)
+                }
+            }
             if (!isFocusEnabled) {
                 gridView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 gridView.isFocusable = false
