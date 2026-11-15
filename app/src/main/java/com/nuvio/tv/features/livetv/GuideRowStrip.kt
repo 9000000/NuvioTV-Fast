@@ -68,7 +68,7 @@ internal fun GuideRowStrip(
     dotSize: Dp = 9.dp,
     iconSize: Dp = 13.dp
 ) {
-    val measurer = rememberTextMeasurer(cacheSize = 256)
+    val measurer = rememberTextMeasurer(cacheSize = 512)
     val base = androidx.compose.material3.LocalTextStyle.current
     val corner = liveCorner()
     val bell = rememberVectorPainter(Icons.Default.Notifications)

@@ -286,6 +286,14 @@ fun LivePosterImage(
         }
         return
     }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val imageRequest: coil3.request.ImageRequest = androidx.compose.runtime.remember(url) {
+        coil3.request.ImageRequest.Builder(context)
+            .data(url)
+            .memoryCachePolicy(coil3.request.CachePolicy.ENABLED)
+            .diskCachePolicy(coil3.request.CachePolicy.ENABLED)
+            .build()
+    }
     var wide by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(false) }
     var loaded by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(false) }
     Box(
@@ -294,7 +302,7 @@ fun LivePosterImage(
     ) {
         if (!loaded) fallback()
         coil3.compose.AsyncImage(
-            model = url,
+            model = imageRequest,
             contentDescription = contentDescription,
             contentScale = if (wide) androidx.compose.ui.layout.ContentScale.Fit else androidx.compose.ui.layout.ContentScale.Crop,
             onSuccess = { s ->

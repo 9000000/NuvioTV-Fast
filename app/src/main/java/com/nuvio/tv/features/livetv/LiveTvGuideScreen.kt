@@ -29,8 +29,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
@@ -232,6 +234,7 @@ private fun LiveTvGuideContent(
     var okPressJob by remember { mutableStateOf<Job?>(null) }
     var isLongPressHandled by remember { mutableStateOf(false) }
     var favoriteToastMessage by remember { mutableStateOf<String?>(null) }
+    var lastDpadTime by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(favoriteToastMessage) {
         if (favoriteToastMessage != null) {
@@ -290,31 +293,38 @@ private fun LiveTvGuideContent(
     LaunchedEffect(channelIndex, selectedGroupId, focusArea) {
         if (channels.isNotEmpty()) {
             val safeIndex = channelIndex.coerceIn(0, channels.lastIndex)
-            if (safeIndex == 0) {
-                channelListState.animateScrollToItem(0, scrollOffset = 0)
-            } else if (safeIndex == channels.lastIndex) {
-                channelListState.animateScrollToItem(channels.lastIndex, scrollOffset = 0)
-            } else {
-                val layoutInfo = channelListState.layoutInfo
-                val visible = layoutInfo.visibleItemsInfo
-                if (visible.isNotEmpty()) {
-                    val targetVisible = visible.firstOrNull { it.index == safeIndex }
-                    if (targetVisible == null) {
-                        channelListState.animateScrollToItem((safeIndex - 2).coerceAtLeast(0))
-                    } else {
-                        val viewportTop = layoutInfo.viewportStartOffset
-                        val viewportBottom = layoutInfo.viewportEndOffset
-                        val itemTop = targetVisible.offset
-                        val itemBottom = itemTop + targetVisible.size
+            val isFastZapping = (System.currentTimeMillis() - lastDpadTime) < 180L
 
-                        if (itemTop < viewportTop + 8) {
-                            channelListState.animateScrollToItem((safeIndex - 1).coerceAtLeast(0))
-                        } else if (itemBottom > viewportBottom - 48) {
-                            channelListState.animateScrollToItem((safeIndex - (visible.size - 2)).coerceAtLeast(0))
-                        }
-                    }
+            if (isFastZapping) {
+                // Instant snap during fast D-pad navigation to prevent frame drops
+                channelListState.scrollToItem((safeIndex - 2).coerceAtLeast(0))
+            } else {
+                if (safeIndex == 0) {
+                    channelListState.animateScrollToItem(0, scrollOffset = 0)
+                } else if (safeIndex == channels.lastIndex) {
+                    channelListState.animateScrollToItem(channels.lastIndex, scrollOffset = 0)
                 } else {
-                    channelListState.animateScrollToItem((safeIndex - 2).coerceAtLeast(0))
+                    val layoutInfo = channelListState.layoutInfo
+                    val visible = layoutInfo.visibleItemsInfo
+                    if (visible.isNotEmpty()) {
+                        val targetVisible = visible.firstOrNull { it.index == safeIndex }
+                        if (targetVisible == null) {
+                            channelListState.animateScrollToItem((safeIndex - 2).coerceAtLeast(0))
+                        } else {
+                            val viewportTop = layoutInfo.viewportStartOffset
+                            val viewportBottom = layoutInfo.viewportEndOffset
+                            val itemTop = targetVisible.offset
+                            val itemBottom = itemTop + targetVisible.size
+
+                            if (itemTop < viewportTop + 8) {
+                                channelListState.animateScrollToItem((safeIndex - 1).coerceAtLeast(0))
+                            } else if (itemBottom > viewportBottom - 48) {
+                                channelListState.animateScrollToItem((safeIndex - (visible.size - 2)).coerceAtLeast(0))
+                            }
+                        }
+                    } else {
+                        channelListState.animateScrollToItem((safeIndex - 2).coerceAtLeast(0))
+                    }
                 }
             }
         }
@@ -342,7 +352,9 @@ private fun LiveTvGuideContent(
     val endWindow = startWindow + windowDurationMs
 
     val focusedChannel = channels.getOrNull(channelIndex)
-    val focusedChannelPrograms = focusedChannel?.let { programs[it.key] }.orEmpty()
+    val focusedChannelPrograms = focusedChannel?.let { ch ->
+        programs[ch.key].takeIf { !it.isNullOrEmpty() } ?: SyntheticEpgGenerator.generate(ch, now)
+    }.orEmpty()
     val maxFutureMs = now + 24 * 3600 * 1000L
     val focusedVisiblePrograms = remember(focusedChannel?.key, focusedChannelPrograms, startWindow, endWindow, now) {
         val inWindow = focusedChannelPrograms.filter {
@@ -795,12 +807,14 @@ private fun LiveTvGuideContent(
                     }
                     GuideFocusArea.CHANNELS -> when {
                         e.key == Key.DirectionUp -> {
+                            lastDpadTime = System.currentTimeMillis()
                             if (channelIndex > 0) {
                                 channelIndex--
                             }
                             true
                         }
                         e.key == Key.DirectionDown -> {
+                            lastDpadTime = System.currentTimeMillis()
                             if (channelIndex < channels.lastIndex) {
                                 channelIndex++
                             }
@@ -899,144 +913,18 @@ private fun LiveTvGuideContent(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // ── Top Header with Program Details & Live Preview Player
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                // Left: Channel info, Program Title, Progress & Description
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    if (focusedChannel != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            LivePosterImage(
-                                url = focusedChannel.logo,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(6.dp)),
-                                contentDescription = focusedChannel.name
-                            )
-                            LiveText(
-                                text = "${if (focusedChannel.number > 0) "${focusedChannel.number} · " else ""}${focusedChannel.name}",
-                                size = 15.sp,
-                                weight = FontWeight.SemiBold,
-                                color = Color.LightGray
-                            )
-                            if (focusedProgram != null && now in focusedProgram.startMs until focusedProgram.stopMs) {
-                                LiveTag("TRỰC TIẾP")
-                            }
-                            if (focusedChannel.catchup != null) {
-                                LiveTag("CATCH-UP")
-                            }
-                        }
-
-                        Spacer(Modifier.height(6.dp))
-
-                        LiveText(
-                            text = focusedProgram?.title ?: "Chương trình truyền hình",
-                            size = 24.sp,
-                            weight = FontWeight.Bold,
-                            color = Color.White,
-                            maxLines = 1
-                        )
-
-                        Spacer(Modifier.height(4.dp))
-
-                        if (focusedProgram != null) {
-                            val timeStr = formatRange(focusedProgram.startMs, focusedProgram.stopMs)
-                            LiveText(
-                                text = timeStr,
-                                size = 13.sp,
-                                color = Color.Gray
-                            )
-                            val prog = focusedProgram.progress(now)
-                            if (now in focusedProgram.startMs until focusedProgram.stopMs) {
-                                Spacer(Modifier.height(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .width(260.dp)
-                                        .height(4.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(Color.DarkGray)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth(prog)
-                                            .height(4.dp)
-                                            .background(NuvioTheme.colors.Primary)
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            ScrollingDescription(
-                                text = focusedProgram.description ?: "Không có mô tả chi tiết cho chương trình này.",
-                                color = Color.LightGray,
-                                size = 13.sp,
-                                maxLines = 2
-                            )
-                        } else {
-                            LiveText(
-                                text = "Không có thông tin lịch phát sóng EPG cho kênh này.",
-                                size = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                    } else {
-                        LiveText(
-                            text = "Chọn một kênh để bắt đầu xem",
-                            size = 18.sp,
-                            color = Color.Gray
-                        )
-                    }
+            TopGuideHeader(
+                focusedChannel = focusedChannel,
+                focusedProgram = focusedProgram,
+                now = now,
+                showPreview = settings.showPreview,
+                playback = playback,
+                player = viewModel.playback.player,
+                onOpenFullscreen = {
+                    isFullscreen = true
+                    showOsd = true
                 }
-
-                // Right: Live Preview Player Window
-                if (settings.showPreview) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .aspectRatio(16f / 9f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.Black)
-                            .border(
-                                width = 1.dp,
-                                color = Color.White.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .clickable {
-                                isFullscreen = true
-                                showOsd = true
-                            }
-                    ) {
-                        LivePlayerSurface(
-                            player = viewModel.playback.player,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        if (playback.channelKey == null) {
-                            LiveText(
-                                text = "Bấm OK trên kênh để phát",
-                                size = 13.sp,
-                                color = Color.Gray,
-                                modifier = Modifier.align(Alignment.Center)
-                            )
-                        } else if (playback.isBuffering) {
-                            CircularProgressIndicator(
-                                color = NuvioTheme.colors.Primary,
-                                modifier = Modifier.size(32.dp).align(Alignment.Center)
-                            )
-                        }
-                    }
-                }
-            }
+            )
 
             // ── Time Ruler Bar
             Row(
@@ -1090,59 +978,14 @@ private fun LiveTvGuideContent(
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Slide-out Categories Drawer
                 if (focusArea == GuideFocusArea.DRAWER) {
-                    Column(
-                        modifier = Modifier
-                            .width(240.dp)
-                            .fillMaxHeight()
-                            .background(Color(0xFF141418))
-                            .padding(12.dp)
-                    ) {
-                        LiveText(
-                            text = "DANH MỤC",
-                            size = 13.sp,
-                            weight = FontWeight.Bold,
-                            color = Color.LightGray,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                        )
-                        LazyColumn(
-                            state = drawerListState,
-                            contentPadding = PaddingValues(vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            itemsIndexed(groups) { idx, grp ->
-                                val isFocused = idx == drawerIndex
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isFocused) NuvioTheme.colors.Primary else Color.Transparent)
-                                        .clickable {
-                                            selectGroupAndFocusChannels(idx)
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        LiveText(
-                                            text = grp.name,
-                                            size = 14.sp,
-                                            weight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isFocused) NuvioTheme.colors.OnPrimary else Color.White
-                                        )
-                                        LiveText(
-                                            text = "${grp.channelCount}",
-                                            size = 12.sp,
-                                            color = if (isFocused) NuvioTheme.colors.OnPrimary.copy(alpha = 0.8f) else Color.Gray
-                                        )
-                                    }
-                                }
-                            }
+                    CategoryDrawer(
+                        groups = groups,
+                        drawerIndex = drawerIndex,
+                        drawerListState = drawerListState,
+                        onSelectGroup = { idx ->
+                            selectGroupAndFocusChannels(idx)
                         }
-                    }
+                    )
                 }
 
                 // Vertical Channel List + Horizontal EPG Grid
@@ -1203,192 +1046,37 @@ private fun LiveTvGuideContent(
                             modifier = Modifier.fillMaxSize()
                         ) {
                         itemsIndexed(channels, key = { _, ch -> ch.key }) { index, ch ->
-                            val isChannelFocused = index == channelIndex && focusArea != GuideFocusArea.DRAWER
-                            val isPlaying = ch.key == playback.channelKey
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(rowHeightDp)
-                                    .background(if (index % 2 == 0) Color(0xFF121216) else Color(0xFF15151B)),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Channel Item Block
-                                Box(
-                                    modifier = Modifier
-                                        .width(channelColWidth)
-                                        .fillMaxHeight()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(
-                                            when {
-                                                isChannelFocused && focusArea == GuideFocusArea.CHANNELS -> NuvioTheme.colors.FocusBackground
-                                                isPlaying -> Color(0xFF262630)
-                                                else -> Color.Transparent
-                                            }
-                                        )
-                                        .border(
-                                            width = if (isPlaying) 1.5.dp else if (isChannelFocused && focusArea == GuideFocusArea.CHANNELS) 1.dp else 0.dp,
-                                            color = if (isPlaying) LIVE_RED else if (isChannelFocused && focusArea == GuideFocusArea.CHANNELS) NuvioTheme.colors.Primary else Color.Transparent,
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .combinedClickable(
-                                            onClick = {
-                                                channelIndex = index
-                                                focusArea = GuideFocusArea.CHANNELS
-                                                onOkPressed()
-                                            },
-                                            onLongClick = {
-                                                channelIndex = index
-                                                focusArea = GuideFocusArea.CHANNELS
-                                                val isFav = ch.id in user.favorites
-                                                viewModel.toggleFavorite(ch)
-                                                favoriteToastMessage = if (!isFav) "Đã thêm ${ch.name} vào Yêu thích ⭐" else "Đã xóa ${ch.name} khỏi Yêu thích"
-                                            }
-                                        )
-                                        .padding(horizontal = 8.dp),
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        if (isPlaying) {
-                                            Icon(
-                                                Icons.Default.PlayArrow,
-                                                contentDescription = null,
-                                                tint = LIVE_RED,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                        } else {
-                                            LiveText(
-                                                text = "${if (ch.number > 0) ch.number else (index + 1)}",
-                                                size = 12.sp,
-                                                color = Color.Gray,
-                                                modifier = Modifier.width(28.dp)
-                                            )
-                                        }
-
-                                        LivePosterImage(
-                                            url = ch.logo,
-                                            modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(RoundedCornerShape(4.dp)),
-                                            contentDescription = ch.name
-                                        )
-                                        Spacer(Modifier.width(10.dp))
-
-                                        LiveText(
-                                            text = ch.name,
-                                            size = 14.sp,
-                                            weight = FontWeight.SemiBold,
-                                            color = if (isChannelFocused) Color.White else Color(0xFFE2E2E2),
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f)
-                                        )
-
-                                        if (ch.catchup != null) {
-                                            Icon(
-                                                Icons.Default.History,
-                                                contentDescription = "Catchup",
-                                                tint = Color.Gray,
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                        }
-                                        if (ch.id in user.favorites) {
-                                            Spacer(Modifier.width(4.dp))
-                                            Icon(
-                                                Icons.Default.Star,
-                                                contentDescription = "Favorite",
-                                                tint = Color(0xFFFFD700),
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                        }
-                                    }
+                            ChannelRowItem(
+                                channel = ch,
+                                index = index,
+                                isChannelFocused = index == channelIndex && focusArea != GuideFocusArea.DRAWER,
+                                isChannelsArea = focusArea == GuideFocusArea.CHANNELS,
+                                isTimelineArea = focusArea == GuideFocusArea.TIMELINE,
+                                timelineProgramIndex = timelineProgramIndex,
+                                isPlaying = ch.key == playback.channelKey,
+                                isFavorite = ch.id in user.favorites,
+                                programs = programs[ch.key].orEmpty(),
+                                startWindow = startWindow,
+                                endWindow = endWindow,
+                                windowDurationMs = windowDurationMs,
+                                maxFutureMs = maxFutureMs,
+                                now = now,
+                                rowHeightDp = rowHeightDp,
+                                channelColWidth = channelColWidth,
+                                gridWidth = gridWidth,
+                                onClick = {
+                                    channelIndex = index
+                                    focusArea = GuideFocusArea.CHANNELS
+                                    onOkPressed()
+                                },
+                                onLongClick = {
+                                    channelIndex = index
+                                    focusArea = GuideFocusArea.CHANNELS
+                                    val isFav = ch.id in user.favorites
+                                    viewModel.toggleFavorite(ch)
+                                    favoriteToastMessage = if (!isFav) "Đã thêm ${ch.name} vào Yêu thích ⭐" else "Đã xóa ${ch.name} khỏi Yêu thích"
                                 }
-
-                                // Horizontal Timeline EPG Strip (Canvas drawing 60fps)
-                                val chPrograms = remember(ch.key, programs[ch.key], startWindow, endWindow, now) {
-                                    val allP = programs[ch.key].orEmpty()
-                                    val inWindow = allP.filter { it.stopMs > startWindow && it.startMs < endWindow && it.startMs <= maxFutureMs }
-                                    val pastInWindow = inWindow.filter { it.stopMs <= now }
-                                    if (pastInWindow.size > 2) {
-                                        val allowedPast = pastInWindow.takeLast(2).toSet()
-                                        inWindow.filter { it.stopMs > now || it in allowedPast }
-                                    } else {
-                                        inWindow
-                                    }
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .width(gridWidth)
-                                        .fillMaxHeight()
-                                        .padding(vertical = 4.dp)
-                                ) {
-                                    if (chPrograms.isEmpty()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(horizontal = 4.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0xFF1E1E24).copy(alpha = 0.5f)),
-                                            contentAlignment = Alignment.CenterStart
-                                        ) {
-                                            LiveText(
-                                                text = "Không có thông tin lịch chiếu",
-                                                size = 13.sp,
-                                                color = Color.DarkGray,
-                                                modifier = Modifier.padding(start = 12.dp)
-                                            )
-                                        }
-                                    } else {
-                                        // Build strip items for Canvas drawing
-                                        val stripItems = chPrograms.mapIndexed { pIdx, p ->
-                                            val pStart = p.startMs.coerceAtLeast(startWindow)
-                                            val pStop = p.stopMs.coerceAtMost(endWindow)
-                                            val fracStart = (pStart - startWindow).toFloat() / windowDurationMs
-                                            val fracDuration = (pStop - pStart).toFloat() / windowDurationMs
-                                            val itemX = gridWidth * fracStart
-                                            val itemWidth = (gridWidth * fracDuration).coerceAtLeast(10.dp)
-
-                                            val isTimelineFocused = isChannelFocused &&
-                                                    focusArea == GuideFocusArea.TIMELINE &&
-                                                    pIdx == timelineProgramIndex
-
-                                            val isLive = now in p.startMs until p.stopMs
-
-                                            StripItem(
-                                                x = itemX,
-                                                width = itemWidth,
-                                                title = p.title,
-                                                subtitle = formatRange(p.startMs, p.stopMs),
-                                                fill = when {
-                                                    isTimelineFocused -> NuvioTheme.colors.FocusBackground
-                                                    isLive -> Color(0xFF2B2B36)
-                                                    else -> Color(0xFF1C1C22)
-                                                },
-                                                edge = when {
-                                                    isTimelineFocused -> NuvioTheme.colors.Primary
-                                                    isLive -> LIVE_RED
-                                                    else -> Color(0xFF2C2C35)
-                                                },
-                                                text = if (isTimelineFocused || isLive) Color.White else Color.LightGray,
-                                                progress = if (isLive) p.progress(now) else null,
-                                                liveTag = isLive,
-                                                catchup = ch.catchup != null
-                                            )
-                                        }
-
-                                        GuideRowStrip(
-                                            items = stripItems,
-                                            titleSize = 13.sp,
-                                            smallSize = 11.sp
-                                        )
-                                    }
-                                }
-                            }
+                            )
                         }
                     }
                     }
@@ -1438,4 +1126,424 @@ private fun LiveTvGuideContent(
 private fun formatRange(startMs: Long, stopMs: Long): String {
     val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
     return "${timeFmt.format(Date(startMs))} - ${timeFmt.format(Date(stopMs))}"
+}
+
+@Composable
+private fun TopGuideHeader(
+    focusedChannel: LiveTvChannel?,
+    focusedProgram: EpgProgram?,
+    now: Long,
+    showPreview: Boolean,
+    playback: LivePlaybackState,
+    player: androidx.media3.common.Player?,
+    onOpenFullscreen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Left: Channel info, Program Title, Progress & Description
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (focusedChannel != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    LivePosterImage(
+                        url = focusedChannel.logo,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(6.dp)),
+                        contentDescription = focusedChannel.name
+                    )
+                    LiveText(
+                        text = "${if (focusedChannel.number > 0) "${focusedChannel.number} · " else ""}${focusedChannel.name}",
+                        size = 15.sp,
+                        weight = FontWeight.SemiBold,
+                        color = Color.LightGray
+                    )
+                    if (focusedProgram != null && now in focusedProgram.startMs until focusedProgram.stopMs) {
+                        LiveTag("TRỰC TIẾP")
+                    }
+                    if (focusedChannel.catchup != null) {
+                        LiveTag("CATCH-UP")
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                LiveText(
+                    text = focusedProgram?.title ?: "Chương trình truyền hình",
+                    size = 24.sp,
+                    weight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                if (focusedProgram != null) {
+                    val timeStr = formatRange(focusedProgram.startMs, focusedProgram.stopMs)
+                    LiveText(
+                        text = timeStr,
+                        size = 13.sp,
+                        color = Color.Gray
+                    )
+                    val prog = focusedProgram.progress(now)
+                    if (now in focusedProgram.startMs until focusedProgram.stopMs) {
+                        Spacer(Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(260.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.DarkGray)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(prog)
+                                    .height(4.dp)
+                                    .background(NuvioTheme.colors.Primary)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    ScrollingDescription(
+                        text = focusedProgram.description ?: "Không có mô tả chi tiết cho chương trình này.",
+                        color = Color.LightGray,
+                        size = 13.sp,
+                        maxLines = 2
+                    )
+                } else {
+                    LiveText(
+                        text = "Không có thông tin lịch phát sóng EPG cho kênh này.",
+                        size = 13.sp,
+                        color = Color.Gray
+                    )
+                }
+            } else {
+                LiveText(
+                    text = "Chọn một kênh để bắt đầu xem",
+                    size = 18.sp,
+                    color = Color.Gray
+                )
+            }
+        }
+
+        // Right: Live Preview Player Window
+        if (showPreview) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black)
+                    .border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .clickable { onOpenFullscreen() }
+            ) {
+                LivePlayerSurface(
+                    player = player,
+                    modifier = Modifier.fillMaxSize()
+                )
+                if (playback.channelKey == null) {
+                    LiveText(
+                        text = "Bấm OK trên kênh để phát",
+                        size = 13.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                } else if (playback.isBuffering) {
+                    CircularProgressIndicator(
+                        color = NuvioTheme.colors.Primary,
+                        modifier = Modifier.size(32.dp).align(Alignment.Center)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryDrawer(
+    groups: List<ChannelGroup>,
+    drawerIndex: Int,
+    drawerListState: LazyListState,
+    onSelectGroup: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .width(240.dp)
+            .fillMaxHeight()
+            .background(Color(0xFF141418))
+            .padding(12.dp)
+    ) {
+        LiveText(
+            text = "DANH MỤC",
+            size = 13.sp,
+            weight = FontWeight.Bold,
+            color = Color.LightGray,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+        )
+        LazyColumn(
+            state = drawerListState,
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            itemsIndexed(groups) { idx, grp ->
+                val isFocused = idx == drawerIndex
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isFocused) NuvioTheme.colors.Primary else Color.Transparent)
+                        .clickable { onSelectGroup(idx) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LiveText(
+                            text = grp.name,
+                            size = 14.sp,
+                            weight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isFocused) NuvioTheme.colors.OnPrimary else Color.White
+                        )
+                        LiveText(
+                            text = "${grp.channelCount}",
+                            size = 12.sp,
+                            color = if (isFocused) NuvioTheme.colors.OnPrimary.copy(alpha = 0.8f) else Color.Gray
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelRowItem(
+    channel: LiveTvChannel,
+    index: Int,
+    isChannelFocused: Boolean,
+    isChannelsArea: Boolean,
+    isTimelineArea: Boolean,
+    timelineProgramIndex: Int,
+    isPlaying: Boolean,
+    isFavorite: Boolean,
+    programs: List<EpgProgram>,
+    startWindow: Long,
+    endWindow: Long,
+    windowDurationMs: Long,
+    maxFutureMs: Long,
+    now: Long,
+    rowHeightDp: Dp,
+    channelColWidth: Dp,
+    gridWidth: Dp,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val chPrograms = remember(channel.key, programs, startWindow, endWindow, maxFutureMs) {
+        val effectivePrograms = programs.ifEmpty {
+            SyntheticEpgGenerator.generate(channel, now)
+        }
+        val inWindow = effectivePrograms.filter { it.stopMs > startWindow && it.startMs < endWindow && it.startMs <= maxFutureMs }
+        val pastInWindow = inWindow.filter { it.stopMs <= now }
+        if (pastInWindow.size > 2) {
+            val allowedPast = pastInWindow.takeLast(2).toSet()
+            inWindow.filter { it.stopMs > now || it in allowedPast }
+        } else {
+            inWindow
+        }
+    }
+
+    val isThisChannelTimelineFocused = isChannelFocused && isTimelineArea
+    val focusBg = NuvioTheme.colors.FocusBackground
+    val primaryColor = NuvioTheme.colors.Primary
+
+    val stripItems = remember(
+        chPrograms,
+        isThisChannelTimelineFocused,
+        timelineProgramIndex,
+        gridWidth,
+        startWindow,
+        endWindow,
+        now,
+        focusBg,
+        primaryColor
+    ) {
+        chPrograms.mapIndexed { pIdx, p ->
+            val pStart = p.startMs.coerceAtLeast(startWindow)
+            val pStop = p.stopMs.coerceAtMost(endWindow)
+            val fracStart = (pStart - startWindow).toFloat() / windowDurationMs
+            val fracDuration = (pStop - pStart).toFloat() / windowDurationMs
+            val itemX = gridWidth * fracStart
+            val itemWidth = (gridWidth * fracDuration).coerceAtLeast(10.dp)
+
+            val isTimelineFocused = isThisChannelTimelineFocused && pIdx == timelineProgramIndex
+            val isLive = now in p.startMs until p.stopMs
+
+            StripItem(
+                x = itemX,
+                width = itemWidth,
+                title = p.title,
+                subtitle = formatRange(p.startMs, p.stopMs),
+                fill = when {
+                    isTimelineFocused -> focusBg
+                    isLive -> Color(0xFF2B2B36)
+                    else -> Color(0xFF1C1C22)
+                },
+                edge = when {
+                    isTimelineFocused -> primaryColor
+                    isLive -> LIVE_RED
+                    else -> Color(0xFF2C2C35)
+                },
+                text = if (isTimelineFocused || isLive) Color.White else Color.LightGray,
+                progress = if (isLive) p.progress(now) else null,
+                liveTag = isLive,
+                catchup = channel.catchup != null
+            )
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(rowHeightDp)
+            .background(if (index % 2 == 0) Color(0xFF121216) else Color(0xFF15151B)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Channel Item Block
+        Box(
+            modifier = Modifier
+                .width(channelColWidth)
+                .fillMaxHeight()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    when {
+                        isChannelFocused && isChannelsArea -> focusBg
+                        isPlaying -> Color(0xFF262630)
+                        else -> Color.Transparent
+                    }
+                )
+                .border(
+                    width = if (isPlaying) 1.5.dp else if (isChannelFocused && isChannelsArea) 1.dp else 0.dp,
+                    color = if (isPlaying) LIVE_RED else if (isChannelFocused && isChannelsArea) primaryColor else Color.Transparent,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                )
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isPlaying) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = LIVE_RED,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                } else {
+                    LiveText(
+                        text = "${if (channel.number > 0) channel.number else (index + 1)}",
+                        size = 12.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.width(28.dp)
+                    )
+                }
+
+                LivePosterImage(
+                    url = channel.logo,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    contentDescription = channel.name
+                )
+                Spacer(Modifier.width(10.dp))
+
+                LiveText(
+                    text = channel.name,
+                    size = 14.sp,
+                    weight = FontWeight.SemiBold,
+                    color = if (isChannelFocused) Color.White else Color(0xFFE2E2E2),
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (channel.catchup != null) {
+                    Icon(
+                        Icons.Default.History,
+                        contentDescription = "Catchup",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                if (isFavorite) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = "Favorite",
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+        }
+
+        // Horizontal Timeline EPG Strip (Canvas drawing 60fps)
+        Box(
+            modifier = Modifier
+                .width(gridWidth)
+                .fillMaxHeight()
+                .padding(vertical = 4.dp)
+        ) {
+            if (stripItems.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 4.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF1E1E24).copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    LiveText(
+                        text = "Không có thông tin lịch chiếu",
+                        size = 13.sp,
+                        color = Color.DarkGray,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+            } else {
+                GuideRowStrip(
+                    items = stripItems,
+                    titleSize = 13.sp,
+                    smallSize = 11.sp
+                )
+            }
+        }
+    }
 }

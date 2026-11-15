@@ -139,7 +139,18 @@ class LiveTvViewModel @Inject constructor(
             val fromMs = nowMs - 24 * 3600 * 1000L
             val toMs = nowMs + 24 * 3600 * 1000L
             val keys = channels.map { it.key }
-            val loaded = epgDatabase.range(fromMs, toMs, channels = keys)
+            val loaded = epgDatabase.range(fromMs, toMs, channels = keys).toMutableMap()
+
+            // Tự động sinh lịch phát sóng (Synthetic EPG) từ tên & mô tả cho các kênh không có dữ liệu XMLTV
+            for (ch in channels) {
+                if (loaded[ch.key].isNullOrEmpty()) {
+                    val synthetic = SyntheticEpgGenerator.generate(ch, nowMs)
+                    if (synthetic.isNotEmpty()) {
+                        loaded[ch.key] = synthetic
+                    }
+                }
+            }
+
             _programs.update { prev ->
                 val combined = prev.toMutableMap()
                 combined.putAll(loaded)
