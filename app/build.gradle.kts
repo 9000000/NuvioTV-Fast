@@ -147,7 +147,6 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1192
-        versionCode = 1192
         versionName = "1.5.0"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
