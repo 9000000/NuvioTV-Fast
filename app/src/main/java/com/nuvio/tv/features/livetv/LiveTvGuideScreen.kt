@@ -176,23 +176,45 @@ private fun LiveTvGuideContent(
 
     var selectedGroupId by remember { mutableStateOf(ChannelGroup.FAVORITES) }
 
-    val channels = remember(rawChannels, selectedGroupId, user.favorites, user.recent) {
-        when {
-            selectedGroupId == ChannelGroup.FAVORITES -> rawChannels.filter { it.id in user.favorites }
-            selectedGroupId == ChannelGroup.RECENT -> {
-                val recentMap = user.recent.withIndex().associate { it.value to it.index }
-                rawChannels.filter { it.id in recentMap.keys }.sortedBy { recentMap[it.id] ?: 999 }
+    val getChannelsForGroup: (String) -> List<LiveTvChannel> = remember(rawChannels, user.favorites, user.recent) {
+        { groupId ->
+            when {
+                groupId == ChannelGroup.FAVORITES -> rawChannels.filter { it.id in user.favorites }
+                groupId == ChannelGroup.RECENT -> {
+                    val recentMap = user.recent.withIndex().associate { it.value to it.index }
+                    rawChannels.filter { it.id in recentMap.keys }.sortedBy { recentMap[it.id] ?: 999 }
+                }
+                groupId.startsWith("custom:") -> {
+                    val gName = groupId.removePrefix("custom:")
+                    rawChannels.filter { it.group?.trim().equals(gName, ignoreCase = true) }
+                }
+                else -> rawChannels
             }
-            selectedGroupId.startsWith("custom:") -> {
-                val gName = selectedGroupId.removePrefix("custom:")
-                rawChannels.filter { it.group?.trim().equals(gName, ignoreCase = true) }
-            }
-            else -> rawChannels
         }
     }
 
+    val findTargetChannelIndex: (List<LiveTvChannel>) -> Int = { targetChannels ->
+        if (targetChannels.isEmpty()) {
+            0
+        } else {
+            val lastWatchedId = playback.channelKey ?: user.lastChannelKey
+            if (lastWatchedId != null) {
+                val idx = targetChannels.indexOfFirst { it.id == lastWatchedId || it.key == lastWatchedId }
+                if (idx >= 0) idx else 0
+            } else {
+                0
+            }
+        }
+    }
+
+    val channels = remember(rawChannels, selectedGroupId, user.favorites, user.recent) {
+        getChannelsForGroup(selectedGroupId)
+    }
+
     var focusArea by remember { mutableStateOf(GuideFocusArea.DRAWER) }
-    var channelIndex by remember { mutableIntStateOf(0) }
+    var channelIndex by remember(rawChannels) {
+        mutableIntStateOf(findTargetChannelIndex(channels))
+    }
     var drawerIndex by remember { mutableIntStateOf(0) }
     var timelineProgramIndex by remember { mutableIntStateOf(0) }
 
@@ -265,19 +287,20 @@ private fun LiveTvGuideContent(
     }
 
     // Keep channel list scrolled smoothly near active index without cut-offs at top/bottom
-    LaunchedEffect(channelIndex) {
+    LaunchedEffect(channelIndex, selectedGroupId, focusArea) {
         if (channels.isNotEmpty()) {
-            if (channelIndex == 0) {
+            val safeIndex = channelIndex.coerceIn(0, channels.lastIndex)
+            if (safeIndex == 0) {
                 channelListState.animateScrollToItem(0, scrollOffset = 0)
-            } else if (channelIndex == channels.lastIndex) {
+            } else if (safeIndex == channels.lastIndex) {
                 channelListState.animateScrollToItem(channels.lastIndex, scrollOffset = 0)
             } else {
                 val layoutInfo = channelListState.layoutInfo
                 val visible = layoutInfo.visibleItemsInfo
                 if (visible.isNotEmpty()) {
-                    val targetVisible = visible.firstOrNull { it.index == channelIndex }
+                    val targetVisible = visible.firstOrNull { it.index == safeIndex }
                     if (targetVisible == null) {
-                        channelListState.animateScrollToItem((channelIndex - 2).coerceAtLeast(0))
+                        channelListState.animateScrollToItem((safeIndex - 2).coerceAtLeast(0))
                     } else {
                         val viewportTop = layoutInfo.viewportStartOffset
                         val viewportBottom = layoutInfo.viewportEndOffset
@@ -285,11 +308,13 @@ private fun LiveTvGuideContent(
                         val itemBottom = itemTop + targetVisible.size
 
                         if (itemTop < viewportTop + 8) {
-                            channelListState.animateScrollToItem((channelIndex - 1).coerceAtLeast(0))
+                            channelListState.animateScrollToItem((safeIndex - 1).coerceAtLeast(0))
                         } else if (itemBottom > viewportBottom - 48) {
-                            channelListState.animateScrollToItem((channelIndex - (visible.size - 2)).coerceAtLeast(0))
+                            channelListState.animateScrollToItem((safeIndex - (visible.size - 2)).coerceAtLeast(0))
                         }
                     }
+                } else {
+                    channelListState.animateScrollToItem((safeIndex - 2).coerceAtLeast(0))
                 }
             }
         }
@@ -350,23 +375,14 @@ private fun LiveTvGuideContent(
         drawerIndex = targetIndex
         selectedGroupId = targetGroupId
         focusArea = GuideFocusArea.CHANNELS
-        channelIndex = 0
 
-        val targetChannels = when {
-            targetGroupId == ChannelGroup.FAVORITES -> rawChannels.filter { it.id in user.favorites }
-            targetGroupId == ChannelGroup.RECENT -> {
-                val recentMap = user.recent.withIndex().associate { it.value to it.index }
-                rawChannels.filter { it.id in recentMap.keys }.sortedBy { recentMap[it.id] ?: 999 }
-            }
-            targetGroupId.startsWith("custom:") -> {
-                val gName = targetGroupId.removePrefix("custom:")
-                rawChannels.filter { it.group?.trim().equals(gName, ignoreCase = true) }
-            }
-            else -> rawChannels
-        }
-        val firstCh = targetChannels.firstOrNull()
-        if (firstCh != null && settings.showPreview && playback.channelKey != firstCh.key) {
-            viewModel.play(firstCh, targetGroupId)
+        val targetChannels = getChannelsForGroup(targetGroupId)
+        val targetChannelIdx = findTargetChannelIndex(targetChannels)
+        channelIndex = targetChannelIdx
+
+        val targetCh = targetChannels.getOrNull(targetChannelIdx)
+        if (targetCh != null && settings.showPreview && playback.channelKey != targetCh.key) {
+            viewModel.play(targetCh, targetGroupId)
         }
     }
 
@@ -757,13 +773,15 @@ private fun LiveTvGuideContent(
                         e.key == Key.DirectionUp -> {
                             drawerIndex = (drawerIndex - 1).coerceAtLeast(0)
                             selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
-                            channelIndex = 0
+                            val targetChannels = getChannelsForGroup(selectedGroupId)
+                            channelIndex = findTargetChannelIndex(targetChannels)
                             true
                         }
                         e.key == Key.DirectionDown -> {
                             drawerIndex = (drawerIndex + 1).coerceAtMost(groups.lastIndex)
                             selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
-                            channelIndex = 0
+                            val targetChannels = getChannelsForGroup(selectedGroupId)
+                            channelIndex = findTargetChannelIndex(targetChannels)
                             true
                         }
                         e.key == Key.DirectionRight -> {
