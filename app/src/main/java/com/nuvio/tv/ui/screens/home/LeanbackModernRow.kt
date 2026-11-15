@@ -488,9 +488,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     init {
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         itemAnimator = null
-        layoutManager?.isItemPrefetchEnabled = false
+        layoutManager?.isItemPrefetchEnabled = true
         setHasFixedSize(true)
-        setItemViewCacheSize(8)
+        setItemViewCacheSize(12)
 
         addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -1093,7 +1093,7 @@ class LeanbackCardViewHolder(
             val request = ImageRequest.Builder(ctx)
                 .data(imageUrl)
                 .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
-                .allowHardware(false)
+                .allowHardware(true)
                 .crossfade(false)
                 .target(
                     object : Target {
@@ -1116,7 +1116,7 @@ class LeanbackCardViewHolder(
                                 }
                             } else {
                                 val bmp = (result as? BitmapImage)?.bitmap
-                                if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
+                                if (bmp != null && !bmp.isRecycled) {
                                     LeanbackColorEngine.extractDominantColorAsync(boundColorKey, bmp) { extracted ->
                                         dominantColorCache.put(boundColorKey, extracted)
                                         if (currentItem?.key == boundKey) {
@@ -1455,6 +1455,28 @@ class LeanbackRowAdapter(
     override fun onBindViewHolder(holder: LeanbackCardViewHolder, position: Int) {
         val item = items[position]
         holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
+        prefetchAhead(holder.itemView.context, position)
+    }
+
+    private fun prefetchAhead(context: Context, position: Int) {
+        val count = items.size
+        if (count <= 1) return
+        val aheadMax = minOf(position + 4, count - 1)
+        if (position + 1 > aheadMax) return
+        val imageLoader = SingletonImageLoader.get(context)
+        for (i in (position + 1)..aheadMax) {
+            val nextItem = items.getOrNull(i) ?: continue
+            val nextUrl = nextItem.imageUrl?.trim()
+            if (!nextUrl.isNullOrEmpty()) {
+                val req = ImageRequest.Builder(context)
+                    .data(nextUrl)
+                    .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
+                    .allowHardware(true)
+                    .crossfade(false)
+                    .build()
+                imageLoader.enqueue(req)
+            }
+        }
     }
 
     override fun onViewRecycled(holder: LeanbackCardViewHolder) {

@@ -123,17 +123,18 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         val imageOkHttpClient by lazy {
             val imageDispatcher = okhttp3.Dispatcher().apply {
-                maxRequests = 32
-                maxRequestsPerHost = 16
+                maxRequests = 64
+                maxRequestsPerHost = 48
             }
             OkHttpClient.Builder()
                 .eventListenerFactory(com.nuvio.tv.core.image.ArtworkDiagnostics.networkEvents)
                 .dispatcher(imageDispatcher)
+                .connectionPool(okhttp3.ConnectionPool(32, 5, TimeUnit.MINUTES))
                 .dns(IPv4FirstDns())
                 .socketFactory(NoDelaySocketFactory)
                 .connectTimeout(4, TimeUnit.SECONDS)
-                .readTimeout(5, TimeUnit.SECONDS)
-                .callTimeout(8, TimeUnit.SECONDS)
+                .readTimeout(6, TimeUnit.SECONDS)
+                .callTimeout(10, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
                     try {
                         chain.proceed(chain.request())

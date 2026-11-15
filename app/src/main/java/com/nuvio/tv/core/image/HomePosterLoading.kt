@@ -17,11 +17,23 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+private val TMDB_ARTWORK_URL_PATTERN = Regex("""^https?://image\.tmdb\.org/t/p/(original|w\d+)/(.+)$""")
+
 /** Shared with the image mapper so disk lookups use the fetched TMDB URL. */
 fun sizedHomeArtworkUrl(data: String, width: Int?): String {
-    if (!data.startsWith("https://image.tmdb.org/t/p/original/") || width == null || width !in 1..780) return data
-    val bucket = when { width <= 342 -> "w342"; width <= 500 -> "w500"; else -> "w780" }
-    return data.replace("/t/p/original/", "/t/p/$bucket/")
+    val match = TMDB_ARTWORK_URL_PATTERN.matchEntire(data) ?: return data
+    val currentBucket = match.groupValues[1]
+    val path = match.groupValues[2]
+
+    val bucket = when {
+        width == null || width <= 0 -> "w342"
+        width <= 342 -> "w342"
+        width <= 500 -> "w500"
+        width <= 780 -> "w780"
+        else -> if (currentBucket == "original" || currentBucket == "w1280") currentBucket else "w780"
+    }
+    if (bucket == currentBucket) return data
+    return "https://image.tmdb.org/t/p/$bucket/$path"
 }
 
 /** A request waiting for a download or decode lane. */
@@ -115,8 +127,8 @@ fun homePosterRetryAfterError(attempt: Int): Boolean = attempt < 1
 const val HOME_POSTER_BITMAP_PARALLELISM = 4
 
 /** Posters on screen download this many at a time; prefetch and idle warming hold at most [HOME_POSTER_BACKGROUND_DOWNLOADS] of them. */
-const val HOME_POSTER_DOWNLOADS = 8
-const val HOME_POSTER_BACKGROUND_DOWNLOADS = 2
+const val HOME_POSTER_DOWNLOADS = 24
+const val HOME_POSTER_BACKGROUND_DOWNLOADS = 8
 private const val MIB = 1024L * 1024
 private const val STRONG_BOX_TOTAL_BYTES = 2_560L * MIB
 private const val LARGE_MEMORY_BOX_TOTAL_BYTES = 3_072L * MIB
