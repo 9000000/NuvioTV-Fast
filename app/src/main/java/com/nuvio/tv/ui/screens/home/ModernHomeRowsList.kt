@@ -774,11 +774,11 @@ internal fun ModernHomeRowsList(
                         }
                     }
                 }
-                val isActiveRowLambda = remember(row.key) {
+                val isActiveRowLambda = remember(row.key, isSidebarExpanded) {
                     // Uses the same source of truth as the focus handoff, so the row we just
                     // left stops being treated as active the moment the key handler decides
-                    // to move. Otherwise deferred focus work in the old row can win the race.
-                    { row.key == effectiveActiveRowKey() }
+                    // to move. When sidebar is open, no home rows can take focus.
+                    { !isSidebarExpandedState.value && row.key == effectiveActiveRowKey() }
                 }
                 val stableOnCatalogSelectionFocused = remember {
                     { selection: FocusedCatalogSelection ->

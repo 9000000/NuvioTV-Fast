@@ -1641,7 +1641,7 @@ private fun ModernSidebarScaffold(
     }
 
     // derivedStateOf prevents per-frame recomposition — only triggers when the boolean crosses the threshold
-    val sidebarBlocksContentKeys by remember { derivedStateOf { sidebarExpandProgress > 0.2f } }
+    val sidebarBlocksContentKeys by remember { derivedStateOf { isSidebarExpanded || sidebarExpandProgress > 0.05f } }
     val sidebarShowExpandedPanel by remember { derivedStateOf { sidebarExpandProgress > 0.01f } }
     val sidebarShowCollapsedPill by remember { derivedStateOf { sidebarExpandProgress < 0.98f } }
     val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled && (isSidebarExpanded || sidebarShowExpandedPanel)
@@ -1759,6 +1759,7 @@ private fun ModernSidebarScaffold(
                     {
                         isSidebarExpanded = true
                         sidebarCollapsePending = false
+                        nativeSidebarRef?.requestSidebarFocus(selectedDrawerRoute)
                     }
                 } else null
             ) {

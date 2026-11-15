@@ -588,7 +588,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
      */
     var canTakeFocus: (() -> Boolean)? = null
 
-    fun mayTakeFocus(): Boolean = hasFocus() || canTakeFocus?.invoke() != false
+    private var isNavigatingToSidebar: Boolean = false
+
+    fun mayTakeFocus(): Boolean = !isNavigatingToSidebar && (hasFocus() || canTakeFocus?.invoke() != false)
 
     val hasPendingHorizontalNavigation: Boolean
         get() = isHoldingHorizontalKey ||
@@ -603,7 +605,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         // (protect it) or because a deliberate row change already pointed focus at another
         // row (let it go). canTakeFocus is updated synchronously by the key handlers, while
         // hasFocus()/scroll state are still stale during the handoff.
-        val deliberateRowChange = canTakeFocus?.invoke() == false
+        val deliberateRowChange = isNavigatingToSidebar || canTakeFocus?.invoke() == false
         val shouldProtectFocus = isAttachedToWindow &&
             !deliberateRowChange &&
             (hasPendingHorizontalNavigation || isSubmittingItems)
@@ -786,6 +788,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         get() = isComputingLayout || isInLayout || !isAttachedToWindow
 
     override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
+        if (!mayTakeFocus()) return false
+        isNavigatingToSidebar = false
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         if (isBusyLayout) {
             post { if (mayTakeFocus()) requestFocus(direction, previouslyFocusedRect) }
             return false
@@ -940,6 +945,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
                     isHoldingHorizontalKey = false
+                    if (isNavigatingToSidebar || canTakeFocus?.invoke() == false) {
+                        return true
+                    }
                     val total = rowAdapter?.itemCount ?: 0
                     val currentSelected = selectedPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
                     val target = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
@@ -1001,6 +1009,11 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                         val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
                         if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
                             if (onNavigateLeftOnFirstItem?.invoke() == true) {
+                                isNavigatingToSidebar = true
+                                isHoldingHorizontalKey = false
+                                pendingTargetPosition = RecyclerView.NO_POSITION
+                                floatingRingView?.hideRing(false)
+                                descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                                 clearFocus()
                                 return true
                             }

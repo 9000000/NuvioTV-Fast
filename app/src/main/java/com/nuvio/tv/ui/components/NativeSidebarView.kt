@@ -95,6 +95,9 @@ class NativeSidebarView @JvmOverloads constructor(
                     }
                     return true
                 }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    return true // Consume to stay in sidebar when pressing Left repeatedly
+                }
             }
         }
         return super.dispatchKeyEvent(event)
