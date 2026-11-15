@@ -136,8 +136,8 @@ class LiveTvViewModel @Inject constructor(
     fun loadEpgWindow(channels: List<LiveTvChannel>) {
         viewModelScope.launch(Dispatchers.IO) {
             val nowMs = System.currentTimeMillis()
-            val fromMs = nowMs - 6 * 3600 * 1000L
-            val toMs = nowMs + 18 * 3600 * 1000L
+            val fromMs = nowMs - 24 * 3600 * 1000L
+            val toMs = nowMs + 24 * 3600 * 1000L
             val keys = channels.map { it.key }
             val loaded = epgDatabase.range(fromMs, toMs, channels = keys)
             _programs.update { prev ->

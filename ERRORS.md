@@ -86,4 +86,69 @@
 
 ---
 
+## [2026-11-15 13:45] - Import Lỗi nativeKeyEvent & Kênh Đầu/Cuối Bị Cắt Nửa
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideScreen.kt:61`
+- **Agent**: mon
+- **Root Cause**: 
+  1. Thêm nhầm lệnh import `import androidx.compose.ui.input.key.nativeKeyEvent` trong khi `nativeKeyEvent` là thuộc tính thành viên (member property) sẵn có trên lớp `KeyEvent`.
+  2. Khi di chuyển lên kênh đầu tiên (`channelIndex == 0`) hoặc kênh cuối cùng (`channelIndex == channels.lastIndex`), điều kiện cuộn kiểm tra `first > 0` và `last < channels.lastIndex` bị `false`, khiến danh sách không cuộn kịch biên, kết hợp thiếu `contentPadding` đáy làm item đầu và cuối bị mép màn hình che khuất một nửa.
+- **Error Message**: 
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideScreen.kt:61:38 Unresolved reference 'nativeKeyEvent'.
+  User reported: lỗi kênh đầu tiên và kênh cuối cùng không tự cuộn lên xuống để hiển thị hết chỉ thấy 1 nửa
+  ```
+- **Fix Applied**: 
+  1. Xóa bỏ import sai `nativeKeyEvent`, thêm `@OptIn(ExperimentalFoundationApi::class)` cho tính năng `combinedClickable`.
+  2. Bổ sung `contentPadding = PaddingValues(top = 6.dp, bottom = 56.dp)` cho `LazyColumn` kênh và `PaddingValues(vertical = 8.dp)` cho danh mục Drawer.
+  3. Xử lý chuyên biệt trong `LaunchedEffect(channelIndex)`: Khi `channelIndex == 0` gọi `animateScrollToItem(0, 0)` kịch đỉnh; khi `channelIndex == channels.lastIndex` gọi `animateScrollToItem(channels.lastIndex, 0)` kịch đáy.
+- **Prevention**: Kiểm tra chữ ký thuộc tính trên Compose trước khi import; luôn cấp khoảng thở `contentPadding(bottom)` cho `LazyColumn` trên TV để tránh bị mép màn hình cắt ngang nội dung.
+- **Status**: Fixed
+
+---
+
+## [2026-11-15 13:55] - Timeline EPG Không Thể Cuộn Sang Phải Để Xem Thêm Chương Trình Tương Lai
+
+- **Type**: Logic
+- **Severity**: Medium
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideScreen.kt:315` & `LiveTvGuideScreen.kt:790`
+- **Agent**: mon
+- **Root Cause**: Cửa sổ thời gian EPG bị cố định cứng trong 2 tiếng xung quanh thời điểm hiện tại (`startWindow` cố định theo `now`). Khi người dùng bấm phím Phải tới chương trình cuối cùng của 2 tiếng đó, điều kiện `timelineProgramIndex < focusedVisiblePrograms.lastIndex` bị chặn lại và đứng yên tại chỗ, không có cơ chế dịch chuyển mốc thời gian sang tương lai. Đồng thời `loadEpgWindow` trong ViewModel chỉ nạp từ -6h đến +18h khiến dữ liệu các ngày sau không được đưa vào bộ nhớ.
+- **Error Message**: 
+  ```
+  User reported: lỗi epg chỉ xem được vài thông tin không thể di chuyển sang phải để hiện thêm
+  ```
+- **Fix Applied**: 
+  1. Mở rộng phạm vi nạp EPG trong `LiveTvViewModel.loadEpgWindow` lên từ -24h (hôm qua) đến +72h (3 ngày tới).
+  2. Bổ sung biến trạng thái `windowOffsetMs`: Khi người dùng bấm phím Phải tại chương trình cuối cùng trong cửa sổ 2 tiếng hiện tại, hệ thống tự động dịch chuyển cửa sổ thời gian sang tương lai (`windowOffsetMs += halfHourMs`), trượt dải Canvas để hiển thị các chương trình tiếp theo tới tối nay, ngày mai và các ngày sau.
+  3. Tương tự khi bấm phím Trái: Cho phép lùi từ tương lai về hiện tại, và lùi tiếp về quá khứ 24h để xem lại các chương trình đã phát (Catch-up).
+  4. Phím Back trong Timeline: Khi đang ở tương lai/quá khứ (`windowOffsetMs != 0L`), bấm Back sẽ đưa ngay về mốc thời gian Trực tiếp hiện tại; bấm Back lần nữa sẽ quay lại cột danh sách kênh.
+  5. Thước đo thời gian Time Ruler Bar tự động hiển thị ngày (ví dụ: `T2, 16/11 · 08:00`) khi người dùng cuộn sang ngày khác.
+- **Prevention**: Thiết kế timeline EPG luôn phải hỗ trợ cơ chế Horizontal Window Paging / Offset để người dùng có thể duyệt toàn bộ lịch phát sóng đa ngày.
+- **Status**: Fixed
+
+---
+
+## [2026-11-15 14:05] - Bấm Trái Bị Kẹt Lùi Thời Gian Không Về Được Kênh & Hiển Thị Quá Nhiều Chương Trình Đã Phát
+
+- **Type**: Logic
+- **Severity**: Medium
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideScreen.kt:790` & `LiveTvGuideScreen.kt:320`
+- **Agent**: mon
+- **Root Cause**: Khi người dùng bấm phím Trái trong Timeline, nhánh `else if (windowOffsetMs > -24 * 3600 * 1000L && ...)` luôn nhận giá trị `true` do dữ liệu EPG quá khứ luôn tồn tại, dẫn đến việc liên tục lùi thời gian (-30m, -1h, -2h...) tới 48 lần thay vì chuyển về cột kênh. Đồng thời giao diện tải tràn lan toàn bộ các chương trình đã phát từ hôm trước làm rối mắt.
+- **Error Message**: 
+  ```
+  User reported: phát sinh thêm lỗi bấm sang trái lại không trỏ vào được kênh , sửa lại chỉ hiển thị 2 trương trình đã phát thay vì hiện lại rất nhiều
+  ```
+- **Fix Applied**: 
+  1. Giới hạn hiển thị quá khứ: Chỉ lọc và giữ lại tối đa **2 chương trình đã phát gần nhất** (`takeLast(2)`) trước thời điểm hiện tại `now` trong `focusedVisiblePrograms` và `chPrograms`.
+  2. Khóa không lùi thời gian âm: Khi ở mốc thời gian hiện tại (`windowOffsetMs == 0L`), bấm phím Trái lùi qua 2 chương trình đã phát là **chuyển ngay lập tức về cột kênh** (`focusArea = GuideFocusArea.CHANNELS`).
+  3. Phím Back trong Timeline: Luôn reset `windowOffsetMs = 0L` và đưa focus trở về cột kênh ngay lập tức.
+- **Prevention**: Tránh lùi thời gian vô hạn trên trục ngang nếu người dùng muốn thao tác điều hướng chuyển vùng (Focus Area Navigation); luôn giới hạn số lượng item quá khứ theo yêu cầu nghiệp vụ UX.
+- **Status**: Fixed
+
+---
+
 
