@@ -91,7 +91,7 @@ object OpenSubtitlesHasher {
                 } else {
                     // 200: no range support, fall back to Content-Length
                     response.header("Content-Length")?.toLongOrNull()
-                        ?: response.body.contentLength().takeIf { it > 0 }
+                        ?: response.body?.contentLength()?.takeIf { it > 0 }
                 }
                 if (len == null) return null
                 if (len > 0) len else null

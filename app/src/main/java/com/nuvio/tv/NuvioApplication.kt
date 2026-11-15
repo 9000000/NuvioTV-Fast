@@ -17,6 +17,7 @@ import coil3.svg.SvgDecoder
 import coil3.request.crossfade
 import coil3.request.allowHardware
 import coil3.request.allowRgb565
+import coil3.request.maxBitmapSize
 import coil3.bitmapFactoryMaxParallelism
 
 import okio.Path.Companion.toOkioPath
@@ -117,6 +118,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         } catch (_: Exception) { }
     }
 
+    @OptIn(coil3.annotation.ExperimentalCoilApi::class)
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         val imageOkHttpClient by lazy {
@@ -125,6 +127,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 maxRequestsPerHost = 16
             }
             OkHttpClient.Builder()
+                .eventListenerFactory(com.nuvio.tv.core.image.ArtworkDiagnostics.networkEvents)
                 .dispatcher(imageDispatcher)
                 .dns(IPv4FirstDns())
                 .socketFactory(NoDelaySocketFactory)
@@ -148,11 +151,25 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 }
         }
 
-        val imageLoaderRef: () -> ImageLoader = { SingletonImageLoader.get(this) }
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memoryInfo = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memoryInfo)
+        val diskDecodeSlots = com.nuvio.tv.core.image.homePosterDiskDecodeSlots(
+            totalRamBytes = memoryInfo.totalMem,
+            lowRamDevice = activityManager.isLowRamDevice,
+            cores = Runtime.getRuntime().availableProcessors()
+        )
 
         return ImageLoader.Builder(this)
+            .eventListenerFactory(com.nuvio.tv.core.image.ArtworkDiagnostics.imageEvents)
             .components {
                 add(CustomPosterFallbackInterceptor())
+                add(com.nuvio.tv.core.image.HomePosterLoadingInterceptor(diskDecodeSlots))
+                // Size-aware TMDB downscaler: rewrite multi-MB original poster URLs to w342/w500 matching target
+                add(coil3.map.Mapper<String, String> { data, options ->
+                    val w = (options.size.width as? coil3.size.Dimension.Pixels)?.px
+                    com.nuvio.tv.core.image.sizedHomeArtworkUrl(data, w).takeIf { it != data }
+                })
                 if (Build.VERSION.SDK_INT >= 28) {
                     add(AnimatedImageDecoder.Factory())
                 } else {
@@ -160,55 +177,44 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 }
                 add(SvgDecoder.Factory())
                 add(
-                    imageNetworkFetcherFactory(
-                        callFactory = { imageOkHttpClient },
-                        cacheStrategy = {
-                            StaleWhileRevalidateCacheStrategy(
-                                revalidationClient = { imageOkHttpClient },
-                                imageLoaderProvider = imageLoaderRef,
-                            )
-                        },
+                    com.nuvio.tv.core.image.SavedCopyOnErrorFetcher.Factory(
+                        imageNetworkFetcherFactory(
+                            callFactory = { imageOkHttpClient },
+                            cacheStrategy = { com.nuvio.tv.core.image.imageCacheStrategy },
+                        )
                     )
                 )
             }
             .memoryCache {
-                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                val memoryInfo = ActivityManager.MemoryInfo()
-                activityManager.getMemoryInfo(memoryInfo)
                 val totalRamMb = memoryInfo.totalMem / (1024 * 1024)
-                // Low-RAM devices (≤2GB): use 0.15 — larger cache reduces GC pressure
-                // from rapid bitmap eviction during scrolling.
-                // Mid-range devices (≤3GB): use 0.20 for decent image caching.
-                // Normal devices (>3GB): use 0.25 for snappy image loading.
-                // - allowHardware(false) keeps bitmaps on heap instead of GPU memory
                 val cachePercent = when {
                     totalRamMb <= 2048 -> 0.15
                     totalRamMb <= 3072 -> 0.20
                     else -> 0.25
                 }
-                // maxSizePercent takes the share of largeMemoryClass under largeHeap (512 MB on
-                // 1 GB TVs, ~77 MB of bitmaps), so when MemoryBudget sizes from a smaller heap on
-                // such a TV the cache takes its share from that heap too.
-                val budgetHeapBytes = MemoryBudget.heapMb * 1024L * 1024L
-                val builder = MemoryCache.Builder()
-                if (budgetHeapBytes < Runtime.getRuntime().maxMemory()) {
-                    builder.maxSizeBytes((budgetHeapBytes * cachePercent).toLong())
-                } else {
-                    builder.maxSizePercent(context, cachePercent)
-                }
-                builder.build()
+                val heapBudget = MemoryCache.Builder()
+                    .maxSizePercent(context, cachePercent)
+                    .build().maxSize
+                com.nuvio.tv.core.image.ArtworkMemoryCache(
+                    com.nuvio.tv.core.image.pictureMemoryCacheBytes(heapBudget, memoryInfo.totalMem)
+                )
             }
             .diskCache {
+                val freeStorage = runCatching { cacheDir.usableSpace }.getOrDefault(0L)
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache").toOkioPath())
-                    .maxSizeBytes(200L * 1024 * 1024)
+                    .maxSizeBytes(com.nuvio.tv.core.image.imageDiskCacheBytes(memoryInfo.totalMem, freeStorage))
                     .build()
             }
             .crossfade(false)
             .precision(coil3.size.Precision.INEXACT)
-            .allowHardware(false)
-            .allowRgb565(imagePerformancePreferences.rgb565Enabled)
-            .bitmapFactoryMaxParallelism(3)
+            .allowHardware(true)
+            .maxBitmapSize(
+                com.nuvio.tv.core.image.pictureMaxBitmapSide(
+                    resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels
+                ).let { coil3.size.Size(it, it) }
+            )
+            .bitmapFactoryMaxParallelism(com.nuvio.tv.core.image.HOME_POSTER_BITMAP_PARALLELISM)
             .build()
     }
 }

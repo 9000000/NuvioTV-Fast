@@ -83,7 +83,7 @@ internal object M3uPlaylistService {
             response.close()
             throw java.io.IOException("HTTP ${response.code} ${response.message} for ${playlist.source}")
         }
-        val body = response.body
+        val body = response.body ?: throw java.io.IOException("Empty body for ${playlist.source}")
         return body.byteStream().bufferedReader().use { reader ->
             M3uStreamParser.parse(reader, playlist)
         }

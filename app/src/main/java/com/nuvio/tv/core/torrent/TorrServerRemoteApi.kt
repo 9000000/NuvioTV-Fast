@@ -136,7 +136,7 @@ class TorrServerRemoteApi @Inject constructor(
         try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (response.isSuccessful) {
-                    val version = response.body.string().trim().ifEmpty { "Connected" }
+                    val version = response.body?.string()?.trim()?.ifEmpty { "Connected" } ?: "Connected"
                     Result.success(version)
                 } else {
                     Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
@@ -183,7 +183,8 @@ class TorrServerRemoteApi @Inject constructor(
                     Log.e(TAG, "addTorrent failed HTTP ${response.code}")
                     return@withContext null
                 }
-                val json = JSONObject(response.body.string().ifEmpty { "{}" })
+                val rawStr = response.body?.string()?.ifEmpty { "{}" } ?: "{}"
+                val json = JSONObject(rawStr)
                 val hash = json.optString("hash", "")
                 hash.ifEmpty { null }
             }
@@ -214,8 +215,8 @@ class TorrServerRemoteApi @Inject constructor(
         try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
-                val rawBody = response.body.string()
-                if (rawBody.isBlank()) return@withContext null
+                val rawBody = response.body?.string()
+                if (rawBody.isNullOrBlank()) return@withContext null
                 val json = JSONObject(rawBody)
 
                 val fileList = json.optJSONArray("file_stats") ?: JSONArray()
@@ -341,8 +342,8 @@ class TorrServerRemoteApi @Inject constructor(
         try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (response.isSuccessful) {
-                    val body = response.body.string()
-                    val json = JSONObject(body)
+                    val body = response.body?.string().orEmpty()
+                    val json = JSONObject(body.ifEmpty { "{}" })
                     val builtIn = json.optBoolean("built_in", false) || json.has("config")
                     Result.success(builtIn)
                 } else {

@@ -69,7 +69,12 @@ object LiveTvEpgSyncService {
                 resp.close()
                 return null
             }
-            resp.body.byteStream().bufferedReader().use { reader ->
+            val stream = resp.body?.byteStream()
+            if (stream == null) {
+                resp.close()
+                return null
+            }
+            stream.bufferedReader().use { reader ->
                 var count = 0
                 while (count < 30) {
                     val line = reader.readLine() ?: break
@@ -110,7 +115,7 @@ object LiveTvEpgSyncService {
                 return@withContext
             }
 
-            val body = response.body
+            val body = response.body ?: return@withContext
             val isGzip = trimmedUrl.endsWith(".gz", ignoreCase = true) ||
                     response.header("Content-Encoding")?.contains("gzip", ignoreCase = true) == true
 

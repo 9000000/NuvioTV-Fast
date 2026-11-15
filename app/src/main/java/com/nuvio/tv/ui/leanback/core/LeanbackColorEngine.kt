@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.leanback.core
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
@@ -72,17 +73,22 @@ object LeanbackColorEngine {
         if (bitmap.isRecycled) return defaultFallbackColor
         return runCatching {
             if (bitmap.isRecycled) return defaultFallbackColor
-            val stepX = (bitmap.width / 14).coerceAtLeast(1)
-            val stepY = (bitmap.height / 14).coerceAtLeast(1)
+            val sourceBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bitmap.config == Bitmap.Config.HARDWARE) {
+                bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return defaultFallbackColor
+            } else {
+                bitmap
+            }
+            val stepX = (sourceBitmap.width / 14).coerceAtLeast(1)
+            val stepY = (sourceBitmap.height / 14).coerceAtLeast(1)
             val hsv = FloatArray(3)
             val numBins = 16
             val binScores = FloatArray(numBins)
             val binBestWeight = FloatArray(numBins)
             val binRepresentative = IntArray(numBins)
 
-            for (x in 0 until bitmap.width step stepX) {
-                for (y in 0 until bitmap.height step stepY) {
-                    val pixel = bitmap.getPixel(x, y)
+            for (x in 0 until sourceBitmap.width step stepX) {
+                for (y in 0 until sourceBitmap.height step stepY) {
+                    val pixel = sourceBitmap.getPixel(x, y)
                     val alpha = (pixel ushr 24) and 0xFF
                     if (alpha < 128) continue
                     Color.colorToHSV(pixel, hsv)

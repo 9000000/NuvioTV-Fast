@@ -425,7 +425,7 @@ internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
         try {
             preloadCall.execute().use { response ->
                 if (response.isSuccessful) {
-                    val byteStream = response.body.byteStream()
+                    val byteStream = response.body?.byteStream() ?: return@use
                     val buffer = ByteArray(16384)
                     while (isActive) {
                         val read = byteStream.read(buffer)

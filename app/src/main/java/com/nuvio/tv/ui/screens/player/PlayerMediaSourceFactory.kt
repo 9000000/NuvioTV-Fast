@@ -1234,7 +1234,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                         inferMimeTypeFromResponseHeaders(responseHeadersMap)?.let { return@withContext it }
 
                         if (method == "GET") {
-                            val snippet = response.body.byteStream().use { stream ->
+                            val snippet = response.body?.byteStream()?.use { stream ->
                                 val bytes = ByteArray(512)
                                 val read = stream.read(bytes)
                                 if (read > 0) String(bytes, 0, read, Charsets.UTF_8) else null

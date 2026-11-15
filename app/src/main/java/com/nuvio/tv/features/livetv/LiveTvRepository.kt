@@ -53,7 +53,12 @@ suspend fun httpGetTextWithHeaders(url: String, headers: Map<String, String> = e
         response.close()
         error("HTTP ${response.code} ${response.message} for $url")
     }
-    response.body.string()
+    val body = response.body
+    if (body == null) {
+        response.close()
+        error("Empty body for $url")
+    }
+    body.string()
 }
 
 object LiveTvRepository {
