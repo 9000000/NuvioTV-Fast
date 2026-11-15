@@ -1719,6 +1719,7 @@ private fun ModernSidebarScaffold(
                         isSidebarExpanded = false
                         sidebarCollapsePending = false
                         pendingContentFocusTransfer = true
+                        runCatching { contentFocusRequester.requestFocus() }
                         return@onPreviewKeyEvent true
                     }
                     if (
@@ -1814,12 +1815,14 @@ private fun ModernSidebarScaffold(
                                     isSidebarExpanded = false
                                     sidebarCollapsePending = false
                                     pendingContentFocusTransfer = true
+                                    runCatching { contentFocusRequester.requestFocus() }
                                 }
                                 onNavigateBack = {
                                     if (!longPressBackHeld.value) {
                                         isSidebarExpanded = false
                                         sidebarCollapsePending = false
                                         pendingContentFocusTransfer = true
+                                        runCatching { contentFocusRequester.requestFocus() }
                                         true
                                     } else false
                                 }
@@ -1852,12 +1855,14 @@ private fun ModernSidebarScaffold(
                                 isSidebarExpanded = false
                                 sidebarCollapsePending = false
                                 pendingContentFocusTransfer = true
+                                runCatching { contentFocusRequester.requestFocus() }
                             }
                             view.onNavigateBack = {
                                 if (!longPressBackHeld.value) {
                                     isSidebarExpanded = false
                                     sidebarCollapsePending = false
                                     pendingContentFocusTransfer = true
+                                    runCatching { contentFocusRequester.requestFocus() }
                                     true
                                 } else false
                             }

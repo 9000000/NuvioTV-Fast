@@ -52,18 +52,53 @@ class NativeSidebarView @JvmOverloads constructor(
         set(value) {
             if (field != value) {
                 field = value
-                selectedBgColor = Color.argb(
-                    0x26,
-                    Color.red(value),
-                    Color.green(value),
-                    Color.blue(value)
-                )
+                selectedBgColor = ColorUtils.setAlphaComponent(value, 0x40)
                 refreshItemVisuals()
             }
         }
-    private var selectedBgColor = Color.parseColor("#26E65100")
+    private var selectedBgColor = ColorUtils.setAlphaComponent(Color.parseColor("#E65100"), 0x40)
     private val textPrimary = Color.WHITE
-    private val textMuted = Color.parseColor("#9E9E9E")
+    private val textNormal = Color.parseColor("#E0E0E0")
+    private val iconNormal = Color.parseColor("#B0B3B8")
+    private var isSidebarClosing = false
+    private val pendingFocusRunnables = mutableListOf<Runnable>()
+
+    private fun cancelPendingFocusRequests() {
+        pendingFocusRunnables.forEach { removeCallbacks(it) }
+        pendingFocusRunnables.clear()
+    }
+
+    private fun notifyClose(isRight: Boolean) {
+        if (isSidebarClosing) return
+        isSidebarClosing = true
+        cancelPendingFocusRequests()
+        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        clearFocus()
+        if (isRight) {
+            onNavigateRight?.invoke()
+        } else {
+            onNavigateBack?.invoke()
+        }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    notifyClose(isRight = true)
+                    return true
+                }
+                KeyEvent.KEYCODE_BACK -> {
+                    if (onNavigateBack?.invoke() == true) {
+                        notifyClose(isRight = false)
+                        return true
+                    }
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
 
     private fun refreshItemVisuals() {
         itemViews.forEach { (itemRoute, view) ->
@@ -134,8 +169,7 @@ class NativeSidebarView @JvmOverloads constructor(
 
     override fun focusSearch(focused: View?, direction: Int): View? {
         if (direction == View.FOCUS_RIGHT) {
-            clearFocus()
-            onNavigateRight?.invoke()
+            notifyClose(isRight = true)
             return null
         }
         val nextFocus = FocusFinder.getInstance().findNextFocus(this, focused, direction)
@@ -189,8 +223,9 @@ class NativeSidebarView @JvmOverloads constructor(
                     val pillBg = GradientDrawable().apply {
                         cornerRadius = 24f.toPx()
                         if (hasFocus) {
-                            setColor(Color.WHITE)
-                            nameView.setTextColor(Color.BLACK)
+                            val isAccentBright = ColorUtils.calculateLuminance(accentColor) > 0.45
+                            setColor(accentColor)
+                            nameView.setTextColor(if (isAccentBright) Color.parseColor("#121212") else Color.WHITE)
                         } else {
                             setColor(Color.TRANSPARENT)
                             nameView.setTextColor(textPrimary)
@@ -209,15 +244,15 @@ class NativeSidebarView @JvmOverloads constructor(
                                 return@setOnKeyListener true
                             }
                             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                                clearFocus()
-                                onNavigateRight?.invoke()
+                                notifyClose(isRight = true)
                                 return@setOnKeyListener true
                             }
                             KeyEvent.KEYCODE_BACK -> {
                                 if (onNavigateBack?.invoke() == true) {
-                                    clearFocus()
+                                    notifyClose(isRight = false)
                                     return@setOnKeyListener true
                                 }
+                                return@setOnKeyListener true
                             }
                             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_LEFT -> {
                                 return@setOnKeyListener true // Consume to prevent escape
@@ -269,26 +304,38 @@ class NativeSidebarView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (visibility == View.VISIBLE && !hasFocus()) {
+        if (!isSidebarClosing && visibility == View.VISIBLE && !hasFocus()) {
             requestSidebarFocus()
         }
     }
 
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        cancelPendingFocusRequests()
+    }
+
     fun requestSidebarFocus(targetRoute: String? = null) {
+        isSidebarClosing = false
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         if (hasFocus()) return
         val target = targetRoute ?: currentSelectedRoute ?: currentItems.firstOrNull()?.route
         val targetView = target?.let { itemViews[it] } ?: itemViews.values.firstOrNull() ?: return
-        val tryFocus = {
-            if (!hasFocus() && isAttachedToWindow) {
+
+        cancelPendingFocusRequests()
+
+        val tryFocus = Runnable {
+            if (!isSidebarClosing && !hasFocus() && isAttachedToWindow) {
                 targetView.requestFocus()
             }
         }
+        pendingFocusRunnables.add(tryFocus)
+
         if (!hasFocus() && targetView.isAttachedToWindow && !targetView.isInLayout) {
             targetView.requestFocus()
         }
-        targetView.post(tryFocus)
-        targetView.postDelayed(tryFocus, 45L)
-        targetView.postDelayed(tryFocus, 100L)
+        post(tryFocus)
+        postDelayed(tryFocus, 45L)
+        postDelayed(tryFocus, 100L)
     }
 
     private fun createNavigationItemView(
@@ -349,7 +396,7 @@ class NativeSidebarView @JvmOverloads constructor(
         }
 
         container.setOnClickListener {
-            clearFocus()
+            notifyClose(isRight = false)
             onDrawerItemClick?.invoke(item.route)
         }
 
@@ -360,15 +407,15 @@ class NativeSidebarView @JvmOverloads constructor(
                         return@setOnKeyListener true // Consume to stay in sidebar
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        clearFocus()
-                        onNavigateRight?.invoke()
+                        notifyClose(isRight = true)
                         return@setOnKeyListener true
                     }
                     KeyEvent.KEYCODE_BACK -> {
                         if (onNavigateBack?.invoke() == true) {
-                            clearFocus()
+                            notifyClose(isRight = false)
                             return@setOnKeyListener true
                         }
+                        return@setOnKeyListener true
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         if (index > 0) {
@@ -422,16 +469,21 @@ class NativeSidebarView @JvmOverloads constructor(
 
         when {
             isFocused -> {
-                iconView.setColorFilter(Color.WHITE)
-                textView.setTextColor(Color.WHITE)
+                val isAccentBright = ColorUtils.calculateLuminance(accentColor) > 0.45
+                val focusedFg = if (isAccentBright) Color.parseColor("#121212") else Color.WHITE
+                iconView.setColorFilter(focusedFg)
+                textView.setTextColor(focusedFg)
+                textView.paint.isFakeBoldText = true
             }
             isSelected -> {
-                iconView.setColorFilter(accentColor)
-                textView.setTextColor(accentColor)
+                iconView.setColorFilter(Color.WHITE)
+                textView.setTextColor(Color.WHITE)
+                textView.paint.isFakeBoldText = true
             }
             else -> {
-                iconView.setColorFilter(textMuted)
-                textView.setTextColor(textMuted)
+                iconView.setColorFilter(iconNormal)
+                textView.setTextColor(textNormal)
+                textView.paint.isFakeBoldText = false
             }
         }
     }
