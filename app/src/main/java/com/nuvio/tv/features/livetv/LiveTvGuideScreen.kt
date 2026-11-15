@@ -244,18 +244,18 @@ private fun LiveTvGuideContent(
         }
     }
 
-    // Auto-tune first channel into Preview if enabled and nothing is currently tuned
-    LaunchedEffect(channels, settings.showPreview) {
-        if (settings.showPreview && playback.channelKey == null && channels.isNotEmpty()) {
+    // Auto-tune first channel into Preview if enabled and nothing is currently tuned (only when not in Drawer)
+    LaunchedEffect(channels, settings.showPreview, focusArea) {
+        if (settings.showPreview && focusArea != GuideFocusArea.DRAWER && playback.channelKey == null && channels.isNotEmpty()) {
             val lastId = user.lastChannelKey
             val initial = channels.firstOrNull { it.id == lastId } ?: channels.first()
             viewModel.play(initial, selectedGroupId)
         }
     }
 
-    // Auto-tune into Preview when navigating channels with debounce (450ms) to prevent lag
-    LaunchedEffect(channelIndex, selectedGroupId, settings.showPreview) {
-        if (settings.showPreview && channels.isNotEmpty()) {
+    // Auto-tune into Preview when navigating channels with debounce (450ms) to prevent lag (only when not in Drawer)
+    LaunchedEffect(channelIndex, selectedGroupId, settings.showPreview, focusArea) {
+        if (settings.showPreview && focusArea != GuideFocusArea.DRAWER && channels.isNotEmpty()) {
             delay(450)
             val ch = channels.getOrNull(channelIndex)
             if (ch != null && playback.channelKey != ch.key) {
@@ -344,12 +344,36 @@ private fun LiveTvGuideContent(
         else -> 56.dp
     }
 
+    val selectGroupAndFocusChannels: (Int) -> Unit = { targetIndex ->
+        val group = groups.getOrNull(targetIndex)
+        val targetGroupId = group?.id ?: ChannelGroup.FAVORITES
+        drawerIndex = targetIndex
+        selectedGroupId = targetGroupId
+        focusArea = GuideFocusArea.CHANNELS
+        channelIndex = 0
+
+        val targetChannels = when {
+            targetGroupId == ChannelGroup.FAVORITES -> rawChannels.filter { it.id in user.favorites }
+            targetGroupId == ChannelGroup.RECENT -> {
+                val recentMap = user.recent.withIndex().associate { it.value to it.index }
+                rawChannels.filter { it.id in recentMap.keys }.sortedBy { recentMap[it.id] ?: 999 }
+            }
+            targetGroupId.startsWith("custom:") -> {
+                val gName = targetGroupId.removePrefix("custom:")
+                rawChannels.filter { it.group?.trim().equals(gName, ignoreCase = true) }
+            }
+            else -> rawChannels
+        }
+        val firstCh = targetChannels.firstOrNull()
+        if (firstCh != null && settings.showPreview && playback.channelKey != firstCh.key) {
+            viewModel.play(firstCh, targetGroupId)
+        }
+    }
+
     fun onOkPressed() {
         when (focusArea) {
             GuideFocusArea.DRAWER -> {
-                selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
-                focusArea = GuideFocusArea.CHANNELS
-                channelIndex = 0
+                selectGroupAndFocusChannels(drawerIndex)
             }
             GuideFocusArea.CHANNELS -> {
                 val ch = focusedChannel ?: return
@@ -743,9 +767,7 @@ private fun LiveTvGuideContent(
                             true
                         }
                         e.key == Key.DirectionRight -> {
-                            selectedGroupId = groups.getOrNull(drawerIndex)?.id ?: ChannelGroup.FAVORITES
-                            focusArea = GuideFocusArea.CHANNELS
-                            channelIndex = 0
+                            selectGroupAndFocusChannels(drawerIndex)
                             true
                         }
                         e.key == Key.Back -> {
@@ -1077,6 +1099,9 @@ private fun LiveTvGuideContent(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (isFocused) NuvioTheme.colors.Primary else Color.Transparent)
+                                        .clickable {
+                                            selectGroupAndFocusChannels(idx)
+                                        }
                                         .padding(horizontal = 12.dp, vertical = 10.dp)
                                 ) {
                                     Row(
