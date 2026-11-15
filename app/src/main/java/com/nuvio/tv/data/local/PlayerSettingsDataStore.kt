@@ -2223,7 +2223,17 @@ class PlayerSettingsDataStore @Inject constructor(
             )
         }
     }
-    suspend fun setSubtitleFontId(fontId: String) { store().edit { it[subtitleFontIdKey] = fontId } }
+    suspend fun setSubtitleFontId(fontId: String) {
+        store().edit {
+            it[subtitleFontIdKey] = fontId
+            when (fontId) {
+                SubtitleFonts.PHIMMOI -> it[subtitleFontKey] = SubtitleFontOption.PHIMMOI
+                SubtitleFonts.OSWALD -> it[subtitleFontKey] = SubtitleFontOption.OSWALD
+                SubtitleFonts.DEFAULT -> it[subtitleFontKey] = SubtitleFontOption.DEFAULT
+                else -> {}
+            }
+        }
+    }
     suspend fun setSubtitleBackgroundRadius(radius: Int) {
         store().edit { it[subtitleBackgroundRadiusKey] = radius.coerceIn(0, SubtitleStyleSettings.BACKGROUND_RADIUS_MAX) }
     }

@@ -2,6 +2,8 @@ package com.nuvio.tv.core.player
 
 import android.content.Context
 import android.graphics.Typeface
+import androidx.core.content.res.ResourcesCompat
+import com.nuvio.tv.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,16 +20,21 @@ data class SubtitleFont(val id: String, val name: String)
 
 object SubtitleFonts {
     const val DEFAULT = "default"
+    const val PHIMMOI = "phimmoi"
+    const val OSWALD = "oswald"
     const val SERIF = "serif"
     const val MONO = "mono"
     const val MAX_BYTES = 10 * 1024 * 1024
-    val builtIn = listOf(DEFAULT, SERIF, MONO)
+    val builtIn = listOf(DEFAULT, PHIMMOI, OSWALD, SERIF, MONO)
     private val customId = Regex("custom-[a-f0-9-]{36}")
 
     fun isCustom(id: String): Boolean = customId.matches(id)
 }
 
-class SubtitleFontStore private constructor(private val dir: File) {
+class SubtitleFontStore private constructor(
+    private val context: Context,
+    private val dir: File
+) {
     private val json = Json { ignoreUnknownKeys = true }
     private val typefaces = ConcurrentHashMap<String, Typeface>()
     private val mutableFonts = MutableStateFlow(readIndex())
@@ -36,6 +43,12 @@ class SubtitleFontStore private constructor(private val dir: File) {
     fun cachedTypeface(id: String): Typeface? = when (id) {
         SubtitleFonts.SERIF -> Typeface.SERIF
         SubtitleFonts.MONO -> Typeface.MONOSPACE
+        SubtitleFonts.PHIMMOI -> typefaces.getOrPut(id) {
+            ResourcesCompat.getFont(context, R.font.fontphimmoi) ?: Typeface.DEFAULT
+        }
+        SubtitleFonts.OSWALD -> typefaces.getOrPut(id) {
+            ResourcesCompat.getFont(context, R.font.oswald) ?: Typeface.DEFAULT
+        }
         else -> typefaces[id]
     }
 
@@ -106,8 +119,10 @@ class SubtitleFontStore private constructor(private val dir: File) {
         private var instance: SubtitleFontStore? = null
 
         fun get(context: Context): SubtitleFontStore = instance ?: synchronized(this) {
-            instance ?: SubtitleFontStore(File(context.applicationContext.filesDir, "subtitle-fonts"))
-                .also { instance = it }
+            instance ?: SubtitleFontStore(
+                context.applicationContext,
+                File(context.applicationContext.filesDir, "subtitle-fonts")
+            ).also { instance = it }
         }
     }
 }

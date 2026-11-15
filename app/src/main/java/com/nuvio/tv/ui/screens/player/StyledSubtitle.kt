@@ -32,6 +32,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Constraints
+import com.nuvio.tv.R
 import com.nuvio.tv.core.player.SubtitleFontStore
 import com.nuvio.tv.core.player.SubtitleFonts
 import com.nuvio.tv.data.local.SubtitleStyleSettings
@@ -70,6 +71,8 @@ internal fun rememberSubtitleFontFamily(fontId: String): FontFamily {
 }
 
 private fun builtInSubtitleFontFamily(fontId: String): FontFamily = when (fontId) {
+    SubtitleFonts.PHIMMOI -> FontFamily(Font(R.font.fontphimmoi))
+    SubtitleFonts.OSWALD -> FontFamily(Font(R.font.oswald))
     SubtitleFonts.SERIF -> FontFamily.Serif
     SubtitleFonts.MONO -> FontFamily.Monospace
     else -> FontFamily.Default

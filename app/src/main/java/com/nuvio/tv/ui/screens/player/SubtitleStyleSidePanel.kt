@@ -61,7 +61,6 @@ import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.SubtitleStyleSettings
-import com.nuvio.tv.data.local.SubtitleFontOption
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -159,41 +158,27 @@ internal fun SubtitleStyleSidePanel(
                         .width(StyleCardWidth)
                         .height(StyleCardHeight)
                 ) {
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    val customFontName = remember {
-                        context.getSharedPreferences("nuvio_global_subtitle_prefs", android.content.Context.MODE_PRIVATE)
-                            .getString("custom_subtitle_font_name", null)
-                    }
-                    val fontList = buildList {
-                        add(SubtitleFontOption.DEFAULT to stringResource(R.string.sub_font_default))
-                        add(SubtitleFontOption.PHIMMOI to stringResource(R.string.sub_font_phimmoi))
-                        add(SubtitleFontOption.INTER to stringResource(R.string.sub_font_inter))
-                        add(SubtitleFontOption.OPENSANS to stringResource(R.string.sub_font_opensans))
-                        add(SubtitleFontOption.DMSANS to stringResource(R.string.sub_font_dmsans))
-                        add(SubtitleFontOption.OSWALD to stringResource(R.string.sub_font_oswald))
-                        if (!customFontName.isNullOrBlank()) {
-                            add(SubtitleFontOption.CUSTOM to customFontName)
-                        }
-                    }
-                    val currentFontIndex = fontList.indexOfFirst { it.first == subtitleStyle.font }.coerceAtLeast(0)
-                    val currentFontName = fontList[currentFontIndex].second
+                    val fonts = rememberSubtitleFonts()
+                    val fontIds = subtitleFontIds(fonts)
+                    val currentFontIndex = fontIds.indexOf(subtitleStyle.fontId).coerceAtLeast(0)
+                    val currentFontLabel = subtitleFontLabel(subtitleStyle.fontId, fonts)
                     SubtitleStyleSettingRow {
                         SubtitleStyleStepperButton(
                             icon = Icons.Default.Remove,
                             onClick = {
-                                val prevIndex = if (currentFontIndex > 0) currentFontIndex - 1 else fontList.size - 1
-                                onEvent(PlayerEvent.OnSetSubtitleFont(fontList[prevIndex].first))
+                                val prevIndex = if (currentFontIndex > 0) currentFontIndex - 1 else fontIds.size - 1
+                                onEvent(PlayerEvent.OnSetSubtitleFont(fontIds[prevIndex]))
                             }
                         )
                         SubtitleStyleValueDisplay(
-                            text = currentFontName,
+                            text = currentFontLabel,
                             modifier = Modifier.widthIn(min = 90.dp, max = 150.dp)
                         )
                         SubtitleStyleStepperButton(
                             icon = Icons.Default.Add,
                             onClick = {
-                                val nextIndex = if (currentFontIndex < fontList.size - 1) currentFontIndex + 1 else 0
-                                onEvent(PlayerEvent.OnSetSubtitleFont(fontList[nextIndex].first))
+                                val nextIndex = if (currentFontIndex < fontIds.size - 1) currentFontIndex + 1 else 0
+                                onEvent(PlayerEvent.OnSetSubtitleFont(fontIds[nextIndex]))
                             }
                         )
                     }

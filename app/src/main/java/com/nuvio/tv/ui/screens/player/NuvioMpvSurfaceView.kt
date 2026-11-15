@@ -16,6 +16,7 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToLong
 import com.nuvio.tv.R
+import com.nuvio.tv.core.player.SubtitleFonts
 import com.nuvio.tv.data.local.SubtitleFontOption
 
 internal const val MPV_TRACK_LIST_PROPERTY = "track-list"
@@ -499,13 +500,17 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             // In background-box mode, sub-shadow-offset controls the box padding/margin
             val shadowOffset = if (backgroundAlpha > 0) 5.0 else 0.0
 
-            val fontName = when (style.font) {
-                SubtitleFontOption.PHIMMOI -> "UVN Hong Ha Hep, PhimMoi"
-                SubtitleFontOption.INTER -> "Inter"
-                SubtitleFontOption.OPENSANS -> "Open Sans"
-                SubtitleFontOption.DMSANS -> "DM Sans 9pt"
-                SubtitleFontOption.OSWALD -> "Oswald"
-                else -> "Roboto"
+            val fontName = when (style.fontId) {
+                SubtitleFonts.PHIMMOI -> "UVN Hong Ha Hep, PhimMoi"
+                SubtitleFonts.OSWALD -> "Oswald"
+                else -> when (style.font) {
+                    SubtitleFontOption.PHIMMOI -> "UVN Hong Ha Hep, PhimMoi"
+                    SubtitleFontOption.INTER -> "Inter"
+                    SubtitleFontOption.OPENSANS -> "Open Sans"
+                    SubtitleFontOption.DMSANS -> "DM Sans 9pt"
+                    SubtitleFontOption.OSWALD -> "Oswald"
+                    else -> "Roboto"
+                }
             }
 
             mpv.setPropertyDouble("sub-scale", scale)

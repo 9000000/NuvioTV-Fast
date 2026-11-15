@@ -223,6 +223,18 @@ private fun SubtitleAppearanceControls(
                 )
             }
             if (style.outlineEnabled) {
+                item(key = "outline_width") {
+                    SliderSettingsItem(
+                        title = stringResource(R.string.sub_outline_width),
+                        subtitle = stringResource(R.string.sub_outline_width_sub),
+                        value = style.outlineWidth,
+                        valueText = "${style.outlineWidth}px",
+                        minValue = 1,
+                        maxValue = 50,
+                        step = 1,
+                        onValueChange = { width -> onUpdate { setSubtitleOutlineWidth(width) } }
+                    )
+                }
                 item(key = "outline_color") {
                     SubtitleColorSwatchRow(
                         title = stringResource(R.string.sub_outline_color),

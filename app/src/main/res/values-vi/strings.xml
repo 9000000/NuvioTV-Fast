@@ -949,7 +949,7 @@
     <string name="sub_strip_sdh_desc">Ẩn các mô tả âm thanh và nhãn người nói khỏi văn bản phụ đề.</string>
     <string name="sub_organization">Sắp xếp phụ đề</string>
     <string name="sub_size">Cỡ chữ</string>
-    <string name="sub_vertical_offset">Độ lệch dọc</string>
+    <string name="sub_vertical_offset">Vị trí phụ đề (thấp - cao)</string>
     <string name="sub_bold">In đậm</string>
     <string name="sub_bold_sub">Dùng kiểu chữ đậm cho phụ đề</string>
     <string name="sub_text_color">Màu chữ</string>
