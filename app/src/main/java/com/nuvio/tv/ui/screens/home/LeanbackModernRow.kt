@@ -140,7 +140,7 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     init {
         setLayerType(LAYER_TYPE_SOFTWARE, null)
         updateGlowPaints()
-        visibility = GONE
+        visibility = INVISIBLE
         isFocusable = false
         isFocusableInTouchMode = false
     }
@@ -239,7 +239,10 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         translationX = minX
         translationY = targetY
 
-        if (visibility != VISIBLE || alpha <= 0f) {
+        if (!animated) {
+            alpha = 1f
+            visibility = VISIBLE
+        } else if (visibility != VISIBLE || alpha <= 0f) {
             alpha = 0f
             visibility = VISIBLE
             animate().alpha(1f).setDuration(120).start()
@@ -265,15 +268,50 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         translationX = minX
     }
 
+    fun showFixedOverlayAt(
+        xPx: Float,
+        yPx: Float,
+        cardWidthPx: Int,
+        cardHeightPx: Int,
+        cornerRadiusPx: Float,
+        dominantColor: Int
+    ) {
+        animate().cancel()
+        currentTargetView = null
+        val targetWidth = cardWidthPx + (glowMarginPx * 2).toInt()
+        val targetHeight = cardHeightPx + (glowMarginPx * 2).toInt()
+        val lp = layoutParams
+        if (lp != null && (lp.width != targetWidth || lp.height != targetHeight)) {
+            lp.width = targetWidth
+            lp.height = targetHeight
+            layoutParams = lp
+        }
+        this.cornerRadiusPx = cornerRadiusPx
+        val resolvedGlowColor = if (dominantColor != 0 && dominantColor != Color.WHITE && dominantColor != Color.BLACK) {
+            dominantColor
+        } else {
+            Color.parseColor("#F59E0B")
+        }
+        strokeColor = resolvedGlowColor
+        glowColor = resolvedGlowColor
+        isGlowEnabled = true
+        translationX = xPx - glowMarginPx
+        translationY = yPx - glowMarginPx
+        if (visibility != VISIBLE || alpha < 1f) {
+            alpha = 1f
+            visibility = VISIBLE
+        }
+    }
+
     fun hideRing(immediate: Boolean = false) {
         animate().cancel()
         currentTargetView = null
         if (immediate) {
-            visibility = GONE
+            visibility = INVISIBLE
             alpha = 0f
         } else if (visibility == VISIBLE) {
             animate().alpha(0f).setDuration(100).withEndAction {
-                visibility = GONE
+                visibility = INVISIBLE
             }.start()
         }
     }
@@ -295,6 +333,7 @@ class ModernRowContainerLayout(context: Context) : FrameLayout(context) {
 
     override fun clearChildFocus(child: View?) {
         if (::gridView.isInitialized &&
+            gridView.isVerticalGlideActive?.invoke() != true &&
             gridView.canTakeFocus?.invoke() != false &&
             (gridView.hasPendingHorizontalNavigation || gridView.isSubmittingItems)
         ) {
@@ -316,14 +355,26 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
     var onNavigateUp: (() -> Boolean)? = null
     var onNavigateBack: (() -> Boolean)? = null
     var onNavigateLeftOnFirstItem: (() -> Boolean)? = null
+    var onVerticalHoldScroll: ((Int) -> Boolean)? = null
+    var onVerticalHoldRelease: (() -> Unit)? = null
+    var isVerticalGlideActive: (() -> Boolean)? = null
+    var onHorizontalInterrupt: (() -> Unit)? = null
     var animationsEnabled: Boolean = true
 
     var floatingRingView: ModernRowFloatingFocusRingView? = null
 
+    private val isOverlayRingActive: Boolean
+        get() = isVerticalGlideActive?.invoke() == true
+
     private val globalFocusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
+        if (isOverlayRingActive) {
+            floatingRingView?.hideRing(true)
+            return@OnGlobalFocusChangeListener
+        }
         val hasRowFocus = hasFocus() || (newFocus != null && isDescendant(newFocus))
         if (!hasRowFocus) {
             isHoldingHorizontalKey = false
+            isHoldingVerticalKey = false
             pendingTargetPosition = RecyclerView.NO_POSITION
             floatingRingView?.hideRing(false)
         } else {
@@ -350,6 +401,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        isHoldingVerticalKey = false
         viewTreeObserver.removeOnGlobalFocusChangeListener(globalFocusListener)
         floatingRingView?.hideRing(true)
     }
@@ -413,6 +465,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     var isHoldingHorizontalKey: Boolean = false
         private set
+    private var isHoldingVerticalKey: Boolean = false
 
     private var arrivalAt0Time = 0L
     private var arrivedAt0FromRight = false
@@ -426,6 +479,10 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         get() = adapter as? LeanbackRowAdapter
 
     fun notifyCardFocused(cardContainer: View, isLandscape: Boolean, dominantColor: Int) {
+        if (isOverlayRingActive) {
+            floatingRingView?.hideRing(true)
+            return
+        }
         floatingRingView?.moveToTarget(cardContainer, isLandscape, dominantColor, animationsEnabled)
     }
 
@@ -436,11 +493,16 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
      */
     fun prepareForRowChange() {
         isHoldingHorizontalKey = false
+        isHoldingVerticalKey = false
         pendingTargetPosition = RecyclerView.NO_POSITION
     }
 
     fun ensureChildFocusAndRing(targetPos: Int = -1, animated: Boolean = false, retryCount: Int = 0) {
         if (!isAttachedToWindow || !mayTakeFocus()) return
+        if (isOverlayRingActive) {
+            floatingRingView?.hideRing(true)
+            return
+        }
         val pos = if (targetPos >= 0) targetPos else {
             if (pendingTargetPosition != RecyclerView.NO_POSITION) pendingTargetPosition
             else selectedPosition.coerceAtLeast(0)
@@ -456,7 +518,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         } else {
             if (retryCount < 8) {
                 post {
-                    if (isAttachedToWindow && mayTakeFocus()) {
+                    if (isAttachedToWindow && mayTakeFocus() && !isOverlayRingActive) {
                         ensureChildFocusAndRing(targetPos, animated, retryCount + 1)
                     }
                 }
@@ -466,6 +528,10 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
 
     fun ensureTargetChildFocused(targetPos: Int, direction: Int, retryCount: Int = 0) {
         if (!isAttachedToWindow || !mayTakeFocus()) return
+        if (isOverlayRingActive) {
+            floatingRingView?.hideRing(true)
+            return
+        }
         val vh = findViewHolderForAdapterPosition(targetPos) as? LeanbackCardViewHolder
         if (vh != null) {
             if (!vh.itemView.hasFocus()) {
@@ -477,7 +543,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         } else {
             if (retryCount < 10) {
                 post {
-                    if (isAttachedToWindow && mayTakeFocus()) {
+                    if (isAttachedToWindow && mayTakeFocus() && !isOverlayRingActive) {
                         ensureTargetChildFocused(targetPos, direction, retryCount + 1)
                     }
                 }
@@ -540,8 +606,12 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     }
                     (child as? LeanbackCardViewHolder)?.let { vh ->
                         vh.updateFocusVisual(true)
-                        val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-                        floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animationsEnabled)
+                        if (!isOverlayRingActive) {
+                            val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+                            floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animationsEnabled)
+                        } else {
+                            floatingRingView?.hideRing(true)
+                        }
                     }
                     rowAdapter?.onFocusedPositionChanged(context, position)
                 } else if (hasGridFocus) {
@@ -589,8 +659,12 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             val granted = vh.itemView.requestFocus(direction)
             if (granted) {
                 vh.updateFocusVisual(true)
-                val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-                floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, false)
+                if (!isOverlayRingActive) {
+                    val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+                    floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, false)
+                } else {
+                    floatingRingView?.hideRing(true)
+                }
                 return true
             }
         }
@@ -620,8 +694,12 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             val holder = findContainingViewHolder(target) as? LeanbackCardViewHolder
             if (holder != null) {
                 holder.updateFocusVisual(true)
-                val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-                floatingRingView?.moveToTarget(holder.cardContainer, isLandscape, holder.currentDominantColor, false)
+                if (!isOverlayRingActive) {
+                    val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
+                    floatingRingView?.moveToTarget(holder.cardContainer, isLandscape, holder.currentDominantColor, false)
+                } else {
+                    floatingRingView?.hideRing(true)
+                }
             } else {
                 ensureChildFocusAndRing(animated = false)
             }
@@ -709,8 +787,9 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
         if (!gainFocus && !hasFocus()) {
             isHoldingHorizontalKey = false
+            isHoldingVerticalKey = false
             pendingTargetPosition = RecyclerView.NO_POSITION
-            floatingRingView?.hideRing(false)
+            floatingRingView?.hideRing(if (isOverlayRingActive) true else false)
         } else if (gainFocus || hasFocus()) {
             if (selectedPosition <= 0) {
                 hasReleasedKeyAfterArrivingAt0 = true
@@ -764,6 +843,13 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     }
                     return true
                 }
+                KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (isHoldingVerticalKey || isOverlayRingActive) {
+                        isHoldingVerticalKey = false
+                        onVerticalHoldRelease?.invoke()
+                        return true
+                    }
+                }
             }
         }
 
@@ -781,6 +867,8 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
             }
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    isHoldingVerticalKey = false
+                    onHorizontalInterrupt?.invoke()
                     if (currentPos <= 0 || total <= 0) {
                         pendingTargetPosition = 0
                         if (selectedPosition != 0) {
@@ -837,6 +925,8 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    isHoldingVerticalKey = false
+                    onHorizontalInterrupt?.invoke()
                     if (total <= 0 || currentPos >= total - 1) {
                         val lastIdx = (total - 1).coerceAtLeast(0)
                         pendingTargetPosition = lastIdx
@@ -883,11 +973,15 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
                     if (event.repeatCount > 0) {
+                        isHoldingVerticalKey = true
+                        if (onVerticalHoldScroll?.invoke(1) == true) return true
                         if (now - lastVerticalRepeatDispatchMs < 115L) {
                             return true
                         }
                         lastVerticalRepeatDispatchMs = now
                     } else {
+                        isHoldingVerticalKey = false
+                        onVerticalHoldRelease?.invoke()
                         lastVerticalRepeatDispatchMs = now
                     }
                     if (onNavigateDown?.invoke() == true) return true
@@ -896,17 +990,22 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
                     if (event.repeatCount > 0) {
+                        isHoldingVerticalKey = true
+                        if (onVerticalHoldScroll?.invoke(-1) == true) return true
                         if (now - lastVerticalRepeatDispatchMs < 115L) {
                             return true
                         }
                         lastVerticalRepeatDispatchMs = now
                     } else {
+                        isHoldingVerticalKey = false
+                        onVerticalHoldRelease?.invoke()
                         lastVerticalRepeatDispatchMs = now
                     }
                     if (onNavigateUp?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_BACK -> {
                     isHoldingHorizontalKey = false
+                    isHoldingVerticalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
                     if (onNavigateBack?.invoke() == true) return true
                 }
@@ -1555,6 +1654,29 @@ class LeanbackRowAdapter(
     }
 }
 
+internal fun resolveRowTargetGlowColor(
+    grid: HorizontalGridView?,
+    cardIndex: Int,
+    fallbackItem: ModernCarouselItem?
+): Int {
+    val vh = grid?.findViewHolderForAdapterPosition(cardIndex) as? LeanbackCardViewHolder
+    if (vh != null && vh.currentDominantColor != 0 &&
+        vh.currentDominantColor != Color.WHITE &&
+        vh.currentDominantColor != Color.BLACK
+    ) {
+        return vh.currentDominantColor
+    }
+    if (fallbackItem != null) {
+        val imageUrl = fallbackItem.imageUrl ?: fallbackItem.heroPreview.poster ?: fallbackItem.heroPreview.backdrop
+        val colorCacheKey = imageUrl ?: fallbackItem.key
+        val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey) ?: dominantColorCache.get(colorCacheKey)
+        if (cachedColor != null && cachedColor != 0 && cachedColor != Color.WHITE && cachedColor != Color.BLACK) {
+            return cachedColor
+        }
+    }
+    return Color.parseColor("#F59E0B")
+}
+
 @Composable
 fun LeanbackModernRow(
     rowKey: String,
@@ -1574,6 +1696,10 @@ fun LeanbackModernRow(
     onNavigateUp: () -> Boolean = { false },
     onNavigateLeftOnFirstItem: () -> Boolean = { false },
     onNavigateBack: () -> Boolean = { false },
+    onVerticalHoldScroll: ((Int) -> Boolean)? = null,
+    onVerticalHoldRelease: (() -> Unit)? = null,
+    isVerticalGlideActive: (() -> Boolean)? = null,
+    onHorizontalInterrupt: (() -> Unit)? = null,
     rowGrids: MutableMap<String, HorizontalGridView>? = null,
     isPendingFocus: Boolean = false,
     pendingFocusIndex: Int = 0,
@@ -1712,6 +1838,10 @@ fun LeanbackModernRow(
                 this.onNavigateUp = onNavigateUp
                 this.onNavigateBack = onNavigateBack
                 this.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
+                this.onVerticalHoldScroll = onVerticalHoldScroll
+                this.onVerticalHoldRelease = onVerticalHoldRelease
+                this.isVerticalGlideActive = isVerticalGlideActive
+                this.onHorizontalInterrupt = onHorizontalInterrupt
                 this.canTakeFocus = canTakeFocus
                 this.animationsEnabled = animationsEnabled
                 setHasFixedSize(true)
@@ -1723,11 +1853,10 @@ fun LeanbackModernRow(
             val focusRing = ModernRowFloatingFocusRingView(context).apply {
                 this.cornerRadiusPx = cornerRadiusPx
                 this.elevation = 30f
-                val spread = this.glowSpreadPx
-                val margin = (spread * 1.35f).toInt()
+                val totalGlowMargin = (this.glowMarginPx * 2).toInt()
                 this.layoutParams = FrameLayout.LayoutParams(
-                    cardWidthPx + (margin * 2),
-                    cardHeightPx + (margin * 2)
+                    cardWidthPx + totalGlowMargin,
+                    cardHeightPx + totalGlowMargin
                 )
             }
             gridView.floatingRingView = focusRing
@@ -1787,6 +1916,10 @@ fun LeanbackModernRow(
             gridView.onNavigateUp = onNavigateUp
             gridView.onNavigateBack = onNavigateBack
             gridView.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
+            gridView.onVerticalHoldScroll = onVerticalHoldScroll
+            gridView.onVerticalHoldRelease = onVerticalHoldRelease
+            gridView.isVerticalGlideActive = isVerticalGlideActive
+            gridView.onHorizontalInterrupt = onHorizontalInterrupt
             gridView.canTakeFocus = canTakeFocus
             gridView.animationsEnabled = animationsEnabled
             gridView.setAnimateChildLayout(animationsEnabled)
