@@ -63,9 +63,9 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     init {
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         itemAnimator = null
-        layoutManager?.isItemPrefetchEnabled = false
+        layoutManager?.isItemPrefetchEnabled = true
         setHasFixedSize(true)
-        setItemViewCacheSize(8)
+        setItemViewCacheSize(10)
 
         addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -104,6 +104,9 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         child.itemView.requestFocus()
                     }
                     (child as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                    universalAdapter?.onFocusedPositionChanged(context, position)
+                } else if (hasGridFocus) {
+                    universalAdapter?.onFocusedPositionChanged(context, position)
                 }
 
                 val totalCount = universalAdapter?.itemCount ?: 0

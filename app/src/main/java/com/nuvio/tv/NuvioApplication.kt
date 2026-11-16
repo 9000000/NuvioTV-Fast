@@ -123,18 +123,18 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         val imageOkHttpClient by lazy {
             val imageDispatcher = okhttp3.Dispatcher().apply {
-                maxRequests = 64
-                maxRequestsPerHost = 48
+                maxRequests = 32
+                maxRequestsPerHost = 16
             }
             OkHttpClient.Builder()
                 .eventListenerFactory(com.nuvio.tv.core.image.ArtworkDiagnostics.networkEvents)
                 .dispatcher(imageDispatcher)
-                .connectionPool(okhttp3.ConnectionPool(32, 5, TimeUnit.MINUTES))
+                .connectionPool(okhttp3.ConnectionPool(10, 5, TimeUnit.MINUTES))
                 .dns(IPv4FirstDns())
                 .socketFactory(NoDelaySocketFactory)
                 .connectTimeout(4, TimeUnit.SECONDS)
-                .readTimeout(6, TimeUnit.SECONDS)
-                .callTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(5, TimeUnit.SECONDS)
+                .callTimeout(8, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
                     try {
                         chain.proceed(chain.request())
@@ -166,10 +166,11 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
             .components {
                 add(CustomPosterFallbackInterceptor())
                 add(com.nuvio.tv.core.image.HomePosterLoadingInterceptor(diskDecodeSlots))
-                // Size-aware TMDB downscaler: rewrite multi-MB original poster URLs to w342/w500 matching target
+                // Size-aware TMDB downscaler: rewrite multi-MB original/w780/w500 poster URLs to w342/w500 matching target
                 add(coil3.map.Mapper<String, String> { data, options ->
                     val w = (options.size.width as? coil3.size.Dimension.Pixels)?.px
-                    com.nuvio.tv.core.image.sizedHomeArtworkUrl(data, w).takeIf { it != data }
+                    val h = (options.size.height as? coil3.size.Dimension.Pixels)?.px
+                    com.nuvio.tv.core.image.sizedHomeArtworkUrl(data, w, h).takeIf { it != data }
                 })
                 if (Build.VERSION.SDK_INT >= 28) {
                     add(AnimatedImageDecoder.Factory())
@@ -193,9 +194,14 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                     totalRamMb <= 3072 -> 0.20
                     else -> 0.25
                 }
-                val heapBudget = MemoryCache.Builder()
-                    .maxSizePercent(context, cachePercent)
-                    .build().maxSize
+                val budgetHeapBytes = MemoryBudget.heapMb * 1024L * 1024L
+                val heapBudget = if (budgetHeapBytes < Runtime.getRuntime().maxMemory()) {
+                    (budgetHeapBytes * cachePercent).toLong()
+                } else {
+                    MemoryCache.Builder()
+                        .maxSizePercent(context, cachePercent)
+                        .build().maxSize
+                }
                 com.nuvio.tv.core.image.ArtworkMemoryCache(
                     com.nuvio.tv.core.image.pictureMemoryCacheBytes(heapBudget, memoryInfo.totalMem)
                 )
@@ -209,7 +215,8 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
             }
             .crossfade(false)
             .precision(coil3.size.Precision.INEXACT)
-            .allowHardware(true)
+            .allowHardware(false)
+            .allowRgb565(imagePerformancePreferences.rgb565Enabled)
             .maxBitmapSize(
                 com.nuvio.tv.core.image.pictureMaxBitmapSide(
                     resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels

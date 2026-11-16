@@ -81,6 +81,9 @@ class SavedCopyOnErrorFetcher internal constructor(
             }
             val showSavedFirst: suspend () -> FetchResult? = savedFirst@{
                 if (onlineCheckRequested(options.httpHeaders["Cache-Control"])) return@savedFirst null
+                if (isImmutableArtworkUrl(url)) {
+                    return@savedFirst openSaved()?.also { savedCopiesServedBeforeCheck.incrementAndGet() }
+                }
                 val cache = imageLoader.diskCache ?: return@savedFirst null
                 val due = withContext(Dispatchers.IO) {
                     cache.openSnapshot(key)?.use { !isFresh(it, cache.fileSystem, url, options) }

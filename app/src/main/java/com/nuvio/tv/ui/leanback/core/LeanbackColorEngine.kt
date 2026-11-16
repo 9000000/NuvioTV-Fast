@@ -78,55 +78,61 @@ object LeanbackColorEngine {
             } else {
                 bitmap
             }
-            val stepX = (sourceBitmap.width / 14).coerceAtLeast(1)
-            val stepY = (sourceBitmap.height / 14).coerceAtLeast(1)
-            val hsv = FloatArray(3)
-            val numBins = 16
-            val binScores = FloatArray(numBins)
-            val binBestWeight = FloatArray(numBins)
-            val binRepresentative = IntArray(numBins)
+            try {
+                val stepX = (sourceBitmap.width / 14).coerceAtLeast(1)
+                val stepY = (sourceBitmap.height / 14).coerceAtLeast(1)
+                val hsv = FloatArray(3)
+                val numBins = 16
+                val binScores = FloatArray(numBins)
+                val binBestWeight = FloatArray(numBins)
+                val binRepresentative = IntArray(numBins)
 
-            for (x in 0 until sourceBitmap.width step stepX) {
-                for (y in 0 until sourceBitmap.height step stepY) {
-                    val pixel = sourceBitmap.getPixel(x, y)
-                    val alpha = (pixel ushr 24) and 0xFF
-                    if (alpha < 128) continue
-                    Color.colorToHSV(pixel, hsv)
-                    val sat = hsv[1]
-                    val brightness = hsv[2]
-                    // Discard absolute dark/black and gray/white lacking chroma
-                    if (sat > 0.22f && brightness > 0.18f) {
-                        val weight = sat * sat * brightness
-                        val bin = (((hsv[0] + 11.25f) % 360f) / 22.5f).toInt().coerceIn(0, numBins - 1)
-                        binScores[bin] += weight
-                        if (weight > binBestWeight[bin]) {
-                            binBestWeight[bin] = weight
-                            binRepresentative[bin] = pixel
+                for (x in 0 until sourceBitmap.width step stepX) {
+                    for (y in 0 until sourceBitmap.height step stepY) {
+                        val pixel = sourceBitmap.getPixel(x, y)
+                        val alpha = (pixel ushr 24) and 0xFF
+                        if (alpha < 128) continue
+                        Color.colorToHSV(pixel, hsv)
+                        val sat = hsv[1]
+                        val brightness = hsv[2]
+                        // Discard absolute dark/black and gray/white lacking chroma
+                        if (sat > 0.22f && brightness > 0.18f) {
+                            val weight = sat * sat * brightness
+                            val bin = (((hsv[0] + 11.25f) % 360f) / 22.5f).toInt().coerceIn(0, numBins - 1)
+                            binScores[bin] += weight
+                            if (weight > binBestWeight[bin]) {
+                                binBestWeight[bin] = weight
+                                binRepresentative[bin] = pixel
+                            }
                         }
                     }
                 }
-            }
 
-            var bestBin = -1
-            var maxBinScore = 0f
-            for (i in 0 until numBins) {
-                if (binScores[i] > maxBinScore) {
-                    maxBinScore = binScores[i]
-                    bestBin = i
+                var bestBin = -1
+                var maxBinScore = 0f
+                for (i in 0 until numBins) {
+                    if (binScores[i] > maxBinScore) {
+                        maxBinScore = binScores[i]
+                        bestBin = i
+                    }
+                }
+
+                val dominantColor = if (bestBin >= 0 && binRepresentative[bestBin] != 0) {
+                    binRepresentative[bestBin]
+                } else {
+                    defaultFallbackColor
+                }
+
+                Color.colorToHSV(dominantColor, hsv)
+                // Boost saturation and push brightness to maximum for radiant OLED neon glow
+                hsv[1] = (hsv[1] * 1.20f).coerceIn(0.75f, 1.0f)
+                hsv[2] = 1.0f
+                Color.HSVToColor(hsv)
+            } finally {
+                if (sourceBitmap !== bitmap && !sourceBitmap.isRecycled) {
+                    sourceBitmap.recycle()
                 }
             }
-
-            val dominantColor = if (bestBin >= 0 && binRepresentative[bestBin] != 0) {
-                binRepresentative[bestBin]
-            } else {
-                defaultFallbackColor
-            }
-
-            Color.colorToHSV(dominantColor, hsv)
-            // Boost saturation and push brightness to maximum for radiant OLED neon glow
-            hsv[1] = (hsv[1] * 1.20f).coerceIn(0.75f, 1.0f)
-            hsv[2] = 1.0f
-            Color.HSVToColor(hsv)
         }.getOrDefault(defaultFallbackColor)
     }
 }

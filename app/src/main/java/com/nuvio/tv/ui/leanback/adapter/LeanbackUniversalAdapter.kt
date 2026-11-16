@@ -4,6 +4,8 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import coil3.request.allowHardware
+import coil3.request.crossfade
 import com.nuvio.tv.ui.leanback.holder.LeanbackAvatarViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackEpisodeViewHolder
@@ -318,9 +320,39 @@ class LeanbackUniversalAdapter(
         }
     }
 
+    private val prefetchedKeys = HashSet<String>()
+
     override fun onBindViewHolder(holder: LeanbackBaseViewHolder, position: Int) {
         val item = items[position]
         holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
+    }
+
+    fun onFocusedPositionChanged(context: android.content.Context, position: Int) {
+        val count = items.size
+        if (count <= 1) return
+        val wPx = cardWidthPx.coerceAtLeast(1)
+        val hPx = cardHeightPx.coerceAtLeast(1)
+        val aheadMax = minOf(position + 2, count - 1)
+        if (position + 1 > aheadMax) return
+        val imageLoader = coil3.SingletonImageLoader.get(context)
+        for (i in (position + 1)..aheadMax) {
+            val nextItem = items.getOrNull(i) ?: continue
+            val nextUrl = nextItem.imageUrl?.trim()
+            if (!nextUrl.isNullOrEmpty()) {
+                val mappedUrl = com.nuvio.tv.core.image.sizedHomeArtworkUrl(nextUrl, wPx, hPx)
+                val memKeyStr = "${mappedUrl}_${wPx}x${hPx}"
+                if (!prefetchedKeys.add(memKeyStr)) continue
+                if (imageLoader.memoryCache?.get(coil3.memory.MemoryCache.Key(memKeyStr)) != null) continue
+                val req = coil3.request.ImageRequest.Builder(context)
+                    .data(nextUrl)
+                    .memoryCacheKey(memKeyStr)
+                    .size(wPx, hPx)
+                    .allowHardware(false)
+                    .crossfade(false)
+                    .build()
+                imageLoader.enqueue(req)
+            }
+        }
     }
 
     override fun onViewRecycled(holder: LeanbackBaseViewHolder) {

@@ -299,7 +299,7 @@ internal fun ModernHomeRowsList(
         landscapeCatalogCardHeight
     ) {
         val prefetchAheadRows = 1
-        val prefetchItemsPerRow = 1
+        val prefetchItemsPerRow = 4
         snapshotFlow {
             verticalRowListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
         }
@@ -312,19 +312,18 @@ internal fun ModernHomeRowsList(
                             .getOrNull(lastVisibleRowIndex + rowOffset) ?: continue
                         for (i in 0 until minOf(prefetchItemsPerRow, row.items.list.size)) {
                             val item = row.items.list[i]
-                            val url = item.imageUrl ?: continue
-                            val metrics = item.catalogCardRequestMetrics(
+                            val url = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop ?: continue
+                            val metrics = item.catalogCardMetrics(
                                 useLandscapePosters = useLandscapePosters,
                                 portraitCardWidth = portraitCatalogCardWidth,
                                 portraitCardHeight = portraitCatalogCardHeight,
                                 landscapeCardWidth = landscapeCatalogCardWidth,
-                                landscapeCardHeight = landscapeCatalogCardHeight,
-                                expandEnabled = effectiveExpandEnabled
+                                landscapeCardHeight = landscapeCatalogCardHeight
                             )
-                            val wPx = with(density) { metrics.width.roundToPx() }
-                            val hPx = with(density) { metrics.height.roundToPx() }
-                            if (wPx <= 0 || hPx <= 0) continue
-                            val cacheKey = "${url}_${wPx}x${hPx}_v0"
+                            val wPx = with(density) { metrics.width.roundToPx() }.coerceAtLeast(1)
+                            val hPx = with(density) { metrics.height.roundToPx() }.coerceAtLeast(1)
+                            val mappedUrl = com.nuvio.tv.core.image.sizedHomeArtworkUrl(url, wPx, hPx)
+                            val cacheKey = "${mappedUrl}_${wPx}x${hPx}"
                             if (verticalPrefetchImageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) continue
                             verticalPrefetchImageLoader.enqueue(
                                 ImageRequest.Builder(context)

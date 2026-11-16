@@ -51,6 +51,9 @@ class LeanbackPosterViewHolder(
     root, cardContainer, glowView, cornerRadiusPx, borderWidthPx, glowMarginPx, adapter
 ) {
     private var imageDisposable: coil3.request.Disposable? = null
+    private var boundImageUrl: String? = null
+    private var boundWidthPx: Int = 0
+    private var boundHeightPx: Int = 0
 
     init {
         posterImage.outlineProvider = object : ViewOutlineProvider() {
@@ -85,7 +88,15 @@ class LeanbackPosterViewHolder(
         cornerRadiusPx: Float,
         showLabels: Boolean
     ) {
-        if (currentItem?.key != item.key) {
+        val imageUrl = item.imageUrl
+        val wPx = cardWidthPx.coerceAtLeast(1)
+        val hPx = cardHeightPx.coerceAtLeast(1)
+        val sameImageRequest = currentItem?.key == item.key &&
+            boundImageUrl == imageUrl &&
+            boundWidthPx == wPx &&
+            boundHeightPx == hPx &&
+            (posterImage.drawable != null || imageDisposable?.isDisposed == false)
+        if (!sameImageRequest) {
             posterImage.setImageDrawable(null)
         }
         currentItem = item
@@ -157,64 +168,99 @@ class LeanbackPosterViewHolder(
             watchedBadgeView?.visibility = View.GONE
         }
 
-        // Coil image loading with zero GPU overdraw
-        val imageUrl = item.imageUrl
+        // Coil image loading with zero GPU overdraw & MemoryCache fast-path
         if (!imageUrl.isNullOrBlank()) {
-            val ctx = posterImage.context
-            val hasCachedColor = cachedColor != null
-            val boundKey = item.key
-            val request = ImageRequest.Builder(ctx)
-                .data(imageUrl)
-                .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
-                .allowHardware(false)
-                .crossfade(false)
-                .target(
-                    object : Target {
-                        override fun onStart(placeholder: Image?) {
-                            if (currentItem?.key != boundKey) return
-                            if (placeholder != null) {
-                                posterImage.setImageDrawable(placeholder.asDrawable(ctx.resources))
-                            }
-                        }
-
-                        override fun onSuccess(result: Image) {
-                            if (currentItem?.key != boundKey) return
-                            posterImage.setImageDrawable(result.asDrawable(ctx.resources))
-                            // Zero GPU Overdraw: remove background when image covers container
-                            cardContainer.background = null
-                            val existingColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
-                            if (existingColor != null) {
-                                currentDominantColor = existingColor
-                                if (root.hasFocus()) {
-                                    updateFocusVisual(true)
-                                }
-                            } else {
-                                val bmp = (result as? BitmapImage)?.bitmap
-                                if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
-                                    LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
-                                        if (currentItem?.key == boundKey) {
-                                            currentDominantColor = extracted
-                                            if (root.hasFocus()) {
-                                                updateFocusVisual(true)
-                                            }
-                                        }
+            if (!sameImageRequest) {
+                val ctx = posterImage.context
+                val boundKey = item.key
+                val mappedUrl = com.nuvio.tv.core.image.sizedHomeArtworkUrl(imageUrl, wPx, hPx)
+                val memKeyStr = "${mappedUrl}_${wPx}x${hPx}"
+                val imageLoader = SingletonImageLoader.get(ctx)
+                val cachedVal = imageLoader.memoryCache?.get(coil3.memory.MemoryCache.Key(memKeyStr))
+                boundImageUrl = imageUrl
+                boundWidthPx = wPx
+                boundHeightPx = hPx
+                imageDisposable?.dispose()
+                if (cachedVal != null) {
+                    imageDisposable = null
+                    val result = cachedVal.image
+                    posterImage.setImageDrawable(result.asDrawable(ctx.resources))
+                    cardContainer.background = null
+                    val existingColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
+                    if (existingColor != null) {
+                        currentDominantColor = existingColor
+                    } else {
+                        val bmp = (result as? BitmapImage)?.bitmap
+                        if (bmp != null && !bmp.isRecycled) {
+                            LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
+                                if (currentItem?.key == boundKey) {
+                                    currentDominantColor = extracted
+                                    if (root.hasFocus()) {
+                                        updateFocusVisual(true)
                                     }
-                                } else if (root.hasFocus()) {
-                                    updateFocusVisual(true)
                                 }
                             }
-                        }
-
-                        override fun onError(error: Image?) {
-                            if (currentItem?.key != boundKey) return
-                            posterImage.setImageDrawable(error?.asDrawable(ctx.resources))
                         }
                     }
-                )
-                .build()
-            imageDisposable?.dispose()
-            imageDisposable = SingletonImageLoader.get(ctx).enqueue(request)
+                } else {
+                    val request = ImageRequest.Builder(ctx)
+                        .data(imageUrl)
+                        .memoryCacheKey(memKeyStr)
+                        .size(wPx, hPx)
+                        .allowHardware(false)
+                        .crossfade(false)
+                        .target(
+                            object : Target {
+                                override fun onStart(placeholder: Image?) {
+                                    if (currentItem?.key != boundKey) return
+                                    if (placeholder != null) {
+                                        posterImage.setImageDrawable(placeholder.asDrawable(ctx.resources))
+                                    }
+                                }
+
+                                override fun onSuccess(result: Image) {
+                                    if (currentItem?.key != boundKey) return
+                                    posterImage.setImageDrawable(result.asDrawable(ctx.resources))
+                                    // Zero GPU Overdraw: remove background when image covers container
+                                    cardContainer.background = null
+                                    val existingColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
+                                    if (existingColor != null) {
+                                        currentDominantColor = existingColor
+                                        if (root.hasFocus()) {
+                                            updateFocusVisual(true)
+                                        }
+                                    } else {
+                                        val bmp = (result as? BitmapImage)?.bitmap
+                                        if (bmp != null && !bmp.isRecycled) {
+                                            LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
+                                                if (currentItem?.key == boundKey) {
+                                                    currentDominantColor = extracted
+                                                    if (root.hasFocus()) {
+                                                        updateFocusVisual(true)
+                                                    }
+                                                }
+                                            }
+                                        } else if (root.hasFocus()) {
+                                            updateFocusVisual(true)
+                                        }
+                                    }
+                                }
+
+                                override fun onError(error: Image?) {
+                                    if (currentItem?.key != boundKey) return
+                                    boundImageUrl = null
+                                    posterImage.setImageDrawable(error?.asDrawable(ctx.resources))
+                                }
+                            }
+                        )
+                        .build()
+                    imageDisposable = imageLoader.enqueue(request)
+                }
+            }
         } else {
+            imageDisposable?.dispose()
+            imageDisposable = null
+            boundImageUrl = null
             posterImage.setImageDrawable(null)
         }
 
@@ -225,6 +271,9 @@ class LeanbackPosterViewHolder(
         super.unbind()
         imageDisposable?.dispose()
         imageDisposable = null
+        boundImageUrl = null
+        boundWidthPx = 0
+        boundHeightPx = 0
         posterImage.setImageDrawable(null)
     }
 
