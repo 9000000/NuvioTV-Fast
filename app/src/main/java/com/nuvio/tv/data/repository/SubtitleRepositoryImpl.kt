@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
-import com.nuvio.tv.data.local.AddonPreferences
 import com.nuvio.tv.data.mediaserver.ServerItemRef
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
@@ -243,6 +242,4 @@ class SubtitleRepositoryImpl @Inject constructor(
     private fun encodePathSegment(value: String): String {
         return java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
-
-    private fun String?.isNullOfBlank(): Boolean = this == null || this.isBlank()
 }

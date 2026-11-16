@@ -1,7 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
 import android.os.SystemClock
-import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.PlayerSessionTracker
@@ -11,7 +10,6 @@ import com.nuvio.tv.core.util.selectEpisodeReleaseValue
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
-import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.normalizeLanguageCode
 import com.nuvio.tv.domain.model.countryToLanguageCode
@@ -43,7 +41,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Collections
@@ -1340,42 +1337,6 @@ private fun choosePreferredNextUpSeed(items: List<WatchProgress>, nextUpFromFurt
                 )
             }
         )
-}
-
-private suspend fun HomeViewModel.resolveCurrentEpisodeDescription(
-    progress: WatchProgress,
-    meta: CwMetaSummary,
-    video: CwVideoSummary?,
-    debug: CwDebugSession? = null
-): String? {
-    if (isSeriesTypeCW(progress.contentType)) {
-        if (video != null) {
-            val season = video.season
-            val episode = video.episode
-            val episodeOverview = video.overview?.takeIf { it.isNotBlank() }
-            if (episodeOverview != null) return episodeOverview
-            if (season != null && episode != null && currentTmdbSettings.enabled) {
-                val tmdbId = resolveTmdbIdForNextUp(progress, meta, debug)
-                if (tmdbId != null) {
-                    val tmdbStartedAtMs = SystemClock.elapsedRealtime()
-                    val tmdbOverview = runCatching {
-                        tmdbMetadataService.fetchEpisodeEnrichment(
-                            tmdbId = tmdbId,
-                            seasonNumbers = listOf(season),
-                            language = currentTmdbSettings.language
-                        )[season to episode]?.overview
-                    }.getOrNull()
-                    debug?.recordTmdbCall(
-                        kind = "current-episode-description",
-                        elapsedMs = SystemClock.elapsedRealtime() - tmdbStartedAtMs,
-                        success = !tmdbOverview.isNullOrBlank()
-                    )
-                    if (!tmdbOverview.isNullOrBlank()) return tmdbOverview
-                }
-            }
-        }
-    }
-    return meta.description?.takeIf { it.isNotBlank() }
 }
 
 private fun resolveVideoForProgress(progress: WatchProgress, meta: CwMetaSummary): CwVideoSummary? {
@@ -3200,22 +3161,6 @@ private suspend fun HomeViewModel.resolveTmdbIdForNextUp(
         elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
     )
     return null
-}
-
-private fun shouldFetchNextUpTmdbFallback(
-    item: ContinueWatchingItem.NextUp,
-    meta: CwMetaSummary,
-    video: CwVideoSummary?
-): Boolean {
-    val hasName = !(item.info.name.isBlank() && meta.name.isNullOrBlank())
-    val hasPoster = item.info.poster != null || meta.poster.normalizeImageUrl() != null
-    val hasBackdrop = item.info.backdrop != null || meta.backdropUrl.normalizeImageUrl() != null
-    val hasLogo = item.info.logo != null || meta.logo.normalizeImageUrl() != null
-    val hasEpisodeTitle = item.info.episodeTitle != null || video?.title?.takeIf { it.isNotBlank() } != null
-    val hasEpisodeDescription = item.info.episodeDescription != null || video?.overview?.takeIf { it.isNotBlank() } != null
-    val hasThumbnail = item.info.thumbnail != null || video?.thumbnail.normalizeImageUrl() != null
-    val hasReleaseDate = item.info.released != null || video?.released?.trim()?.takeIf { it.isNotEmpty() } != null
-    return !(hasName && hasPoster && hasBackdrop && hasLogo && hasEpisodeTitle && hasEpisodeDescription && hasThumbnail && hasReleaseDate)
 }
 
 private fun formatEpisodeAirDateLabel(releaseDate: LocalDate): String {

@@ -1,25 +1,16 @@
 package com.nuvio.tv.features.livetv
 
 import android.content.Context
-import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.hls.HlsMediaSource
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -234,45 +225,6 @@ class LiveTvPlaybackController @Inject constructor(
             }
         }
         return out
-    }
-
-    private fun buildMediaSource(url: String, customHeaders: Map<String, String>): MediaSource {
-        val httpFactory = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
-
-        if (customHeaders.isNotEmpty()) {
-            httpFactory.setDefaultRequestProperties(customHeaders)
-        }
-
-        val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
-        val uri = Uri.parse(url)
-
-        val isHls = url.contains(".m3u8", ignoreCase = true) || url.contains("m3u8", ignoreCase = true)
-        val isDash = url.contains(".mpd", ignoreCase = true)
-
-        val mediaItem = MediaItem.Builder()
-            .setUri(uri)
-            .apply {
-                if (isHls) setMimeType(MimeTypes.APPLICATION_M3U8)
-                else if (isDash) setMimeType(MimeTypes.APPLICATION_MPD)
-            }
-            .build()
-
-        return if (isHls) {
-            val hlsExtractorFactory = androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory(
-                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES,
-                /* exposeCea608WhenMissingDeclarations = */ true
-            )
-            HlsMediaSource.Factory(dataSourceFactory)
-                .setExtractorFactory(hlsExtractorFactory)
-                .setAllowChunklessPreparation(true)
-                .createMediaSource(mediaItem)
-        } else {
-            DefaultMediaSourceFactory(dataSourceFactory)
-                .createMediaSource(mediaItem)
-        }
     }
 
     private fun buildPlayer(): ExoPlayer {

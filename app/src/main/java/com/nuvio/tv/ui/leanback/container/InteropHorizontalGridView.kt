@@ -30,6 +30,13 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var onNavigateLeftOnFirstItem: (() -> Boolean)? = null
     var animationsEnabled: Boolean = true
 
+    internal var configuredRowHeightPx: Int = Int.MIN_VALUE
+    internal var configuredSpacingPx: Int = Int.MIN_VALUE
+    internal var configuredStartPaddingPx: Int = Int.MIN_VALUE
+    internal var configuredVerticalPaddingPx: Int = Int.MIN_VALUE
+    internal var configuredAnimationsEnabled: Boolean? = null
+    internal var configuredFocusEnabled: Boolean? = null
+
     var canTakeFocus: (() -> Boolean)? = null
 
     private var isNavigatingToSidebar: Boolean = false

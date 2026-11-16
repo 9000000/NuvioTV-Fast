@@ -29,7 +29,7 @@ abstract class LeanbackBaseViewHolder(
     var cornerRadiusPx: Float,
     val borderWidthPx: Int,
     val glowMarginPx: Int,
-    val adapter: LeanbackUniversalAdapter
+    var adapter: LeanbackUniversalAdapter
 ) : RecyclerView.ViewHolder(root) {
 
     protected val interpolator = DecelerateInterpolator(1.5f)
@@ -173,6 +173,7 @@ abstract class LeanbackBaseViewHolder(
 
     open fun unbind() {
         root.removeCallbacks(deferredGlowRunnable)
+        currentItem = null
         glowView.visibility = View.GONE
         cardContainer.foreground = null
         applyPlaceholderBackgroundShape()

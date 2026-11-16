@@ -86,13 +86,6 @@ class DebridStreamPresentation @Inject constructor(
             DebridProviders.byId(debridCacheStatus?.providerId)?.supports(DebridProviderCapability.LocalTorrentCacheCheck) == true &&
             debridCacheStatus?.state == StreamDebridCacheState.NOT_CACHED
 
-    private fun Stream.dedupKeyForPresentation(): String =
-        infoHash?.lowercase()?.let { "$it:${fileIdx ?: ""}" }
-            ?: clientResolve?.infoHash?.lowercase()?.let { "$it:${clientResolve.fileIdx ?: ""}" }
-            ?: url
-            ?: externalUrl
-            ?: stableKey()
-
     private fun Stream.isInactiveResolverStream(settings: DebridSettings): Boolean {
         val streamProviderId = DebridProviders.byId(clientResolve?.service)?.id ?: return false
         val activeProviderId = settings.activeResolverProviderId ?: return false

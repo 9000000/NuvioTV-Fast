@@ -43,29 +43,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
-import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.network.NoDelaySocketFactory
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.VodCacheSizeMode
-import okhttp3.ConnectionPool
-import okhttp3.Dispatcher
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.SocketTimeoutException
 import java.net.URLDecoder
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.util.Base64
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 internal class PlayerMediaSourceFactory(private val context: Context) {
     private var customExtractorsFactory: ExtractorsFactory? = null
@@ -652,14 +642,6 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             val cacheKey = buildMimeProbeCacheKey(url, sanitizedHeaders)
             return synchronized(probeInfoCache) {
                 probeInfoCache[cacheKey]
-            }
-        }
-
-        private fun cacheProbeInfo(url: String, headers: Map<String, String>, contentLength: Long, acceptsRanges: Boolean) {
-            val sanitizedHeaders = sanitizeHeaders(headers)
-            val cacheKey = buildMimeProbeCacheKey(url, sanitizedHeaders)
-            synchronized(probeInfoCache) {
-                probeInfoCache[cacheKey] = StreamProbeInfo(contentLength, acceptsRanges)
             }
         }
 

@@ -322,18 +322,6 @@ internal class DolbyVisionMatroskaTransformer(
         return parts.joinToString(".")
     }
 
-    private fun downgradeDolbyVisionCodecStringToHevc(codecs: String?): String? {
-        val raw = codecs?.trim().orEmpty()
-        if (raw.isEmpty()) return null
-        val parts = raw.split('.').toMutableList()
-        if (parts.size < 2) return null
-        return when (parts[0].lowercase()) {
-            "dvhe" -> { parts[0] = "hvc1"; parts.joinToString(".") }
-            "dvh1" -> { parts[0] = "hev1"; parts.joinToString(".") }
-            else -> null
-        }
-    }
-
     private fun resolveProfile(codecs: String?, configBytes: ByteArray?): Int? {
         if (configBytes != null && configBytes.isNotEmpty()) {
             val parsedProfile = runCatching {
@@ -362,21 +350,6 @@ internal class DolbyVisionMatroskaTransformer(
         val b0 = sample[offset].toInt() and 0x01
         val b1 = sample[offset + 1].toInt() and 0xF8
         return (b0 shl 5) or (b1 ushr 3)
-    }
-
-    private fun getNuhLayerId(nalPayload: ByteArray): Int {
-        if (nalPayload.size < 2) return 0
-        val b0 = nalPayload[0].toInt() and 0x01
-        val b1 = nalPayload[1].toInt() and 0xF8
-        return (b0 shl 5) or (b1 ushr 3)
-    }
-
-    private fun normalizeNuhLayerIdToZero(nalPayload: ByteArray): ByteArray {
-        if (nalPayload.size < 2 || getNuhLayerId(nalPayload) == 0) return nalPayload
-        val out = nalPayload.copyOf()
-        out[0] = (out[0].toInt() and 0xFE).toByte()
-        out[1] = (out[1].toInt() and 0x07).toByte()
-        return out
     }
 
     private fun readLengthField(data: ByteArray, offset: Int, lengthBytes: Int): Int {

@@ -113,7 +113,6 @@ import com.nuvio.tv.ui.util.localizedGenreLabel
 import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.text.TextStyle
 import com.nuvio.tv.LocalOpenSidebar
 import com.nuvio.tv.R
 

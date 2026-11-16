@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -1112,15 +1111,6 @@ private fun formatCommentTimestamp(createdAt: String?, updatedAt: String?): Stri
 
     val formatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
     return formatter.format(instant.atZone(ZoneId.systemDefault()))
-}
-
-private fun commentMaxLines(length: Int): Int = when {
-    length <= 160 -> 7
-    length <= 280 -> 10
-    length <= 420 -> 13
-    length <= 650 -> 17
-    length <= 900 -> 22
-    else -> 28
 }
 
 private fun selectedEpisodeLabel(video: Video): String {

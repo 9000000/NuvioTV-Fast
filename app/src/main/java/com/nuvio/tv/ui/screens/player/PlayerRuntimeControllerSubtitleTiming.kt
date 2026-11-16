@@ -8,7 +8,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.player.SubtitleCharsetDetector
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient

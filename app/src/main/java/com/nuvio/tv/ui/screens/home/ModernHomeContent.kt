@@ -10,8 +10,6 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -23,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -42,40 +39,17 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.metrics.performance.PerformanceMetricsState
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import coil3.request.CachePolicy
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import kotlin.math.abs
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
-import com.nuvio.tv.R
-import androidx.tv.material3.Border
-import androidx.tv.material3.Card
-import androidx.tv.material3.CardDefaults
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
-import coil3.imageLoader
-import coil3.memory.MemoryCache
-import coil3.request.ImageRequest
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.MetaPreview
@@ -89,13 +63,8 @@ import com.nuvio.tv.ui.util.StableRef
 import com.nuvio.tv.ui.util.asStable
 import com.nuvio.tv.ui.util.formatHeroRuntime
 import com.nuvio.tv.ui.util.recompositionHighlighter
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 // Height of the wide card as a fraction of its width, matching the 2.5:1 shape of the mobile card.
 private const val WIDE_CARD_HEIGHT_RATIO = 0.4f
@@ -216,13 +185,11 @@ fun ModernHomeContent(
         derivedStateOf { verticalRowListState.isScrollInProgress }
     }
 
-    val rowListStates = remember { mutableStateMapOf<String, LazyListState>() }
     val loadMoreRequestedTotals = remember { mutableStateMapOf<String, Int>() }
 
     val focusedItemByRow = remember { mutableStateMapOf<String, Int>() }
     val itemIdentitySnapshot = remember { ItemIdentitySnapshot() }
     val stableFocusedItemByRow = remember { StableRef<MutableMap<String, Int>>(focusedItemByRow) }
-    val stableRowListStates = remember { StableRef<MutableMap<String, LazyListState>>(rowListStates) }
     val stableLoadMoreRequestedTotals = remember { StableRef<MutableMap<String, Int>>(loadMoreRequestedTotals) }
     // Every focus move writes focusedItemByRow, so reading it observably here recomposed this
     // whole composable on each D-pad press. The restore below only cares whether the map is still
@@ -402,7 +369,6 @@ fun ModernHomeContent(
     }
 
     LaunchedEffect(carouselRows, focusState.hasSavedFocus) {
-        rowListStates.keys.retainAll(activeRowKeys)
         loadMoreRequestedTotals.keys.retainAll(activeRowKeys)
         val staleSelection = focusedCatalogSelection.value?.let { selection ->
             when (val payload = selection.payload) {
@@ -633,25 +599,16 @@ fun ModernHomeContent(
 
             val catalogRowScrollStates = latestCarouselRows
                 .associate { rowState ->
-                    val scrollIndex = rowListStates[rowState.key]?.firstVisibleItemIndex
-                        ?: (focusedItemByRow[rowState.key] ?: 0)
-                    rowState.key to scrollIndex
+                    rowState.key to (focusedItemByRow[rowState.key] ?: 0)
                 }
 
-            // A row not composed since the return has no state: keep the anchor it came back with.
             val liveRowKeys = latestCarouselRows.map { it.key }.toSet()
-            val catalogRowScrollAnchors = latestSavedScrollAnchors.filterKeys { it in liveRowKeys } + latestCarouselRows
-                .mapNotNull { rowState ->
-                    val state = rowListStates[rowState.key] ?: return@mapNotNull null
-                    // The card last measured there: an off-screen row is not re-measured when items land in front.
-                    val anchorKey = (state.layoutInfo.visibleItemsInfo
-                        .firstOrNull { it.index == state.firstVisibleItemIndex }?.key as? String)
-                        ?.takeIf { key -> rowState.items.list.any { it.key == key } }
-                        ?: rowState.items.list.getOrNull(state.firstVisibleItemIndex)?.key
-                        ?: return@mapNotNull null
+            val catalogRowScrollAnchors = latestSavedScrollAnchors.filterKeys { it in liveRowKeys } +
+                latestCarouselRows.mapNotNull { rowState ->
+                    val idx = focusedItemByRow[rowState.key] ?: return@mapNotNull null
+                    val anchorKey = rowState.items.list.getOrNull(idx)?.key ?: return@mapNotNull null
                     rowState.key to anchorKey
-                }
-                .toMap()
+                }.toMap()
 
             onSaveFocusState(
                 latestVerticalRowListState.firstVisibleItemIndex,
@@ -1186,12 +1143,12 @@ fun ModernHomeContent(
             }
             val stableOnItemFocus = remember(onItemFocus) { { item: MetaPreview -> onItemFocus(item) } }
             val stableOnPreloadAdjacentItem = remember(onPreloadAdjacentItem) { { item: MetaPreview -> onPreloadAdjacentItem(item) } }
+            val onUserNavigatedLambda = remember { { userHasNavigated.value = true } }
 
             ModernHomeRowsList(
                 carouselRows = carouselRows,
                 verticalRowListState = verticalRowListState,
                 focusedItemByRow = stableFocusedItemByRow,
-                rowListStates = stableRowListStates,
                 loadMoreRequestedTotals = stableLoadMoreRequestedTotals,
                 focusState = focusState,
                 activeRowKey = activeRowKey,
@@ -1257,7 +1214,7 @@ fun ModernHomeContent(
                 onFocusedHeroMediaNonceChange = onFocusedHeroMediaNonceChangeLambda,
                 onExpansionInteractionNonceChange = onExpansionInteractionNonceChangeLambda,
                 blockLeftOnFirstExpandedItem = blockLeftOnFirstExpandedItem,
-                onUserNavigated = { userHasNavigated.value = true },
+                onUserNavigated = onUserNavigatedLambda,
                 isVerticalRowsScrollingState = isVerticalRowsScrollingState,
                 modifier = Modifier
                     .align(Alignment.BottomStart)

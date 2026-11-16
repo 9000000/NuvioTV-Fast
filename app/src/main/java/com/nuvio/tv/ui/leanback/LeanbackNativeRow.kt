@@ -210,6 +210,7 @@ fun LeanbackNativeRow(
                     totalRowHeightPx
                 )
                 setRowHeight(totalRowHeightPx)
+                configuredRowHeightPx = totalRowHeightPx
                 setNumRows(1)
                 focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ALIGNED
                 windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
@@ -218,15 +219,20 @@ fun LeanbackNativeRow(
                 itemAlignmentOffset = 0
                 itemAlignmentOffsetPercent = 0f
                 setItemSpacing(spacingPx)
+                configuredSpacingPx = spacingPx
                 clipToPadding = false
                 clipChildren = false
                 setPadding(startPaddingPx, verticalPaddingPx, startPaddingPx, verticalPaddingPx)
+                configuredStartPaddingPx = startPaddingPx
+                configuredVerticalPaddingPx = verticalPaddingPx
                 this.adapter = adapter
                 this.onNavigateDown = onNavigateDown
                 this.onNavigateUp = onNavigateUp
                 this.onNavigateBack = onNavigateBack
                 this.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
                 this.animationsEnabled = animationsEnabled
+                setAnimateChildLayout(animationsEnabled)
+                configuredAnimationsEnabled = animationsEnabled
                 setHasFixedSize(true)
                 setItemViewCacheSize(8)
                 effectivePool?.let { setRecycledViewPool(it) }
@@ -239,6 +245,7 @@ fun LeanbackNativeRow(
                     isFocusable = true
                     isFocusableInTouchMode = true
                 }
+                configuredFocusEnabled = isFocusEnabled
                 localGridViewRef = this
                 rowGrids?.put(rowKey, this)
                 addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
@@ -266,38 +273,48 @@ fun LeanbackNativeRow(
                     gridView.setSelectedPosition(initialFocusPosition)
                 }
             }
-            if (!isFocusEnabled) {
-                gridView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                gridView.isFocusable = false
-                gridView.isFocusableInTouchMode = false
-            } else {
-                gridView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-                gridView.isFocusable = true
-                gridView.isFocusableInTouchMode = true
+            if (gridView.configuredFocusEnabled != isFocusEnabled) {
+                if (!isFocusEnabled) {
+                    gridView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                    gridView.isFocusable = false
+                    gridView.isFocusableInTouchMode = false
+                } else {
+                    gridView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                    gridView.isFocusable = true
+                    gridView.isFocusableInTouchMode = true
+                }
+                gridView.configuredFocusEnabled = isFocusEnabled
             }
-            val lp = gridView.layoutParams
-            if (lp != null && lp.height != totalRowHeightPx) {
-                lp.height = totalRowHeightPx
-                gridView.layoutParams = lp
+            if (gridView.configuredRowHeightPx != totalRowHeightPx) {
+                val lp = gridView.layoutParams
+                if (lp != null && lp.height != totalRowHeightPx) {
+                    lp.height = totalRowHeightPx
+                    gridView.layoutParams = lp
+                }
+                gridView.setRowHeight(totalRowHeightPx)
+                gridView.configuredRowHeightPx = totalRowHeightPx
             }
-            gridView.setRowHeight(totalRowHeightPx)
-            gridView.focusScrollStrategy = BaseGridView.FOCUS_SCROLL_ALIGNED
-            gridView.windowAlignment = BaseGridView.WINDOW_ALIGN_NO_EDGE
-            gridView.windowAlignmentOffset = startPaddingPx
-            gridView.setItemSpacing(spacingPx)
-            if (gridView.paddingLeft != startPaddingPx ||
-                gridView.paddingTop != verticalPaddingPx ||
-                gridView.paddingRight != startPaddingPx ||
-                gridView.paddingBottom != verticalPaddingPx
+            if (gridView.configuredStartPaddingPx != startPaddingPx ||
+                gridView.configuredVerticalPaddingPx != verticalPaddingPx
             ) {
+                gridView.windowAlignmentOffset = startPaddingPx
                 gridView.setPadding(startPaddingPx, verticalPaddingPx, startPaddingPx, verticalPaddingPx)
+                gridView.configuredStartPaddingPx = startPaddingPx
+                gridView.configuredVerticalPaddingPx = verticalPaddingPx
+            }
+            if (gridView.configuredSpacingPx != spacingPx) {
+                gridView.setItemSpacing(spacingPx)
+                gridView.configuredSpacingPx = spacingPx
             }
             gridView.onNavigateDown = onNavigateDown
             gridView.onNavigateUp = onNavigateUp
             gridView.onNavigateBack = onNavigateBack
             gridView.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
-            gridView.animationsEnabled = animationsEnabled
-            gridView.setAnimateChildLayout(animationsEnabled)
+            if (gridView.configuredAnimationsEnabled != animationsEnabled) {
+                gridView.animationsEnabled = animationsEnabled
+                gridView.setAnimateChildLayout(animationsEnabled)
+                gridView.configuredAnimationsEnabled = animationsEnabled
+            }
             adapter.animationsEnabled = { animationsEnabled }
             adapter.onItemFocused = onItemFocused
             adapter.onItemClick = onItemClick

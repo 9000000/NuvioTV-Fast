@@ -23,10 +23,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -36,7 +34,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +69,6 @@ import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.runtime.State
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
@@ -100,10 +96,8 @@ import com.nuvio.tv.ui.util.localizedGenreLabel
 import com.nuvio.tv.ui.util.recompositionHighlighter
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.draw.clip
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -111,8 +105,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
-import coil3.imageLoader
-import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import androidx.compose.ui.platform.LocalContext
@@ -377,25 +369,6 @@ private const val USER_INTERACTION_DISPATCH_DEBOUNCE_MS = 120L
 private fun formatDetailYearRange(releaseInfo: String?): String? {
     if (releaseInfo.isNullOrBlank()) return null
     return releaseInfo.trim()
-}
-
-private fun applyDither(bmp: android.graphics.Bitmap) {
-    val pixels = IntArray(bmp.width * bmp.height)
-    bmp.getPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
-    val rng = java.util.Random(0)
-    for (i in pixels.indices) {
-        val p = pixels[i]
-        val a = (p ushr 24) and 0xFF
-        val r = (p ushr 16) and 0xFF
-        val g = (p ushr 8) and 0xFF
-        val b = p and 0xFF
-        val noise = rng.nextInt(3) - 1
-        pixels[i] = ((a shl 24) or
-            ((r + noise).coerceIn(0, 255) shl 16) or
-            ((g + noise).coerceIn(0, 255) shl 8) or
-            (b + noise).coerceIn(0, 255))
-    }
-    bmp.setPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

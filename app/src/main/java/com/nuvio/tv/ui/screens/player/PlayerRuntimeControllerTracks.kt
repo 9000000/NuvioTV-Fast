@@ -1,6 +1,5 @@
 package com.nuvio.tv.ui.screens.player
 
-import android.net.Uri
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -487,10 +486,6 @@ private fun Tracks.hasSelectedAssSsaTextTrack(): Boolean {
     return false
 }
 
-// Profile 7 only: it's the profile AUTO conversion rewrites. DV5/DV8 don't convert, so they
-// shouldn't trigger a libass-drop reload.
-private val DV_PROFILE_7_CODEC = Regex("^(dvhe|dvh1|dvav|dva1)\\.0?7\\.")
-
 private val DV_CODEC_PREFIX = Regex("^(dvhe|dvh1|dvav|dva1|dav1)\\.")
 
 /**
@@ -535,17 +530,6 @@ internal fun Format.hevcSpsColorTransfer(): Int? {
         }
     }
     return null
-}
-
-private fun Tracks.hasDolbyVisionProfile7VideoTrack(): Boolean {
-    groups.forEach { trackGroup ->
-        if (trackGroup.type != C.TRACK_TYPE_VIDEO) return@forEach
-        for (index in 0 until trackGroup.length) {
-            val codec = trackGroup.getTrackFormat(index).codecs?.lowercase(Locale.US).orEmpty()
-            if (DV_PROFILE_7_CODEC.containsMatchIn(codec)) return true
-        }
-    }
-    return false
 }
 
 // Profiles that the DolbyVisionExtractorsFactory actually converts (7 always, 5 when enabled).

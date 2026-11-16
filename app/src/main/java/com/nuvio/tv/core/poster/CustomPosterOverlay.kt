@@ -1,6 +1,5 @@
 package com.nuvio.tv.core.poster
 
-import com.nuvio.tv.core.poster.CustomPosterUrlResolver.ContentIds
 import com.nuvio.tv.domain.model.LibraryEntry
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview

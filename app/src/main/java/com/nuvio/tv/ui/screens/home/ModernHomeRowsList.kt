@@ -4,8 +4,8 @@ import android.view.KeyEvent as AndroidKeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import androidx.core.graphics.ColorUtils
 import androidx.recyclerview.widget.RecyclerView
+import com.nuvio.tv.ui.leanback.pool.LocalLeanbackRecycledViewPool
 
 import com.nuvio.tv.domain.model.catalogRowLegacyKey
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -80,7 +80,6 @@ import com.nuvio.tv.ui.util.StableList
 import com.nuvio.tv.ui.util.StableMap
 import com.nuvio.tv.ui.util.StableRef
 import com.nuvio.tv.ui.util.recompositionHighlighter
-import com.nuvio.tv.ui.components.rememberPlaceholderShimmerOffsetState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -93,12 +92,12 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 
-private const val VERTICAL_HOLD_START_VELOCITY_DP_PER_SEC = 700f
-private const val VERTICAL_HOLD_MAX_VELOCITY_DP_PER_SEC = 1050f
-private const val VERTICAL_HOLD_RAMP_SEC = 0.25f
-private const val VERTICAL_HOLD_IDLE_TIMEOUT_MS = 170L
-private const val VERTICAL_STEP_DURATION_MS = 185
-private const val VERTICAL_SETTLE_DURATION_MS = 140
+private const val VERTICAL_HOLD_START_VELOCITY_DP_PER_SEC = 520f
+private const val VERTICAL_HOLD_MAX_VELOCITY_DP_PER_SEC = 960f
+private const val VERTICAL_HOLD_RAMP_SEC = 0.32f
+private const val VERTICAL_HOLD_IDLE_TIMEOUT_MS = 420L
+private const val VERTICAL_STEP_DURATION_MS = 160
+private const val VERTICAL_SETTLE_DURATION_MS = 135
 
 private class VerticalRingOverlayHost(context: android.content.Context) : FrameLayout(context) {
     val ringView = ModernRowFloatingFocusRingView(context).apply {
@@ -231,7 +230,6 @@ internal fun ModernHomeRowsList(
     carouselRows: StableList<HeroCarouselRow>,
     verticalRowListState: LazyListState,
     focusedItemByRow: StableRef<MutableMap<String, Int>>,
-    rowListStates: StableRef<MutableMap<String, LazyListState>>,
     loadMoreRequestedTotals: StableRef<MutableMap<String, Int>>,
     focusState: HomeScreenFocusState,
     activeRowKey: State<String?>,
@@ -305,23 +303,23 @@ internal fun ModernHomeRowsList(
     val isSidebarExpanded = LocalSidebarExpanded.current
     val isSidebarExpandedState = rememberUpdatedState(isSidebarExpanded)
     val focusedItemByRowMap = focusedItemByRow.value
-    val rowListStatesMap = rowListStates.value
     val loadMoreRequestedTotalsMap = loadMoreRequestedTotals.value
 
     val latestOnActiveRowKeyChange = rememberUpdatedState(onActiveRowKeyChange)
     val latestOnActiveItemIndexChange = rememberUpdatedState(onActiveItemIndexChange)
 
     val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
-    val stableItemFocusRequestersByRow = remember { mutableMapOf<String, StableRef<MutableMap<Int, FocusRequester>>>() }
     val rowGrids = remember { mutableMapOf<String, androidx.leanback.widget.HorizontalGridView>() }
-    val sharedRecycledViewPool = remember {
-        RecyclerView.RecycledViewPool().apply {
-            setMaxRecycledViews(0, 30)
+    val externalPool = LocalLeanbackRecycledViewPool.current
+    val sharedRecycledViewPool = remember(externalPool) {
+        externalPool ?: RecyclerView.RecycledViewPool().apply {
+            setMaxRecycledViews(0, 56)
         }
     }
     val coroutineScope = rememberCoroutineScope()
     var scrollJob by remember { mutableStateOf<Job?>(null) }
     var localPendingFocusRowKey by remember { mutableStateOf<String?>(null) }
+    val stableClearPendingFocus = remember { { localPendingFocusRowKey = null } }
     var localPendingFocusIndex by remember { mutableIntStateOf(0) }
     var localPendingFocusNonce by remember { mutableIntStateOf(0) }
     var targetRowIndexTracker by remember { mutableIntStateOf(0) }
@@ -598,15 +596,26 @@ internal fun ModernHomeRowsList(
     }
 
     fun finishOverlayRingToCurrentGrid() {
-        val gen = overlayGenerationRef.incrementAndGet()
+        val overlayHost = verticalOverlayHostRef.get()
+        val overlayActive = isVerticalGlideRef.get() ||
+            scrollJob?.isActive == true ||
+            overlayHost?.ringView?.visibility == View.VISIBLE ||
+            overlayHost?.hasFocus() == true
+        if (!overlayActive) return
+
+        overlayGenerationRef.incrementAndGet()
+        verticalHoldDirectionRef.set(0)
+        verticalHoldJobRef.getAndSet(null)?.cancel()
+        verticalHoldTimeoutRef.getAndSet(null)?.cancel()
+        scrollJob?.cancel()
         isVerticalGlideRef.set(false)
+        latestOnFastScrollingChanged.value(false)
+        overlayHost?.deactivateGlideFocusAndHideRing()
+        // Hand focus back cleanly without snapping selectedPosition backward over a pending horizontal move
         val key = effectiveActiveRowKey()
         val grid = key?.let { rowGrids[it] as? InteropHorizontalGridView }
-        if (grid != null && grid.isAttachedToWindow) {
-            val targetIdx = (focusedItemByRowMap[key] ?: grid.selectedPosition).coerceAtLeast(0)
-            handoffOverlayToGrid(key, targetIdx, gen)
-        } else {
-            verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+        if (grid != null && grid.isAttachedToWindow && !grid.hasFocus()) {
+            grid.requestFocus()
         }
     }
 
@@ -665,7 +674,19 @@ internal fun ModernHomeRowsList(
         } ?: catalogCardHeightPx.toFloat()
         val probeY = anchorY + currentRingHeight * 0.45f
         val anchoredInfo = findAnchoredRowInfo(visible, probeY, lastNonEmptyIdx)
-        val landingIdx = (anchoredInfo?.index ?: targetRowIndexTracker).coerceIn(0, lastNonEmptyIdx)
+        val baseIdx = (anchoredInfo?.index ?: targetRowIndexTracker).coerceIn(0, lastNonEmptyIdx)
+        // Bias landing row in the user's glide direction so releasing never snaps backward
+        val landingIdx = when {
+            dir > 0 && anchoredInfo != null &&
+                anchoredInfo.offset < -(anchoredInfo.size * 0.25f) &&
+                baseIdx + 1 <= lastNonEmptyIdx &&
+                rows.getOrNull(baseIdx + 1)?.items?.list?.isNotEmpty() == true -> baseIdx + 1
+            dir < 0 && anchoredInfo != null &&
+                anchoredInfo.offset > (anchoredInfo.size * 0.35f) &&
+                baseIdx > 0 &&
+                rows.getOrNull(baseIdx - 1)?.items?.list?.isNotEmpty() == true -> baseIdx - 1
+            else -> baseIdx
+        }
         val landingRow = rows.getOrNull(landingIdx) ?: run {
             overlayGenerationRef.incrementAndGet()
             isVerticalGlideRef.set(false)
@@ -771,14 +792,35 @@ internal fun ModernHomeRowsList(
             isVerticalGlideRef.set(true)
             latestOnFastScrollingChanged.value(true)
 
+            val host = verticalOverlayHostRef.get()
+            val existingRing = host?.ringView
+            val visibleRing = existingRing?.takeIf {
+                it.visibility == View.VISIBLE && it.width > 0 && it.height > 0
+            }
             val currentKey = navTargetRowKey.get() ?: currentRowKeyTracker.get() ?: activeRowKey.value
-            val measuredRect = measureFocusedCardInOverlay(currentKey)
             val (defaultW, defaultH, defaultR) = rowCardDimensionsPx(currentKey)
             val anchorY = cachedCardTopInRowRef.get()
-            val startX = measuredRect?.get(0) ?: resolveAnchoredLeftPx(defaultW)
-            val startY = measuredRect?.get(1) ?: anchorY
-            val startW = measuredRect?.get(2) ?: defaultW.toFloat()
-            val startH = measuredRect?.get(3) ?: defaultH.toFloat()
+            val measuredRect = if (visibleRing != null) null else measureFocusedCardInOverlay(currentKey)
+            val startX = when {
+                visibleRing != null -> visibleRing.translationX + visibleRing.glowMarginPx
+                measuredRect != null -> measuredRect[0]
+                else -> resolveAnchoredLeftPx(defaultW)
+            }
+            val startY = when {
+                visibleRing != null -> visibleRing.translationY + visibleRing.glowMarginPx
+                measuredRect != null -> measuredRect[1]
+                else -> anchorY
+            }
+            val startW = when {
+                visibleRing != null -> (visibleRing.width - (visibleRing.glowMarginPx * 2f)).coerceAtLeast(1f)
+                measuredRect != null -> measuredRect[2]
+                else -> defaultW.toFloat()
+            }
+            val startH = when {
+                visibleRing != null -> (visibleRing.height - (visibleRing.glowMarginPx * 2f)).coerceAtLeast(1f)
+                measuredRect != null -> measuredRect[3]
+                else -> defaultH.toFloat()
+            }
             val currentCardIdx = currentKey?.let { focusedItemByRowMap[it] } ?: 0
             val startColor = resolveRowTargetGlowColor(
                 grid = currentKey?.let { rowGrids[it] },
@@ -786,8 +828,7 @@ internal fun ModernHomeRowsList(
                 fallbackItem = rows.firstOrNull { it.key == currentKey }?.items?.list?.getOrNull(currentCardIdx)
             )
 
-            val host = verticalOverlayHostRef.get()
-            host?.ringView?.showFixedOverlayAt(
+            existingRing?.showFixedOverlayAt(
                 xPx = startX,
                 yPx = startY,
                 cardWidthPx = startW.roundToInt(),
@@ -807,21 +848,31 @@ internal fun ModernHomeRowsList(
                 coroutineScope.launch {
                     try {
                         var elapsedSec = 0f
+                        var smoothedDt = 1f / 60f
                         var displayX = startX
                         var displayY = startY
-                        var displayW = startW
-                        var displayH = startH
-                        var displayRadius = defaultR
-                        var displayColor = startColor
-                        var lastCheckedLazyEnd = -1
+                        var targetX = startX
+                        var targetW = startW.roundToInt()
+                        var targetH = startH.roundToInt()
+                        var targetR = defaultR
+                        var targetColor = startColor
+                        var lastPassingRowKey: String? = currentKey
+                        var appliedX = startX
+                        var appliedY = startY
+                        var appliedW = targetW
+                        var appliedH = targetH
+                        var appliedR = targetR
+                        var appliedColor = targetColor
 
                         verticalRowListState.scroll {
                             var lastFrameNs = withFrameNanos { it }
                             while (true) {
                                 val nowNs = withFrameNanos { it }
-                                val dtSec = ((nowNs - lastFrameNs) / 1_000_000_000f).coerceIn(0f, 0.048f)
+                                val rawDt = ((nowNs - lastFrameNs) / 1_000_000_000f).coerceIn(0.004f, 0.032f)
                                 lastFrameNs = nowNs
-                                elapsedSec += dtSec
+                                // Smooth frame delta to avoid micro-stutter when a new row enters composition
+                                smoothedDt = smoothedDt * 0.7f + rawDt * 0.3f
+                                elapsedSec += smoothedDt
 
                                 val liveRows = latestCarouselRowsForLazy.value.list
                                 val liveLastNonEmpty = findLastNonEmptyRowIndex(liveRows)
@@ -829,66 +880,67 @@ internal fun ModernHomeRowsList(
                                 if (sign < 0 && !verticalRowListState.canScrollBackward) break
 
                                 val t = (elapsedSec / VERTICAL_HOLD_RAMP_SEC).coerceIn(0f, 1f)
-                                val smoothT = t * (2f - t)
+                                val smoothT = t * t * (3f - 2f * t)
                                 val velPx = startVelPx + (maxVelPx - startVelPx) * smoothT
-                                val delta = sign * velPx * dtSec
+                                val delta = sign * velPx * smoothedDt
                                 val consumed = scrollBy(delta)
                                 if (consumed == 0f && delta != 0f) break
 
                                 val visible = verticalRowListState.layoutInfo.visibleItemsInfo
-                                val lastVisibleIdx = visible.lastOrNull()?.index ?: -1
-                                if (lastVisibleIdx > lastCheckedLazyEnd) {
-                                    lastCheckedLazyEnd = lastVisibleIdx
-                                    val endCheck = minOf(lastVisibleIdx + 2, liveRows.lastIndex)
-                                    for (idx in lastVisibleIdx.coerceAtLeast(0)..endCheck) {
-                                        val r = liveRows.getOrNull(idx) ?: continue
-                                        if (r.items.list.isEmpty()) {
-                                            val addonId = r.addonId
-                                            val apiType = r.apiType
-                                            val catalogId = r.catalogId
-                                            if (addonId != null && apiType != null && catalogId != null) {
-                                                latestOnRequestLazyCatalogLoad.value(
-                                                    catalogRowLegacyKey(addonId, apiType, catalogId)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                val probeY = anchorY + displayH * 0.45f
+                                val probeY = anchorY + targetH * 0.45f
                                 val passingInfo = findAnchoredRowInfo(visible, probeY, liveLastNonEmpty.coerceAtLeast(0))
                                 val passingRow = passingInfo?.let { liveRows.getOrNull(it.index) }
-                                if (passingRow != null) {
-                                    val (targetW, targetH, targetR) = rowCardDimensionsPx(passingRow.key)
-                                    val targetX = resolveAnchoredLeftPx(targetW)
+                                if (passingRow != null && passingRow.key != lastPassingRowKey) {
+                                    lastPassingRowKey = passingRow.key
+                                    val (nextW, nextH, nextR) = rowCardDimensionsPx(passingRow.key)
+                                    targetW = nextW
+                                    targetH = nextH
+                                    targetR = nextR
+                                    targetX = resolveAnchoredLeftPx(nextW)
                                     val cardIdx = (focusedItemByRowMap[passingRow.key] ?: 0)
                                         .coerceIn(0, (passingRow.items.list.size - 1).coerceAtLeast(0))
-                                    val targetColor = resolveRowTargetGlowColor(
+                                    targetColor = resolveRowTargetGlowColor(
                                         grid = rowGrids[passingRow.key],
                                         cardIndex = cardIdx,
                                         fallbackItem = passingRow.items.list.getOrNull(cardIdx)
                                     )
-                                    val settleFactor = (dtSec * 14f).coerceIn(0.18f, 1f)
-                                    displayX += (targetX - displayX) * settleFactor
-                                    displayY += (anchorY - displayY) * settleFactor
-                                    displayW += (targetW - displayW) * settleFactor
-                                    displayH += (targetH - displayH) * settleFactor
-                                    displayRadius += (targetR - displayRadius) * settleFactor
-                                    if (displayColor != targetColor) {
-                                        displayColor = ColorUtils.blendARGB(
-                                            displayColor,
-                                            targetColor,
-                                            (dtSec * 12f).coerceIn(0.22f, 1f)
-                                        )
-                                    }
+                                }
+
+                                val settleFactor = (smoothedDt * 18f).coerceIn(0.25f, 1f)
+                                displayX = if (kotlin.math.abs(targetX - displayX) < 0.5f) {
+                                    targetX
+                                } else {
+                                    displayX + (targetX - displayX) * settleFactor
+                                }
+                                displayY = if (kotlin.math.abs(anchorY - displayY) < 0.5f) {
+                                    anchorY
+                                } else {
+                                    displayY + (anchorY - displayY) * settleFactor
+                                }
+
+                                // Only call showFixedOverlayAt when bounds, position, or row color actually changed
+                                // so same-size catalog rows avoid 60fps BlurMaskFilter redraws and requestLayout().
+                                val styleOrBoundsChanged = appliedW != targetW ||
+                                    appliedH != targetH ||
+                                    appliedR != targetR ||
+                                    appliedColor != targetColor
+                                val posChanged = kotlin.math.abs(appliedX - displayX) >= 0.5f ||
+                                    kotlin.math.abs(appliedY - displayY) >= 0.5f
+                                if (styleOrBoundsChanged || posChanged) {
                                     verticalOverlayHostRef.get()?.ringView?.showFixedOverlayAt(
                                         xPx = displayX,
                                         yPx = displayY,
-                                        cardWidthPx = displayW.roundToInt(),
-                                        cardHeightPx = displayH.roundToInt(),
-                                        cornerRadiusPx = displayRadius,
-                                        dominantColor = displayColor
+                                        cardWidthPx = targetW,
+                                        cardHeightPx = targetH,
+                                        cornerRadiusPx = targetR,
+                                        dominantColor = targetColor
                                     )
+                                    appliedX = displayX
+                                    appliedY = displayY
+                                    appliedW = targetW
+                                    appliedH = targetH
+                                    appliedR = targetR
+                                    appliedColor = targetColor
                                 }
                             }
                         }
@@ -968,8 +1020,8 @@ internal fun ModernHomeRowsList(
             (measuredBefore != null || overlayHost.ringView.visibility == View.VISIBLE)
 
         val stepGen = overlayGenerationRef.incrementAndGet()
-        if (canUseFixedStepRing && overlayHost != null) {
-            val ringView = overlayHost.ringView
+        if (canUseFixedStepRing) {
+            val ringView = checkNotNull(overlayHost).ringView
             val prevMargin = (ringView.glowMarginPx * 2).toInt()
             val sizeChanged = ringView.width <= 0 ||
                 ringView.height <= 0 ||
@@ -1108,29 +1160,6 @@ internal fun ModernHomeRowsList(
         wasSidebarExpanded = isSidebarExpanded
     }
 
-    val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
-
-    // Only run the shared shimmer while a row on screen actually draws it: rememberInfiniteTransition
-    // keeps waking the Compose frame clock on every frame for as long as it is composed, even when
-    // nothing reads its value. Rows below the fold stay placeholders until they are scrolled to, so
-    // the check has to be on the visible rows, not on the whole list. Keyed on the list state for
-    // the same reason isVerticalRowsScrollingState is in ModernHomeContent: rememberLazyListState
-    // is saveable-backed and can hand back a new instance, and a derived state still holding the
-    // old one would read a layout that has stopped updating.
-    val needsPlaceholderShimmer by remember(verticalRowListState) {
-        derivedStateOf {
-            val rows = latestCarouselRowsForLazy.value.list
-            verticalRowListState.layoutInfo.visibleItemsInfo.any { visibleRow ->
-                rows.getOrNull(visibleRow.index)?.showsPlaceholderShimmer() == true
-            }
-        }
-    }
-    val sharedPlaceholderShimmerOffsetState = if (needsPlaceholderShimmer) {
-        rememberPlaceholderShimmerOffsetState(label = "sharedRowShimmer")
-    } else {
-        null
-    }
-
     CompositionLocalProvider(
         LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec,
         LocalFastScrollActive provides isFastScrolling,
@@ -1140,6 +1169,27 @@ internal fun ModernHomeRowsList(
         val latestOnVerticalHoldRelease = rememberUpdatedState { endVerticalHoldScroll(immediate = false) }
         val latestOnVerticalSingleStep = rememberUpdatedState(::stepVerticalRow)
         val latestOnHorizontalInterrupt = rememberUpdatedState(::finishOverlayRingToCurrentGrid)
+        val latestOnEscapeKey = rememberUpdatedState { keyEvent: AndroidKeyEvent ->
+            val activeKey = effectiveActiveRowKey()
+            val hadHold = verticalHoldDirectionRef.get() != 0
+            if (hadHold) {
+                endVerticalHoldScroll(immediate = true)
+            } else {
+                scrollJob?.cancel()
+                latestOnHorizontalInterrupt.value()
+            }
+            val landedKey = effectiveActiveRowKey() ?: activeKey
+            val landedGrid = landedKey?.let { rowGrids[it] }
+            if (landedGrid != null && landedGrid.isAttachedToWindow) {
+                val cloneEvent = AndroidKeyEvent(keyEvent)
+                landedGrid.post {
+                    if (landedGrid.isAttachedToWindow) {
+                        landedGrid.dispatchKeyEvent(cloneEvent)
+                    }
+                }
+            }
+            true
+        }
 
         Box(
             modifier = modifier
@@ -1219,7 +1269,9 @@ internal fun ModernHomeRowsList(
             itemsIndexed(
                 items = carouselRows.list,
                 key = { _, row -> row.key },
-                contentType = { _, row -> row.apiType ?: "modern_home_row" }
+                contentType = { _, row ->
+                    if (isContinueWatchingRowKey(row.key)) "modern_cw_row" else "modern_catalog_row"
+                }
             ) { _, row ->
                 val onNavigateLeftOnFirstItem = remember(openSidebar, row.key) {
                     {
@@ -1235,7 +1287,7 @@ internal fun ModernHomeRowsList(
                     }
                 }
 
-                val onNavigateBack = remember(carouselRows.list, animationsEnabled) {
+                val onNavigateBack = remember(animationsEnabled) {
                     {
                         onUserNavigated()
                         if (isSidebarExpandedState.value) {
@@ -1265,7 +1317,7 @@ internal fun ModernHomeRowsList(
                                 true
                             } else if (targetRowIndexTracker > 0) {
                                 targetRowIndexTracker = 0
-                                val firstRow = carouselRows.list.firstOrNull()
+                                val firstRow = latestCarouselRowsForLazy.value.list.firstOrNull()
                                 if (firstRow != null) {
                                     val targetCardIndex = (focusedItemByRowMap[firstRow.key] ?: 0)
                                         .coerceIn(0, (firstRow.items.list.size - 1).coerceAtLeast(0))
@@ -1409,17 +1461,30 @@ internal fun ModernHomeRowsList(
                     isActiveRow = isActiveRowLambda,
                     rowFocusRequester = rowFocusRequesters.getOrPut(row.key) { FocusRequester() },
                     rowTitleBottom = 4.dp, // rowTitleBottom sát poster
-                    defaultBringIntoViewSpec = defaultBringIntoViewSpec,
-                    focusStateCatalogRowScrollIndex = focusState.catalogRowScrollStates[row.key] ?: 0,
-                    focusStateCatalogRowScrollAnchor = focusState.catalogRowScrollAnchors[row.key],
                     focusedItemByRow = focusedItemByRow,
-                    rowListStates = rowListStates,
                     loadMoreRequestedTotals = loadMoreRequestedTotals,
                     pendingRowFocusKey = pendingRowFocusKey,
                     pendingRowFocusIndex = pendingRowFocusIndex,
                     pendingRowFocusNonce = pendingRowFocusNonce,
-                    onPendingRowFocusCleared = onPendingRowFocusCleared,
                     onRowItemFocused = stableOnRowItemFocused,
+                    useLandscapePosters = useLandscapePosters,
+                    showLabels = showLabels,
+                    posterCardCornerRadius = posterCardCornerRadius,
+                    portraitCatalogCardWidth = portraitCatalogCardWidth,
+                    portraitCatalogCardHeight = portraitCatalogCardHeight,
+                    landscapeCatalogCardWidth = landscapeCatalogCardWidth,
+                    landscapeCatalogCardHeight = landscapeCatalogCardHeight,
+                    continueWatchingCardWidth = continueWatchingCardWidth,
+                    continueWatchingCardHeight = continueWatchingCardHeight,
+                    continueWatchingCornerRadius = continueWatchingCornerRadius,
+                    onContinueWatchingClick = onContinueWatchingClick,
+                    onContinueWatchingOptions = stableOnContinueWatchingOptions,
+                    onCatalogItemLongPress = onCatalogItemLongPress,
+                    onItemFocus = onItemFocus,
+                    onCatalogSelectionFocused = stableOnCatalogSelectionFocused,
+                    onNavigateToDetail = onNavigateToDetail,
+                    onNavigateToFolderDetail = onNavigateToFolderDetail,
+                    onLoadMoreCatalog = onLoadMoreCatalog,
                     onNavigateDown = onNavigateDown,
                     onNavigateUp = onNavigateUp,
                     onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem,
@@ -1433,46 +1498,7 @@ internal fun ModernHomeRowsList(
                     isPendingFocus = localPendingFocusRowKey == row.key,
                     pendingFocusIndex = localPendingFocusIndex,
                     pendingFocusNonce = localPendingFocusNonce,
-                    onClearPendingFocus = { localPendingFocusRowKey = null },
-                    useLandscapePosters = useLandscapePosters,
-                    alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
-                    showLabels = showLabels,
-                    posterCardCornerRadius = posterCardCornerRadius,
-                    focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
-                    effectiveExpandEnabled = effectiveExpandEnabled,
-                    effectiveAutoplayEnabled = effectiveAutoplayEnabled,
-                    trailerPlaybackTarget = trailerPlaybackTarget,
-                    expandedCatalogFocusKey = expandedCatalogFocusKey,
-                    expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
-                    expandedTrailerPreviewAudioUrl = expandedTrailerPreviewAudioUrl,
-                    portraitCatalogCardWidth = portraitCatalogCardWidth,
-                    portraitCatalogCardHeight = portraitCatalogCardHeight,
-                    landscapeCatalogCardWidth = landscapeCatalogCardWidth,
-                    landscapeCatalogCardHeight = landscapeCatalogCardHeight,
-                    continueWatchingCardWidth = continueWatchingCardWidth,
-                    continueWatchingCardHeight = continueWatchingCardHeight,
-                    blurUnwatchedEpisodes = blurUnwatchedEpisodes,
-                    useEpisodeThumbnails = useEpisodeThumbnails,
-                    continueWatchingCardStyle = continueWatchingCardStyle,
-                    continueWatchingCornerRadius = continueWatchingCornerRadius,
-                    onContinueWatchingClick = onContinueWatchingClick,
-                    onContinueWatchingOptions = stableOnContinueWatchingOptions,
-                    isCatalogItemWatched = isCatalogItemWatched,
-                    onCatalogItemLongPress = onCatalogItemLongPress,
-                    onItemFocus = onItemFocus,
-                    onPreloadAdjacentItem = onPreloadAdjacentItem,
-                    enrichedPreviews = enrichedPreviews,
-                    onCatalogSelectionFocused = stableOnCatalogSelectionFocused,
-                    onNavigateToDetail = onNavigateToDetail,
-                    onNavigateToFolderDetail = onNavigateToFolderDetail,
-                    onLoadMoreCatalog = onLoadMoreCatalog,
-                    onBackdropInteraction = onBackdropInteraction,
-                    onExpandedCatalogFocusKeyChange = onExpandedCatalogFocusKeyChange,
-                    sharedPlaceholderShimmerOffsetState = sharedPlaceholderShimmerOffsetState,
-                    isVerticalRowsScrollingState = isVerticalRowsScrollingState,
-                    itemFocusRequesters = stableItemFocusRequestersByRow.getOrPut(row.key) {
-                        StableRef(mutableMapOf())
-                    }
+                    onClearPendingFocus = stableClearPendingFocus
                 )
             }
         }
@@ -1486,37 +1512,17 @@ internal fun ModernHomeRowsList(
                 factory = { ctx ->
                     VerticalRingOverlayHost(ctx).also { host ->
                         host.preMeasureCardSize(catalogCardWidthPx, catalogCardHeightPx)
+                        host.isGlideHolding = { verticalHoldDirectionRef.get() != 0 }
+                        host.onVerticalRepeat = { sign -> latestOnVerticalHoldScroll.value(sign) }
+                        host.onVerticalRelease = { latestOnVerticalHoldRelease.value() }
+                        host.onVerticalSingleStep = { sign -> latestOnVerticalSingleStep.value(sign) }
+                        host.onEscapeKey = { keyEvent -> latestOnEscapeKey.value(keyEvent) }
                         verticalOverlayHostRef.set(host)
                     }
                 },
                 update = { host ->
                     verticalOverlayHostRef.set(host)
                     host.preMeasureCardSize(catalogCardWidthPx, catalogCardHeightPx)
-                    host.isGlideHolding = { verticalHoldDirectionRef.get() != 0 }
-                    host.onVerticalRepeat = { sign -> latestOnVerticalHoldScroll.value(sign) }
-                    host.onVerticalRelease = { latestOnVerticalHoldRelease.value() }
-                    host.onVerticalSingleStep = { sign -> latestOnVerticalSingleStep.value(sign) }
-                    host.onEscapeKey = { keyEvent ->
-                        val activeKey = effectiveActiveRowKey()
-                        val hadHold = verticalHoldDirectionRef.get() != 0
-                        if (hadHold) {
-                            endVerticalHoldScroll(immediate = true)
-                        } else {
-                            scrollJob?.cancel()
-                            latestOnHorizontalInterrupt.value()
-                        }
-                        val landedKey = effectiveActiveRowKey() ?: activeKey
-                        val landedGrid = landedKey?.let { rowGrids[it] }
-                        if (landedGrid != null && landedGrid.isAttachedToWindow) {
-                            val cloneEvent = AndroidKeyEvent(keyEvent)
-                            landedGrid.post {
-                                if (landedGrid.isAttachedToWindow) {
-                                    landedGrid.dispatchKeyEvent(cloneEvent)
-                                }
-                            }
-                        }
-                        true
-                    }
                 }
             )
         }

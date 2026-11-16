@@ -5,7 +5,6 @@ import com.nuvio.tv.ui.screens.home.continueWatchingItemKey
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.geometry.Offset
@@ -53,8 +52,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusGroup
@@ -74,14 +71,12 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 import com.nuvio.tv.ui.screens.home.canMarkWatched
-import com.nuvio.tv.ui.theme.NuvioComponents
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.transformations
 import coil3.request.crossfade
-import kotlin.math.roundToInt
 import java.util.concurrent.TimeUnit
 import com.nuvio.tv.ui.util.recompositionHighlighter
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
@@ -113,9 +108,6 @@ private const val POSTER_TITLE_SCALE = 0.85f
 
 // Line height multiplier for the poster title, kept near 1 so the row below the artwork stays compact.
 private const val POSTER_TITLE_LINE_HEIGHT = 1.1f
-
-// Fixed height of the poster title row, sized for the two lines the mobile card allows.
-private val POSTER_TITLE_BLOCK_HEIGHT = 30.dp
 
 // Width to height ratio of poster art, used to size the wide card's artwork strip.
 private const val WIDE_POSTER_ASPECT = 2f / 3f

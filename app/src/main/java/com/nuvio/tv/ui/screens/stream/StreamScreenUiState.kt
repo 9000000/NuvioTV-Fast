@@ -3,7 +3,6 @@ package com.nuvio.tv.ui.screens.stream
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.SourceChipItem
-import com.nuvio.tv.ui.components.SourceChipStatus
 
 data class StreamScreenUiState(
     val isLoading: Boolean = true,

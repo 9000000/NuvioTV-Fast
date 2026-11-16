@@ -3695,12 +3695,6 @@
     <string name="player_error_startup_timeout">Playback did not start - the video decoder may not be responding. A device restart usually clears this. Press back to return and try again, or pick a different stream.</string>
     <string name="player_error_startup_video_track_unsupported">Playback did not start - this device cannot play the video format of this stream. Press back and pick a different stream.</string>
     <string name="player_error_startup_no_stream_data">Playback did not start - the stream did not deliver data in time. The source may be slow or unavailable. Press back to try again, or pick a different stream.</string>
-
-    <!-- Network Diagnostic Run Strings -->
-    <string name="network_test_busy">Another network test is running or finishing. Try again shortly.</string>
-    <string name="network_test_playback_active">Stop playback before running the speed test.</string>
-    <string name="diagnostic_run_timed_out">The comparison reached its two-minute limit. Results are incomplete; no recommendations were produced.</string>
-    <string name="diagnostic_run_payload_limit">The comparison reached its payload allowance. Results are incomplete; no recommendations were produced.</string>
 <string name="stream_resume_from_time">Resume from %1$s</string>
     <string name="stream_resume_from_percent">Resume from %1$d%%</string>
 </resources>

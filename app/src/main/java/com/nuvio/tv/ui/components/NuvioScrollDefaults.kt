@@ -6,7 +6,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import com.nuvio.tv.ui.theme.NuvioFocus
-import com.nuvio.tv.ui.theme.NuvioMotion
 
 @OptIn(ExperimentalFoundationApi::class)
 object NuvioScrollDefaults {

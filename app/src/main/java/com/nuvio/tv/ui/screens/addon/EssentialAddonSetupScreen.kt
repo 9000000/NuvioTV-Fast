@@ -44,7 +44,6 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.server.AddonWebConfigMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.text.TextStyle
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

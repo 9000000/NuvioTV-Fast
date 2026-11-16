@@ -5,7 +5,6 @@ import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.screens.home.HeroBackdropState
 
-import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -14,13 +13,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -45,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -57,22 +52,14 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.zIndex
 import com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames
 import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import com.nuvio.tv.ui.util.contentTextDirection
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -84,14 +71,8 @@ import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.EmptyScreenState
-import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.components.LocalCardDepthStyle
 import com.nuvio.tv.ui.components.PosterCardStyle
-import com.nuvio.tv.ui.components.nuvioCardDepth
-import com.nuvio.tv.domain.model.CardDepthSurface
-import com.nuvio.tv.ui.util.dpadVerticalFastScroll
-import com.nuvio.tv.ui.util.formatAddonTypeLabel
 import com.nuvio.tv.ui.util.localizedContentType
 import com.nuvio.tv.ui.util.localizedGenreLabel
 
@@ -645,100 +626,6 @@ internal fun DiscoverGrid(
                     false
                 }
             }
-        )
-    }
-}
-
-private sealed class DiscoverGridAction {
-    object None : DiscoverGridAction()
-    object ShowMore : DiscoverGridAction()
-    object LoadMore : DiscoverGridAction()
-    object Loading : DiscoverGridAction()
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun DiscoverActionCard(
-    actionType: DiscoverGridAction,
-    posterCardStyle: PosterCardStyle,
-    modifier: Modifier = Modifier,
-    focusRequester: FocusRequester? = null,
-    onFocused: () -> Unit = {},
-    onClick: () -> Unit
-) {
-    val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
-    val title = when (actionType) {
-        DiscoverGridAction.ShowMore -> stringResource(R.string.discover_load_more)
-        DiscoverGridAction.LoadMore -> stringResource(R.string.discover_load_more)
-        DiscoverGridAction.Loading -> stringResource(R.string.discover_loading)
-        DiscoverGridAction.None -> ""
-    }
-    val cardDepthStyle = LocalCardDepthStyle.current
-    val globalLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
-
-    Column(
-        modifier = modifier.then(if (globalLandscape) Modifier.fillMaxWidth() else Modifier.width(posterCardStyle.width))
-    ) {
-        Card(
-            onClick = onClick,
-            modifier = Modifier
-                .then(
-                    if (globalLandscape) Modifier.fillMaxWidth().aspectRatio(com.nuvio.tv.domain.model.PosterShape.LANDSCAPE.aspectRatio())
-                    else Modifier.width(posterCardStyle.width).height(posterCardStyle.height)
-                )
-                .focusProperties { canFocus = actionType != DiscoverGridAction.Loading }
-                .onPreviewKeyEvent { event ->
-                    actionType != DiscoverGridAction.None &&
-                        event.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
-                        event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT
-                }
-                .onFocusChanged { state -> if (state.isFocused) onFocused() }
-                .then(
-                    if (focusRequester != null) Modifier.focusRequester(focusRequester)
-                    else Modifier
-                ),
-            shape = CardDefaults.shape(shape = cardShape),
-            colors = CardDefaults.colors(
-                containerColor = NuvioTheme.colors.BackgroundCard,
-                focusedContainerColor = NuvioTheme.colors.FocusBackground
-            ),
-            border = CardDefaults.border(
-                focusedBorder = Border(
-                    border = NuvioTheme.posterFocusRing.border(posterCardStyle.focusedBorderWidth),
-                    shape = cardShape
-                )
-            ),
-            scale = CardDefaults.scale(focusedScale = posterCardStyle.focusedScale)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(cardShape)
-                    .nuvioCardDepth(
-                        shape = cardShape,
-                        surface = CardDepthSurface.POSTERS,
-                        style = cardDepthStyle
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (actionType == DiscoverGridAction.Loading) {
-                    LoadingIndicator()
-                } else {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = NuvioTheme.colors.TextPrimary,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-        // Reserve space for label to match GridContentCard height
-        Spacer(
-            modifier = Modifier
-                .then(if (globalLandscape) Modifier.fillMaxWidth() else Modifier.width(posterCardStyle.width))
-                .padding(top = NuvioTheme.spacing.sm)
-                .height(MaterialTheme.typography.titleMedium.lineHeight.value.dp)
         )
     }
 }

@@ -12,7 +12,6 @@ import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
 import com.nuvio.tv.domain.model.stableItemKey
 import com.nuvio.tv.ui.util.StableList
 import com.nuvio.tv.ui.util.asStable
-import kotlinx.coroutines.withContext
 
 @Immutable
 internal data class ModernHomePresentationInput(

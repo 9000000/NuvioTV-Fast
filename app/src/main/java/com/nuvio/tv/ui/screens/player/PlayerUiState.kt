@@ -1,7 +1,5 @@
 package com.nuvio.tv.ui.screens.player
 
-import androidx.media3.common.C
-import androidx.media3.common.TrackGroup
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.nuvio.tv.core.streams.CompiledStreamBadgeFilter
 import com.nuvio.tv.core.streams.StreamBadgePlacement

@@ -9,13 +9,11 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.RendererCapabilities
 import androidx.media3.exoplayer.audio.AudioRendererEventListener
-import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
-import androidx.media3.exoplayer.mediacodec.MediaCodecUtil.DecoderQueryException
 
 internal class PlaybackSpeedAwareAudioRenderer(
     private val rendererContext: Context,

@@ -1,6 +1,5 @@
 package com.nuvio.tv.data.simkl
 
-import com.nuvio.tv.core.tracking.TrackingExternalIds
 import com.nuvio.tv.core.tracking.TrackingHistoryItem
 import com.nuvio.tv.core.tracking.TrackingListStatus
 import com.nuvio.tv.core.tracking.TrackingMediaKind

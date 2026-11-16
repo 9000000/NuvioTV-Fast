@@ -5,7 +5,6 @@ import android.app.Application
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.os.Build
-import android.os.StrictMode
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
@@ -22,7 +21,6 @@ import coil3.bitmapFactoryMaxParallelism
 
 import okio.Path.Companion.toOkioPath
 import com.nuvio.tv.core.diagnostics.SentryInitializer
-import com.nuvio.tv.core.image.StaleWhileRevalidateCacheStrategy
 import com.nuvio.tv.core.runtime.PluginRuntimeHooks
 import com.nuvio.tv.core.sync.androidtv.AndroidTvChannelSyncService
 import com.nuvio.tv.core.network.IPv4FirstDns
@@ -155,17 +153,11 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val memoryInfo = ActivityManager.MemoryInfo()
         activityManager.getMemoryInfo(memoryInfo)
-        val diskDecodeSlots = com.nuvio.tv.core.image.homePosterDiskDecodeSlots(
-            totalRamBytes = memoryInfo.totalMem,
-            lowRamDevice = activityManager.isLowRamDevice,
-            cores = Runtime.getRuntime().availableProcessors()
-        )
 
         return ImageLoader.Builder(this)
             .eventListenerFactory(com.nuvio.tv.core.image.ArtworkDiagnostics.imageEvents)
             .components {
                 add(CustomPosterFallbackInterceptor())
-                add(com.nuvio.tv.core.image.HomePosterLoadingInterceptor(diskDecodeSlots))
                 // Size-aware TMDB downscaler: rewrite multi-MB original/w780/w500 poster URLs to w342/w500 matching target
                 add(coil3.map.Mapper<String, String> { data, options ->
                     val w = (options.size.width as? coil3.size.Dimension.Pixels)?.px

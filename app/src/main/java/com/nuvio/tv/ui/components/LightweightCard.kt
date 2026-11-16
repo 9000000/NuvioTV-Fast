@@ -2,7 +2,6 @@ package com.nuvio.tv.ui.components
 
 import android.os.Build
 import android.view.KeyEvent as AndroidKeyEvent
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource

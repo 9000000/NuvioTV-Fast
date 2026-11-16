@@ -137,11 +137,6 @@ internal object PlayerSubtitleCueParser {
         return startTimeMs to endTimeMs
     }
 
-    private fun parseStartTimeMs(timingLine: String): Long? {
-        val startToken = timingLine.substringBefore("-->").trim().substringBefore(' ')
-        return parseTimestampMs(startToken)
-    }
-
     private fun parseTimestampMs(rawTimestamp: String): Long? {
         val match = timestampRegex.matchEntire(rawTimestamp.trim()) ?: return null
         val hours = match.groupValues[1].toLongOrNull() ?: 0L

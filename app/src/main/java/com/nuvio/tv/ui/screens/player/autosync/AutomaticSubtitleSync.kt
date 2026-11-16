@@ -7,7 +7,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -1904,8 +1903,6 @@ internal object AutomaticSubtitleSync {
         headers.entries
             .sortedBy { it.key.lowercase() }
             .map { (key, value) -> key.lowercase() to value }
-
-    private fun fmt(value: Double): String = "%.4f".format(value)
 
     private data class ParsedSubtitleCacheKey(
         val url: String,

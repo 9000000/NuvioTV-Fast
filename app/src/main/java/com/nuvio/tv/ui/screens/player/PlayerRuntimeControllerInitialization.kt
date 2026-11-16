@@ -3,8 +3,6 @@ package com.nuvio.tv.ui.screens.player
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.RectF
-import android.media.MediaFormat
-import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -35,8 +33,6 @@ import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
-import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
-import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
 import androidx.media3.exoplayer.video.VideoRendererEventListener
@@ -45,7 +41,6 @@ import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.RendererCapabilities
-import androidx.media3.exoplayer.RendererConfiguration
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.trackselection.ExoTrackSelection
@@ -73,7 +68,6 @@ import com.nuvio.tv.core.util.findCause
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.Dv7HandlingMode
-import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.LibassRenderMode
@@ -87,7 +81,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.SocketTimeoutException
-import kotlin.math.min
 import androidx.media3.common.Tracks
 
 
@@ -2710,15 +2703,6 @@ private fun createDolbyVisionFallbackCodecSelector(
         }
     }
     return MediaCodecSelector.DEFAULT
-}
-
-private fun describeExtensionRendererMode(mode: Int): String {
-    return when (mode) {
-        DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF -> "off"
-        DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON -> "on"
-        DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER -> "prefer"
-        else -> mode.toString()
-    }
 }
 
 private fun DefaultRenderersFactory.applyMapDv7ToHevcIfSupported(enabled: Boolean): DefaultRenderersFactory {

@@ -30,7 +30,6 @@ import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.ContinueWatchingSortMode
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.ListMembershipChanges
-import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.domain.model.MDBListSettings
@@ -48,7 +47,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -896,9 +894,6 @@ class HomeViewModel @Inject constructor(
     private suspend fun loadAllCatalogs(addons: List<Addon>, forceReload: Boolean = false) =
         loadAllCatalogsPipeline(addons, forceReload)
 
-    private fun loadCatalog(addon: Addon, catalog: CatalogDescriptor, generation: Long) =
-        loadCatalogPipeline(addon, catalog, generation)
-
     private fun loadMoreCatalogItems(catalogId: String, addonId: String, type: String) =
         loadMoreCatalogItemsPipeline(catalogId, addonId, type)
 
@@ -971,28 +966,9 @@ class HomeViewModel @Inject constructor(
 
     internal var posterStatusReconcileJob: Job? = null
 
-    private fun schedulePosterStatusReconcile(rows: List<CatalogRow>) =
-        schedulePosterStatusReconcilePipeline(rows)
-
-    private fun reconcilePosterStatusObservers(rows: List<CatalogRow>) =
-        reconcilePosterStatusObserversPipeline(rows)
-
     private fun navigateToDetail(itemId: String, itemType: String) {
         _uiState.update { it.copy(selectedItemId = itemId) }
     }
-
-    private suspend fun enrichHeroItems(
-        items: List<MetaPreview>,
-        settings: TmdbSettings
-    ): List<MetaPreview> = enrichHeroItemsPipeline(items, settings)
-
-    private fun replaceGridHeroItems(
-        gridItems: List<GridItem>,
-        heroItems: List<MetaPreview>
-    ): List<GridItem> = replaceGridHeroItemsPipeline(gridItems, heroItems)
-
-    private fun heroEnrichmentSignature(items: List<MetaPreview>, settings: TmdbSettings): String =
-        heroEnrichmentSignaturePipeline(items, settings)
 
     /**
      * Saves the current focus and scroll state for restoration when returning to this screen.

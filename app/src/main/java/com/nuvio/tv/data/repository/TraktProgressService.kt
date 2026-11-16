@@ -8,7 +8,6 @@ import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.remote.api.TraktApi
-import com.nuvio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
@@ -37,7 +36,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow

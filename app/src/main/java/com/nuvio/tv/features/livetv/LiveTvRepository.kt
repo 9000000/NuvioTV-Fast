@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.*
 import com.nuvio.tv.core.network.DynamicHostFallback
 import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.ui.screens.player.ClearKeyUtil
-import com.nuvio.tv.ui.screens.player.IptvHeaderProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.HttpURLConnection

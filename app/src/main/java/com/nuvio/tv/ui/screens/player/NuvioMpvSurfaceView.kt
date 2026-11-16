@@ -904,30 +904,6 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         return String.format(Locale.US, "#%08X", color)
     }
 
-    private fun applyCoverAspectScale() {
-        val viewAspect = if (width > 0 && height > 0) {
-            width.toFloat() / height.toFloat()
-        } else {
-            0f
-        }
-        val videoAspect = readVideoAspectRatio()
-
-        if (videoAspect != null && videoAspect > 0f && viewAspect > 0f) {
-            if (videoAspect > viewAspect) {
-                scaleX = 1.0f
-                scaleY = videoAspect / viewAspect
-            } else {
-                scaleX = viewAspect / videoAspect
-                scaleY = 1.0f
-            }
-            return
-        }
-
-        // Fallback to a visible zoom when video metadata/aspect is unavailable.
-        scaleX = MPV_COVER_FALLBACK_SCALE
-        scaleY = MPV_COVER_FALLBACK_SCALE
-    }
-
     private fun readVideoAspectRatio(): Float? {
         if (!initialized) return null
 

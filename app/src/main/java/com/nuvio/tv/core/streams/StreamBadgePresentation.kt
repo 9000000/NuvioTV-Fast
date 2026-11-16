@@ -2,7 +2,6 @@ package com.nuvio.tv.core.streams
 
 import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
 import com.nuvio.tv.domain.model.AddonStreams
-import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBadge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first

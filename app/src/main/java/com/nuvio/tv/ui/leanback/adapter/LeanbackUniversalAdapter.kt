@@ -13,6 +13,9 @@ import com.nuvio.tv.ui.leanback.holder.LeanbackPosterViewHolder
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
 
+private const val MAX_PREFETCHED_KEYS = 512
+private const val PREFETCH_TRIM_BATCH = 128
+
 /**
  * Universal polymorphic RecyclerView Adapter for all Android Leanback Cards.
  * Supports Poster, Episode, and Avatar items with safe notifyDataSetChanged execution,
@@ -95,8 +98,48 @@ class LeanbackUniversalAdapter(
         }
     }
 
+    private fun hasSameCardVisuals(a: LeanbackCardItem, b: LeanbackCardItem): Boolean {
+        if (a === b) return true
+        if (a.key != b.key || a.title != b.title || a.imageUrl != b.imageUrl) return false
+        return when {
+            a is LeanbackCardItem.Poster && b is LeanbackCardItem.Poster ->
+                a.subtitle == b.subtitle &&
+                    a.isLandscape == b.isLandscape &&
+                    a.progressPercent == b.progressPercent &&
+                    a.badgeText == b.badgeText &&
+                    a.isWatched == b.isWatched
+            a is LeanbackCardItem.Episode && b is LeanbackCardItem.Episode ->
+                a.description == b.description &&
+                    a.episodeNumber == b.episodeNumber &&
+                    a.seasonNumber == b.seasonNumber &&
+                    a.episodeLabel == b.episodeLabel &&
+                    a.runtimeMinutes == b.runtimeMinutes &&
+                    a.progressPercent == b.progressPercent &&
+                    a.isWatched == b.isWatched &&
+                    a.releaseDate == b.releaseDate &&
+                    a.imdbRating == b.imdbRating &&
+                    a.isAvailable == b.isAvailable &&
+                    a.blurThumbnail == b.blurThumbnail
+            a is LeanbackCardItem.Avatar && b is LeanbackCardItem.Avatar ->
+                a.subtitle == b.subtitle
+            else -> false
+        }
+    }
+
+    private fun itemsMatchVisuals(a: List<LeanbackCardItem>, b: List<LeanbackCardItem>, count: Int): Boolean {
+        for (i in 0 until count) {
+            if (!hasSameCardVisuals(a[i], b[i])) return false
+        }
+        return true
+    }
+
     fun submitItems(newItems: List<LeanbackCardItem>) {
-        if (items == newItems && pendingItems == null) return
+        if (items === newItems && pendingItems == null) return
+        if (items.size == newItems.size && itemsMatchVisuals(items, newItems, items.size)) {
+            items = newItems
+            pendingItems = null
+            return
+        }
         pendingItems = newItems
 
         val rv = attachedRecyclerView
@@ -149,7 +192,7 @@ class LeanbackUniversalAdapter(
                 try {
                     notifyItemRangeInserted(oldSize, newSize - oldSize)
                     for (i in 0 until oldSize) {
-                        if (oldItems[i] != newItems[i]) {
+                        if (!hasSameCardVisuals(oldItems[i], newItems[i])) {
                             notifyItemChanged(i)
                         }
                     }
@@ -165,7 +208,7 @@ class LeanbackUniversalAdapter(
                             return oldItems[oldItemPosition].key == newItems[newItemPosition].key
                         }
                         override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                            return oldItems[oldItemPosition] == newItems[newItemPosition]
+                            return hasSameCardVisuals(oldItems[oldItemPosition], newItems[newItemPosition])
                         }
                     }, false)
                     diffResult.dispatchUpdatesTo(this)
@@ -320,9 +363,10 @@ class LeanbackUniversalAdapter(
         }
     }
 
-    private val prefetchedKeys = HashSet<String>()
+    private val prefetchedKeys = LinkedHashSet<String>()
 
     override fun onBindViewHolder(holder: LeanbackBaseViewHolder, position: Int) {
+        holder.adapter = this
         val item = items[position]
         holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
     }
@@ -341,7 +385,17 @@ class LeanbackUniversalAdapter(
             if (!nextUrl.isNullOrEmpty()) {
                 val mappedUrl = com.nuvio.tv.core.image.sizedHomeArtworkUrl(nextUrl, wPx, hPx)
                 val memKeyStr = "${mappedUrl}_${wPx}x${hPx}"
-                if (!prefetchedKeys.add(memKeyStr)) continue
+                if (prefetchedKeys.contains(memKeyStr)) continue
+                if (prefetchedKeys.size >= MAX_PREFETCHED_KEYS) {
+                    val iter = prefetchedKeys.iterator()
+                    repeat(PREFETCH_TRIM_BATCH) {
+                        if (iter.hasNext()) {
+                            iter.next()
+                            iter.remove()
+                        }
+                    }
+                }
+                prefetchedKeys.add(memKeyStr)
                 if (imageLoader.memoryCache?.get(coil3.memory.MemoryCache.Key(memKeyStr)) != null) continue
                 val req = coil3.request.ImageRequest.Builder(context)
                     .data(nextUrl)

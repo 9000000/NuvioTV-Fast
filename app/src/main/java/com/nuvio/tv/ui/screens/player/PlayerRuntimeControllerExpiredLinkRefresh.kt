@@ -4,7 +4,6 @@ import android.util.Log
 import com.nuvio.tv.core.debrid.DirectDebridPlayableResult
 import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val CACHED_LINK_REFRESH_POLL_COUNT = 30

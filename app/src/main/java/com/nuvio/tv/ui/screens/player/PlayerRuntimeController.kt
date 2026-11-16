@@ -755,7 +755,6 @@ class PlayerRuntimeController(
     internal var playbackRecoveryJob: Job? = null
     internal var lastOutputChangeForTunnelMs: Long = 0L
     internal var tunnelAvSyncWatchdogJob: Job? = null
-    internal var bufferMemoryKeeper: com.nuvio.tv.core.player.BufferMemoryKeeper? = null
     internal var currentManagedBudgetMb: Int = com.nuvio.tv.ui.screens.settings.MemoryBudget.autoBudgetMb
     internal var losslessAudioDefaultAppliedForStream: Boolean = false
     internal var persistedAudioPreferenceSeenForStream: Boolean = false

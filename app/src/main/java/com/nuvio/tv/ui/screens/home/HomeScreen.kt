@@ -408,6 +408,7 @@ fun HomeScreen(
                             HomeLayout.MODERN -> ModernHomeRoute(
                                 viewModel = viewModel,
                                 uiState = uiState,
+                                modernPresentation = modernPresentation,
                                 onNavigateToDetail = onNavigateToDetailStable,
                                 onContinueWatchingClick = onContinueWatchingClickStable,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginningStable,
@@ -643,6 +644,7 @@ private fun GridHomeRoute(
 private fun ModernHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
+    modernPresentation: ModernHomePresentationState,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
@@ -654,7 +656,6 @@ private fun ModernHomeRoute(
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsStateWithLifecycle()
-    val modernPresentation by viewModel.modernHomePresentation.collectAsStateWithLifecycle()
     // Passed down as State, not values: enrichment changes on most focus moves, and reading it
     // here recomposed all of the home content for each one.
     val enrichingItemId = viewModel.enrichingItemId.collectAsStateWithLifecycle()

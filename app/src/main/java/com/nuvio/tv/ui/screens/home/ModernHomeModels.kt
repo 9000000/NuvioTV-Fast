@@ -30,7 +30,6 @@ internal const val MODERN_HERO_MEDIA_WIDTH_FRACTION = 0.72f
 internal const val MODERN_TRAILER_OVERSCAN_ZOOM = 1.35f
 internal const val MODERN_HERO_FOCUS_DEBOUNCE_MS = 450L
 internal val MODERN_ROW_HEADER_FOCUS_INSET = 40.dp
-private val MODERN_ROW_CARD_BOTTOM_ROOM = 8.dp
 private const val MODERN_ROWS_VIEWPORT_MAX_FRACTION = 0.6f
 
 /** Rows keep their share of the screen, matching the original project ratio. */
