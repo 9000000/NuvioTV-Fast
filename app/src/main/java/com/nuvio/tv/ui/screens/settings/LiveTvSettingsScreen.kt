@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.settings
 
 import android.provider.OpenableColumns
+import android.view.KeyEvent as AndroidKeyEvent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -23,6 +24,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -38,6 +41,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,13 +56,20 @@ import com.nuvio.tv.ui.screens.addon.QrCodeOverlay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -515,6 +526,7 @@ private fun LiveTvPlaylistDialog(
                 value = name,
                 onValueChange = { name = it },
                 placeholder = "Playlist Name (Optional)",
+                imeAction = ImeAction.Next,
                 modifier = Modifier.focusRequester(focusRequester)
             )
 
@@ -522,7 +534,9 @@ private fun LiveTvPlaylistDialog(
             TVTextField(
                 value = url,
                 onValueChange = { url = it },
-                placeholder = "https://example.com/channels.m3u"
+                placeholder = "https://example.com/channels.m3u",
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Done
             )
 
             Row(
@@ -609,6 +623,8 @@ private fun LiveTvXtreamDialog(
                 value = server,
                 onValueChange = { server = it; errorMessage = null },
                 placeholder = "Server URL (e.g. http://server.com:8080)",
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
                 modifier = Modifier.focusRequester(focusRequester),
                 enabled = !isConnecting
             )
@@ -617,6 +633,7 @@ private fun LiveTvXtreamDialog(
                 value = user,
                 onValueChange = { user = it; errorMessage = null },
                 placeholder = "Username",
+                imeAction = ImeAction.Next,
                 enabled = !isConnecting
             )
 
@@ -625,6 +642,7 @@ private fun LiveTvXtreamDialog(
                 onValueChange = { pass = it; errorMessage = null },
                 placeholder = "Password",
                 isPassword = true,
+                imeAction = ImeAction.Done,
                 enabled = !isConnecting
             )
 
@@ -760,6 +778,8 @@ private fun LiveTvStalkerDialog(
                 value = portal,
                 onValueChange = { portal = it; errorMessage = null },
                 placeholder = "Portal URL (e.g. http://portal.domain/c/)",
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
                 modifier = Modifier.focusRequester(focusRequester),
                 enabled = !isConnecting
             )
@@ -768,6 +788,7 @@ private fun LiveTvStalkerDialog(
                 value = mac,
                 onValueChange = { mac = it.uppercase(); errorMessage = null },
                 placeholder = "MAC Address (e.g. 00:1A:79:XX:XX:XX)",
+                imeAction = ImeAction.Next,
                 enabled = !isConnecting
             )
 
@@ -775,6 +796,7 @@ private fun LiveTvStalkerDialog(
                 value = user,
                 onValueChange = { user = it; errorMessage = null },
                 placeholder = "Username (Optional)",
+                imeAction = ImeAction.Next,
                 enabled = !isConnecting
             )
 
@@ -783,6 +805,7 @@ private fun LiveTvStalkerDialog(
                 onValueChange = { pass = it; errorMessage = null },
                 placeholder = "Password (Optional)",
                 isPassword = true,
+                imeAction = ImeAction.Done,
                 enabled = !isConnecting
             )
 
@@ -874,25 +897,48 @@ private fun TVTextField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    imeAction: ImeAction = ImeAction.Done,
     isPassword: Boolean = false,
     enabled: Boolean = true
 ) {
+    val textFieldFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    var isEditing by remember { mutableStateOf(false) }
+    var editTrigger by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(editTrigger) {
+        if (editTrigger > 0 && enabled) {
+            isEditing = true
+            textFieldFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
+    val activeBorder = Border(
+        border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+        shape = RoundedCornerShape(10.dp)
+    )
+    val idleBorder = Border(
+        border = BorderStroke(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border),
+        shape = RoundedCornerShape(10.dp)
+    )
+
     Card(
-        onClick = {},
+        onClick = {
+            if (enabled) {
+                editTrigger++
+            }
+        },
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.colors(
             containerColor = if (enabled) NuvioTheme.colors.BackgroundElevated else NuvioTheme.colors.BackgroundElevated.copy(alpha = 0.5f),
             focusedContainerColor = NuvioTheme.colors.BackgroundElevated
         ),
         border = CardDefaults.border(
-            border = Border(
-                border = BorderStroke(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border),
-                shape = RoundedCornerShape(10.dp)
-            ),
-            focusedBorder = Border(
-                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
-                shape = RoundedCornerShape(10.dp)
-            )
+            border = if (isEditing) activeBorder else idleBorder,
+            focusedBorder = activeBorder
         ),
         shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
         scale = CardDefaults.scale(focusedScale = 1f)
@@ -902,14 +948,53 @@ private fun TVTextField(
                 value = value,
                 onValueChange = onValueChange,
                 enabled = enabled,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(textFieldFocusRequester)
+                    .onFocusChanged { state ->
+                        if (state.isFocused) {
+                            isEditing = true
+                            keyboardController?.show()
+                        } else if (isEditing) {
+                            isEditing = false
+                            keyboardController?.hide()
+                        }
+                    }
+                    .onPreviewKeyEvent { keyEvent ->
+                        val native = keyEvent.nativeKeyEvent
+                        if (enabled &&
+                            native.action == AndroidKeyEvent.ACTION_DOWN &&
+                            (native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+                                native.keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+                                native.keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER)
+                        ) {
+                            editTrigger++
+                        }
+                        false
+                    },
                 textStyle = TextStyle(
                     color = if (enabled) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextMuted,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium
                 ),
                 singleLine = true,
-                cursorBrush = SolidColor(NuvioTheme.colors.Primary),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
+                    imeAction = imeAction
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = {
+                        isEditing = false
+                        keyboardController?.hide()
+                        focusManager.moveFocus(FocusDirection.Down)
+                    },
+                    onDone = {
+                        isEditing = false
+                        keyboardController?.hide()
+                        focusManager.moveFocus(FocusDirection.Down)
+                    }
+                ),
+                cursorBrush = SolidColor(if (isEditing) NuvioTheme.colors.Primary else Color.Transparent),
                 visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None
             )
             if (value.isEmpty()) {
