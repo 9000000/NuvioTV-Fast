@@ -50,8 +50,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,26 +61,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
+import android.view.View
 import androidx.core.graphics.ColorUtils
 import androidx.media3.common.Player
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import com.nuvio.tv.ui.leanback.core.PlayStoreGlowView
 import com.nuvio.tv.ui.theme.NuvioTheme
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -365,6 +369,7 @@ internal fun LiveTvChannelGridPanel(
     playingChannelKey: String?,
     focusedChannelIndex: Int,
     isGridFocused: Boolean,
+    isRapidNavigation: Boolean,
     showChannelNames: Boolean,
     twoLineChannelNames: Boolean,
     showChannelNumbers: Boolean,
@@ -414,7 +419,8 @@ internal fun LiveTvChannelGridPanel(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(LIVE_TV_GUIDE_GRID_COLUMNS),
                 state = gridState,
-                contentPadding = PaddingValues(18.dp),
+                // Padding wide enough to contain Home's 18dp PlayStoreGlowView bloom on edge tiles.
+                contentPadding = PaddingValues(24.dp),
                 horizontalArrangement = Arrangement.spacedBy(LIVE_TV_GUIDE_GRID_SPACING),
                 verticalArrangement = Arrangement.spacedBy(LIVE_TV_GUIDE_GRID_SPACING),
                 modifier = Modifier
@@ -426,6 +432,7 @@ internal fun LiveTvChannelGridPanel(
                         channel = channel,
                         index = idx,
                         isFocused = isGridFocused && idx == focusedChannelIndex,
+                        deferGlow = isRapidNavigation,
                         isPlaying = channel.key == playingChannelKey,
                         isFavorite = channel.id in favoriteIds,
                         showChannelNames = showChannelNames,
@@ -454,6 +461,7 @@ private fun GuideGridChannelTile(
     channel: LiveTvChannel,
     index: Int,
     isFocused: Boolean,
+    deferGlow: Boolean,
     isPlaying: Boolean,
     isFavorite: Boolean,
     showChannelNames: Boolean,
@@ -473,19 +481,20 @@ private fun GuideGridChannelTile(
     }
 
     val resolvedGlowInt = resolveChannelGlowColor(dominantColorInt)
-    val animatedGlowColor by animateColorAsState(
-        targetValue = Color(resolvedGlowInt),
+    // Focus border uses Home's glow-tinted white stroke.
+    val animatedFocusBorderColor by animateColorAsState(
+        targetValue = Color(ColorUtils.blendARGB(resolvedGlowInt, AndroidColor.WHITE, 0.90f)),
         animationSpec = tween(durationMillis = 120),
-        label = "channelTileGlowColor"
+        label = "channelTileFocusBorderColor"
     )
 
     val borderColor = when {
-        isFocused -> animatedGlowColor
+        isFocused -> animatedFocusBorderColor
         isPlaying -> LIVE_RED
         else -> Color(0x28FFFFFF)
     }
     val borderWidth = when {
-        isFocused -> 2.5.dp
+        isFocused -> 2.dp
         isPlaying -> 1.5.dp
         else -> 0.5.dp
     }
@@ -495,38 +504,22 @@ private fun GuideGridChannelTile(
         else -> CardBgColor
     }
 
-    // Single GPU-drawn outer glow without AndroidView software-layer swapping so focus never flashes an old layer behind.
-    val focusGlowModifier = if (isFocused) {
-        Modifier.drawBehind {
-            val baseRadiusPx = 10.dp.toPx()
-            val outerPad = 5.dp.toPx()
-            drawRoundRect(
-                color = animatedGlowColor.copy(alpha = 0.14f),
-                topLeft = Offset(-outerPad, -outerPad),
-                size = Size(size.width + outerPad * 2f, size.height + outerPad * 2f),
-                cornerRadius = CornerRadius(baseRadiusPx + outerPad),
-                style = Stroke(width = 10.dp.toPx())
-            )
-            val midPad = 2.5.dp.toPx()
-            drawRoundRect(
-                color = animatedGlowColor.copy(alpha = 0.28f),
-                topLeft = Offset(-midPad, -midPad),
-                size = Size(size.width + midPad * 2f, size.height + midPad * 2f),
-                cornerRadius = CornerRadius(baseRadiusPx + midPad),
-                style = Stroke(width = 5.dp.toPx())
-            )
-            val innerPad = 0.5.dp.toPx()
-            drawRoundRect(
-                color = animatedGlowColor.copy(alpha = 0.45f),
-                topLeft = Offset(-innerPad, -innerPad),
-                size = Size(size.width + innerPad * 2f, size.height + innerPad * 2f),
-                cornerRadius = CornerRadius(baseRadiusPx + innerPad),
-                style = Stroke(width = 2.dp.toPx())
-            )
+    // Mirror Home's PlayStoreGlowView behavior: one persistent glow view per tile toggled by visibility
+    // (never swapped with a Compose glow), deferred 55ms only while the D-pad is held for fast scrolling.
+    var deferredGlowReady by remember { mutableStateOf(false) }
+    LaunchedEffect(isFocused, deferGlow) {
+        deferredGlowReady = false
+        if (isFocused && deferGlow) {
+            delay(55L)
+            deferredGlowReady = true
         }
-    } else {
-        Modifier
     }
+    val showGlow = isFocused && (!deferGlow || deferredGlowReady)
+
+    val density = LocalDensity.current
+    val cornerRadiusPx = with(density) { 10.dp.toPx() }
+    val glowSpreadPx = with(density) { 18.dp.toPx() }
+    val glowMarginPx = (glowSpreadPx * 1.35f).toInt()
 
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -535,8 +528,36 @@ private fun GuideGridChannelTile(
             .fillMaxWidth()
             .aspectRatio(1.48f)
             .zIndex(if (isFocused) 1f else 0f)
-            .then(focusGlowModifier)
     ) {
+        AndroidView(
+            modifier = Modifier
+                .matchParentSize()
+                .layout { measurable, constraints ->
+                    val glowW = constraints.maxWidth + glowMarginPx * 2
+                    val glowH = constraints.maxHeight + glowMarginPx * 2
+                    val placeable = measurable.measure(Constraints.fixed(glowW, glowH))
+                    layout(constraints.maxWidth, constraints.maxHeight) {
+                        placeable.place(-glowMarginPx, -glowMarginPx)
+                    }
+                },
+            factory = { ctx ->
+                PlayStoreGlowView(ctx).apply {
+                    this.cornerRadiusPx = cornerRadiusPx
+                    this.glowSpreadPx = glowSpreadPx
+                    this.glowMarginPx = glowMarginPx.toFloat()
+                    this.glowColor = resolvedGlowInt
+                    visibility = View.GONE
+                }
+            },
+            update = { view ->
+                view.cornerRadiusPx = cornerRadiusPx
+                view.glowSpreadPx = glowSpreadPx
+                view.glowMarginPx = glowMarginPx.toFloat()
+                view.glowColor = resolvedGlowInt
+                view.visibility = if (showGlow) View.VISIBLE else View.GONE
+            }
+        )
+
         Box(
             modifier = Modifier
                 .matchParentSize()

@@ -839,6 +839,7 @@ private fun LiveTvGuideContent(
                 playingChannelKey = playback.channelKey,
                 focusedChannelIndex = channelIndex,
                 isGridFocused = focusArea == GuideFocusArea.CHANNEL_GRID && !showPlaylistPicker,
+                isRapidNavigation = isRapidGridDpad,
                 showChannelNames = settings.showChannelNames,
                 twoLineChannelNames = settings.twoLineChannelNames,
                 showChannelNumbers = settings.showChannelNumbers,
