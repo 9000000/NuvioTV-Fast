@@ -282,6 +282,8 @@ fun LivePosterImage(
     url: String?,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    forceFit: Boolean = false,
+    onDominantColorExtracted: ((Int) -> Unit)? = null,
     fallback: @Composable () -> Unit = {}
 ) {
     if (url.isNullOrBlank()) {
@@ -300,19 +302,40 @@ fun LivePosterImage(
     }
     var wide by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(false) }
     var loaded by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(url, onDominantColorExtracted) {
+        if (onDominantColorExtracted != null) {
+            com.nuvio.tv.ui.leanback.core.LeanbackColorEngine.getCachedColor(url)
+                ?.let(onDominantColorExtracted)
+        }
+    }
     Box(
-        modifier = modifier.then(if (wide && loaded) Modifier.background(Color.Black) else Modifier),
+        modifier = modifier.then(if (!forceFit && wide && loaded) Modifier.background(Color.Black) else Modifier),
         contentAlignment = Alignment.Center
     ) {
         if (!loaded) fallback()
         coil3.compose.AsyncImage(
             model = imageRequest,
             contentDescription = contentDescription,
-            contentScale = if (wide) androidx.compose.ui.layout.ContentScale.Fit else androidx.compose.ui.layout.ContentScale.Crop,
+            contentScale = if (forceFit || wide) androidx.compose.ui.layout.ContentScale.Fit else androidx.compose.ui.layout.ContentScale.Crop,
             onSuccess = { s ->
                 val size = s.painter.intrinsicSize
                 wide = size.width > 0f && size.height > 0f && size.width > size.height * 1.1f
                 loaded = true
+                if (onDominantColorExtracted != null) {
+                    val cached = com.nuvio.tv.ui.leanback.core.LeanbackColorEngine.getCachedColor(url)
+                    if (cached != null) {
+                        onDominantColorExtracted(cached)
+                    } else {
+                        val bmp = (s.result.image as? coil3.BitmapImage)?.bitmap
+                        if (bmp != null && !bmp.isRecycled) {
+                            com.nuvio.tv.ui.leanback.core.LeanbackColorEngine.extractDominantColorAsync(
+                                url,
+                                bmp,
+                                onDominantColorExtracted
+                            )
+                        }
+                    }
+                }
             },
             onError = { loaded = false },
             modifier = Modifier.fillMaxSize()
