@@ -544,7 +544,8 @@ private fun LiveTvGuideContent(
                 if (drawerIndex == 0) {
                     openPlaylistPicker()
                 } else {
-                    selectGroup(drawerIndex - 1, moveFocusToGrid = true)
+                    // Keep focus on the category list; user presses RIGHT to enter the channel grid.
+                    selectGroup(drawerIndex - 1, moveFocusToGrid = false)
                 }
             }
             GuideFocusArea.CHANNEL_GRID -> {
@@ -819,7 +820,7 @@ private fun LiveTvGuideContent(
                 onSelectPlaylistOption = ::applyPlaylistOption,
                 onSelectGroup = { idx ->
                     showPlaylistPicker = false
-                    selectGroup(idx, moveFocusToGrid = true)
+                    selectGroup(idx, moveFocusToGrid = false)
                 }
             )
 

@@ -481,9 +481,9 @@ private fun GuideGridChannelTile(
     }
 
     val resolvedGlowInt = resolveChannelGlowColor(dominantColorInt)
-    // Focus border uses Home's glow-tinted white stroke.
+    // Focus border follows the channel's dominant logo color (same tint as the glow core).
     val animatedFocusBorderColor by animateColorAsState(
-        targetValue = Color(ColorUtils.blendARGB(resolvedGlowInt, AndroidColor.WHITE, 0.90f)),
+        targetValue = Color(ColorUtils.blendARGB(resolvedGlowInt, AndroidColor.WHITE, 0.15f)),
         animationSpec = tween(durationMillis = 120),
         label = "channelTileFocusBorderColor"
     )
