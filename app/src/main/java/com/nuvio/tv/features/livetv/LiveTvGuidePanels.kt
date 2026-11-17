@@ -628,11 +628,10 @@ private fun GuideGridChannelTile(
                         .align(Alignment.BottomCenter)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.62f),
-                                    Color.Black.copy(alpha = 0.88f)
-                                )
+                                0.0f to Color.Transparent,
+                                0.28f to Color.Black.copy(alpha = 0.62f),
+                                0.55f to Color.Black.copy(alpha = 0.85f),
+                                1.0f to Color.Black.copy(alpha = 0.94f)
                             )
                         )
                         .padding(start = 6.dp, end = 6.dp, top = 10.dp, bottom = 4.dp),
