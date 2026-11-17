@@ -7,7 +7,6 @@ import android.util.TypedValue
 import android.view.SurfaceHolder
 import com.nuvio.tv.data.local.MpvHardwareDecodeMode
 import com.nuvio.tv.data.local.SubtitleStyleSettings
-import `is`.xyz.mpv.BaseMPVView
 import `is`.xyz.mpv.MPV
 import `is`.xyz.mpv.Utils
 import java.io.File
@@ -22,6 +21,7 @@ import com.nuvio.tv.data.local.SubtitleFontOption
 internal const val MPV_TRACK_LIST_PROPERTY = "track-list"
 internal const val MPV_SID_PROPERTY = "sid"
 internal const val MPV_SUB_TEXT_PROPERTY = "sub-text"
+private const val MPV_TEXT_OUTLINE_SIZE_PER_WIDTH = 0.5
 private val MPV_STYLED_SUBTITLE_CODECS = setOf(
     "subrip", "srt", "webvtt", "text", "mov_text", "microdvd", "mpl2", "subviewer", "subviewer1", "sami", "realtext"
 )
@@ -29,7 +29,7 @@ private val MPV_STYLED_SUBTITLE_CODECS = setOf(
 class NuvioMpvSurfaceView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
-) : BaseMPVView(context, attrs) {
+) : NuvioBaseMpvView(context, attrs) {
 
     private var initialized = false
     private var hasQueuedInitialMedia = false
@@ -490,10 +490,10 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                 (normalizedOffset * (MPV_SUB_POS_AT_BOTTOM - MPV_SUB_POS_AT_TOP))
             val subMarginY = (MPV_SUB_MARGIN_Y_MIN +
                 (normalizedOffset * (MPV_SUB_MARGIN_Y_MAX - MPV_SUB_MARGIN_Y_MIN))).toInt()
-            val outlineSize = if (style.outlineEnabled) {
-                style.outlineWidth.coerceIn(1, 50).toDouble()
-            } else {
-                0.0
+            val outlineSize = when {
+                !style.outlineEnabled -> 0.0
+                isAssOrSsaSubtitleSelectedNow() -> style.outlineWidth.coerceIn(1, 6).toDouble()
+                else -> style.outlineWidth * MPV_TEXT_OUTLINE_SIZE_PER_WIDTH
             }
             val backgroundAlpha = (style.backgroundColor ushr 24) and 0xFF
             val borderStyle = if (backgroundAlpha > 0) "background-box" else "outline-and-shadow"
@@ -812,7 +812,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
     }
 
     override fun initOptions() {
-        mpv.setOptionString("profile", "fast")
+        mpv.command("apply-profile", "fast")
         mpv.setOptionString("msg-level", "ffmpeg=warn,vd=warn,ad=warn,vo=warn,ao=warn,demux=warn,lavf=warn,cplayer=warn,autoconvert=warn,hwupload=warn")
         setVo(if (hi10pGnextSoftwareFallbackActive) MPV_VIDEO_OUTPUT_GPU_NEXT else MPV_VIDEO_OUTPUT_GPU)
         mpv.setOptionString("gpu-context", "android")

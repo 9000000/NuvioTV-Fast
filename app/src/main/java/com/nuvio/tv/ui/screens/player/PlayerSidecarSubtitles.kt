@@ -269,8 +269,6 @@ internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
     val sanitized = active.map { SubtitleMojibakeSanitizer.sanitizeCue(it) }
     val filtered = if (stripSdh) SubtitleSdhFilter.filterCues(sanitized) else sanitized
     val merged = PlayerSubtitleUtils.mergeOverlappingCues(filtered)
-    val subtitleStyle = currentPlayerSettingsForReport.subtitleStyle
-    val styledCues = merged.map { it.applyOutlineWidth(subtitleStyle.outlineEnabled, subtitleStyle.outlineWidth) }
     val currentKey = activeSidecarSubtitleKey ?: return
     val currentGeneration = activeSidecarGeneration.takeIf { it != 0L } ?: return
     postToSubtitleView { view ->
@@ -279,7 +277,7 @@ internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
             activeSidecarGeneration == currentGeneration &&
             view.getTag(R.id.player_view_sidecar_generation_tag) == currentKey
         ) {
-            showSidecarCues(view, styledCues)
+            showSidecarCues(view, merged)
         }
     }
 }

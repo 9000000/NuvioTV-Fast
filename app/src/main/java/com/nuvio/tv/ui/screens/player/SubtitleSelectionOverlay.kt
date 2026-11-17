@@ -1053,9 +1053,21 @@ private fun SubtitleStyleRail(
                                 color = Color.White.copy(alpha = 0.7f)
                             )
                             StepperRow(
-                                value = "${subtitleStyle.outlineWidth}px",
-                                onDecrease = { dispatchStyleEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth - 1).coerceAtLeast(1))) },
-                                onIncrease = { dispatchStyleEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth + 1).coerceAtMost(50))) },
+                                value = subtitleStyle.outlineWidth.toString(),
+                                onDecrease = {
+                                    dispatchStyleEvent(
+                                        PlayerEvent.OnSetSubtitleOutlineWidth(
+                                            (subtitleStyle.outlineWidth - 1).coerceAtLeast(SubtitleStyleSettings.OUTLINE_WIDTH_MIN)
+                                        )
+                                    )
+                                },
+                                onIncrease = {
+                                    dispatchStyleEvent(
+                                        PlayerEvent.OnSetSubtitleOutlineWidth(
+                                            (subtitleStyle.outlineWidth + 1).coerceAtMost(SubtitleStyleSettings.OUTLINE_WIDTH_MAX)
+                                        )
+                                    )
+                                },
                                 onMoveLeft = onMoveLeft,
                                 decrementFocusRequester = focusRequesters[StyleFocusKey.OutlineWidthDecrease],
                                 incrementFocusRequester = focusRequesters[StyleFocusKey.OutlineWidthIncrease],

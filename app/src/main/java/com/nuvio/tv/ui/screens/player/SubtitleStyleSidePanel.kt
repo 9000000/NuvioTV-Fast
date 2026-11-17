@@ -314,14 +314,22 @@ internal fun SubtitleStyleSidePanel(
                                 SubtitleStyleStepperButton(
                                     icon = Icons.Default.Remove,
                                     onClick = {
-                                        onEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth - 1).coerceAtLeast(1)))
+                                        onEvent(
+                                            PlayerEvent.OnSetSubtitleOutlineWidth(
+                                                (subtitleStyle.outlineWidth - 1).coerceAtLeast(SubtitleStyleSettings.OUTLINE_WIDTH_MIN)
+                                            )
+                                        )
                                     }
                                 )
-                                SubtitleStyleValueDisplay(text = "${subtitleStyle.outlineWidth}px")
+                                SubtitleStyleValueDisplay(text = subtitleStyle.outlineWidth.toString())
                                 SubtitleStyleStepperButton(
                                     icon = Icons.Default.Add,
                                     onClick = {
-                                        onEvent(PlayerEvent.OnSetSubtitleOutlineWidth((subtitleStyle.outlineWidth + 1).coerceAtMost(50)))
+                                        onEvent(
+                                            PlayerEvent.OnSetSubtitleOutlineWidth(
+                                                (subtitleStyle.outlineWidth + 1).coerceAtMost(SubtitleStyleSettings.OUTLINE_WIDTH_MAX)
+                                            )
+                                        )
                                     }
                                 )
                             }
