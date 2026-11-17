@@ -166,7 +166,7 @@ data class SubtitleStyleSettings(
     val backgroundColor: Int = Color.Transparent.toArgb(),
     val outlineEnabled: Boolean = true,
     val outlineColor: Int = Color.Black.toArgb(),
-    val outlineWidth: Int = OUTLINE_WIDTH_DEFAULT, // 1-5
+    val outlineWidth: Int = OUTLINE_WIDTH_DEFAULT, // 1-15
     val font: String = SubtitleFontOption.DEFAULT,
     val hdrStyleEnabled: Boolean = false,
     val hdrTextColor: Int = Color.White.toArgb(),
@@ -215,7 +215,7 @@ data class SubtitleStyleSettings(
         const val HDR_BRIGHTNESS_DEFAULT = 40
         const val BACKGROUND_RADIUS_MAX = 24
         const val OUTLINE_WIDTH_MIN = 1
-        const val OUTLINE_WIDTH_MAX = 5
+        const val OUTLINE_WIDTH_MAX = 15
         const val OUTLINE_WIDTH_DEFAULT = 2
         const val SHADOW_OPACITY_DEFAULT = 75
         const val SHADOW_SIZE_MIN = 1

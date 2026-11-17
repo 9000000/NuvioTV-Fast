@@ -958,7 +958,7 @@
     <string name="sub_outline_sub">Thêm viền chữ quanh phụ đề để dễ đọc hơn</string>
     <string name="sub_outline_color">Màu viền</string>
     <string name="sub_outline_width">Độ dày viền</string>
-    <string name="sub_outline_width_sub">Độ dày nét viền chữ (1-5)</string>
+    <string name="sub_outline_width_sub">Độ dày nét viền chữ (1-15)</string>
     <string name="sub_font_sub">Chọn phông chữ hiển thị cho phụ đề</string>
     <string name="sub_font_phimmoi">PhimMoi</string>
     <string name="sub_font_inter">Inter</string>

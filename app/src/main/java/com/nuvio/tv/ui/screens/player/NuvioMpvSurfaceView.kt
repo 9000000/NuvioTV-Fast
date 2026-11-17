@@ -492,7 +492,10 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                 (normalizedOffset * (MPV_SUB_MARGIN_Y_MAX - MPV_SUB_MARGIN_Y_MIN))).toInt()
             val outlineSize = when {
                 !style.outlineEnabled -> 0.0
-                isAssOrSsaSubtitleSelectedNow() -> style.outlineWidth.coerceIn(1, 6).toDouble()
+                isAssOrSsaSubtitleSelectedNow() -> style.outlineWidth.coerceIn(
+                    SubtitleStyleSettings.OUTLINE_WIDTH_MIN,
+                    SubtitleStyleSettings.OUTLINE_WIDTH_MAX
+                ).toDouble()
                 else -> style.outlineWidth * MPV_TEXT_OUTLINE_SIZE_PER_WIDTH
             }
             val backgroundAlpha = (style.backgroundColor ushr 24) and 0xFF

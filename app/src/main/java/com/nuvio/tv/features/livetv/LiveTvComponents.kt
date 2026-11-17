@@ -302,11 +302,11 @@ fun LivePosterImage(
     }
     var wide by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(false) }
     var loaded by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(url, onDominantColorExtracted) {
-        if (onDominantColorExtracted != null) {
-            com.nuvio.tv.ui.leanback.core.LeanbackColorEngine.getCachedColor(url)
-                ?.let(onDominantColorExtracted)
-        }
+    val latestDominantCallback by androidx.compose.runtime.rememberUpdatedState(onDominantColorExtracted)
+    androidx.compose.runtime.LaunchedEffect(url) {
+        val cb = latestDominantCallback ?: return@LaunchedEffect
+        com.nuvio.tv.ui.leanback.core.LeanbackColorEngine.getCachedColor(url)
+            ?.let(cb)
     }
     Box(
         modifier = modifier.then(if (!forceFit && wide && loaded) Modifier.background(Color.Black) else Modifier),

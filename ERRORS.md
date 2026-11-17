@@ -171,6 +171,24 @@
 
 ---
 
+## [2026-11-17 11:30] - Viền Sáng Kênh Live TV Bị Nháy Lớp Mờ Phía Sau & Độ Dày Viền Phụ Đề Tối Đa Còn Thấp
+
+- **Type**: Logic
+- **Severity**: Medium
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuidePanels.kt:459` & `app/src/main/java/com/nuvio/tv/data/local/PlayerSettingsDataStore.kt:218`
+- **Agent**: mon
+- **Root Cause**: 
+  1. `GuideGridChannelTile` dùng hai lớp phát sáng xung đột: trong 40ms đầu (`isFocused && !showNeonBloom`) vẽ `instantGlowModifier` bằng Compose `drawBehind`, sau `delay(40L)` lại tắt nó và gắn `AndroidView(PlayStoreGlowView)` chạy `LAYER_TYPE_SOFTWARE` với 3 lớp `BlurMaskFilter`. Khi người dùng di chuyển D-pad nhanh, việc chuyển giao 40ms kết hợp render bitmap software phía sau thẻ tạo hiệu ứng nháy mờ và chèn lớp cũ; kèm theo `combinedClickable` không tắt `indication` mặc định và `LivePosterImage` khởi chạy lại `LaunchedEffect(url, onDominantColorExtracted)` mỗi lần recomposition do lambda không ổn định.
+  2. Giới hạn độ dày viền phụ đề (`OUTLINE_WIDTH_MAX`) chỉ dừng ở `5`, chưa đủ dày trên màn hình TV lớn.
+- **Error Message**: 
+  ```
+  User reported: độ dày viền phụ đề hơi ít hãy cho phép tăng từ 1 đến 15, tôi thấy viền sáng của các kênh trong mục live tv bị chèn cả lớp cũ đúng không tôi thấy bị nháy một lơp mờ phía sau
+  ```
+- **Fix Applied**: 
+  1. Loại bỏ hoàn toàn `showNeonBloom`, `delay(40L)`, `instantGlowModifier` và `AndroidView(PlayStoreGlowView)` trong `GuideGridChannelTile`; thay bằng một lớp `focusGlowModifier` thuần GPU Compose (`drawBehind` vẽ 3 vòng `drawRoundRect` đồng tâm với `animatedGlowColor`), bổ sung `indication = null` cho `combinedClickable` và ổn định callback trong `LivePosterImage` bằng `rememberUpdatedState`.
+  2. Nâng `SubtitleStyleSettings.OUTLINE_WIDTH_MAX` từ `5` lên `15` (giữ `OUTLINE_WIDTH_MIN = 1`, `OUTLINE_WIDTH_DEFAULT = 2`), mở rộng kẹp giá trị ASS/SSA trên MPV (`NuvioMpvSurfaceView`) lên `1..15` và cập nhật chuỗi mô tả `sub_outline_width_sub` (EN/VI).
+- **Prevention**: Không kết hợp tráo đổi 2 cơ chế glow khác pipeline (Compose Canvas + `AndroidView` `LAYER_TYPE_SOFTWARE`) theo bộ đếm `delay` trên các item cuộn/chuyển focus liên tục bằng D-pad; luôn dùng một lớp vẽ GPU đồng nhất và tắt `indication` mặc định khi đã có viền focus tùy biến.
+- **Status**: Fixed
 
 ---
 

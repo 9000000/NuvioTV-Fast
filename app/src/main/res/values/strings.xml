@@ -1007,7 +1007,7 @@
     <string name="sub_outline_sub">Add outline around subtitle text for better visibility</string>
     <string name="sub_outline_color">Outline Color</string>
     <string name="sub_outline_width">Outline Width</string>
-    <string name="sub_outline_width_sub">Thickness of subtitle outline (1-5)</string>
+    <string name="sub_outline_width_sub">Thickness of subtitle outline (1-15)</string>
     <string name="sub_font_sub">Choose font family for subtitles</string>
     <string name="sub_font_phimmoi">PhimMoi</string>
     <string name="sub_font_inter">Inter</string>

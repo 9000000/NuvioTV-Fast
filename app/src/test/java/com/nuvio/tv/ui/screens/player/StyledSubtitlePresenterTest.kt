@@ -136,5 +136,13 @@ class StyledSubtitlePresenterTest {
         assertTrue(defaults.copy(backgroundColor = Color.Black.copy(alpha = 0.5f).toArgb()).usesStyledRenderer)
         assertTrue(defaults.copy(shadowEnabled = true).usesStyledRenderer)
         assertFalse(defaults.copy(backgroundRadius = 12, outlineEnabled = false).usesStyledRenderer)
+        assertTrue(defaults.copy(outlineWidth = SubtitleStyleSettings.OUTLINE_WIDTH_MAX).usesStyledRenderer)
+    }
+
+    @Test
+    fun `outline width range allows values from 1 to 15`() {
+        assertEquals(1, SubtitleStyleSettings.OUTLINE_WIDTH_MIN)
+        assertEquals(15, SubtitleStyleSettings.OUTLINE_WIDTH_MAX)
+        assertEquals(5, SubtitleStyleSettings.OUTLINE_WIDTH_DEFAULT)
     }
 }

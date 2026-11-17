@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,10 +50,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,23 +68,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.graphics.ColorUtils
 import androidx.media3.common.Player
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
-import com.nuvio.tv.ui.leanback.core.PlayStoreGlowView
 import com.nuvio.tv.ui.theme.NuvioTheme
-import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -474,15 +467,8 @@ private fun GuideGridChannelTile(
                 ?: DEFAULT_TILE_GLOW_COLOR
         )
     }
-    var showNeonBloom by remember { mutableStateOf(false) }
-    LaunchedEffect(isFocused) {
-        if (isFocused) {
-            // Defer software-layered Gaussian bloom by 40ms so rapid D-pad holds stay at 60fps.
-            delay(40L)
-            showNeonBloom = true
-        } else {
-            showNeonBloom = false
-        }
+    val onDominantExtracted = remember(channel.logoUrl) {
+        { extracted: Int -> dominantColorInt = extracted }
     }
 
     val resolvedGlowInt = resolveChannelGlowColor(dominantColorInt)
@@ -508,70 +494,58 @@ private fun GuideGridChannelTile(
         else -> CardBgColor
     }
 
-    val density = LocalDensity.current
-    val cornerRadiusPx = with(density) { 10.dp.toPx() }
-    val glowSpreadPx = with(density) { 18.dp.toPx() }
-    val glowMarginPx = (glowSpreadPx * 1.35f).toInt()
-
-    val instantGlowModifier = if (isFocused && !showNeonBloom) {
+    // Single GPU-drawn outer glow without AndroidView software-layer swapping so focus never flashes an old layer behind.
+    val focusGlowModifier = if (isFocused) {
         Modifier.drawBehind {
-            val radiusPx = 10.dp.toPx()
+            val baseRadiusPx = 10.dp.toPx()
+            val outerPad = 5.dp.toPx()
+            drawRoundRect(
+                color = animatedGlowColor.copy(alpha = 0.14f),
+                topLeft = Offset(-outerPad, -outerPad),
+                size = Size(size.width + outerPad * 2f, size.height + outerPad * 2f),
+                cornerRadius = CornerRadius(baseRadiusPx + outerPad),
+                style = Stroke(width = 10.dp.toPx())
+            )
+            val midPad = 2.5.dp.toPx()
             drawRoundRect(
                 color = animatedGlowColor.copy(alpha = 0.28f),
-                topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                size = Size(size.width + 6.dp.toPx(), size.height + 6.dp.toPx()),
-                cornerRadius = CornerRadius(radiusPx + 2.dp.toPx()),
+                topLeft = Offset(-midPad, -midPad),
+                size = Size(size.width + midPad * 2f, size.height + midPad * 2f),
+                cornerRadius = CornerRadius(baseRadiusPx + midPad),
                 style = Stroke(width = 5.dp.toPx())
+            )
+            val innerPad = 0.5.dp.toPx()
+            drawRoundRect(
+                color = animatedGlowColor.copy(alpha = 0.45f),
+                topLeft = Offset(-innerPad, -innerPad),
+                size = Size(size.width + innerPad * 2f, size.height + innerPad * 2f),
+                cornerRadius = CornerRadius(baseRadiusPx + innerPad),
+                style = Stroke(width = 2.dp.toPx())
             )
         }
     } else {
         Modifier
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1.48f)
             .zIndex(if (isFocused) 1f else 0f)
+            .then(focusGlowModifier)
     ) {
-        if (isFocused && showNeonBloom) {
-            AndroidView(
-                modifier = Modifier
-                    .matchParentSize()
-                    .layout { measurable, constraints ->
-                        val glowW = constraints.maxWidth + glowMarginPx * 2
-                        val glowH = constraints.maxHeight + glowMarginPx * 2
-                        val placeable = measurable.measure(Constraints.fixed(glowW, glowH))
-                        layout(constraints.maxWidth, constraints.maxHeight) {
-                            placeable.place(-glowMarginPx, -glowMarginPx)
-                        }
-                    },
-                factory = { ctx ->
-                    PlayStoreGlowView(ctx).apply {
-                        this.cornerRadiusPx = cornerRadiusPx
-                        this.glowSpreadPx = glowSpreadPx
-                        this.glowMarginPx = glowMarginPx.toFloat()
-                        this.glowColor = resolvedGlowInt
-                    }
-                },
-                update = { view ->
-                    view.cornerRadiusPx = cornerRadiusPx
-                    view.glowSpreadPx = glowSpreadPx
-                    view.glowMarginPx = glowMarginPx.toFloat()
-                    view.glowColor = resolvedGlowInt
-                }
-            )
-        }
-
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .then(instantGlowModifier)
                 .clip(RoundedCornerShape(10.dp))
                 .background(bgColor)
                 .border(borderWidth, borderColor, RoundedCornerShape(10.dp))
                 .focusProperties { canFocus = false }
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
                     onClick = onClick,
                     onLongClick = onLongClick
                 )
@@ -581,9 +555,7 @@ private fun GuideGridChannelTile(
                 url = channel.logoUrl,
                 contentDescription = channel.name,
                 forceFit = true,
-                onDominantColorExtracted = { extracted ->
-                    dominantColorInt = extracted
-                },
+                onDominantColorExtracted = onDominantExtracted,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = logoBottomPadding),
