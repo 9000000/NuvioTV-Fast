@@ -235,5 +235,26 @@
 
 ---
 
+## [2026-11-17 21:28] - Thoát App Không Lưu List Kênh Vừa Xem & Mất Kênh Yêu Thích/Xem Gần Đây Khi Đổi List
+
+- **Type**: Logic
+- **Severity**: Medium
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideScreen.kt:197` & `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideNavigation.kt:121`
+- **Agent**: mon
+- **Root Cause**:
+  1. `selectedPlaylistId` và `selectedGroupId` trong `LiveTvGuideContent` chỉ giữ bằng `rememberSaveable` khởi tạo cứng là `null`, không đọc/ghi xuống `LiveTvStorage`, đồng thời `LaunchedEffect` reset `selectedPlaylistId` về `null` khi `rawChannels` chưa load xong từ cache lúc khởi động app.
+  2. `buildLiveTvChannelGroups` và `filterChannelsForGroup` lọc `FAVORITES` và `RECENT` trên `scopedChannels` (theo playlist đang chọn) thay vì toàn bộ danh sách kênh, khiến các kênh đã lưu biến mất khi chuyển sang list khác.
+- **Error Message**:
+  ```
+  User reported: khi thoát app vào lại không lưu list kênh vừa xem mà lại hiện tất cả list sửa cho tôi lưu list vừa xem, mục yêu thích và xem gần đây sửa luôn hiển thị các kênh đã lưu vào đó bất kể có chuyển sang list khác vẫn luôn hiện lên cho tôi
+  ```
+- **Fix Applied**:
+  1. Thêm `loadGuidePlaylistId`/`saveGuidePlaylistId` (kèm sentinel phân biệt `"Tất cả list kênh"` với trạng thái chưa chọn) và `loadGuideGroupId`/`saveGuideGroupId` vào `LiveTvStorage`; khôi phục khi vào `LiveTvGuideContent`, lưu ngay khi đổi list/danh mục/phát kênh, và chỉ kiểm tra tính hợp lệ của playlist khi `rawChannels.isNotEmpty() && !ui.isLoading`.
+  2. Bổ sung tham số `allChannels` vào `buildLiveTvChannelGroups` và `filterChannelsForGroup` để `FAVORITES` và `RECENT` luôn hiển thị đầy đủ các kênh đã lưu trên mọi list, còn các danh mục riêng và `ALL` vẫn theo list đang chọn.
+- **Prevention**: Không dùng `rememberSaveable` đơn thuần cho bộ lọc nguồn chính cần giữ qua các lần thoát app; luôn tách phạm vi dữ liệu toàn cục (`Favorites`/`Recent`) khỏi bộ lọc nguồn khi thiết kế danh mục.
+- **Status**: Fixed
+
+---
+
 
 

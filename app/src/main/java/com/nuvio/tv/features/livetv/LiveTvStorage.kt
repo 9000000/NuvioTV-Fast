@@ -14,6 +14,9 @@ object LiveTvStorage {
     private const val KEY_LAST_WATCHED_PLAYLIST_ID = "last_watched_playlist_id"
     private const val KEY_LAST_WATCHED_GROUP = "last_watched_group"
     private const val KEY_LAST_WATCHED_FILTER_TYPE = "last_watched_filter_type"
+    private const val KEY_GUIDE_PLAYLIST_ID = "guide_selected_playlist_id"
+    private const val KEY_GUIDE_GROUP_ID = "guide_selected_group_id"
+    private const val ALL_PLAYLISTS_SENTINEL = "__all__"
     private const val KEY_RECENT_CHANNELS_BLOB = "recent_channels_blob"
     private const val KEY_NAV_ENABLED = "nav_enabled"
     private const val KEY_STALKER_SETTINGS = "stalker_settings"
@@ -80,6 +83,33 @@ object LiveTvStorage {
             prefs.edit().apply {
                 if (filterType != null) putString(KEY_LAST_WATCHED_FILTER_TYPE, filterType)
                 else remove(KEY_LAST_WATCHED_FILTER_TYPE)
+            }.apply()
+        }
+    }
+
+    fun loadGuidePlaylistId(): String? {
+        if (!isReady) return null
+        if (!prefs.contains(KEY_GUIDE_PLAYLIST_ID)) {
+            return loadLastWatchedPlaylistId()
+        }
+        val stored = prefs.getString(KEY_GUIDE_PLAYLIST_ID, null)
+        return stored?.takeUnless { it == ALL_PLAYLISTS_SENTINEL }
+    }
+
+    fun saveGuidePlaylistId(playlistId: String?) {
+        if (isReady) {
+            prefs.edit()
+                .putString(KEY_GUIDE_PLAYLIST_ID, playlistId ?: ALL_PLAYLISTS_SENTINEL)
+                .apply()
+        }
+    }
+
+    fun loadGuideGroupId(): String? = if (isReady) prefs.getString(KEY_GUIDE_GROUP_ID, null) else null
+    fun saveGuideGroupId(groupId: String?) {
+        if (isReady) {
+            prefs.edit().apply {
+                if (groupId != null) putString(KEY_GUIDE_GROUP_ID, groupId)
+                else remove(KEY_GUIDE_GROUP_ID)
             }.apply()
         }
     }

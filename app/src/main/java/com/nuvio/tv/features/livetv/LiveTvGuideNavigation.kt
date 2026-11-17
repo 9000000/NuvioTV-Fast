@@ -124,15 +124,17 @@ internal fun buildLiveTvChannelGroups(
     recentIds: List<String>,
     favoritesLabel: String,
     recentLabel: String,
-    allLabel: String
+    allLabel: String,
+    allChannels: List<LiveTvChannel> = scopedChannels
 ): List<ChannelGroup> {
     val list = mutableListOf<ChannelGroup>()
 
-    val favCount = scopedChannels.count { it.id in favoriteIds }
+    // Favorites and Recent are global across all playlists regardless of the selected list filter.
+    val favCount = allChannels.count { it.id in favoriteIds }
     list.add(ChannelGroup(ChannelGroup.FAVORITES, favoritesLabel, channelCount = favCount))
 
     val recentSet = recentIds.toSet()
-    val recentCount = scopedChannels.count { it.id in recentSet }
+    val recentCount = allChannels.count { it.id in recentSet }
     list.add(ChannelGroup(ChannelGroup.RECENT, recentLabel, channelCount = recentCount))
 
     val groupCounts = scopedChannels.groupBy { it.group?.trim().orEmpty() }
@@ -150,13 +152,14 @@ internal fun filterChannelsForGroup(
     scopedChannels: List<LiveTvChannel>,
     groupId: String,
     favoriteIds: Set<String>,
-    recentIds: List<String>
+    recentIds: List<String>,
+    allChannels: List<LiveTvChannel> = scopedChannels
 ): List<LiveTvChannel> {
     return when {
-        groupId == ChannelGroup.FAVORITES -> scopedChannels.filter { it.id in favoriteIds }
+        groupId == ChannelGroup.FAVORITES -> allChannels.filter { it.id in favoriteIds }
         groupId == ChannelGroup.RECENT -> {
             val recentOrder = recentIds.withIndex().associate { it.value to it.index }
-            scopedChannels
+            allChannels
                 .filter { it.id in recentOrder }
                 .sortedBy { recentOrder[it.id] ?: Int.MAX_VALUE }
         }

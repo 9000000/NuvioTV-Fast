@@ -225,4 +225,60 @@ class LiveTvGuideNavigationTest {
             )
         )
     }
+
+    @Test
+    fun `favorites and recent always include channels from all playlists even when switching playlist`() {
+        val chP1Fav = channel("ch_p1_fav", playlistId = "p1", group = "News", name = "P1 Fav")
+        val chP1Recent = channel("ch_p1_rec", playlistId = "p1", group = "Sports", name = "P1 Recent")
+        val chP2Sport = channel("ch_p2_sport", playlistId = "p2", group = "Sports", name = "P2 Sport")
+        val allChannels = listOf(chP1Fav, chP1Recent, chP2Sport)
+
+        // User switches playlist filter to p2 only.
+        val scopedToP2 = scopeChannelsByPlaylist(allChannels, "p2")
+        val favoriteIds = setOf("ch_p1_fav")
+        val recentIds = listOf("ch_p1_rec", "ch_p2_sport")
+
+        val groups = buildLiveTvChannelGroups(
+            scopedChannels = scopedToP2,
+            favoriteIds = favoriteIds,
+            recentIds = recentIds,
+            favoritesLabel = "Favorites",
+            recentLabel = "Recent",
+            allLabel = "All",
+            allChannels = allChannels
+        )
+
+        // Favorites and Recent counts reflect saved channels across all playlists, while ALL/custom stay scoped to p2.
+        assertEquals(1, groups.first { it.id == ChannelGroup.FAVORITES }.channelCount)
+        assertEquals(2, groups.first { it.id == ChannelGroup.RECENT }.channelCount)
+        assertEquals(1, groups.first { it.id == ChannelGroup.ALL }.channelCount)
+        assertEquals(1, groups.first { it.id == "custom:Sports" }.channelCount)
+
+        val favChannels = filterChannelsForGroup(
+            scopedChannels = scopedToP2,
+            groupId = ChannelGroup.FAVORITES,
+            favoriteIds = favoriteIds,
+            recentIds = recentIds,
+            allChannels = allChannels
+        )
+        assertEquals(listOf("ch_p1_fav"), favChannels.map { it.id })
+
+        val recentChannels = filterChannelsForGroup(
+            scopedChannels = scopedToP2,
+            groupId = ChannelGroup.RECENT,
+            favoriteIds = favoriteIds,
+            recentIds = recentIds,
+            allChannels = allChannels
+        )
+        assertEquals(listOf("ch_p1_rec", "ch_p2_sport"), recentChannels.map { it.id })
+
+        val p2AllChannels = filterChannelsForGroup(
+            scopedChannels = scopedToP2,
+            groupId = ChannelGroup.ALL,
+            favoriteIds = favoriteIds,
+            recentIds = recentIds,
+            allChannels = allChannels
+        )
+        assertEquals(listOf("ch_p2_sport"), p2AllChannels.map { it.id })
+    }
 }
