@@ -58,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.focusProperties
@@ -67,7 +68,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -88,6 +88,7 @@ private val GridBgColor = Color(0xFF101014)
 private val CardBgColor = Color(0xFF1A1A22)
 private val DividerColor = Color(0x22FFFFFF)
 private val DEFAULT_TILE_GLOW_COLOR: Int = AndroidColor.parseColor("#F59E0B")
+internal val LIVE_TV_GUIDE_GRID_SPACING = 14.dp
 
 internal fun formatTimeRange(startMs: Long, stopMs: Long): String {
     val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -351,7 +352,7 @@ private fun PlaylistDropdownMenu(
 }
 
 /**
- * Full-height middle column (Blue zone with Pink channel tiles): displays a 4-column grid of
+ * Full-height middle column (Blue zone with Pink channel tiles): displays a 3-column grid of
  * channels matching the active playlist filter and category.
  */
 @Composable
@@ -414,11 +415,11 @@ internal fun LiveTvChannelGridPanel(
                 columns = GridCells.Fixed(LIVE_TV_GUIDE_GRID_COLUMNS),
                 state = gridState,
                 contentPadding = PaddingValues(18.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(LIVE_TV_GUIDE_GRID_SPACING),
+                verticalArrangement = Arrangement.spacedBy(LIVE_TV_GUIDE_GRID_SPACING),
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { clip = false }
+                    .clipToBounds()
             ) {
                 itemsIndexed(channels, key = { _, ch -> ch.key }) { idx, channel ->
                     GuideGridChannelTile(
@@ -550,7 +551,7 @@ private fun GuideGridChannelTile(
                     onLongClick = onLongClick
                 )
         ) {
-            val logoBottomPadding = if (showChannelNames) 20.dp else 6.dp
+            val logoBottomPadding = if (showChannelNames) 24.dp else 8.dp
             LivePosterImage(
                 url = channel.logoUrl,
                 contentDescription = channel.name,
@@ -558,13 +559,13 @@ private fun GuideGridChannelTile(
                 onDominantColorExtracted = onDominantExtracted,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = logoBottomPadding),
+                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = logoBottomPadding),
                 fallback = {
                     Icon(
                         imageVector = Icons.Default.LiveTv,
                         contentDescription = null,
                         tint = Color(0xFF565666),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 }
             )
@@ -573,8 +574,8 @@ private fun GuideGridChannelTile(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(5.dp)
-                        .size(7.dp)
+                        .padding(6.dp)
+                        .size(8.dp)
                         .clip(CircleShape)
                         .background(LIVE_RED)
                 )
@@ -584,7 +585,7 @@ private fun GuideGridChannelTile(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(4.dp)
+                        .padding(5.dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.55f))
                         .padding(3.dp)
@@ -593,7 +594,7 @@ private fun GuideGridChannelTile(
                         imageVector = Icons.Default.Star,
                         contentDescription = null,
                         tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(11.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }
@@ -612,17 +613,17 @@ private fun GuideGridChannelTile(
                                 listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))
                             )
                         )
-                        .padding(horizontal = 5.dp, vertical = 4.dp),
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     LiveText(
                         text = "$numberPrefix${channel.name}",
-                        size = 10.sp,
+                        size = 11.sp,
                         weight = if (isFocused || isPlaying) FontWeight.Bold else FontWeight.Medium,
                         color = Color.White,
                         maxLines = if (twoLineChannelNames) 2 else 1,
                         align = TextAlign.Center,
-                        lineHeight = 12.sp
+                        lineHeight = 13.sp
                     )
                 }
             }

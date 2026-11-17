@@ -1,6 +1,6 @@
 package com.nuvio.tv.features.livetv
 
-internal const val LIVE_TV_GUIDE_GRID_COLUMNS = 4
+internal const val LIVE_TV_GUIDE_GRID_COLUMNS = 3
 private const val EPG_PAST_WINDOW_MS = 4 * 60 * 60 * 1000L
 private const val EPG_FUTURE_WINDOW_MS = 24 * 60 * 60 * 1000L
 private const val EPG_MAX_PAST_PROGRAMS = 4
@@ -253,3 +253,106 @@ internal fun moveGridRight(
     val isLastInRow = (safeIndex % cols == cols - 1) || (safeIndex == totalCount - 1)
     return if (isLastInRow) GridMoveResult.Boundary else GridMoveResult.MoveTo(safeIndex + 1)
 }
+
+internal sealed interface GridScrollAction {
+    data object None : GridScrollAction
+    data class ScrollToIndex(val index: Int) : GridScrollAction
+    data class ScrollByOffset(val deltaPx: Float) : GridScrollAction
+}
+
+internal data class GridVisibleItemGeometry(
+    val index: Int,
+    val topPx: Int,
+    val heightPx: Int
+)
+
+/**
+ * Computes the scroll adjustment needed to keep [targetIndex] completely inside the grid's
+ * padded content bounds (excluding before/after contentPadding so outer focus glow is never
+ * clipped at the top header or bottom edge).
+ */
+internal fun computeGridScrollAction(
+    targetIndex: Int,
+    totalItemsCount: Int,
+    cols: Int = LIVE_TV_GUIDE_GRID_COLUMNS,
+    firstVisibleItemIndex: Int,
+    firstVisibleItemScrollOffset: Int,
+    visibleItems: List<GridVisibleItemGeometry>,
+    viewportStartOffset: Int,
+    viewportEndOffset: Int,
+    afterContentPadding: Int,
+    verticalSpacingPx: Int
+): GridScrollAction {
+    if (totalItemsCount <= 0 || cols <= 0) return GridScrollAction.None
+    val safeIdx = targetIndex.coerceIn(0, totalItemsCount - 1)
+    val targetRowStart = (safeIdx / cols) * cols
+
+    // Always restore full top content padding when returning to the top row.
+    if (safeIdx < cols) {
+        return if (firstVisibleItemIndex > 0 || firstVisibleItemScrollOffset > 0) {
+            GridScrollAction.ScrollToIndex(0)
+        } else {
+            GridScrollAction.None
+        }
+    }
+
+    // Origin 0 sits immediately below beforeContentPadding; viewportEndOffset - afterContentPadding
+    // marks the bottom edge of the padded content region.
+    val rawSafeBottom = viewportEndOffset - afterContentPadding
+    val useFullViewportFallback = rawSafeBottom <= 0
+    val safeTop = if (useFullViewportFallback) viewportStartOffset else 0
+    val safeBottom = if (useFullViewportFallback) viewportEndOffset else rawSafeBottom
+
+    val targetVisible = visibleItems.firstOrNull { it.index == safeIdx }
+    if (targetVisible != null) {
+        val top = targetVisible.topPx
+        val bottom = top + targetVisible.heightPx
+        return when {
+            top < safeTop -> GridScrollAction.ScrollByOffset((top - safeTop).toFloat())
+            bottom > safeBottom -> {
+                val desiredDelta = (bottom - safeBottom).toFloat()
+                val maxDelta = (top - safeTop).toFloat().coerceAtLeast(0f)
+                GridScrollAction.ScrollByOffset(desiredDelta.coerceAtMost(maxDelta))
+            }
+            else -> GridScrollAction.None
+        }
+    }
+
+    if (visibleItems.isEmpty()) {
+        return GridScrollAction.ScrollToIndex((targetRowStart - cols).coerceAtLeast(0))
+    }
+
+    val firstVisibleIdx = visibleItems.minOf { it.index }
+    if (safeIdx < firstVisibleIdx) {
+        return GridScrollAction.ScrollToIndex(targetRowStart)
+    }
+
+    val sampleHeight = visibleItems.first().heightPx.coerceAtLeast(1)
+    val rowStride = computeRowStride(visibleItems, cols, sampleHeight, verticalSpacingPx)
+    val contentHeight = (safeBottom - safeTop).coerceAtLeast(sampleHeight)
+    val rowsFit = ((contentHeight + verticalSpacingPx) / rowStride).coerceAtLeast(1)
+    val topRowStart = (targetRowStart - (rowsFit - 1) * cols).coerceAtLeast(0)
+    return GridScrollAction.ScrollToIndex(topRowStart)
+}
+
+private fun computeRowStride(
+    visibleItems: List<GridVisibleItemGeometry>,
+    cols: Int,
+    fallbackHeightPx: Int,
+    verticalSpacingPx: Int
+): Int {
+    val first = visibleItems.firstOrNull()
+    if (first != null) {
+        val firstRow = first.index / cols
+        val otherRow = visibleItems.firstOrNull { (it.index / cols) > firstRow }
+        if (otherRow != null) {
+            val rowDiff = (otherRow.index / cols) - firstRow
+            val pxDiff = otherRow.topPx - first.topPx
+            if (rowDiff > 0 && pxDiff > 0) {
+                return pxDiff / rowDiff
+            }
+        }
+    }
+    return (fallbackHeightPx + verticalSpacingPx).coerceAtLeast(1)
+}
+

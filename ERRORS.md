@@ -192,4 +192,25 @@
 
 ---
 
+## [2026-11-17 11:50] - Lưới Kênh Live TV Không Tự Động Cuộn Lên & Điều Chỉnh Lưới Thành 3 Cột
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideScreen.kt:338` & `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuideNavigation.kt:3`
+- **Agent**: mon
+- **Root Cause**:
+  1. `LaunchedEffect` điều khiển `gridState` so sánh `targetVisible.offset.y < viewportStartOffset`, trong khi `viewportStartOffset` của `LazyVerticalGrid` bằng `-beforeContentPadding` (~`-36px` cho `18.dp`). Khi di chuyển lên một hàng đang bị lấp một phần trong `beforeContentPadding` (`-36 < offset.y < 0`) hoặc quay về hàng đầu tiên đang có `firstVisibleItemScrollOffset > 0`, điều kiện trả `false` khiến lưới không cuộn lên.
+  2. `LaunchedEffect(channelIndex, ...)` tự hủy coroutine `scrollToItem`/`animateScrollToItem` liên tục khi giữ phím D-pad (`< 180ms`), bỏ qua sự kiện quay về từ `FullscreenPlayerOverlay` (`isFullscreen`), và dùng `.graphicsLayer { clip = false }` khiến hàng bị cắt tràn lên thanh header.
+- **Error Message**:
+  ```
+  User reported: các kênh trong mục live tv không tự động cuộn lên sửa cho tôi , và sửa sửa hàng 4 kênh hiện tại thành 3 kênh để to dễ nhìn hơn
+  ```
+- **Fix Applied**:
+  1. Tách hàm thuần `computeGridScrollAction(...)` kiểm tra đúng ranh giới nội dung sau `beforeContentPadding`/`afterContentPadding` (`0..(viewportEndOffset - afterContentPadding)`), luôn đưa hàng 0 về đỉnh `(0, 0)` và dùng `ScrollByOffset` vừa đủ để không nhảy cóc; dùng `snapshotFlow(...).collectLatest` theo dõi cả `isFullscreen` và phân biệt giữ phím D-pad với bấm từng nhịp qua `markGridDpadPress()`.
+  2. Bật `clipToBounds()` trên `LazyVerticalGrid`, nâng `LIVE_TV_GUIDE_GRID_COLUMNS` từ `4` lên `3` kèm điều chỉnh khoảng cách/chữ/logo trong `GuideGridChannelTile` to dễ nhìn hơn.
+- **Prevention**: Khi kiểm tra tính hiển thị của item trong `LazyGrid`/`LazyList` có `contentPadding`, luôn hiệu chỉnh ranh giới theo `beforeContentPadding`/`afterContentPadding` thay vì dùng thẳng `viewportStartOffset`/`viewportEndOffset`.
+- **Status**: Fixed
+
+---
+
 

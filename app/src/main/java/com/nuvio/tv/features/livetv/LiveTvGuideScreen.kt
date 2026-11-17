@@ -1,6 +1,7 @@
 package com.nuvio.tv.features.livetv
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -11,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +27,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.LazyGridLayoutInfo
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -43,8 +48,11 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +67,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -75,8 +84,37 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private data class GridScrollRequest(
+    val channelIndex: Int,
+    val groupId: String,
+    val playlistId: String?,
+    val focusArea: GuideFocusArea,
+    val channelCount: Int
+)
+
+private fun resolveGridScrollAction(
+    gridState: LazyGridState,
+    layoutInfo: LazyGridLayoutInfo,
+    targetIndex: Int,
+    verticalSpacingPx: Int
+): GridScrollAction = computeGridScrollAction(
+    targetIndex = targetIndex,
+    totalItemsCount = layoutInfo.totalItemsCount,
+    firstVisibleItemIndex = gridState.firstVisibleItemIndex,
+    firstVisibleItemScrollOffset = gridState.firstVisibleItemScrollOffset,
+    visibleItems = layoutInfo.visibleItemsInfo.map {
+        GridVisibleItemGeometry(it.index, it.offset.y, it.size.height)
+    },
+    viewportStartOffset = layoutInfo.viewportStartOffset,
+    viewportEndOffset = layoutInfo.viewportEndOffset,
+    afterContentPadding = layoutInfo.afterContentPadding,
+    verticalSpacingPx = verticalSpacingPx
+)
 
 @Composable
 fun LiveTvGuideScreen(
@@ -247,7 +285,18 @@ private fun LiveTvGuideContent(
     var isLongPressHandled by remember { mutableStateOf(false) }
     var ignoreNextOkKeyUp by remember { mutableStateOf(false) }
     var favoriteToastMessage by remember { mutableStateOf<String?>(null) }
-    var lastDpadTime by remember { mutableLongStateOf(0L) }
+    var lastGridDpadTime by remember { mutableLongStateOf(0L) }
+    var isRapidGridDpad by remember { mutableStateOf(false) }
+
+    val density = LocalDensity.current
+    val verticalSpacingPx = remember(density) { with(density) { LIVE_TV_GUIDE_GRID_SPACING.roundToPx() } }
+    val latestChannels by rememberUpdatedState(channels)
+
+    fun markGridDpadPress() {
+        val nowMs = System.currentTimeMillis()
+        isRapidGridDpad = (nowMs - lastGridDpadTime) < 180L
+        lastGridDpadTime = nowMs
+    }
 
     val gridFocusedChannel = channels.getOrNull(channelIndex)
     val playingChannel = remember(rawChannels, playback.channelKey) {
@@ -306,25 +355,64 @@ private fun LiveTvGuideContent(
         }
     }
 
-    // Keep grid focused tile visible in viewport without blocking fast D-pad hold.
-    LaunchedEffect(channelIndex, effectiveGroupId, selectedPlaylistId, focusArea) {
-        if (channels.isEmpty()) return@LaunchedEffect
-        val safeIdx = channelIndex.coerceIn(0, channels.lastIndex)
-        if (safeIdx != channelIndex) channelIndex = safeIdx
-        val isFast = (System.currentTimeMillis() - lastDpadTime) < 180L
-        val visibleItems = gridState.layoutInfo.visibleItemsInfo
-        val targetVisible = visibleItems.firstOrNull { it.index == safeIdx }
-        val vpStart = gridState.layoutInfo.viewportStartOffset
-        val vpEnd = gridState.layoutInfo.viewportEndOffset
-        val needsScroll = targetVisible == null ||
-            targetVisible.offset.y < vpStart ||
-            (targetVisible.offset.y + targetVisible.size.height) > vpEnd
-        if (needsScroll) {
-            if (isFast) {
-                gridState.scrollToItem((safeIdx - LIVE_TV_GUIDE_GRID_COLUMNS).coerceAtLeast(0))
-            } else {
-                gridState.animateScrollToItem((safeIdx - LIVE_TV_GUIDE_GRID_COLUMNS).coerceAtLeast(0))
+    // Keep focused grid tile completely visible (upward & downward) without breaking fast D-pad hold.
+    LaunchedEffect(gridState, isFullscreen) {
+        if (isFullscreen) return@LaunchedEffect
+        var previousContext: Pair<String, String?>? = null
+
+        snapshotFlow {
+            GridScrollRequest(
+                channelIndex = channelIndex,
+                groupId = effectiveGroupId,
+                playlistId = selectedPlaylistId,
+                focusArea = focusArea,
+                channelCount = latestChannels.size
+            )
+        }.collectLatest { req ->
+            if (req.channelCount <= 0) return@collectLatest
+            val safeIdx = req.channelIndex.coerceIn(0, req.channelCount - 1)
+            if (safeIdx != channelIndex) channelIndex = safeIdx
+
+            val contextKey = req.groupId to req.playlistId
+            val isContextReset = previousContext != contextKey
+
+            val readyLayout = gridState.layoutInfo.takeIf {
+                it.totalItemsCount == req.channelCount && it.viewportSize.height > 0
+            } ?: snapshotFlow { gridState.layoutInfo }.first {
+                it.totalItemsCount == req.channelCount && it.viewportSize.height > 0
             }
+
+            val action = resolveGridScrollAction(gridState, readyLayout, safeIdx, verticalSpacingPx)
+
+            val snapImmediately = isContextReset || isRapidGridDpad
+            when (action) {
+                GridScrollAction.None -> Unit
+                is GridScrollAction.ScrollToIndex -> {
+                    if (snapImmediately) {
+                        gridState.scrollToItem(action.index)
+                        withFrameNanos { }
+                    } else {
+                        gridState.animateScrollToItem(action.index)
+                    }
+                    val followUp = resolveGridScrollAction(
+                        gridState,
+                        gridState.layoutInfo,
+                        safeIdx,
+                        verticalSpacingPx
+                    )
+                    if (followUp is GridScrollAction.ScrollByOffset) {
+                        gridState.scrollBy(followUp.deltaPx)
+                    }
+                }
+                is GridScrollAction.ScrollByOffset -> {
+                    if (snapImmediately) {
+                        gridState.scrollBy(action.deltaPx)
+                    } else {
+                        gridState.animateScrollBy(action.deltaPx, tween(durationMillis = 120))
+                    }
+                }
+            }
+            previousContext = contextKey
         }
     }
 
@@ -584,14 +672,12 @@ private fun LiveTvGuideContent(
                 when (focusArea) {
                     GuideFocusArea.CATEGORY -> when {
                         e.key == Key.DirectionUp -> {
-                            lastDpadTime = System.currentTimeMillis()
                             if (drawerIndex > 0) {
                                 drawerIndex--
                             }
                             true
                         }
                         e.key == Key.DirectionDown -> {
-                            lastDpadTime = System.currentTimeMillis()
                             if (drawerIndex < groups.size) {
                                 drawerIndex++
                             }
@@ -599,6 +685,7 @@ private fun LiveTvGuideContent(
                         }
                         e.key == Key.DirectionRight -> {
                             if (channels.isNotEmpty()) {
+                                isRapidGridDpad = false
                                 focusArea = GuideFocusArea.CHANNEL_GRID
                             }
                             true
@@ -614,17 +701,17 @@ private fun LiveTvGuideContent(
 
                     GuideFocusArea.CHANNEL_GRID -> when {
                         e.key == Key.DirectionUp -> {
-                            lastDpadTime = System.currentTimeMillis()
+                            markGridDpadPress()
                             moveGridUp(channelIndex)?.let { channelIndex = it }
                             true
                         }
                         e.key == Key.DirectionDown -> {
-                            lastDpadTime = System.currentTimeMillis()
+                            markGridDpadPress()
                             moveGridDown(channelIndex, channels.size)?.let { channelIndex = it }
                             true
                         }
                         e.key == Key.DirectionLeft -> {
-                            lastDpadTime = System.currentTimeMillis()
+                            markGridDpadPress()
                             when (val res = moveGridLeft(channelIndex)) {
                                 is GridMoveResult.MoveTo -> channelIndex = res.index
                                 GridMoveResult.Boundary -> {
@@ -635,7 +722,7 @@ private fun LiveTvGuideContent(
                             true
                         }
                         e.key == Key.DirectionRight -> {
-                            lastDpadTime = System.currentTimeMillis()
+                            markGridDpadPress()
                             when (val res = moveGridRight(channelIndex, channels.size)) {
                                 is GridMoveResult.MoveTo -> channelIndex = res.index
                                 GridMoveResult.Boundary -> {
@@ -738,7 +825,7 @@ private fun LiveTvGuideContent(
 
             VerticalDivider(color = Color(0x1EFFFFFF), thickness = 1.dp)
 
-            // Middle column (Blue frame + Pink channel tiles): full-height 4-column channel grid.
+            // Middle column (Blue frame + Pink channel tiles): full-height 3-column channel grid.
             val currentGroupName = groups.firstOrNull { it.id == effectiveGroupId }?.name ?: allChannelsLabel
             val currentPlaylistLabel = selectedPlaylistId?.let { id ->
                 playlistOptions.firstOrNull { it.id == id }?.name

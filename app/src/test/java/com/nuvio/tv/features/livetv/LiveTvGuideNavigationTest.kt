@@ -120,4 +120,109 @@ class LiveTvGuideNavigationTest {
         assertEquals(listOf("Past Catchup", "Live Show", "Upcoming Show"), filtered.map { it.title })
         assertEquals(1, findDefaultEpgIndex(filtered, now))
     }
+
+    @Test
+    fun `default guide grid uses 3 columns and navigates boundaries accurately`() {
+        assertEquals(3, LIVE_TV_GUIDE_GRID_COLUMNS)
+        // 8 items in 3 columns -> row0: 0..2, row1: 3..5, row2: 6..7
+        assertNull(moveGridUp(index = 2))
+        assertEquals(2, moveGridUp(index = 5))
+        assertEquals(5, moveGridDown(index = 2, totalCount = 8))
+        // Index 5 (row 1 col 2) clamps to last item 7 on the incomplete row 2.
+        assertEquals(7, moveGridDown(index = 5, totalCount = 8))
+        assertEquals(GridMoveResult.Boundary, moveGridLeft(index = 3))
+        assertEquals(GridMoveResult.Boundary, moveGridRight(index = 2, totalCount = 8))
+        assertEquals(GridMoveResult.MoveTo(7), moveGridRight(index = 6, totalCount = 8))
+    }
+
+    @Test
+    fun `computeGridScrollAction scrolls back up when row enters top padding or top row scrolled`() {
+        // Returning to row 0 while scrolled down slightly must snap all the way back to index 0.
+        assertEquals(
+            GridScrollAction.ScrollToIndex(0),
+            computeGridScrollAction(
+                targetIndex = 1,
+                totalItemsCount = 12,
+                cols = 3,
+                firstVisibleItemIndex = 0,
+                firstVisibleItemScrollOffset = 24,
+                visibleItems = listOf(GridVisibleItemGeometry(index = 1, topPx = -24, heightPx = 120)),
+                viewportStartOffset = -36,
+                viewportEndOffset = 500,
+                afterContentPadding = 36,
+                verticalSpacingPx = 14
+            )
+        )
+
+        // Row clipped inside beforeContentPadding (-20 >= -36) must still scroll upward to topPx = 0.
+        assertEquals(
+            GridScrollAction.ScrollByOffset(-20f),
+            computeGridScrollAction(
+                targetIndex = 3,
+                totalItemsCount = 18,
+                cols = 3,
+                firstVisibleItemIndex = 3,
+                firstVisibleItemScrollOffset = 20,
+                visibleItems = listOf(GridVisibleItemGeometry(index = 3, topPx = -20, heightPx = 120)),
+                viewportStartOffset = -36,
+                viewportEndOffset = 500,
+                afterContentPadding = 36,
+                verticalSpacingPx = 14
+            )
+        )
+
+        // Off-screen row above viewport must scroll up to that row start.
+        assertEquals(
+            GridScrollAction.ScrollToIndex(6),
+            computeGridScrollAction(
+                targetIndex = 7,
+                totalItemsCount = 30,
+                cols = 3,
+                firstVisibleItemIndex = 12,
+                firstVisibleItemScrollOffset = 0,
+                visibleItems = listOf(GridVisibleItemGeometry(index = 12, topPx = 0, heightPx = 120)),
+                viewportStartOffset = -36,
+                viewportEndOffset = 500,
+                afterContentPadding = 36,
+                verticalSpacingPx = 14
+            )
+        )
+
+        // Item protruding past safe bottom (500 - 36 = 464) scrolls downward just enough to clear bottom padding.
+        assertEquals(
+            GridScrollAction.ScrollByOffset(36f),
+            computeGridScrollAction(
+                targetIndex = 9,
+                totalItemsCount = 30,
+                cols = 3,
+                firstVisibleItemIndex = 0,
+                firstVisibleItemScrollOffset = 0,
+                visibleItems = listOf(
+                    GridVisibleItemGeometry(index = 0, topPx = 0, heightPx = 120),
+                    GridVisibleItemGeometry(index = 9, topPx = 380, heightPx = 120)
+                ),
+                viewportStartOffset = -36,
+                viewportEndOffset = 500,
+                afterContentPadding = 36,
+                verticalSpacingPx = 14
+            )
+        )
+
+        // Completely visible item inside [0, 464] needs no scroll.
+        assertEquals(
+            GridScrollAction.None,
+            computeGridScrollAction(
+                targetIndex = 6,
+                totalItemsCount = 30,
+                cols = 3,
+                firstVisibleItemIndex = 3,
+                firstVisibleItemScrollOffset = 0,
+                visibleItems = listOf(GridVisibleItemGeometry(index = 6, topPx = 134, heightPx = 120)),
+                viewportStartOffset = -36,
+                viewportEndOffset = 500,
+                afterContentPadding = 36,
+                verticalSpacingPx = 14
+            )
+        )
+    }
 }
