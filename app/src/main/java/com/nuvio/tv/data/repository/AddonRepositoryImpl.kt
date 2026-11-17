@@ -12,6 +12,7 @@ import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -129,6 +130,7 @@ class AddonRepositoryImpl(
     private val manifestCache = mutableMapOf<String, Addon>()
     private val manifestCacheLock = Any()
     private val manifestCacheRevision = MutableStateFlow(0L)
+    private val manifestCacheReady = CompletableDeferred<Unit>()
     @Volatile
     private var lastManifestRefreshAttemptTime = 0L
     private var manifestRefreshJob: Job? = null
@@ -208,6 +210,9 @@ class AddonRepositoryImpl(
             Log.d(TAG, "Loaded ${cached.size} cached manifests from disk")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to load manifest cache from disk", e)
+        } finally {
+            // Unblock initial installedAddonsFlow emission once disk manifests are hydrated.
+            manifestCacheReady.complete(Unit)
         }
     }
 
@@ -237,6 +242,7 @@ class AddonRepositoryImpl(
                     emit(emptyList())
                     return@flow
                 }
+                manifestCacheReady.await()
 
                 val enabledByUrl = enabledStates.mapKeys { (url, _) -> canonicalizeUrl(url) }
                 val cached = urls.mapNotNull { url ->

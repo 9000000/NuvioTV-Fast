@@ -5,7 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
-import com.nuvio.tv.ui.leanback.pool.LocalLeanbackRecycledViewPool
+import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
 
 import com.nuvio.tv.domain.model.catalogRowLegacyKey
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -310,11 +310,10 @@ internal fun ModernHomeRowsList(
 
     val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val rowGrids = remember { mutableMapOf<String, androidx.leanback.widget.HorizontalGridView>() }
-    val externalPool = LocalLeanbackRecycledViewPool.current
-    val sharedRecycledViewPool = remember(externalPool) {
-        externalPool ?: RecyclerView.RecycledViewPool().apply {
-            setMaxRecycledViews(0, 56)
-        }
+    // Isolate Modern Home's LeanbackCardViewHolder pool from LeanbackUniversalAdapter's shared pool
+    // so ViewHolders of incompatible types never cross-pollinate on navigation transitions.
+    val sharedRecycledViewPool = remember {
+        LeanbackPoolManager.createModernHomePool(maxPerType = 56)
     }
     val coroutineScope = rememberCoroutineScope()
     var scrollJob by remember { mutableStateOf<Job?>(null) }

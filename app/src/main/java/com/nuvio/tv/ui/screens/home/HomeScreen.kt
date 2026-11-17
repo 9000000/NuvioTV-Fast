@@ -116,12 +116,16 @@ fun HomeScreen(
         initialValue = false
     )
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
-    val hasCollectionContent = uiState.homeRows.any { it is HomeRow.CollectionRow }
+    val hasCollectionContent = uiState.homeRows.any {
+        it is HomeRow.CollectionRow && it.collection.folders.isNotEmpty()
+    }
     val hasHeroContent = uiState.heroItems.isNotEmpty()
+    val hasVisibleHeroContent = uiState.heroSectionEnabled && hasHeroContent
+    val hasContinueWatchingContent = uiState.continueWatchingEnabled && uiState.continueWatchingItems.isNotEmpty()
     val modernPresentationReady =
         uiState.homeLayout != HomeLayout.MODERN ||
             modernPresentation.rows.list.isNotEmpty() ||
-            (uiState.heroSectionEnabled && hasHeroContent && !hasCatalogContent && !hasCollectionContent)
+            (hasVisibleHeroContent && !hasCatalogContent && !hasCollectionContent)
     
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var hasShownInitialHomeContent by rememberSaveable { mutableStateOf(false) }
@@ -183,9 +187,10 @@ fun HomeScreen(
 
     LaunchedEffect(
         uiState.isLoading,
+        uiState.installedAddonsCount,
         hasCatalogContent,
         hasCollectionContent,
-        hasHeroContent,
+        hasVisibleHeroContent,
         initialCwResolved,
         modernPresentationReady
     ) {
@@ -200,8 +205,8 @@ fun HomeScreen(
             !uiState.isLoading &&
             initialCwResolved &&
             modernPresentationReady &&
-            // When addons are installed, require at least one catalog row.
-            (hasCatalogContent || uiState.installedAddonsCount == 0)
+            // When addons are installed, require at least one renderable catalog/collection/hero section.
+            (hasCatalogContent || hasCollectionContent || hasVisibleHeroContent || uiState.installedAddonsCount == 0)
         ) {
             Log.d("HomeGate", "RELEASE: catalogs=$hasCatalogContent cwResolved=$initialCwResolved cwItems=${uiState.continueWatchingItems.size} addons=${uiState.installedAddonsCount}")
             homeStableGateReleased = true
@@ -236,18 +241,25 @@ fun HomeScreen(
 
     val noAddonsError = stringResource(R.string.home_empty_no_sources_title)
     val noCatalogAddonsError = stringResource(R.string.home_error_no_catalog_addons)
-    val hasAnyContent = uiState.catalogRows.isNotEmpty() ||
-        (uiState.continueWatchingEnabled && uiState.continueWatchingItems.isNotEmpty()) ||
-        uiState.heroItems.isNotEmpty() ||
+    val hasAnyContent = hasCatalogContent ||
+        hasContinueWatchingContent ||
+        hasVisibleHeroContent ||
         hasCollectionContent
+    val isHomeContentRevealed = showHomeContentWithAnimation || hasShownInitialHomeContent
+    val showModernUnavailableFallback =
+        uiState.homeLayout == HomeLayout.MODERN &&
+            homeStableGateReleased &&
+            !uiState.isLoading &&
+            !modernPresentationReady
     val showStartupLoader = when {
         !uiState.layoutPreferencesReady -> true
         uiState.isLoading && !hasAnyContent -> true
         uiState.error == noAddonsError && uiState.catalogRows.isEmpty() -> !homeStableGateReleased
-        uiState.error == noCatalogAddonsError && uiState.catalogRows.isEmpty() && !hasCollectionContent && !hasHeroContent -> !homeStableGateReleased
+        uiState.error == noCatalogAddonsError && uiState.catalogRows.isEmpty() && !hasCollectionContent && !hasVisibleHeroContent -> !homeStableGateReleased
         uiState.error != null && uiState.catalogRows.isEmpty() -> false
         !uiState.isLoading && !hasAnyContent -> !homeStableGateReleased
-        else -> !homeStableGateReleased || !modernPresentationReady || !showHomeContentWithAnimation
+        showModernUnavailableFallback -> false
+        else -> !homeStableGateReleased || !modernPresentationReady || !isHomeContentRevealed
     }
 
     // Reports the home screen as fully drawn once it leaves the loading state so startup timing is measurable and post-launch work can be deferred.
@@ -294,7 +306,7 @@ fun HomeScreen(
                 }
             }
 
-            uiState.error == noCatalogAddonsError && uiState.catalogRows.isEmpty() && !hasCollectionContent && !hasHeroContent -> {
+            uiState.error == noCatalogAddonsError && uiState.catalogRows.isEmpty() && !hasCollectionContent && !hasVisibleHeroContent -> {
                 if (!homeStableGateReleased) {
                     Unit
                 } else {
@@ -337,6 +349,19 @@ fun HomeScreen(
                 }
             }
 
+            showModernUnavailableFallback -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.web_no_catalogs),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = NuvioTheme.colors.TextSecondary
+                    )
+                }
+            }
+
             else -> {
                 // On first launch, wait for stable content before revealing home.
                 // Once released, never go back to loading (homeStableGateReleased is rememberSaveable).
@@ -353,17 +378,13 @@ fun HomeScreen(
                             showHomeContentWithAnimation = true
                         }
                     }
-                    LaunchedEffect(showHomeContentWithAnimation) {
-                        if (showHomeContentWithAnimation) {
+                    LaunchedEffect(isHomeContentRevealed) {
+                        if (isHomeContentRevealed) {
                             hasShownInitialHomeContent = true
                         }
                     }
-                    // Keep loading visible during the single-frame gap before animation starts.
-                    if (!showHomeContentWithAnimation) {
-                        Unit
-                    }
                     AnimatedVisibility(
-                        visible = showHomeContentWithAnimation,
+                        visible = isHomeContentRevealed,
                         enter = if (hasShownInitialHomeContent) {
                             EnterTransition.None
                         } else {

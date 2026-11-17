@@ -40,6 +40,7 @@ class LeanbackUniversalAdapter(
 
     private var items: List<LeanbackCardItem> = emptyList()
     private var pendingItems: List<LeanbackCardItem>? = null
+    private var pendingNotifyOnAttach: Boolean = false
     var attachedRecyclerView: RecyclerView? = null
     var isSubmittingItems: Boolean = false
         private set
@@ -54,24 +55,48 @@ class LeanbackUniversalAdapter(
         if (pending != null) {
             pendingItems = null
             applyItemsUpdate(pending)
-        } else if (items.isNotEmpty()) {
+        } else if (items.isNotEmpty() || pendingNotifyOnAttach) {
+            pendingNotifyOnAttach = false
             safeNotifyDataSetChanged()
         }
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         super.onDetachedFromRecyclerView(recyclerView)
-        attachedRecyclerView = null
+        if (attachedRecyclerView === recyclerView) {
+            attachedRecyclerView = null
+        }
+        pendingNotifyOnAttach = false
+    }
+
+    fun onHostAttached() {
+        val pending = pendingItems
+        if (pending != null) {
+            flushPendingUpdates()
+            return
+        }
+        val rv = attachedRecyclerView ?: return
+        if ((pendingNotifyOnAttach || (items.isNotEmpty() && rv.childCount == 0)) && rv.isAttachedToWindow) {
+            pendingNotifyOnAttach = false
+            safeNotifyDataSetChanged()
+        }
     }
 
     fun flushPendingUpdates() {
-        val pending = pendingItems ?: return
+        val pending = pendingItems ?: run {
+            if (pendingNotifyOnAttach) {
+                pendingNotifyOnAttach = false
+                safeNotifyDataSetChanged()
+            }
+            return
+        }
         val rv = attachedRecyclerView
         if (rv != null && (rv.isComputingLayout || rv.isInLayout)) {
             rv.post { flushPendingUpdates() }
             return
         }
         pendingItems = null
+        pendingNotifyOnAttach = false
         applyItemsUpdate(pending)
     }
 
@@ -134,8 +159,8 @@ class LeanbackUniversalAdapter(
     }
 
     fun submitItems(newItems: List<LeanbackCardItem>) {
-        if (items === newItems && pendingItems == null) return
-        if (items.size == newItems.size && itemsMatchVisuals(items, newItems, items.size)) {
+        if (items === newItems && pendingItems == null && !pendingNotifyOnAttach) return
+        if (!pendingNotifyOnAttach && items.size == newItems.size && itemsMatchVisuals(items, newItems, items.size)) {
             items = newItems
             pendingItems = null
             return
@@ -266,9 +291,13 @@ class LeanbackUniversalAdapter(
 
     fun safeNotifyDataSetChanged() {
         val rv = attachedRecyclerView
-        if (rv != null && (rv.isComputingLayout || !rv.isAttachedToWindow)) {
+        if (rv != null && (rv.isComputingLayout || rv.isInLayout || !rv.isAttachedToWindow)) {
+            if (!rv.isAttachedToWindow) {
+                pendingNotifyOnAttach = true
+            }
             rv.post {
-                if (attachedRecyclerView != null && !rv.isComputingLayout && rv.isAttachedToWindow) {
+                if (attachedRecyclerView === rv && !rv.isComputingLayout && !rv.isInLayout && rv.isAttachedToWindow) {
+                    pendingNotifyOnAttach = false
                     try {
                         notifyDataSetChanged()
                     } catch (_: IllegalStateException) {
@@ -278,6 +307,7 @@ class LeanbackUniversalAdapter(
             }
             return
         }
+        pendingNotifyOnAttach = false
         try {
             notifyDataSetChanged()
         } catch (_: IllegalStateException) {

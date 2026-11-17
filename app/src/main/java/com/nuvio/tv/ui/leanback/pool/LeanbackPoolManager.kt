@@ -14,6 +14,8 @@ object LeanbackPoolManager {
     const val VIEW_TYPE_EPISODE = 1
     const val VIEW_TYPE_AVATAR = 2
     const val VIEW_TYPE_POSTER_LANDSCAPE = 3
+    // Dedicated view type for Modern Home cards so they never collide with LeanbackUniversalAdapter view types.
+    const val VIEW_TYPE_MODERN_CARD = 100
 
     fun createSharedPool(maxPerType: Int = 18): RecyclerView.RecycledViewPool {
         return RecyclerView.RecycledViewPool().apply {
@@ -21,6 +23,12 @@ object LeanbackPoolManager {
             setMaxRecycledViews(VIEW_TYPE_POSTER_LANDSCAPE, maxPerType)
             setMaxRecycledViews(VIEW_TYPE_EPISODE, maxPerType)
             setMaxRecycledViews(VIEW_TYPE_AVATAR, maxPerType)
+        }
+    }
+
+    fun createModernHomePool(maxPerType: Int = 56): RecyclerView.RecycledViewPool {
+        return RecyclerView.RecycledViewPool().apply {
+            setMaxRecycledViews(VIEW_TYPE_MODERN_CARD, maxPerType)
         }
     }
 }

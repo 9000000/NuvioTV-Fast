@@ -770,7 +770,7 @@ class InteropHorizontalGridView(context: Context) : HorizontalGridView(context) 
         try {
             super.onLayout(changed, l, t, r, b)
         } catch (e: Exception) {
-            // Intercept Compose focus recursion or RecyclerView internal layout race conditions safely
+            android.util.Log.e("LeanbackModernRow", "Layout error in modern row", e)
         }
     }
 
@@ -1573,6 +1573,9 @@ class LeanbackRowAdapter(
     }
 
     override fun getItemCount(): Int = items.size
+
+    override fun getItemViewType(position: Int): Int =
+        com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager.VIEW_TYPE_MODERN_CARD
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): LeanbackCardViewHolder {
         val context = parent.context

@@ -255,7 +255,7 @@ internal fun DiscoverSection(
                 .fillMaxWidth()
         ) {
             when {
-                uiState.discoverLoading && uiState.discoverResults.isEmpty() -> {
+                (!uiState.discoverInitialized || uiState.discoverLoading) && uiState.discoverResults.isEmpty() -> {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -304,7 +304,7 @@ internal fun DiscoverSection(
                     }
                 }
 
-                uiState.discoverInitialized && selectedCatalog == null -> {
+                selectedCatalog == null -> {
                     EmptyScreenState(
                         title = stringResource(R.string.discover_empty_no_catalog_title),
                         subtitle = stringResource(R.string.discover_empty_no_catalog_subtitle),
@@ -312,7 +312,7 @@ internal fun DiscoverSection(
                     )
                 }
 
-                uiState.discoverInitialized && !uiState.discoverLoading && selectedCatalog != null -> {
+                else -> {
                     EmptyScreenState(
                         title = stringResource(R.string.discover_empty_no_content_title),
                         subtitle = stringResource(R.string.discover_empty_no_content_subtitle),

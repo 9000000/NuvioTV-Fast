@@ -22,7 +22,7 @@ import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.container.InteropVerticalGridView
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
-import com.nuvio.tv.ui.leanback.pool.LocalLeanbackRecycledViewPool
+import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
 
 /**
  * Universal Composable Bridge for Android Leanback Native 2D Vertical Grids.
@@ -67,7 +67,11 @@ fun LeanbackNativeGrid(
     val horizontalSpacingPx = with(density) { horizontalSpacing.roundToPx() }
     val verticalSpacingPx = with(density) { verticalSpacing.roundToPx() }
 
-    val effectivePool = recycledViewPool ?: LocalLeanbackRecycledViewPool.current
+    // Vertical grids use GridLayoutManager with vertical orientation and screen-specific card sizes,
+    // so keep their pool isolated from HorizontalGridView / ModernRow pools.
+    val effectivePool = recycledViewPool ?: remember(gridKey) {
+        LeanbackPoolManager.createSharedPool(maxPerType = 24)
+    }
 
     val adapter = remember(gridKey) {
         LeanbackUniversalAdapter(
@@ -162,25 +166,47 @@ fun LeanbackNativeGrid(
                 )
                 this.numColumnsCount = numColumns
                 setNumColumns(numColumns)
+                configuredNumColumns = numColumns
                 windowAlignment = BaseGridView.WINDOW_ALIGN_LOW_EDGE
                 windowAlignmentOffset = topPaddingPx
+                configuredTopPaddingPx = topPaddingPx
                 windowAlignmentOffsetPercent = BaseGridView.WINDOW_ALIGN_OFFSET_PERCENT_DISABLED
                 itemAlignmentOffset = 0
                 itemAlignmentOffsetPercent = 0f
                 setHorizontalSpacing(horizontalSpacingPx)
+                configuredHorizontalSpacingPx = horizontalSpacingPx
                 setVerticalSpacing(verticalSpacingPx)
+                configuredVerticalSpacingPx = verticalSpacingPx
                 clipToPadding = false
                 clipChildren = false
                 setPadding(startPaddingPx, topPaddingPx, endPaddingPx, bottomPaddingPx)
+                // Seed the adapter before attaching so the first layout pass sees initial items immediately.
+                adapter.submitItems(items)
                 this.adapter = adapter
                 this.onNavigateUpOnFirstRow = onNavigateUpOnFirstRow
                 this.onNavigateDownOnLastRow = onNavigateDownOnLastRow
                 this.onNavigateLeftOnFirstColumn = onNavigateLeftOnFirstColumn
                 this.onNavigateBack = onNavigateBack
                 this.animationsEnabled = animationsEnabled
+                setAnimateChildLayout(animationsEnabled)
+                configuredAnimationsEnabled = animationsEnabled
                 setHasFixedSize(true)
                 setItemViewCacheSize(12)
-                effectivePool?.let { setRecycledViewPool(it) }
+                setRecycledViewPool(effectivePool)
+                addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: android.view.View) {
+                        adapter.onHostAttached()
+                        if (adapter.itemCount > 0 && childCount == 0) {
+                            post {
+                                if (isAttachedToWindow && adapter.itemCount > 0 && childCount == 0) {
+                                    adapter.safeNotifyDataSetChanged()
+                                    requestLayout()
+                                }
+                            }
+                        }
+                    }
+                    override fun onViewDetachedFromWindow(v: android.view.View) {}
+                })
                 gridViewRef = this
                 onGridCreated?.invoke(this)
 
@@ -192,11 +218,23 @@ fun LeanbackNativeGrid(
         },
         update = { gridView ->
             gridViewRef = gridView
-            gridView.numColumnsCount = numColumns
-            gridView.setNumColumns(numColumns)
-            gridView.windowAlignmentOffset = topPaddingPx
-            gridView.setHorizontalSpacing(horizontalSpacingPx)
-            gridView.setVerticalSpacing(verticalSpacingPx)
+            if (gridView.configuredNumColumns != numColumns) {
+                gridView.numColumnsCount = numColumns
+                gridView.setNumColumns(numColumns)
+                gridView.configuredNumColumns = numColumns
+            }
+            if (gridView.configuredTopPaddingPx != topPaddingPx) {
+                gridView.windowAlignmentOffset = topPaddingPx
+                gridView.configuredTopPaddingPx = topPaddingPx
+            }
+            if (gridView.configuredHorizontalSpacingPx != horizontalSpacingPx) {
+                gridView.setHorizontalSpacing(horizontalSpacingPx)
+                gridView.configuredHorizontalSpacingPx = horizontalSpacingPx
+            }
+            if (gridView.configuredVerticalSpacingPx != verticalSpacingPx) {
+                gridView.setVerticalSpacing(verticalSpacingPx)
+                gridView.configuredVerticalSpacingPx = verticalSpacingPx
+            }
             if (gridView.paddingLeft != startPaddingPx ||
                 gridView.paddingTop != topPaddingPx ||
                 gridView.paddingRight != endPaddingPx ||
@@ -208,8 +246,11 @@ fun LeanbackNativeGrid(
             gridView.onNavigateDownOnLastRow = onNavigateDownOnLastRow
             gridView.onNavigateLeftOnFirstColumn = onNavigateLeftOnFirstColumn
             gridView.onNavigateBack = onNavigateBack
-            gridView.animationsEnabled = animationsEnabled
-            gridView.setAnimateChildLayout(animationsEnabled)
+            if (gridView.configuredAnimationsEnabled != animationsEnabled) {
+                gridView.animationsEnabled = animationsEnabled
+                gridView.setAnimateChildLayout(animationsEnabled)
+                gridView.configuredAnimationsEnabled = animationsEnabled
+            }
 
             adapter.animationsEnabled = { animationsEnabled }
             adapter.onItemFocused = onItemFocused
@@ -224,13 +265,18 @@ fun LeanbackNativeGrid(
             if (gridView.adapter !== adapter) {
                 gridView.adapter = adapter
             }
-            effectivePool?.let {
-                if (gridView.recycledViewPool !== it) {
-                    gridView.setRecycledViewPool(it)
-                }
+            if (gridView.recycledViewPool !== effectivePool) {
+                gridView.setRecycledViewPool(effectivePool)
             }
             adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
             adapter.submitItems(items)
+        },
+        onRelease = { gridView ->
+            if (gridViewRef === gridView) {
+                gridViewRef = null
+            }
+            // Return attached ViewHolders cleanly to the shared pool when leaving this screen.
+            gridView.adapter = null
         }
     )
 }

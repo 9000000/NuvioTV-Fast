@@ -90,6 +90,8 @@ class SearchViewModel @Inject constructor(
     private var activeSearchQuery: String? = null
     private var searchGeneration = 0L
     private var discoverJob: Job? = null
+    private var discoverAddonsObserverJob: Job? = null
+    private var lastDiscoverCatalogSignature: String? = null
     private var catalogRowsUpdateJob: Job? = null
     private var suggestionJob: Job? = null
     private var liveSearchJob: Job? = null
@@ -104,6 +106,7 @@ class SearchViewModel @Inject constructor(
     private companion object {
         const val DISCOVER_INITIAL_LIMIT = 100
         const val DISCOVER_SHOW_MORE_BATCH = 50
+        const val DISCOVER_EMPTY_SETTLE_DELAY_MS = 350L
         const val SUGGESTION_DEBOUNCE_MS = 150L
 
         /**
@@ -128,6 +131,9 @@ class SearchViewModel @Inject constructor(
             layoutPreferenceDataStore.discoverLocation.distinctUntilChanged().collectLatest { location ->
                 _uiState.update { it.copy(discoverLocation = location) }
                 if (location == DiscoverLocation.OFF) {
+                    discoverAddonsObserverJob?.cancel()
+                    discoverAddonsObserverJob = null
+                    lastDiscoverCatalogSignature = null
                     discoverJob?.cancel()
                     discoverJob = null
                     revealBatchAfterNextDiscoverFetch = false
@@ -200,8 +206,39 @@ class SearchViewModel @Inject constructor(
     fun ensureDiscoverLoaded() {
         val state = _uiState.value
         if (state.discoverLocation == DiscoverLocation.OFF) return
-        if (state.discoverInitialized || state.discoverLoading) return
-        viewModelScope.launch { loadDiscoverCatalogs() }
+        if (discoverAddonsObserverJob?.isActive != true) {
+            startObservingDiscoverAddons()
+            return
+        }
+        if (!state.discoverInitialized && !state.discoverLoading) {
+            viewModelScope.launch { loadDiscoverCatalogs() }
+        } else if (
+            state.discoverInitialized &&
+            state.discoverCatalogs.isNotEmpty() &&
+            state.discoverResults.isEmpty() &&
+            !state.discoverLoading &&
+            state.query.trim().isEmpty()
+        ) {
+            fetchDiscoverContent(reset = true)
+        }
+    }
+
+    private fun startObservingDiscoverAddons() {
+        discoverAddonsObserverJob?.cancel()
+        if (_uiState.value.discoverResults.isEmpty()) {
+            _uiState.update { it.copy(discoverLoading = true) }
+        }
+        discoverAddonsObserverJob = viewModelScope.launch {
+            combine(
+                addonRepository.getInstalledAddons(),
+                serverCatalog.searchAddons
+            ) { installed, servers ->
+                installed.enabledAddons() + servers
+            }.collectLatest { addons ->
+                if (_uiState.value.discoverLocation == DiscoverLocation.OFF) return@collectLatest
+                applyDiscoverAddons(addons)
+            }
+        }
     }
 
     private val metaPrefetchedIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -943,12 +980,118 @@ class SearchViewModel @Inject constructor(
         _uiState.update { it.copy(discoverLoading = true) }
         val addons = try {
             searchAddons()
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             _uiState.update { it.copy(discoverInitialized = true, discoverLoading = false) }
             return
         }
+        applyDiscoverAddons(addons)
+    }
 
-        val discoverCatalogs = addons.flatMap { addon ->
+    private suspend fun applyDiscoverAddons(addons: List<Addon>) {
+        if (_uiState.value.discoverLocation == DiscoverLocation.OFF) return
+
+        val discoverCatalogs = buildDiscoverCatalogs(addons)
+        if (discoverCatalogs.isEmpty()) {
+            // AddonRepositoryImpl's StateFlow starts as emptyList() and placeholder manifests
+            // may arrive before real manifests finish loading; give real emissions a brief
+            // settle window so collectLatest can cancel this before flashing an empty screen.
+            if (!_uiState.value.discoverInitialized) {
+                _uiState.update { it.copy(installedAddons = addons, discoverLoading = true) }
+                delay(DISCOVER_EMPTY_SETTLE_DELAY_MS)
+            }
+            if (_uiState.value.discoverLocation == DiscoverLocation.OFF) return
+            lastDiscoverCatalogSignature = ""
+            _uiState.update {
+                it.copy(
+                    installedAddons = addons,
+                    discoverCatalogs = emptyList(),
+                    selectedDiscoverType = "movie",
+                    selectedDiscoverCatalogKey = null,
+                    selectedDiscoverGenre = null,
+                    discoverInitialized = true,
+                    discoverLoading = false,
+                    discoverResults = emptyList(),
+                    pendingDiscoverResults = emptyList(),
+                    discoverHasMore = false,
+                    discoverPage = 1
+                )
+            }
+            return
+        }
+
+        val signature = discoverCatalogs.joinToString("|") {
+            "${it.key}:${it.catalogName}:${it.genres.joinToString(",")}"
+        }
+        val currentState = _uiState.value
+        if (
+            signature == lastDiscoverCatalogSignature &&
+            currentState.discoverInitialized &&
+            (currentState.discoverResults.isNotEmpty() || currentState.discoverLoading)
+        ) {
+            if (currentState.installedAddons != addons) {
+                _uiState.update { it.copy(installedAddons = addons) }
+            }
+            return
+        }
+        lastDiscoverCatalogSignature = signature
+
+        val preferredKey = discoverSelectionDataStore.getSelectedCatalogKey()
+        val selectedCatalog = resolveDiscoverCatalog(
+            catalogs = discoverCatalogs,
+            preferredKey = preferredKey,
+            currentKey = currentState.selectedDiscoverCatalogKey
+        )
+        val keepExistingResults =
+            currentState.discoverInitialized &&
+                currentState.discoverResults.isNotEmpty() &&
+                selectedCatalog != null &&
+                selectedCatalog.key == currentState.selectedDiscoverCatalogKey
+
+        if (keepExistingResults) {
+            _uiState.update {
+                it.copy(
+                    installedAddons = addons,
+                    discoverCatalogs = discoverCatalogs
+                )
+            }
+            return
+        }
+
+        val selectedType = selectedCatalog?.type ?: "movie"
+        val selectedGenre: String? = if (selectedCatalog?.key == currentState.selectedDiscoverCatalogKey) {
+            currentState.selectedDiscoverGenre?.takeIf { it in selectedCatalog?.genres.orEmpty() }
+        } else {
+            null
+        }
+
+        _uiState.update {
+            it.copy(
+                installedAddons = addons,
+                discoverCatalogs = discoverCatalogs,
+                selectedDiscoverType = selectedType,
+                selectedDiscoverCatalogKey = selectedCatalog?.key,
+                selectedDiscoverGenre = selectedGenre,
+                discoverInitialized = true,
+                // Stay in loading state through fetchDiscoverContent so the UI doesn't flash empty.
+                discoverLoading = selectedCatalog != null && currentState.query.trim().isEmpty(),
+                discoverResults = emptyList(),
+                pendingDiscoverResults = emptyList(),
+                discoverHasMore = true,
+                discoverPage = 1
+            )
+        }
+        selectedCatalog?.let { catalog ->
+            viewModelScope.launch {
+                discoverSelectionDataStore.setSelectedCatalogKey(catalog.key)
+            }
+        }
+        fetchDiscoverContent(reset = true)
+    }
+
+    private fun buildDiscoverCatalogs(addons: List<Addon>): List<DiscoverCatalog> =
+        addons.flatMap { addon ->
             addon.catalogs
                 .filter { catalog ->
                     !(catalog.supportsExtra("search") &&
@@ -973,37 +1116,6 @@ class SearchViewModel @Inject constructor(
                     )
                 }
         }
-
-        val selectedCatalog = resolveDiscoverCatalog(
-            catalogs = discoverCatalogs,
-            preferredKey = discoverSelectionDataStore.getSelectedCatalogKey(),
-            currentKey = _uiState.value.selectedDiscoverCatalogKey
-        )
-        val selectedType = selectedCatalog?.type ?: "movie"
-        val selectedGenre: String? = null
-
-        _uiState.update {
-            it.copy(
-                installedAddons = addons,
-                discoverCatalogs = discoverCatalogs,
-                selectedDiscoverType = selectedType,
-                selectedDiscoverCatalogKey = selectedCatalog?.key,
-                selectedDiscoverGenre = selectedGenre,
-                discoverInitialized = true,
-                discoverLoading = false,
-                discoverResults = emptyList(),
-                pendingDiscoverResults = emptyList(),
-                discoverHasMore = true,
-                discoverPage = 1
-            )
-        }
-        selectedCatalog?.let { catalog ->
-            viewModelScope.launch {
-                discoverSelectionDataStore.setSelectedCatalogKey(catalog.key)
-            }
-        }
-        fetchDiscoverContent(reset = true)
-    }
 
     private fun selectDiscoverType(type: String) {
         val catalogs = _uiState.value.discoverCatalogs
@@ -1097,9 +1209,15 @@ class SearchViewModel @Inject constructor(
         discoverJob?.cancel()
         discoverJob = viewModelScope.launch {
             val state = _uiState.value
-            if (state.query.trim().isNotEmpty()) return@launch
+            if (state.query.trim().isNotEmpty()) {
+                _uiState.update { it.copy(discoverLoading = false, discoverLoadingMore = false) }
+                return@launch
+            }
             val selectedCatalog = state.discoverCatalogs.firstOrNull { it.key == state.selectedDiscoverCatalogKey }
-                ?: return@launch
+            if (selectedCatalog == null) {
+                _uiState.update { it.copy(discoverLoading = false, discoverLoadingMore = false) }
+                return@launch
+            }
 
             if (reset) {
                 revealBatchAfterNextDiscoverFetch = false

@@ -31,6 +31,12 @@ class InteropVerticalGridView @JvmOverloads constructor(
     var animationsEnabled: Boolean = true
     var numColumnsCount: Int = 5
 
+    internal var configuredNumColumns: Int = Int.MIN_VALUE
+    internal var configuredTopPaddingPx: Int = Int.MIN_VALUE
+    internal var configuredHorizontalSpacingPx: Int = Int.MIN_VALUE
+    internal var configuredVerticalSpacingPx: Int = Int.MIN_VALUE
+    internal var configuredAnimationsEnabled: Boolean? = null
+
     var isHoldingVerticalKey: Boolean = false
         private set
 
@@ -225,8 +231,8 @@ class InteropVerticalGridView @JvmOverloads constructor(
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         try {
             super.onLayout(changed, l, t, r, b)
-        } catch (_: Exception) {
-            // Guard against internal layout pass race conditions
+        } catch (e: Exception) {
+            android.util.Log.e("InteropVerticalGridView", "Layout error in grid", e)
         }
     }
 

@@ -879,7 +879,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 
     // Clear any stale error when content is now available (e.g., hero
     // catalogs loaded after the initial startup race set an error).
-    val hasContent = computedHomeRows.isNotEmpty() || baseHeroItems.isNotEmpty() || displayRows.isNotEmpty()
+    val hasAnyRowsOrHero = computedHomeRows.isNotEmpty() || baseHeroItems.isNotEmpty() || displayRows.isNotEmpty()
+    val hasRenderableContent = computedHomeRows.any { row ->
+        when (row) {
+            is HomeRow.Catalog -> row.row.items.isNotEmpty()
+            is HomeRow.CollectionRow -> row.collection.folders.isNotEmpty()
+            is HomeRow.PlaceholderCatalog -> false
+        }
+    } || baseHeroItems.isNotEmpty() || displayRows.any { it.items.isNotEmpty() }
+    val stillLoadingInitialCatalogs = catalogsLoadInProgress && pendingCatalogLoads > 0 && !hasRenderableContent
 
     _uiState.update { state ->
         state.copy(
@@ -887,8 +895,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             heroItems = if (state.heroItems == baseHeroItems) state.heroItems else baseHeroItems,
             gridItems = if (state.gridItems == nextGridItems) state.gridItems else nextGridItems,
             homeRows = if (state.homeRows == computedHomeRows) state.homeRows else computedHomeRows,
-            isLoading = false,
-            error = if (hasContent) null else state.error
+            isLoading = stillLoadingInitialCatalogs,
+            error = if (hasAnyRowsOrHero) null else state.error
         )
     }
 

@@ -341,15 +341,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
             // not the row structure — the hero section reads enriched data
             // via lastEnrichedPreview instead.
             .distinctUntilChanged { old, new ->
-                old.homeRows === new.homeRows
-                    && old.continueWatchingItems == new.continueWatchingItems
-                    && old.upcomingItems == new.upcomingItems
-                    && old.useLandscapePosters == new.useLandscapePosters
-                    && old.showCatalogTypeSuffix == new.showCatalogTypeSuffix
-                    && old.showFullReleaseDate == new.showFullReleaseDate
-                    && old.showImdbRatings == new.showImdbRatings
-                    && old.localeTag == new.localeTag
-                    && old.catalogRows.size == new.catalogRows.size
+                hasSameModernPresentationStructure(old, new)
             }
             .debounce {
                 // Use a longer debounce while catalogs are still loading to
@@ -388,6 +380,39 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                 }
             }
     }
+}
+
+private fun hasSameModernPresentationStructure(
+    old: ModernHomePresentationInput,
+    new: ModernHomePresentationInput
+): Boolean {
+    if (old.homeRows !== new.homeRows ||
+        old.continueWatchingItems != new.continueWatchingItems ||
+        old.upcomingItems != new.upcomingItems ||
+        old.useLandscapePosters != new.useLandscapePosters ||
+        old.continueWatchingCardStyle != new.continueWatchingCardStyle ||
+        old.showCatalogTypeSuffix != new.showCatalogTypeSuffix ||
+        old.showFullReleaseDate != new.showFullReleaseDate ||
+        old.showImdbRatings != new.showImdbRatings ||
+        old.detailImdbRatingsVisibility != new.detailImdbRatingsVisibility ||
+        old.localeTag != new.localeTag
+    ) {
+        return false
+    }
+    if (old.catalogRows.size != new.catalogRows.size) return false
+    for (i in old.catalogRows.indices) {
+        val a = old.catalogRows[i]
+        val b = new.catalogRows[i]
+        if (a.addonId != b.addonId ||
+            a.catalogId != b.catalogId ||
+            a.apiType != b.apiType ||
+            a.items.size != b.items.size ||
+            a.isLoading != b.isLoading
+        ) {
+            return false
+        }
+    }
+    return true
 }
 
 internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {

@@ -250,8 +250,8 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         try {
             super.onLayout(changed, l, t, r, b)
-        } catch (_: Exception) {
-            // Guard against internal layout pass race conditions
+        } catch (e: Exception) {
+            android.util.Log.e("InteropHorizontalGridView", "Layout error in row", e)
         }
     }
 

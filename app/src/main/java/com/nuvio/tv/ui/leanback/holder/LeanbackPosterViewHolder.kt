@@ -58,8 +58,9 @@ class LeanbackPosterViewHolder(
     init {
         posterImage.outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
-                if (cornerRadiusPx > 0f) {
-                    outline.setRoundRect(0, 0, view.width, view.height, cornerRadiusPx)
+                val radius = this@LeanbackPosterViewHolder.cornerRadiusPx
+                if (radius > 0f) {
+                    outline.setRoundRect(0, 0, view.width, view.height, radius)
                 } else {
                     outline.setRect(0, 0, view.width, view.height)
                 }
