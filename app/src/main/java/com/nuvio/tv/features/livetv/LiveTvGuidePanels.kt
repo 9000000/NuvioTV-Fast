@@ -126,10 +126,10 @@ internal fun LiveTvLeftPanel(
 
     Column(
         modifier = modifier
-            .width(210.dp)
+            .width(176.dp)
             .fillMaxHeight()
             .background(PanelBgColor)
-            .padding(horizontal = 10.dp, vertical = 12.dp)
+            .padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
         // Topmost item in the category column: Channel List selector with inline dropdown.
         val isPlaylistRowFocused = isCategoryFocused && drawerIndex == 0
@@ -196,7 +196,7 @@ internal fun LiveTvLeftPanel(
                         )
                         .focusProperties { canFocus = false }
                         .clickable { onSelectGroup(idx) }
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .padding(horizontal = 8.dp, vertical = 7.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -205,7 +205,7 @@ internal fun LiveTvLeftPanel(
                     ) {
                         LiveText(
                             text = grp.name,
-                            size = 13.sp,
+                            size = 12.sp,
                             weight = if (isFocused || isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isFocused || isSelected) Color.White else Color.LightGray,
                             maxLines = 1,
@@ -247,16 +247,16 @@ private fun ChannelListFilterButton(
             )
             .focusProperties { canFocus = false }
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
             contentDescription = label,
             tint = if (isFocused) Color.White else NuvioTheme.colors.Primary,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(16.dp)
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
         Column(modifier = Modifier.weight(1f)) {
             LiveText(
                 text = label.uppercase(),
@@ -526,7 +526,7 @@ private fun GuideGridChannelTile(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1.48f)
+            .aspectRatio(16f / 9f)
             .zIndex(if (isFocused) 1f else 0f)
     ) {
         AndroidView(
@@ -572,21 +572,18 @@ private fun GuideGridChannelTile(
                     onLongClick = onLongClick
                 )
         ) {
-            val logoBottomPadding = if (showChannelNames) 24.dp else 8.dp
             LivePosterImage(
                 url = channel.logoUrl,
                 contentDescription = channel.name,
                 forceFit = true,
                 onDominantColorExtracted = onDominantExtracted,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = logoBottomPadding),
+                modifier = Modifier.fillMaxSize(),
                 fallback = {
                     Icon(
                         imageVector = Icons.Default.LiveTv,
                         contentDescription = null,
                         tint = Color(0xFF565666),
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             )
@@ -631,19 +628,24 @@ private fun GuideGridChannelTile(
                         .align(Alignment.BottomCenter)
                         .background(
                             Brush.verticalGradient(
-                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.62f),
+                                    Color.Black.copy(alpha = 0.88f)
+                                )
                             )
                         )
-                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                        .padding(start = 6.dp, end = 6.dp, top = 10.dp, bottom = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     LiveText(
                         text = "$numberPrefix${channel.name}",
                         size = 11.sp,
-                        weight = if (isFocused || isPlaying) FontWeight.Bold else FontWeight.Medium,
+                        weight = if (isFocused || isPlaying) FontWeight.Bold else FontWeight.SemiBold,
                         color = Color.White,
                         maxLines = if (twoLineChannelNames) 2 else 1,
                         align = TextAlign.Center,
+                        shadow = true,
                         lineHeight = 13.sp
                     )
                 }
