@@ -213,4 +213,27 @@
 
 ---
 
+## [2026-11-17 12:00] - Playlist Name Nhập Tiếng Việt Bị Lỗi Ký Tự Không Đọc Được
+
+- **Type**: Integration
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/core/server/LiveTvConfigServer.kt:162` & `app/src/main/java/com/nuvio/tv/core/server/LiveTvWebPage.kt:525`
+- **Agent**: mon
+- **Root Cause**:
+  1. Trang cấu hình Web QR ([LiveTvWebPage.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/server/LiveTvWebPage.kt)) gửi request JSON chỉ đặt `Content-Type: application/json` (thiếu `; charset=utf-8`), trong khi [LiveTvConfigServer.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/server/LiveTvConfigServer.kt) gọi `session.parseBody(bodyMap)` của `NanoHTTPD 2.3.1`. Theo mặc định của `NanoHTTPD`, khi header `Content-Type` không có `charset=`, `NanoHTTPD` đọc luồng body bằng bảng mã `US-ASCII`, làm toàn bộ byte tiếng Việt UTF-8 biến thành ký tự thay thế không đọc được.
+  2. `LiveTvRepository` mã hóa danh sách playlist vào Android `SharedPreferences` bằng ký tự điều khiển `\u001E`/`\u001F` (vốn không hợp lệ trong XML 1.0) và chưa URL-decode phần tên tệp UTF-8 trong `playlistNameFromUrl`.
+- **Error Message**:
+  ```
+  User reported: playlist name tôi nhập tiếng việt bị lỗi hiển thị các kí tự không đọc được
+  ```
+- **Fix Applied**:
+  1. Thay thế `session.parseBody` trong `LiveTvConfigServer` bằng `readUtf8Body(session)` đọc trực tiếp byte stream theo `StandardCharsets.UTF_8`, chuẩn hóa toàn bộ JSON response về `application/json; charset=utf-8`.
+  2. Cập nhật `LiveTvWebPage` gửi `Content-Type: application/json; charset=utf-8`, đọc tệp M3U với `'UTF-8'` và escape HTML khi hiển thị tên/URL playlist.
+  3. Cập nhật `encodePlaylists`/`decodePlaylists` trong `LiveTvRepository` sang JSON (tương thích ngược với dữ liệu `\u001E`/`\u001F` cũ) và URL-decode UTF-8 trong `playlistNameFromUrl`.
+- **Prevention**: Không bao giờ gọi `NanoHTTPD.IHTTPSession.parseBody()` cho payload JSON/UTF-8; luôn đọc `inputStream` bằng `StandardCharsets.UTF_8` như mẫu ở `DebridFormatterConfigServer` / `StreamBadgeConfigServer`, và không dùng ký tự control ASCII `< 0x20` (trừ `\t`, `\n`, `\r`) khi lưu vào `SharedPreferences`.
+- **Status**: Fixed
+
+---
+
+
 

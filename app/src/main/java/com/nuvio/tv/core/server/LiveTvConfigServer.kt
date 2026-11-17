@@ -7,12 +7,28 @@ import com.google.gson.reflect.TypeToken
 import com.nuvio.tv.features.livetv.LiveTvPlaylistType
 import com.nuvio.tv.features.livetv.LiveTvRepository
 import com.nuvio.tv.features.livetv.LiveTvStalkerSettings
+import com.nuvio.tv.features.livetv.LiveTvUiState
 import com.nuvio.tv.features.livetv.LiveTvXtreamSettings
 import fi.iki.elonen.NanoHTTPD
+import java.nio.charset.StandardCharsets
 
 class LiveTvConfigServer(
-    private val context: Context,
-    port: Int = 8092
+    private val context: Context? = null,
+    port: Int = 8092,
+    private val uiStateProvider: () -> LiveTvUiState = { LiveTvRepository.uiState.value },
+    private val onAddUrlPlaylist: (name: String?, url: String) -> Unit = { name, url ->
+        LiveTvRepository.addPlaylistUrl(name = name, url = url)
+    },
+    private val onAddLocalPlaylist: (name: String?, fileName: String?, content: String) -> Unit = { name, fileName, content ->
+        LiveTvRepository.addLocalPlaylist(name = name, fileName = fileName, content = content)
+    },
+    private val onRemovePlaylist: (String) -> Unit = { LiveTvRepository.removePlaylist(it) },
+    private val onSetPlaylistEnabled: (String, Boolean) -> Unit = { id, enabled ->
+        LiveTvRepository.setPlaylistEnabled(id, enabled)
+    },
+    private val onSaveXtream: (LiveTvXtreamSettings) -> Unit = { LiveTvRepository.saveXtreamSettings(it) },
+    private val onSaveStalker: (LiveTvStalkerSettings) -> Unit = { LiveTvRepository.saveStalkerSettings(it) },
+    private val onSetNavigationEnabled: (Boolean) -> Unit = { LiveTvRepository.setNavigationEnabled(it) }
 ) : NanoHTTPD(port) {
 
     private val gson = Gson()
@@ -37,11 +53,12 @@ class LiveTvConfigServer(
     }
 
     private fun serveWebPage(): Response {
-        return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", LiveTvWebPage.getHtml(context))
+        val html = context?.let { LiveTvWebPage.getHtml(it) }.orEmpty()
+        return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", html)
     }
 
     private fun serveConfig(): Response {
-        val uiState = LiveTvRepository.uiState.value
+        val uiState = uiStateProvider()
         val config = mapOf(
             "playlists" to uiState.playlists.map { p ->
                 mapOf(
@@ -65,7 +82,7 @@ class LiveTvConfigServer(
             ),
             "isNavigationEnabled" to uiState.isNavigationEnabled
         )
-        return newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", gson.toJson(config))
+        return jsonResponse(Response.Status.OK, gson.toJson(config))
     }
 
     private fun handleAddPlaylist(session: IHTTPSession): Response {
@@ -74,11 +91,11 @@ class LiveTvConfigServer(
         val url = body["url"]?.toString()?.trim().orEmpty()
 
         if (url.isBlank()) {
-            return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", """{"error":"URL cannot be empty"}""")
+            return jsonResponse(Response.Status.BAD_REQUEST, """{"error":"URL cannot be empty"}""")
         }
 
-        LiveTvRepository.addPlaylistUrl(name = name.ifBlank { null }, url = url)
-        return newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
+        onAddUrlPlaylist(name.ifBlank { null }, url)
+        return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
     private fun handleUploadPlaylist(session: IHTTPSession): Response {
@@ -88,11 +105,11 @@ class LiveTvConfigServer(
         val content = body["content"]?.toString()?.trim().orEmpty()
 
         if (content.isBlank()) {
-            return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", """{"error":"Content cannot be empty"}""")
+            return jsonResponse(Response.Status.BAD_REQUEST, """{"error":"Content cannot be empty"}""")
         }
 
-        LiveTvRepository.addLocalPlaylist(name = name.ifBlank { null }, fileName = fileName, content = content)
-        return newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
+        onAddLocalPlaylist(name.ifBlank { null }, fileName, content)
+        return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
     private fun handleDeletePlaylist(session: IHTTPSession): Response {
@@ -100,10 +117,10 @@ class LiveTvConfigServer(
         val id = body["id"]?.toString()?.trim().orEmpty()
 
         if (id.isNotBlank()) {
-            LiveTvRepository.removePlaylist(id)
+            onRemovePlaylist(id)
         }
 
-        return newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
+        return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
     private fun handleTogglePlaylist(session: IHTTPSession): Response {
@@ -112,10 +129,10 @@ class LiveTvConfigServer(
         val isEnabled = (body["isEnabled"] as? Boolean) ?: true
 
         if (id.isNotBlank()) {
-            LiveTvRepository.setPlaylistEnabled(id, isEnabled)
+            onSetPlaylistEnabled(id, isEnabled)
         }
 
-        return newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
+        return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
     private fun handleSaveXtream(session: IHTTPSession): Response {
@@ -131,9 +148,9 @@ class LiveTvConfigServer(
             password = password,
             isEnabled = isEnabled
         )
-        LiveTvRepository.saveXtreamSettings(settings)
+        onSaveXtream(settings)
 
-        return newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
+        return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
     private fun handleSaveStalker(session: IHTTPSession): Response {
@@ -147,34 +164,51 @@ class LiveTvConfigServer(
             macAddress = macAddress,
             isEnabled = isEnabled
         )
-        LiveTvRepository.saveStalkerSettings(settings)
+        onSaveStalker(settings)
 
-        return newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
+        return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
     private fun handleToggleNavigation(session: IHTTPSession): Response {
         val body = parseBody(session)
         val isEnabled = (body["isEnabled"] as? Boolean) ?: true
-        LiveTvRepository.setNavigationEnabled(isEnabled)
-        return newFixedLengthResponse(Response.Status.OK, "application/json", """{"status":"ok"}""")
+        onSetNavigationEnabled(isEnabled)
+        return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
+    private fun jsonResponse(status: Response.Status, body: String): Response =
+        newFixedLengthResponse(status, "application/json; charset=utf-8", body)
+
     private fun parseBody(session: IHTTPSession): Map<String, Any?> {
-        val bodyMap = HashMap<String, String>()
-        try {
-            session.parseBody(bodyMap)
-            val json = bodyMap["postData"] ?: ""
+        return try {
+            val json = readUtf8Body(session)
             if (json.isNotBlank()) {
-                return gson.fromJson(json, mapType) ?: emptyMap()
+                gson.fromJson(json, mapType) ?: emptyMap()
+            } else {
+                emptyMap()
             }
         } catch (e: Exception) {
             Log.e("LiveTvConfigServer", "Failed to parse body", e)
+            emptyMap()
         }
-        return emptyMap()
+    }
+
+    private fun readUtf8Body(session: IHTTPSession): String {
+        val length = session.headers["content-length"]?.trim()?.toIntOrNull() ?: return ""
+        if (length <= 0 || length > MAX_BODY_BYTES) return ""
+        val buffer = ByteArray(length)
+        var offset = 0
+        while (offset < length) {
+            val read = session.inputStream.read(buffer, offset, length - offset)
+            if (read <= 0) break
+            offset += read
+        }
+        return String(buffer, 0, offset, StandardCharsets.UTF_8)
     }
 
     companion object {
         private const val SOCKET_READ_TIMEOUT = 10000
+        private const val MAX_BODY_BYTES = 16 * 1024 * 1024
 
         fun startOnAvailablePort(
             context: Context,

@@ -2,6 +2,8 @@ package com.nuvio.tv.features.livetv
 
 import android.content.Context
 import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.nuvio.tv.R
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.core.server.DeviceIpAddress
@@ -15,6 +17,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
@@ -850,13 +854,20 @@ private fun createUrlPlaylist(url: String, customName: String? = null): LiveTvPl
         source = url,
     )
 
-private fun playlistNameFromUrl(url: String): String {
+internal fun playlistNameFromUrl(url: String): String {
     val trimmed = url.trim()
-    val fileName = trimmed
+    val rawFileName = trimmed
         .substringBefore('?')
         .substringAfterLast('/')
         .substringBeforeLast('.', missingDelimiterValue = "")
         .trim()
+    val fileName = if (rawFileName.contains('%')) {
+        runCatching {
+            URLDecoder.decode(rawFileName.replace("+", "%2B"), StandardCharsets.UTF_8.name())
+        }.getOrDefault(rawFileName).trim()
+    } else {
+        rawFileName
+    }
     if (fileName.isNotBlank()) return fileName
 
     return trimmed
@@ -877,20 +888,31 @@ private fun decodePlaylistEnabled(value: String?): Boolean =
 
 private const val playlistRecordSeparator = "\u001E"
 private const val playlistFieldSeparator = "\u001F"
+private val playlistsGson = Gson()
+private val playlistListType = object : TypeToken<List<LiveTvPlaylist>>() {}.type
 
-private fun encodePlaylists(playlists: List<LiveTvPlaylist>): String =
-    playlists.joinToString(playlistRecordSeparator) { playlist ->
-        listOf(
-            playlist.id,
-            playlist.name,
-            playlist.type.name,
-            playlist.source,
-            playlist.isEnabled.toString(),
-            playlist.epgUrl.orEmpty(),
-        ).joinToString(playlistFieldSeparator) { escapePlaylistField(it) }
+internal fun encodePlaylists(playlists: List<LiveTvPlaylist>): String =
+    playlistsGson.toJson(playlists)
+
+internal fun decodePlaylists(blob: String): List<LiveTvPlaylist> {
+    val trimmed = blob.trim()
+    if (trimmed.isEmpty()) return emptyList()
+    if (trimmed.startsWith("[")) {
+        val parsed = runCatching {
+            playlistsGson.fromJson<List<LiveTvPlaylist>>(trimmed, playlistListType)
+        }.getOrNull()
+        if (parsed != null) {
+            return parsed.mapNotNull { playlist ->
+                if (playlist.id.isBlank() || playlist.source.isBlank()) return@mapNotNull null
+                val safeName = playlist.name.takeIf(String::isNotBlank) ?: "M3U playlist"
+                if (safeName == playlist.name) playlist else playlist.copy(name = safeName)
+            }
+        }
     }
+    return decodeLegacyPlaylists(blob)
+}
 
-private fun decodePlaylists(blob: String): List<LiveTvPlaylist> =
+private fun decodeLegacyPlaylists(blob: String): List<LiveTvPlaylist> =
     blob
         .split(playlistRecordSeparator)
         .mapNotNull { record ->
@@ -908,12 +930,6 @@ private fun decodePlaylists(blob: String): List<LiveTvPlaylist> =
                 epgUrl = fields.getOrNull(5)?.takeIf(String::isNotBlank),
             )
         }
-
-private fun escapePlaylistField(value: String): String =
-    value
-        .replace("%", "%25")
-        .replace(playlistRecordSeparator, "%1E")
-        .replace(playlistFieldSeparator, "%1F")
 
 private fun unescapePlaylistField(value: String): String =
     value

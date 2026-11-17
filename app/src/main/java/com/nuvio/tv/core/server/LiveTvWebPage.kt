@@ -477,6 +477,15 @@ object LiveTvWebPage {
     }
   }
 
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function renderConfig() {
     // Render playlists
     const listEl = document.getElementById('playlist-list');
@@ -484,15 +493,15 @@ object LiveTvWebPage {
       listEl.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 16px;">$emptyPlaylistsText</div>';
     } else {
       listEl.innerHTML = currentConfig.playlists.map(p => {
-        const pName = p.name || 'Playlist';
-        const pUrl = p.isLocal ? 'Tệp cục bộ' : (p.url || '');
-        const pId = p.id || p.url;
+        const pName = escapeHtml(p.name || 'Playlist');
+        const pUrl = p.isLocal ? 'Tệp cục bộ' : escapeHtml(p.url || '');
+        const pId = escapeHtml(p.id || p.url || '');
         return '<div class="playlist-item">' +
           '<div class="playlist-info">' +
             '<div class="playlist-name">' + pName + '</div>' +
             '<div class="playlist-url">' + pUrl + '</div>' +
           '</div>' +
-          '<button class="btn-del" onclick="deletePlaylist(\'' + pId + '\')">🗑️</button>' +
+          '<button class="btn-del" data-id="' + pId + '" onclick="deletePlaylist(this.getAttribute(\'data-id\'))">🗑️</button>' +
         '</div>';
       }).join('');
     }
@@ -524,7 +533,7 @@ object LiveTvWebPage {
     try {
       const res = await fetch('/api/livetv/playlist/add', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ name: name || url, url: url })
       });
       if (res.ok) {
@@ -551,7 +560,7 @@ object LiveTvWebPage {
       try {
         const res = await fetch('/api/livetv/playlist/upload', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
           body: JSON.stringify({ name: playlistName, fileName: fileName, content: content })
         });
         if (res.ok) {
@@ -564,7 +573,7 @@ object LiveTvWebPage {
         alert('Network error: ' + err);
       }
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
   }
 
   async function deletePlaylist(id) {
@@ -572,7 +581,7 @@ object LiveTvWebPage {
     try {
       const res = await fetch('/api/livetv/playlist/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ id: id })
       });
       if (res.ok) {
@@ -592,7 +601,7 @@ object LiveTvWebPage {
     try {
       const res = await fetch('/api/livetv/xtream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ serverUrl, username, password, isEnabled: true })
       });
       if (res.ok) {
@@ -609,7 +618,7 @@ object LiveTvWebPage {
     try {
       const res = await fetch('/api/livetv/xtream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ serverUrl: '', username: '', password: '', isEnabled: false })
       });
       if (res.ok) {
@@ -631,7 +640,7 @@ object LiveTvWebPage {
     try {
       const res = await fetch('/api/livetv/stalker', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ portalUrl, macAddress, isEnabled: true })
       });
       if (res.ok) {
@@ -648,7 +657,7 @@ object LiveTvWebPage {
     try {
       const res = await fetch('/api/livetv/stalker', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ portalUrl: '', macAddress: '', isEnabled: false })
       });
       if (res.ok) {
@@ -666,7 +675,7 @@ object LiveTvWebPage {
     try {
       await fetch('/api/livetv/navigation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ isEnabled: enabled })
       });
       showToast(enabled ? '${if (isVi) "✅ Đã bật Live TV trên menu TV" else "✅ Live TV enabled in TV sidebar"}' : '${if (isVi) "✅ Đã tắt Live TV trên menu TV" else "✅ Live TV disabled in TV sidebar"}');
