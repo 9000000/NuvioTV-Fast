@@ -23,7 +23,8 @@ data class SimklPinSession(
     val userCode: String,
     val verificationUri: String,
     val expiresAtEpochMs: Long,
-    val intervalSeconds: Int
+    val intervalSeconds: Int,
+    val deviceCode: String? = null
 )
 
 data class SimklAuthState(
@@ -87,9 +88,12 @@ internal data class SimklPinResponse(
     @SerialName("user_code") val userCode: String? = null,
     @SerialName("verification_uri") val verificationUri: String? = null,
     @SerialName("verification_url") val verificationUrl: String? = null,
+    @SerialName("verification_uri_complete") val verificationUriComplete: String? = null,
     @SerialName("expires_in") val expiresIn: Long? = null,
     val interval: Int? = null,
-    @SerialName("access_token") val accessToken: String? = null
+    @SerialName("access_token") val accessToken: String? = null,
+    @SerialName("refresh_token") val refreshToken: String? = null,
+    @SerialName("token_type") val tokenType: String? = null
 )
 
 @Serializable

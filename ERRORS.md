@@ -1,5 +1,27 @@
 # Error Log
 
+## [2026-11-18 21:30] - Lỗi Kết Nối Simkl Với Client ID Mới (unauthorized_client: V2 vs V1)
+
+- **Type**: Integration
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/data/simkl/SimklAuthRepository.kt:35`
+- **Agent**: mon
+- **Root Cause**: Simkl đã chuyển hệ thống đăng ký App sang OAuth 2.0 (AUTH V2). Các Client ID mới tạo trên Simkl bị server từ chối khi gọi vào endpoint cũ `GET /oauth/pin` của V1. Trong khi đó, mã nguồn NuvioTV chỉ hỗ trợ V1 và regex PIN code không cho phép ký tự gạch ngang `-` trong `user_code` của V2 (`XXXX-XXXX`).
+- **Error Message**: 
+  ```json
+  {"error":"unauthorized_client","code":400,"message":"This client_id is an OAuth 2.0 app: use POST /oauth2/device instead of /oauth/pin"}
+  ```
+- **Fix Applied**: 
+  1. Thêm trường `deviceCode` vào `SimklPinSession` và cập nhật `SimklPinResponse` để nhận đủ các trường của V2 OAuth 2.0 Device flow.
+  2. Nâng cấp `startPinAuth()`: thử luồng V2 (`POST /oauth2/device`) trước, nếu không thành công thì fallback về V1 (`GET /oauth/pin`).
+  3. Nâng cấp `pollPin()`: hỗ trợ polling qua `POST /oauth2/token` với mã `urn:ietf:params:oauth:grant-type:device_code` khi có `deviceCode`, xử lý các trạng thái `authorization_pending`, `slow_down`, `expired_token`, `access_denied`.
+  4. Cập nhật `PIN_PATTERN = Regex("[A-Za-z0-9-]{4,16}")` để hỗ trợ định dạng mã người dùng V2 có dấu gạch ngang.
+  5. Bổ sung trọn bộ 5 unit test kiểm thử V2 trong `SimklAuthRepositoryTest.kt` và chạy pass 100%.
+- **Prevention**: Khi tích hợp các dịch vụ bên thứ ba (OAuth), luôn theo dõi các phiên bản API mới và thiết kế cơ chế fallback linh hoạt giữa các phiên bản API.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-15 09:28] - Poster Bị Khóa Cứng Không Di Chuyển Trái/Phải Được
 
 - **Type**: Logic

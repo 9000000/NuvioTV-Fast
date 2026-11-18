@@ -169,6 +169,82 @@ class SimklAuthRepositoryTest {
         assertNull(harness.storage.state.value.error)
     }
 
+    @Test
+    fun `v2 device creation persists device code and user code`() = runTest {
+        val harness = Harness(
+            response(
+                200,
+                """{"device_code":"DEV_123","user_code":"9WQ4-56HE","verification_uri":"https://simkl.com/pin","verification_uri_complete":"https://simkl.com/pin?user_code=9WQ4-56HE","expires_in":900,"interval":5}"""
+            )
+        )
+
+        val session = harness.repository.startPinAuth()
+
+        assertEquals("9WQ4-56HE", session.userCode)
+        assertEquals("DEV_123", session.deviceCode)
+        assertEquals("https://simkl.com/pin", session.verificationUri)
+        assertEquals(900_000L, session.expiresAtEpochMs)
+        assertEquals(5, session.intervalSeconds)
+        assertEquals(SimklConnectionMode.AWAITING_APPROVAL, harness.storage.state.value.mode)
+        assertEquals(SimklHttpMethod.POST.name, harness.engine.requests.single().method)
+        assertTrue(harness.engine.requests.single().url.contains("/oauth2/device"))
+    }
+
+    @Test
+    fun `v2 pending poll returns Pending on authorization_pending`() = runTest {
+        val harness = Harness(
+            response(400, """{"error":"authorization_pending","error_description":"The user has not yet approved this device"}""")
+        )
+        harness.storage.savePinSession(session(deviceCode = "DEV_123", userCode = "9WQ4-56HE"))
+
+        assertEquals(SimklPinPollResult.Pending, harness.repository.pollPin())
+        assertEquals("9WQ4-56HE", harness.storage.state.value.pinSession?.userCode)
+        assertFalse(harness.storage.state.value.isAuthenticated)
+        assertEquals(SimklHttpMethod.POST.name, harness.engine.requests.single().method)
+        assertTrue(harness.engine.requests.single().url.contains("/oauth2/token"))
+    }
+
+    @Test
+    fun `v2 approved poll stores token and loads identity`() = runTest {
+        val harness = Harness(
+            response(200, """{"access_token":"v2-secret-token","token_type":"Bearer","expires_in":604800}"""),
+            response(200, """{"user":{"name":"v2viewer"},"account":{"id":99}}""")
+        )
+        harness.storage.savePinSession(session(deviceCode = "DEV_123", userCode = "9WQ4-56HE"))
+
+        assertEquals(SimklPinPollResult.Authorized, harness.repository.pollPin())
+
+        assertEquals("v2-secret-token", harness.storage.accessToken())
+        assertNull(harness.storage.state.value.pinSession)
+        assertTrue(harness.storage.state.value.isAuthenticated)
+        assertEquals("v2viewer", harness.storage.state.value.username)
+        assertEquals(99L, harness.storage.state.value.accountId)
+    }
+
+    @Test
+    fun `v2 expired poll clears session and returns Expired`() = runTest {
+        val harness = Harness(
+            response(400, """{"error":"expired_token","error_description":"The device code has expired"}""")
+        )
+        harness.storage.savePinSession(session(deviceCode = "DEV_123", userCode = "9WQ4-56HE"))
+
+        assertEquals(SimklPinPollResult.Expired, harness.repository.pollPin())
+        assertNull(harness.storage.state.value.pinSession)
+        assertEquals(SimklAuthError.PIN_EXPIRED, harness.storage.state.value.error)
+    }
+
+    @Test
+    fun `v2 access_denied poll clears session and returns Invalidated`() = runTest {
+        val harness = Harness(
+            response(400, """{"error":"access_denied","error_description":"The user denied authorization"}""")
+        )
+        harness.storage.savePinSession(session(deviceCode = "DEV_123", userCode = "9WQ4-56HE"))
+
+        assertEquals(SimklPinPollResult.Invalidated, harness.repository.pollPin())
+        assertNull(harness.storage.state.value.pinSession)
+        assertEquals(SimklAuthError.PIN_INVALIDATED, harness.storage.state.value.error)
+    }
+
     private class Harness(
         vararg responses: SimklRawHttpResponse,
         configuration: SimklApiConfiguration = SimklApiConfiguration("client-id", "nuvio", "1.0")
@@ -335,11 +411,16 @@ class SimklAuthRepositoryTest {
         val body: String
     )
 
-    private fun session(expiresAt: Long = 100_000L) = SimklPinSession(
-        userCode = "ABCDE",
+    private fun session(
+        expiresAt: Long = 100_000L,
+        userCode: String = "ABCDE",
+        deviceCode: String? = null
+    ) = SimklPinSession(
+        userCode = userCode,
         verificationUri = "https://simkl.com/pin",
         expiresAtEpochMs = expiresAt,
-        intervalSeconds = 5
+        intervalSeconds = 5,
+        deviceCode = deviceCode
     )
 
     private fun response(status: Int, body: String = "") = SimklRawHttpResponse(status, body)
