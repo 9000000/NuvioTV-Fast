@@ -187,8 +187,8 @@ private fun CastDetailContent(
     val filmographyPosterStyle = remember(posterCardCornerRadiusDp, globalLandscape) {
         if (globalLandscape) {
             PosterCardStyle(
-                width = 112.dp,
-                height = 240.dp,
+                width = 260.dp,
+                height = 146.dp,
                 cornerRadius = posterCardCornerRadiusDp.dp,
                 focusedBorderWidth = PosterCardDefaults.Style.focusedBorderWidth,
                 focusedScale = PosterCardDefaults.Style.focusedScale
@@ -605,9 +605,10 @@ private fun FilmographyRow(
     val leanbackItems = remember(credits, globalLandscape, isItemWatched) {
         credits.mapIndexed { index, item ->
             LeanbackCardItem.Poster(
-                key = item.id + item.name + "_$index",
+                key = "${item.id}_${item.name}_$index",
                 title = item.name,
                 imageUrl = if (globalLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                fallbackImageUrl = item.rawPosterUrl,
                 isLandscape = globalLandscape,
                 isWatched = isItemWatched(item),
                 payload = item
@@ -627,47 +628,40 @@ private fun FilmographyRow(
     val shouldFocusRow = (!initialFocusDone && leanbackItems.isNotEmpty()) ||
         (restoreFocusToken > 0 && restoreItemId != null)
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(effectiveHeight + 52.dp)
-            .graphicsLayer { clip = false }
-    ) {
-        LeanbackNativeRow(
-            rowKey = "cast_filmography",
-            items = leanbackItems,
-            cardWidth = effectiveWidth,
-            cardHeight = effectiveHeight,
-            cornerRadius = posterCardStyle.cornerRadius,
-            showLabels = true,
-            animationsEnabled = NuvioTheme.animationsEnabled,
-            paddingValues = PaddingValues(
-                horizontal = NuvioTheme.spacing.xxxl,
-                vertical = NuvioTheme.spacing.xs
-            ),
-            itemSpacing = NuvioTheme.spacing.md,
-            initialFocusPosition = initialPos,
-            isPendingFocus = shouldFocusRow,
-            pendingFocusIndex = initialPos,
-            pendingFocusNonce = restoreFocusToken,
-            entryFocusRequester = firstItemFocusRequester,
-            onClearPendingFocus = {
-                initialFocusDone = true
-                if (restoreItemId != null) {
-                    onRestoreFocusHandled()
-                }
-            },
-            onNavigateUp = onNavigateUp,
-            onItemClick = { cardItem ->
-                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
-                onItemClick(item)
-            },
-            onItemLongClick = { cardItem ->
-                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
-                onItemLongPress(item)
+    LeanbackNativeRow(
+        rowKey = "cast_filmography",
+        items = leanbackItems,
+        cardWidth = effectiveWidth,
+        cardHeight = effectiveHeight,
+        cornerRadius = posterCardStyle.cornerRadius,
+        showLabels = true,
+        animationsEnabled = NuvioTheme.animationsEnabled,
+        paddingValues = PaddingValues(
+            horizontal = NuvioTheme.spacing.xxxl,
+            vertical = NuvioTheme.spacing.xs
+        ),
+        itemSpacing = NuvioTheme.spacing.md,
+        initialFocusPosition = initialPos,
+        isPendingFocus = shouldFocusRow,
+        pendingFocusIndex = initialPos,
+        pendingFocusNonce = restoreFocusToken,
+        entryFocusRequester = firstItemFocusRequester,
+        onClearPendingFocus = {
+            initialFocusDone = true
+            if (restoreItemId != null) {
+                onRestoreFocusHandled()
             }
-        )
-    }
+        },
+        onNavigateUp = onNavigateUp,
+        onItemClick = { cardItem ->
+            val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+            onItemClick(item)
+        },
+        onItemLongClick = { cardItem ->
+            val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+            onItemLongPress(item)
+        }
+    )
 }
 
 // ─── Loading / Error States ───

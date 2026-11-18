@@ -7,14 +7,21 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.util.AttributeSet
+import android.util.LruCache
 import android.util.TypedValue
 import android.view.View
 import androidx.core.graphics.ColorUtils
+import kotlin.math.roundToInt
 
 /**
  * High-fidelity 3-tier Skia Gaussian Bloom Glow View for Android TV.
  * Renders atmospheric neon bloom around cards with round stroke caps,
- * synchronized perfectly with card corner radius or circular avatars.
+ * synchronized with card corner radius or circular avatars.
+ *
+ * Optimization:
+ * - Shares immutable [BlurMaskFilter] instances across all ViewHolders via a static cache.
+ * - Allocates a `LAYER_TYPE_SOFTWARE` backing buffer ONLY while `visibility == VISIBLE`,
+ *   releasing it (`LAYER_TYPE_NONE`) immediately on `GONE`/`INVISIBLE`/detach.
  */
 class PlayStoreGlowView @JvmOverloads constructor(
     context: Context,
@@ -27,6 +34,7 @@ class PlayStoreGlowView @JvmOverloads constructor(
             if (field != value) {
                 field = value
                 updatePaints()
+                syncSoftwareLayer()
                 invalidate()
             }
         }
@@ -52,6 +60,7 @@ class PlayStoreGlowView @JvmOverloads constructor(
             if (field != value) {
                 field = value
                 updateFilters()
+                syncSoftwareLayer()
                 invalidate()
             }
         }
@@ -65,14 +74,6 @@ class PlayStoreGlowView @JvmOverloads constructor(
         }
 
     private val cardPath = Path()
-
-    // 3 Skia Gaussian Blur filters for realistic TV Neon Glow:
-    // 1. Aura: Soft atmospheric dispersion spreading into dark background
-    // 2. Mid: Optical saturated beam hugging card edges and corners
-    // 3. Core: High-intensity white-blended neon core filament
-    private var coreFilter: BlurMaskFilter? = null
-    private var midFilter: BlurMaskFilter? = null
-    private var auraFilter: BlurMaskFilter? = null
 
     private val auraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -94,31 +95,45 @@ class PlayStoreGlowView @JvmOverloads constructor(
         updatePaints()
     }
 
+    override fun setVisibility(visibility: Int) {
+        super.setVisibility(visibility)
+        syncSoftwareLayer()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        syncSoftwareLayer()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        if (layerType != LAYER_TYPE_NONE) {
+            setLayerType(LAYER_TYPE_NONE, null)
+        }
+    }
+
+    private fun syncSoftwareLayer() {
+        val needsSoftwareLayer = isAttachedToWindow &&
+            visibility == VISIBLE &&
+            glowSpreadPx > 0f &&
+            glowColor != 0
+        val desiredLayer = if (needsSoftwareLayer) LAYER_TYPE_SOFTWARE else LAYER_TYPE_NONE
+        if (layerType != desiredLayer) {
+            setLayerType(desiredLayer, null)
+        }
+    }
+
     private fun updateFilters() {
         if (glowSpreadPx <= 0f) {
-            coreFilter = null
-            midFilter = null
-            auraFilter = null
             corePaint.maskFilter = null
             midPaint.maskFilter = null
             auraPaint.maskFilter = null
-            if (layerType != LAYER_TYPE_NONE) {
-                setLayerType(LAYER_TYPE_NONE, null)
-            }
             return
         }
-        if (layerType != LAYER_TYPE_SOFTWARE) {
-            setLayerType(LAYER_TYPE_SOFTWARE, null)
-        }
-        val rCore = (glowSpreadPx * 0.15f).coerceAtLeast(1f)
-        val rMid = (glowSpreadPx * 0.35f).coerceAtLeast(1f)
-        val rAura = (glowSpreadPx * 0.65f).coerceAtLeast(1f)
-        coreFilter = BlurMaskFilter(rCore, BlurMaskFilter.Blur.NORMAL)
-        midFilter = BlurMaskFilter(rMid, BlurMaskFilter.Blur.NORMAL)
-        auraFilter = BlurMaskFilter(rAura, BlurMaskFilter.Blur.NORMAL)
-        corePaint.maskFilter = coreFilter
-        midPaint.maskFilter = midFilter
-        auraPaint.maskFilter = auraFilter
+        val filters = obtainBlurFilterSet(glowSpreadPx)
+        corePaint.maskFilter = filters.core
+        midPaint.maskFilter = filters.mid
+        auraPaint.maskFilter = filters.aura
 
         auraPaint.strokeWidth = (glowSpreadPx * 0.75f).coerceAtLeast(4f)
         midPaint.strokeWidth = (glowSpreadPx * 0.40f).coerceAtLeast(2f)
@@ -142,6 +157,7 @@ class PlayStoreGlowView @JvmOverloads constructor(
         val cardTop = margin
         val cardRight = width - margin
         val cardBottom = height - margin
+        if (cardRight <= cardLeft || cardBottom <= cardTop) return
 
         cardPath.reset()
         if (isCircle) {
@@ -170,5 +186,33 @@ class PlayStoreGlowView @JvmOverloads constructor(
             canvas.drawPath(cardPath, corePaint)
         }
     }
-}
 
+    private data class BlurFilterSet(
+        val core: BlurMaskFilter,
+        val mid: BlurMaskFilter,
+        val aura: BlurMaskFilter
+    )
+
+    companion object {
+        private val filterCache = LruCache<Int, BlurFilterSet>(12)
+
+        private fun obtainBlurFilterSet(spreadPx: Float): BlurFilterSet {
+            val bucketKey = (spreadPx * 10f).roundToInt().coerceAtLeast(1)
+            synchronized(filterCache) {
+                filterCache.get(bucketKey)?.let { return it }
+            }
+            val rCore = (spreadPx * 0.15f).coerceAtLeast(1f)
+            val rMid = (spreadPx * 0.35f).coerceAtLeast(1f)
+            val rAura = (spreadPx * 0.65f).coerceAtLeast(1f)
+            val created = BlurFilterSet(
+                core = BlurMaskFilter(rCore, BlurMaskFilter.Blur.NORMAL),
+                mid = BlurMaskFilter(rMid, BlurMaskFilter.Blur.NORMAL),
+                aura = BlurMaskFilter(rAura, BlurMaskFilter.Blur.NORMAL)
+            )
+            synchronized(filterCache) {
+                filterCache.put(bucketKey, created)
+            }
+            return created
+        }
+    }
+}

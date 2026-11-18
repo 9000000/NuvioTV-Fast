@@ -15,7 +15,8 @@ import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 
 /**
  * Android Leanback VerticalGridView customized for 2D TV Grids in Jetpack Compose.
- * Powers Catalog See All, Library, Search Discover, and Home Grid at native 60fps.
+ * Powers Catalog See All, Folder Tabbed Grid, and Search Discover at native 60fps
+ * with RTL column awareness and 2D row-ahead artwork prefetching.
  */
 class InteropVerticalGridView @JvmOverloads constructor(
     context: Context,
@@ -49,7 +50,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
     init {
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         itemAnimator = null
-        layoutManager?.isItemPrefetchEnabled = false
+        layoutManager?.isItemPrefetchEnabled = true
         setHasFixedSize(true)
         setItemViewCacheSize(12)
 
@@ -69,14 +70,18 @@ class InteropVerticalGridView @JvmOverloads constructor(
                 position: Int,
                 subposition: Int
             ) {
-                if (child != null) {
-                    if (pendingTargetPosition == position || hasFocus()) {
+                val hasGridFocus = pendingTargetPosition == position || hasFocus()
+                if (child != null && hasGridFocus) {
+                    if (!child.itemView.hasFocus()) {
                         child.itemView.requestFocus()
-                        (child as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
-                        if (pendingTargetPosition == position) {
-                            pendingTargetPosition = RecyclerView.NO_POSITION
-                        }
                     }
+                    (child as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                    if (pendingTargetPosition == position) {
+                        pendingTargetPosition = RecyclerView.NO_POSITION
+                    }
+                    universalAdapter?.onGridPositionFocused(context, position, numColumnsCount)
+                } else if (hasGridFocus) {
+                    universalAdapter?.onGridPositionFocused(context, position, numColumnsCount)
                 }
 
                 val totalCount = universalAdapter?.itemCount ?: 0
@@ -161,13 +166,12 @@ class InteropVerticalGridView @JvmOverloads constructor(
 
         when (direction) {
             View.FOCUS_LEFT, View.FOCUS_RIGHT -> {
-                // Focus inside grid must NEVER escape to outside views (e.g. category dropdowns)
+                // Focus inside grid must NEVER escape to outside views via focusSearch
                 if (result == null || !isChildOfThis(result)) {
                     return focused ?: findFocus()
                 }
             }
             View.FOCUS_UP -> {
-                // Only allow escaping to category / filters when focus is on the first row
                 if (!isFirstRow) {
                     val targetPos = actualPos - cols
                     if (targetPos >= 0) {
@@ -212,15 +216,15 @@ class InteropVerticalGridView @JvmOverloads constructor(
         val vh = findViewHolderForAdapterPosition(targetPos)
         if (vh != null) {
             vh.itemView.requestFocus()
-            (vh as? com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder)?.updateFocusVisual(true)
+            (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
             pendingTargetPosition = RecyclerView.NO_POSITION
         } else {
             post {
-                if (isAttachedToWindow) {
+                if (isAttachedToWindow && pendingTargetPosition == targetPos) {
                     val deferredVh = findViewHolderForAdapterPosition(targetPos)
                     if (deferredVh != null) {
                         deferredVh.itemView.requestFocus()
-                        (deferredVh as? com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                        (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
                         pendingTargetPosition = RecyclerView.NO_POSITION
                     }
                 }
@@ -244,7 +248,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
         try { super.removeViews(start, count) } catch (_: Exception) {}
     }
 
-    override fun removeView(view: View?) {
+    override fun removeView(view: View) {
         try { super.removeView(view) } catch (_: Exception) {}
     }
 
@@ -278,6 +282,9 @@ class InteropVerticalGridView @JvmOverloads constructor(
 
     override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
         if (event == null) return false
+        val isRtl = layoutDirection == LAYOUT_DIRECTION_RTL
+        val towardStartColKey = if (isRtl) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
+        val towardEndColKey = if (isRtl) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
 
         if (event.action == KeyEvent.ACTION_UP) {
             when (event.keyCode) {
@@ -292,7 +299,6 @@ class InteropVerticalGridView @JvmOverloads constructor(
                     }
                     pendingTargetPosition = RecyclerView.NO_POSITION
 
-                    // Thả phím: trượt mượt mà về vị trí đích, không gọi stopScroll() gây gián đoạn snap keyline
                     if (animationsEnabled) {
                         setSelectedPositionSmooth(target)
                     } else {
@@ -304,13 +310,13 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         if (!vh.itemView.hasFocus()) {
                             vh.itemView.requestFocus()
                         }
-                        (vh as? com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                        (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
                     } else {
                         post {
                             if (isAttachedToWindow) {
                                 val deferredVh = findViewHolderForAdapterPosition(target)
                                 deferredVh?.itemView?.requestFocus()
-                                (deferredVh as? com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder)?.updateFocusVisual(true)
+                                (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
                             }
                         }
                     }
@@ -372,12 +378,10 @@ class InteropVerticalGridView @JvmOverloads constructor(
                     }
                     return true
                 }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                towardStartColKey -> {
                     if (currentColumn == 0) {
-                        if (event.repeatCount == 0 && onNavigateLeftOnFirstColumn != null) {
-                            if (onNavigateLeftOnFirstColumn?.invoke() == true) {
-                                return true
-                            }
+                        if (event.repeatCount == 0 && onNavigateLeftOnFirstColumn?.invoke() == true) {
+                            return true
                         }
                         return true
                     } else {
@@ -392,7 +396,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         return true
                     }
                 }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                towardEndColKey -> {
                     if (currentColumn == cols - 1 || actualPos == totalItems - 1) {
                         if (event.repeatCount == 0 && onNavigateRightOnLastColumn?.invoke() == true) {
                             return true
@@ -430,4 +434,3 @@ class InteropVerticalGridView @JvmOverloads constructor(
         return false
     }
 }
-

@@ -554,6 +554,7 @@ internal fun DiscoverGrid(
                 key = item.id.ifEmpty { "discover_${filterKey}_$index" },
                 title = item.name,
                 imageUrl = if (globalLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                fallbackImageUrl = item.rawPosterUrl,
                 isLandscape = globalLandscape,
                 isWatched = isWatched,
                 payload = Pair(index, item)

@@ -1,15 +1,18 @@
 package com.nuvio.tv.ui.leanback.holder
 
+import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.core.graphics.ColorUtils
 import androidx.recyclerview.widget.RecyclerView
+import coil3.BitmapImage
+import coil3.Image
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
 import com.nuvio.tv.ui.leanback.container.InteropVerticalGridView
@@ -18,9 +21,37 @@ import com.nuvio.tv.ui.leanback.core.PlayStoreGlowView
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 
 /**
+ * Root LinearLayout that isolates `getRootView()` to prevent Android's `rootViewRequestFocus()`
+ * from escaping up to `DecorView` / `AndroidComposeView` during RecyclerView detach or recycling.
+ */
+class FocusIsolatedRootLayout(context: Context) : LinearLayout(context) {
+    override fun getRootView(): View = this
+}
+
+internal data class LeanbackCardChromeMetrics(
+    val glowSpreadPx: Float,
+    val glowMarginPx: Int,
+    val borderWidthPx: Int
+)
+
+internal fun computeLeanbackCardChromeMetrics(context: Context): LeanbackCardChromeMetrics {
+    val metrics = context.resources.displayMetrics
+    val glowSpreadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 18f, metrics)
+    val glowMarginPx = (glowSpreadPx * 1.35f).toInt()
+    val borderWidthPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2.0f, metrics)
+        .toInt()
+        .coerceAtLeast(2)
+    return LeanbackCardChromeMetrics(
+        glowSpreadPx = glowSpreadPx,
+        glowMarginPx = glowMarginPx,
+        borderWidthPx = borderWidthPx
+    )
+}
+
+/**
  * Base ViewHolder for all Leanback Native Cards.
- * Implements standard 60fps focus animations, deferred glow, zero GPU overdraw,
- * and key event delegation.
+ * Implements standard 60fps focus visuals, deferred glow, zero GPU overdraw,
+ * placeholder restoration, and key event delegation.
  */
 abstract class LeanbackBaseViewHolder(
     val root: LinearLayout,
@@ -32,7 +63,6 @@ abstract class LeanbackBaseViewHolder(
     var adapter: LeanbackUniversalAdapter
 ) : RecyclerView.ViewHolder(root) {
 
-    protected val interpolator = DecelerateInterpolator(1.5f)
     var currentDominantColor: Int = LeanbackColorEngine.defaultFallbackColor
     protected var currentItem: LeanbackCardItem? = null
     open val isCircle: Boolean get() = false
@@ -57,6 +87,42 @@ abstract class LeanbackBaseViewHolder(
             placeholderBackgroundDrawable.shape = GradientDrawable.RECTANGLE
             placeholderBackgroundDrawable.setColor(Color.parseColor("#1A1A1A"))
             placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
+        }
+    }
+
+    protected fun ensurePlaceholderBackground() {
+        applyPlaceholderBackgroundShape()
+        if (cardContainer.background !== placeholderBackgroundDrawable) {
+            cardContainer.background = placeholderBackgroundDrawable
+        }
+    }
+
+    protected fun resolveDominantColorFromImage(
+        result: Image,
+        boundKey: String,
+        colorCacheKey: String,
+        notifyIfCachedAndFocused: Boolean
+    ) {
+        val existingColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
+        if (existingColor != null) {
+            currentDominantColor = existingColor
+            if (notifyIfCachedAndFocused && root.hasFocus()) {
+                updateFocusVisual(true)
+            }
+            return
+        }
+        val bmp = (result as? BitmapImage)?.bitmap
+        if (bmp != null && !bmp.isRecycled) {
+            LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
+                if (currentItem?.key == boundKey) {
+                    currentDominantColor = extracted
+                    if (root.hasFocus()) {
+                        updateFocusVisual(true)
+                    }
+                }
+            }
+        } else if (notifyIfCachedAndFocused && root.hasFocus()) {
+            updateFocusVisual(true)
         }
     }
 
@@ -124,13 +190,14 @@ abstract class LeanbackBaseViewHolder(
         root.removeCallbacks(deferredGlowRunnable)
         val anim = adapter.animationsEnabled()
         root.animate().cancel()
-        root.scaleX = 1.0f
-        root.scaleY = 1.0f
+        if (root.scaleX != 1.0f) root.scaleX = 1.0f
+        if (root.scaleY != 1.0f) root.scaleY = 1.0f
 
         // Lift focused card so glow and borders are never drawn over by adjacent views
-        root.translationZ = if (hasFocus) 12f else 0f
-        cardContainer.elevation = 0f
-        cardContainer.translationZ = 0f
+        val targetZ = if (hasFocus) 12f else 0f
+        if (root.translationZ != targetZ) root.translationZ = targetZ
+        if (cardContainer.elevation != 0f) cardContainer.elevation = 0f
+        if (cardContainer.translationZ != 0f) cardContainer.translationZ = 0f
 
         if (isCircle) {
             focusBorderDrawable.shape = GradientDrawable.OVAL
@@ -176,10 +243,6 @@ abstract class LeanbackBaseViewHolder(
         currentItem = null
         glowView.visibility = View.GONE
         cardContainer.foreground = null
-        applyPlaceholderBackgroundShape()
-        if (cardContainer.background !== placeholderBackgroundDrawable) {
-            cardContainer.background = placeholderBackgroundDrawable
-        }
+        ensurePlaceholderBackground()
     }
 }
-

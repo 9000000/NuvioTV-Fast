@@ -185,9 +185,10 @@ fun CatalogSeeAllScreen(
                         uiState.movieWatchedStatus[com.nuvio.tv.ui.screens.home.homeItemStatusKey(item.id, item.apiType)] == true
                     }
                     LeanbackCardItem.Poster(
-                        key = "${catalogRow.stableKey()}_$index",
+                        key = "${catalogRow.stableKey()}_${item.id}_$index",
                         title = item.name,
                         imageUrl = if (isLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                        fallbackImageUrl = item.rawPosterUrl,
                         isLandscape = isLandscape,
                         isWatched = isWatched,
                         payload = item

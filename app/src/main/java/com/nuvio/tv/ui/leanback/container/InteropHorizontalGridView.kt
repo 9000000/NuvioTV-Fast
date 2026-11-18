@@ -15,7 +15,7 @@ import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 
 /**
  * Android Leanback HorizontalGridView customized for Jetpack Compose interop.
- * Handles D-pad rapid key acceleration, boundary edge transitions,
+ * Handles D-pad rapid key acceleration, RTL directional mapping, boundary edge transitions,
  * detached view sanitization, and layout race prevention.
  */
 class InteropHorizontalGridView @JvmOverloads constructor(
@@ -52,7 +52,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             scrollState != RecyclerView.SCROLL_STATE_IDLE
 
     private var arrivalAt0Time = 0L
-    private var arrivedAt0FromRight = false
+    private var arrivedAt0FromEnd = false
     private var hasReleasedKeyAfterArrivingAt0 = true
     private var lastHorizontalKeyTime = 0L
     private var lastVerticalKeyTime = 0L
@@ -92,20 +92,21 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 subposition: Int
             ) {
                 val isPendingTarget = (position == pendingTargetPosition) || (pendingTargetPosition != RecyclerView.NO_POSITION)
-                if (position == pendingTargetPosition) {
+                // Keep pendingTargetPosition intact until the target ViewHolder is actually laid out
+                if (position == pendingTargetPosition && child != null) {
                     pendingTargetPosition = RecyclerView.NO_POSITION
                 }
                 if (position == 0) {
                     arrivalAt0Time = SystemClock.uptimeMillis()
                 } else {
-                    arrivedAt0FromRight = true
+                    arrivedAt0FromEnd = true
                     hasReleasedKeyAfterArrivingAt0 = false
                 }
 
                 restoredPosition = position
 
-                val hasGridFocus = hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
-                    isHoldingHorizontalKey || isPendingTarget
+                val hasGridFocus = (hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
+                    isHoldingHorizontalKey || isPendingTarget) && mayTakeFocus()
                 if (child != null && hasGridFocus) {
                     if (!child.itemView.hasFocus()) {
                         child.itemView.requestFocus()
@@ -130,18 +131,24 @@ class InteropHorizontalGridView @JvmOverloads constructor(
 
     fun ensureTargetChildFocused(targetPos: Int, direction: Int, retryCount: Int = 0) {
         if (!isAttachedToWindow || !mayTakeFocus()) return
+        // Abort stale retry if the user already moved to a newer horizontal target
+        val activeTarget = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+            pendingTargetPosition
+        } else {
+            selectedPosition
+        }
+        if (activeTarget != RecyclerView.NO_POSITION && activeTarget != targetPos) return
+
         val vh = findViewHolderForAdapterPosition(targetPos)
         if (vh != null) {
             if (!vh.itemView.hasFocus()) {
                 vh.itemView.requestFocus(direction)
             }
             (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
-        } else {
-            if (retryCount < 10) {
-                post {
-                    if (isAttachedToWindow && mayTakeFocus()) {
-                        ensureTargetChildFocused(targetPos, direction, retryCount + 1)
-                    }
+        } else if (retryCount < 10) {
+            post {
+                if (isAttachedToWindow && mayTakeFocus()) {
+                    ensureTargetChildFocused(targetPos, direction, retryCount + 1)
                 }
             }
         }
@@ -230,19 +237,22 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         }
         val total = universalAdapter?.itemCount ?: 0
         val currentPos = selectedPosition
-        if (direction == View.FOCUS_LEFT && currentPos <= 0) {
+        val isRtl = layoutDirection == LAYOUT_DIRECTION_RTL
+        val towardStartDir = if (isRtl) View.FOCUS_RIGHT else View.FOCUS_LEFT
+        val towardEndDir = if (isRtl) View.FOCUS_LEFT else View.FOCUS_RIGHT
+
+        if (direction == towardStartDir && currentPos <= 0) {
             return focused ?: findFocus() ?: this
         }
-        if (direction == View.FOCUS_RIGHT && total > 0 && currentPos >= total - 1) {
+        if (direction == towardEndDir && total > 0 && currentPos >= total - 1) {
             return focused ?: findFocus() ?: this
         }
         val result = super.focusSearch(focused, direction)
         if (result == null || result === this || !isChildOfThis(result)) {
-            val fallback = focused?.takeIf { isChildOfThis(it) }
+            return focused?.takeIf { isChildOfThis(it) }
                 ?: findFocus()?.takeIf { isChildOfThis(it) }
                 ?: findViewHolderForAdapterPosition(currentPos)?.itemView
                 ?: this
-            return fallback
         }
         return result
     }
@@ -263,7 +273,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         try { super.removeViews(start, count) } catch (_: Exception) {}
     }
 
-    override fun removeView(view: View?) {
+    override fun removeView(view: View) {
         try { super.removeView(view) } catch (_: Exception) {}
     }
 
@@ -286,7 +296,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         } else {
             if (selectedPosition <= 0) {
                 hasReleasedKeyAfterArrivingAt0 = true
-                arrivedAt0FromRight = false
+                arrivedAt0FromEnd = false
             }
             if (findFocus() === this) {
                 val targetPos = selectedPosition.coerceAtLeast(0)
@@ -309,6 +319,11 @@ class InteropHorizontalGridView @JvmOverloads constructor(
 
     override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
         if (event == null) return false
+        val isRtl = layoutDirection == LAYOUT_DIRECTION_RTL
+        val towardStartKey = if (isRtl) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
+        val towardEndKey = if (isRtl) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+        val towardStartFocusDir = if (isRtl) View.FOCUS_RIGHT else View.FOCUS_LEFT
+        val towardEndFocusDir = if (isRtl) View.FOCUS_LEFT else View.FOCUS_RIGHT
 
         if (event.action == KeyEvent.ACTION_UP) {
             when (event.keyCode) {
@@ -331,13 +346,12 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     }
                     pendingTargetPosition = RecyclerView.NO_POSITION
 
-                    if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && target <= 0) {
+                    if (event.keyCode == towardStartKey && target <= 0) {
                         hasReleasedKeyAfterArrivingAt0 = true
-                        arrivedAt0FromRight = false
+                        arrivedAt0FromEnd = false
                     }
 
-                    // Không gọi stopScroll() gây ngắt cụt và lệch lửng poster.
-                    // Sử dụng setSelectedPositionSmooth để Leanback trôi êm và tự khớp chuẩn vào keyline
+                    // Never call stopScroll() — let Leanback settle smoothly onto the keyline
                     if (animationsEnabled) {
                         setSelectedPositionSmooth(target)
                     } else {
@@ -366,16 +380,16 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             val focusedChild = findFocus()
             val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
             val resolvedHolderPos = holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
-                ?: selectedPosition
-            val actualPos = if (isHoldingHorizontalKey && pendingTargetPosition != RecyclerView.NO_POSITION) {
-                pendingTargetPosition
-            } else {
-                resolvedHolderPos
+            val resolvedSelectedPos = selectedPosition.takeIf { it != RecyclerView.NO_POSITION }
+            val actualPos = when {
+                pendingTargetPosition != RecyclerView.NO_POSITION -> pendingTargetPosition
+                scrollState == RecyclerView.SCROLL_STATE_IDLE -> resolvedHolderPos ?: resolvedSelectedPos ?: 0
+                else -> resolvedSelectedPos ?: resolvedHolderPos ?: 0
             }
             val total = universalAdapter?.itemCount ?: 0
 
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                towardStartKey -> {
                     if (actualPos <= 0 || total <= 0) {
                         pendingTargetPosition = 0
                         if (selectedPosition != 0) {
@@ -385,7 +399,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                                 setSelectedPosition(0)
                             }
                         }
-                        val arrivedRecently = arrivedAt0FromRight && (now - arrivalAt0Time < 300L)
+                        val arrivedRecently = arrivedAt0FromEnd && (now - arrivalAt0Time < 300L)
                         if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
                             if (onNavigateLeftOnFirstItem?.invoke() == true) {
                                 isNavigatingToSidebar = true
@@ -412,20 +426,32 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
                         setSelectedPosition(target)
-                        nextVh?.itemView?.requestFocus(View.FOCUS_LEFT)
+                        if (nextVh != null) {
+                            nextVh.itemView.requestFocus(towardStartFocusDir)
+                        } else {
+                            ensureTargetChildFocused(target, towardStartFocusDir)
+                        }
                         return true
                     }
                     setSelectedPositionSmooth(target)
                     if (nextVh != null) {
-                        nextVh.itemView.requestFocus(View.FOCUS_LEFT)
+                        nextVh.itemView.requestFocus(towardStartFocusDir)
                     } else {
-                        ensureTargetChildFocused(target, View.FOCUS_LEFT)
+                        ensureTargetChildFocused(target, towardStartFocusDir)
                     }
                     return true
                 }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                towardEndKey -> {
                     if (total <= 0 || actualPos >= total - 1) {
-                        pendingTargetPosition = RecyclerView.NO_POSITION
+                        val lastIdx = (total - 1).coerceAtLeast(0)
+                        pendingTargetPosition = lastIdx
+                        if (selectedPosition != lastIdx && total > 0) {
+                            if (animationsEnabled) {
+                                setSelectedPositionSmooth(lastIdx)
+                            } else {
+                                setSelectedPosition(lastIdx)
+                            }
+                        }
                         return true
                     }
 
@@ -441,19 +467,19 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     pendingTargetPosition = target
                     val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
-                        stopScroll()
                         setSelectedPosition(target)
-                        nextVh?.itemView?.requestFocus(View.FOCUS_RIGHT)
+                        if (nextVh != null) {
+                            nextVh.itemView.requestFocus(towardEndFocusDir)
+                        } else {
+                            ensureTargetChildFocused(target, towardEndFocusDir)
+                        }
                         return true
                     }
+                    setSelectedPositionSmooth(target)
                     if (nextVh != null) {
-                        val focused = nextVh.itemView.requestFocus(View.FOCUS_RIGHT)
-                        if (!focused) {
-                            setSelectedPositionSmooth(target)
-                        }
+                        nextVh.itemView.requestFocus(towardEndFocusDir)
                     } else {
-                        setSelectedPositionSmooth(target)
-                        ensureTargetChildFocused(target, View.FOCUS_RIGHT)
+                        ensureTargetChildFocused(target, towardEndFocusDir)
                     }
                     return true
                 }
@@ -494,4 +520,3 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         return false
     }
 }
-

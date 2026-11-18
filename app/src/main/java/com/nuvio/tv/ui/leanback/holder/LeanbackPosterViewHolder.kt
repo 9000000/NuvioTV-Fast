@@ -1,10 +1,9 @@
 package com.nuvio.tv.ui.leanback.holder
 
-import android.graphics.Bitmap
+import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
@@ -15,15 +14,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import coil3.BitmapImage
-import coil3.Image
-import coil3.SingletonImageLoader
-import coil3.asDrawable
-import coil3.request.ImageRequest
-import coil3.request.allowHardware
-import coil3.request.crossfade
-import coil3.target.Target
+import coil3.request.Disposable
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
+import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
 import com.nuvio.tv.ui.leanback.core.PillProgressBarDrawable
 import com.nuvio.tv.ui.leanback.core.PlayStoreGlowView
@@ -31,7 +24,7 @@ import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 
 /**
  * Leanback ViewHolder for standard Poster cards (Portrait 2:3 or Landscape 16:9).
- * Used across Home, Library, Catalog, Search, and More Like This.
+ * Used across Classic Home, Library, Catalog, Search, Cast Filmography, Collection, and More Like This.
  */
 class LeanbackPosterViewHolder(
     root: LinearLayout,
@@ -50,8 +43,9 @@ class LeanbackPosterViewHolder(
 ) : LeanbackBaseViewHolder(
     root, cardContainer, glowView, cornerRadiusPx, borderWidthPx, glowMarginPx, adapter
 ) {
-    private var imageDisposable: coil3.request.Disposable? = null
+    private var imageDisposable: Disposable? = null
     private var boundImageUrl: String? = null
+    private var boundFallbackUrl: String? = null
     private var boundWidthPx: Int = 0
     private var boundHeightPx: Int = 0
 
@@ -89,21 +83,27 @@ class LeanbackPosterViewHolder(
         cornerRadiusPx: Float,
         showLabels: Boolean
     ) {
+        val posterItem = item as? LeanbackCardItem.Poster
         val imageUrl = item.imageUrl
+        val fallbackUrl = posterItem?.fallbackImageUrl
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
         val sameImageRequest = currentItem?.key == item.key &&
             boundImageUrl == imageUrl &&
+            boundFallbackUrl == fallbackUrl &&
             boundWidthPx == wPx &&
             boundHeightPx == hPx &&
             (posterImage.drawable != null || imageDisposable?.isDisposed == false)
-        if (!sameImageRequest) {
-            posterImage.setImageDrawable(null)
-        }
+
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
 
-        val colorCacheKey = item.imageUrl ?: item.key
+        if (!sameImageRequest) {
+            posterImage.setImageDrawable(null)
+            ensurePlaceholderBackground()
+        }
+
+        val colorCacheKey = imageUrl ?: item.key
         val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
         currentDominantColor = cachedColor ?: LeanbackColorEngine.defaultFallbackColor
 
@@ -126,8 +126,6 @@ class LeanbackPosterViewHolder(
             }
         }
 
-        val posterItem = item as? LeanbackCardItem.Poster
-
         // Title & Subtitle text
         if (showLabels && titleText != null && item.title.isNotBlank()) {
             titleText.visibility = View.VISIBLE
@@ -144,7 +142,7 @@ class LeanbackPosterViewHolder(
             subtitleText?.visibility = View.GONE
         }
 
-        // Progress bar for Continue Watching
+        // Progress bar
         val progress = posterItem?.progressPercent
         if (progress != null && progress > 0 && progressBar != null) {
             progressBar.visibility = View.VISIBLE
@@ -172,97 +170,50 @@ class LeanbackPosterViewHolder(
         // Coil image loading with zero GPU overdraw & MemoryCache fast-path
         if (!imageUrl.isNullOrBlank()) {
             if (!sameImageRequest) {
-                val ctx = posterImage.context
                 val boundKey = item.key
-                val mappedUrl = com.nuvio.tv.core.image.sizedHomeArtworkUrl(imageUrl, wPx, hPx)
-                val memKeyStr = "${mappedUrl}_${wPx}x${hPx}"
-                val imageLoader = SingletonImageLoader.get(ctx)
-                val cachedVal = imageLoader.memoryCache?.get(coil3.memory.MemoryCache.Key(memKeyStr))
                 boundImageUrl = imageUrl
+                boundFallbackUrl = fallbackUrl
                 boundWidthPx = wPx
                 boundHeightPx = hPx
                 imageDisposable?.dispose()
-                if (cachedVal != null) {
-                    imageDisposable = null
-                    val result = cachedVal.image
-                    posterImage.setImageDrawable(result.asDrawable(ctx.resources))
-                    cardContainer.background = null
-                    val existingColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
-                    if (existingColor != null) {
-                        currentDominantColor = existingColor
-                    } else {
-                        val bmp = (result as? BitmapImage)?.bitmap
-                        if (bmp != null && !bmp.isRecycled) {
-                            LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
-                                if (currentItem?.key == boundKey) {
-                                    currentDominantColor = extracted
-                                    if (root.hasFocus()) {
-                                        updateFocusVisual(true)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    val request = ImageRequest.Builder(ctx)
-                        .data(imageUrl)
-                        .memoryCacheKey(memKeyStr)
-                        .size(wPx, hPx)
-                        .allowHardware(false)
-                        .crossfade(false)
-                        .target(
-                            object : Target {
-                                override fun onStart(placeholder: Image?) {
-                                    if (currentItem?.key != boundKey) return
-                                    if (placeholder != null) {
-                                        posterImage.setImageDrawable(placeholder.asDrawable(ctx.resources))
-                                    }
-                                }
-
-                                override fun onSuccess(result: Image) {
-                                    if (currentItem?.key != boundKey) return
-                                    posterImage.setImageDrawable(result.asDrawable(ctx.resources))
-                                    // Zero GPU Overdraw: remove background when image covers container
-                                    cardContainer.background = null
-                                    val existingColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
-                                    if (existingColor != null) {
-                                        currentDominantColor = existingColor
-                                        if (root.hasFocus()) {
-                                            updateFocusVisual(true)
-                                        }
-                                    } else {
-                                        val bmp = (result as? BitmapImage)?.bitmap
-                                        if (bmp != null && !bmp.isRecycled) {
-                                            LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
-                                                if (currentItem?.key == boundKey) {
-                                                    currentDominantColor = extracted
-                                                    if (root.hasFocus()) {
-                                                        updateFocusVisual(true)
-                                                    }
-                                                }
-                                            }
-                                        } else if (root.hasFocus()) {
-                                            updateFocusVisual(true)
-                                        }
-                                    }
-                                }
-
-                                override fun onError(error: Image?) {
-                                    if (currentItem?.key != boundKey) return
-                                    boundImageUrl = null
-                                    posterImage.setImageDrawable(error?.asDrawable(ctx.resources))
-                                }
-                            }
+                imageDisposable = LeanbackArtworkLoader.loadIntoImageView(
+                    imageView = posterImage,
+                    imageUrl = imageUrl,
+                    fallbackUrl = fallbackUrl,
+                    widthPx = wPx,
+                    heightPx = hPx,
+                    isStillBound = { currentItem?.key == boundKey },
+                    onCacheHit = { result ->
+                        cardContainer.background = null
+                        resolveDominantColorFromImage(
+                            result = result,
+                            boundKey = boundKey,
+                            colorCacheKey = colorCacheKey,
+                            notifyIfCachedAndFocused = false
                         )
-                        .build()
-                    imageDisposable = imageLoader.enqueue(request)
-                }
+                    },
+                    onAsyncSuccess = { result ->
+                        cardContainer.background = null
+                        resolveDominantColorFromImage(
+                            result = result,
+                            boundKey = boundKey,
+                            colorCacheKey = colorCacheKey,
+                            notifyIfCachedAndFocused = true
+                        )
+                    },
+                    onAsyncError = {
+                        boundImageUrl = null
+                        ensurePlaceholderBackground()
+                    }
+                )
             }
         } else {
             imageDisposable?.dispose()
             imageDisposable = null
             boundImageUrl = null
+            boundFallbackUrl = null
             posterImage.setImageDrawable(null)
+            ensurePlaceholderBackground()
         }
 
         updateFocusVisual(root.hasFocus())
@@ -273,6 +224,7 @@ class LeanbackPosterViewHolder(
         imageDisposable?.dispose()
         imageDisposable = null
         boundImageUrl = null
+        boundFallbackUrl = null
         boundWidthPx = 0
         boundHeightPx = 0
         posterImage.setImageDrawable(null)
@@ -280,18 +232,17 @@ class LeanbackPosterViewHolder(
 
     companion object {
         fun create(
-            parent: LinearLayout,
+            context: Context,
             cardWidthPx: Int,
             cardHeightPx: Int,
             cornerRadiusPx: Float,
-            borderWidthPx: Int,
-            glowMarginPx: Int,
             showLabels: Boolean,
             adapter: LeanbackUniversalAdapter
         ): LeanbackPosterViewHolder {
-            val context = parent.context
+            val chrome = computeLeanbackCardChromeMetrics(context)
+            val dp = context.resources.displayMetrics.density
 
-            val root = LinearLayout(context).apply {
+            val root = FocusIsolatedRootLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 clipChildren = false
@@ -306,27 +257,18 @@ class LeanbackPosterViewHolder(
                 clipChildren = false
                 clipToPadding = false
                 layoutParams = LinearLayout.LayoutParams(cardWidthPx, cardHeightPx)
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#1A1A1A"))
-                    cornerRadius = cornerRadiusPx
-                }
             }
-
-            val glowSpreadDp = 18f
-            val glowSpreadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, glowSpreadDp, context.resources.displayMetrics)
-            val effectiveGlowMarginPx = (glowSpreadPx * 1.35f).toInt()
-            val effectiveBorderWidthPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2.0f, context.resources.displayMetrics).toInt().coerceAtLeast(2)
 
             val glowView = PlayStoreGlowView(context).apply {
                 this.cornerRadiusPx = cornerRadiusPx
-                this.glowSpreadPx = glowSpreadPx
-                this.glowMarginPx = effectiveGlowMarginPx.toFloat()
+                this.glowSpreadPx = chrome.glowSpreadPx
+                this.glowMarginPx = chrome.glowMarginPx.toFloat()
                 layoutParams = FrameLayout.LayoutParams(
-                    cardWidthPx + (effectiveGlowMarginPx * 2),
-                    cardHeightPx + (effectiveGlowMarginPx * 2)
+                    cardWidthPx + (chrome.glowMarginPx * 2),
+                    cardHeightPx + (chrome.glowMarginPx * 2)
                 ).apply {
-                    leftMargin = -effectiveGlowMarginPx
-                    topMargin = -effectiveGlowMarginPx
+                    leftMargin = -chrome.glowMarginPx
+                    topMargin = -chrome.glowMarginPx
                 }
                 visibility = View.GONE
             }
@@ -341,14 +283,12 @@ class LeanbackPosterViewHolder(
             }
             cardContainer.addView(posterImage)
 
-            // Progress bar
-            val dp = context.resources.displayMetrics.density
-            val pbHeightPx = (4f * dp)
+            val pbHeightPx = 4f * dp
             val horizMargin = (cornerRadiusPx * 0.75f).toInt().coerceAtLeast(6)
             val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
-                    pbHeightPx.toInt()
+                    pbHeightPx.toInt().coerceAtLeast(2)
                 ).apply {
                     gravity = Gravity.BOTTOM
                     leftMargin = horizMargin
@@ -360,7 +300,6 @@ class LeanbackPosterViewHolder(
             }
             cardContainer.addView(progressBar)
 
-            // Badge overlay (top-end)
             val badgeView = TextView(context).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -381,7 +320,6 @@ class LeanbackPosterViewHolder(
             }
             cardContainer.addView(badgeView)
 
-            // Watched indicator badge (top-start)
             val watchedSizePx = (20f * dp).toInt()
             val watchedBadgeView = TextView(context).apply {
                 layoutParams = FrameLayout.LayoutParams(
@@ -406,8 +344,6 @@ class LeanbackPosterViewHolder(
 
             root.addView(cardContainer)
 
-            // Always create titleText and subtitleText so ViewHolders shared across pools
-            // between showLabels=false and showLabels=true rows never lose their labels.
             val titleText = TextView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -449,11 +385,10 @@ class LeanbackPosterViewHolder(
                 badgeView = badgeView,
                 watchedBadgeView = watchedBadgeView,
                 cornerRadiusPx = cornerRadiusPx,
-                borderWidthPx = effectiveBorderWidthPx,
-                glowMarginPx = effectiveGlowMarginPx,
+                borderWidthPx = chrome.borderWidthPx,
+                glowMarginPx = chrome.glowMarginPx,
                 adapter = adapter
-            )
+            ).also { it.ensurePlaceholderBackground() }
         }
     }
 }
-

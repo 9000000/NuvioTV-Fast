@@ -1,0 +1,702 @@
+package com.nuvio.tv.ui.screens.home
+
+import android.content.Context
+import android.graphics.Color
+import android.graphics.Outline
+import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.ViewOutlineProvider
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
+import androidx.leanback.widget.HorizontalGridView
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.RecyclerView
+import coil3.BitmapImage
+import coil3.Image
+import coil3.SingletonImageLoader
+import coil3.request.Disposable
+import com.nuvio.tv.ui.leanback.adapter.LeanbackUpdatePlan
+import com.nuvio.tv.ui.leanback.adapter.computeLeanbackUpdatePlan
+import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
+import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import com.nuvio.tv.ui.leanback.core.PillProgressBarDrawable
+import com.nuvio.tv.ui.leanback.holder.FocusIsolatedRootLayout
+import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
+
+class LeanbackCardViewHolder(
+    val root: LinearLayout,
+    val cardContainer: FrameLayout,
+    val posterImage: ImageView,
+    val titleText: TextView?,
+    val progressBar: ProgressBar?,
+    var cornerRadiusPx: Float,
+    val borderWidthPx: Int,
+    val glowMarginPx: Int,
+    var adapter: LeanbackRowAdapter
+) : RecyclerView.ViewHolder(root) {
+
+    private val placeholderBackgroundDrawable = GradientDrawable().apply {
+        setColor(Color.parseColor("#1A1A1A"))
+        cornerRadius = cornerRadiusPx
+    }
+
+    private fun ensurePlaceholderBackground() {
+        placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
+        if (cardContainer.background !== placeholderBackgroundDrawable) {
+            cardContainer.background = placeholderBackgroundDrawable
+        }
+    }
+
+    fun updateCornerRadius(newRadiusPx: Float) {
+        val radiusChanged = cornerRadiusPx != newRadiusPx
+        if (!radiusChanged) return
+        cornerRadiusPx = newRadiusPx
+
+        placeholderBackgroundDrawable.cornerRadius = newRadiusPx
+        (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
+        posterImage.invalidateOutline()
+
+        val horizMargin = (newRadiusPx * 0.75f).toInt().coerceAtLeast(6)
+        (progressBar?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            if (lp.leftMargin != horizMargin || lp.rightMargin != horizMargin) {
+                lp.leftMargin = horizMargin
+                lp.rightMargin = horizMargin
+                progressBar.layoutParams = lp
+            }
+        }
+
+        if (root.hasFocus()) {
+            updateFocusVisual(true)
+        }
+    }
+
+    private var currentItem: ModernCarouselItem? = null
+    var currentDominantColor: Int = Color.WHITE
+    private var imageDisposable: Disposable? = null
+    private var boundImageUrl: String? = null
+    private var boundFallbackUrl: String? = null
+    private var boundWidthPx: Int = 0
+    private var boundHeightPx: Int = 0
+
+    init {
+        root.isFocusable = true
+        root.isFocusableInTouchMode = true
+        root.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+
+        posterImage.outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                if (cornerRadiusPx > 0f) {
+                    outline.setRoundRect(0, 0, view.width, view.height, cornerRadiusPx)
+                } else {
+                    outline.setRect(0, 0, view.width, view.height)
+                }
+            }
+        }
+        posterImage.clipToOutline = true
+
+        root.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+            updateFocusVisual(hasFocus)
+            if (hasFocus) {
+                val pos = bindingAdapterPosition
+                val item = currentItem
+                if (pos != RecyclerView.NO_POSITION && item != null) {
+                    adapter.onItemFocused(pos, item)
+                }
+            }
+        }
+
+        root.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (adapter.onNavigateDown()) return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (adapter.onNavigateUp()) return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_BACK -> {
+                        if (adapter.onNavigateBack()) return@setOnKeyListener true
+                    }
+                }
+            }
+            false
+        }
+
+        root.setOnClickListener {
+            currentItem?.let { adapter.onItemClick(it) }
+        }
+
+        root.setOnLongClickListener {
+            currentItem?.let { adapter.onItemLongClick(it) }
+            true
+        }
+    }
+
+    fun updateFocusVisual(hasFocus: Boolean) {
+        root.animate().cancel()
+        if (root.scaleX != 1.0f) root.scaleX = 1.0f
+        if (root.scaleY != 1.0f) root.scaleY = 1.0f
+
+        val isLandscape = adapter.cardWidthPx > adapter.cardHeightPx
+
+        val targetTranslationZ = if (hasFocus) 12f else 0f
+        if (root.translationZ != targetTranslationZ) root.translationZ = targetTranslationZ
+        if (cardContainer.elevation != 0f) cardContainer.elevation = 0f
+        if (cardContainer.translationZ != 0f) cardContainer.translationZ = 0f
+        if (cardContainer.foreground != null) cardContainer.foreground = null
+
+        val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
+        if (hasFocus) {
+            gridView?.notifyCardFocused(cardContainer, isLandscape, currentDominantColor)
+        }
+    }
+
+    private fun resolveCardColorFromImage(
+        result: Image,
+        boundKey: String,
+        boundColorKey: String,
+        notifyIfCachedAndFocused: Boolean
+    ) {
+        val existingColor = LeanbackColorEngine.getCachedColor(boundColorKey)
+        if (existingColor != null) {
+            currentDominantColor = existingColor
+            if (notifyIfCachedAndFocused && root.hasFocus()) {
+                updateFocusVisual(true)
+            }
+            return
+        }
+        val bmp = (result as? BitmapImage)?.bitmap
+        if (bmp != null && !bmp.isRecycled) {
+            LeanbackColorEngine.extractDominantColorAsync(boundColorKey, bmp) { extracted ->
+                if (currentItem?.key == boundKey) {
+                    currentDominantColor = extracted
+                    if (root.hasFocus()) {
+                        updateFocusVisual(true)
+                    }
+                }
+            }
+        } else if (notifyIfCachedAndFocused && root.hasFocus()) {
+            updateFocusVisual(true)
+        }
+    }
+
+    fun bind(
+        item: ModernCarouselItem,
+        cardWidthPx: Int,
+        cardHeightPx: Int,
+        cornerRadiusPx: Float,
+        showLabels: Boolean
+    ) {
+        val imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+        val fallbackUrl = item.metaPreview?.rawPosterUrl
+        val colorCacheKey = imageUrl ?: item.key
+        val wPx = cardWidthPx.coerceAtLeast(1)
+        val hPx = cardHeightPx.coerceAtLeast(1)
+        val sameImageRequest = currentItem?.key == item.key &&
+            boundImageUrl == imageUrl &&
+            boundFallbackUrl == fallbackUrl &&
+            boundWidthPx == wPx &&
+            boundHeightPx == hPx &&
+            (posterImage.drawable != null || imageDisposable?.isDisposed == false)
+
+        currentItem = item
+        updateCornerRadius(cornerRadiusPx)
+
+        if (!sameImageRequest) {
+            posterImage.setImageDrawable(null)
+            ensurePlaceholderBackground()
+        }
+
+        val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
+        currentDominantColor = cachedColor ?: LeanbackColorEngine.defaultFallbackColor
+
+        // Set dimensions
+        val cardLp = cardContainer.layoutParams
+        if (cardLp.width != cardWidthPx || cardLp.height != cardHeightPx) {
+            cardLp.width = cardWidthPx
+            cardLp.height = cardHeightPx
+            cardContainer.layoutParams = cardLp
+
+            val rootLp = root.layoutParams
+            if (rootLp != null && rootLp.width != cardWidthPx) {
+                rootLp.width = cardWidthPx
+                root.layoutParams = rootLp
+            }
+        }
+
+        // Title
+        if (showLabels && titleText != null && item.title.isNotBlank()) {
+            titleText.visibility = View.VISIBLE
+            titleText.text = item.title
+        } else {
+            titleText?.visibility = View.GONE
+        }
+
+        // Progress bar for Continue Watching
+        val cwPayload = item.payload as? ModernPayload.ContinueWatching
+        val progressItem = cwPayload?.item as? ContinueWatchingItem.InProgress
+        if (progressItem != null && progressBar != null) {
+            progressBar.visibility = View.VISIBLE
+            val pct = progressItem.progress.progressPercent?.toInt()
+                ?: if (progressItem.progress.duration > 0) {
+                    ((progressItem.progress.position.toFloat() / progressItem.progress.duration) * 100).toInt()
+                } else 0
+            progressBar.progress = pct.coerceIn(0, 100)
+        } else {
+            progressBar?.visibility = View.GONE
+        }
+
+        // Image loading via unified LeanbackArtworkLoader (matches CustomPoster FALLBACK_URL_KEY fast-path)
+        if (!imageUrl.isNullOrBlank()) {
+            if (!sameImageRequest) {
+                val boundKey = item.key
+                val boundColorKey = colorCacheKey
+                boundImageUrl = imageUrl
+                boundFallbackUrl = fallbackUrl
+                boundWidthPx = wPx
+                boundHeightPx = hPx
+                imageDisposable?.dispose()
+                imageDisposable = LeanbackArtworkLoader.loadIntoImageView(
+                    imageView = posterImage,
+                    imageUrl = imageUrl,
+                    fallbackUrl = fallbackUrl,
+                    widthPx = wPx,
+                    heightPx = hPx,
+                    isStillBound = { currentItem?.key == boundKey },
+                    onCacheHit = { result ->
+                        cardContainer.background = null
+                        resolveCardColorFromImage(
+                            result = result,
+                            boundKey = boundKey,
+                            boundColorKey = boundColorKey,
+                            notifyIfCachedAndFocused = false
+                        )
+                    },
+                    onAsyncSuccess = { result ->
+                        cardContainer.background = null
+                        resolveCardColorFromImage(
+                            result = result,
+                            boundKey = boundKey,
+                            boundColorKey = boundColorKey,
+                            notifyIfCachedAndFocused = true
+                        )
+                    },
+                    onAsyncError = {
+                        boundImageUrl = null
+                        ensurePlaceholderBackground()
+                    }
+                )
+            }
+        } else {
+            imageDisposable?.dispose()
+            imageDisposable = null
+            boundImageUrl = null
+            boundFallbackUrl = null
+            posterImage.setImageDrawable(null)
+            ensurePlaceholderBackground()
+        }
+
+        // Sync focus visual to current focus state when bound or recycled
+        val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
+        val isRowFocused = gridView?.hasFocus() == true
+        val targetPos = gridView?.selectedPosition?.coerceAtLeast(0) ?: 0
+        val isCurrentSelectedPos = isRowFocused && bindingAdapterPosition != RecyclerView.NO_POSITION && bindingAdapterPosition == targetPos
+
+        if (root.hasFocus() || isCurrentSelectedPos) {
+            if (!root.hasFocus()) {
+                root.requestFocus()
+            }
+            updateFocusVisual(true)
+        } else {
+            updateFocusVisual(false)
+        }
+    }
+
+    fun unbind() {
+        root.animate().cancel()
+        root.scaleX = 1.0f
+        root.scaleY = 1.0f
+        imageDisposable?.dispose()
+        imageDisposable = null
+        currentItem = null
+        boundImageUrl = null
+        boundFallbackUrl = null
+        boundWidthPx = 0
+        boundHeightPx = 0
+        posterImage.setImageDrawable(null)
+        cardContainer.foreground = null
+        ensurePlaceholderBackground()
+    }
+}
+
+class LeanbackRowAdapter(
+    var cardWidthPx: Int,
+    var cardHeightPx: Int,
+    var cornerRadiusPx: Float,
+    var showLabels: Boolean,
+    var animationsEnabled: () -> Boolean,
+    var onItemFocused: (Int, ModernCarouselItem) -> Unit,
+    var onItemClick: (ModernCarouselItem) -> Unit,
+    var onItemLongClick: (ModernCarouselItem) -> Unit,
+    var onLoadMore: () -> Unit,
+    var onNavigateDown: () -> Boolean,
+    var onNavigateUp: () -> Boolean,
+    var onNavigateLeftOnFirstItem: () -> Boolean,
+    var onNavigateBack: () -> Boolean
+) : RecyclerView.Adapter<LeanbackCardViewHolder>() {
+
+    private var items: List<ModernCarouselItem> = emptyList()
+    private var pendingItems: List<ModernCarouselItem>? = null
+    var isSubmittingItems: Boolean = false
+        private set
+
+    fun getItem(position: Int): ModernCarouselItem? = items.getOrNull(position)
+
+    fun updateConfig(
+        newWidthPx: Int,
+        newHeightPx: Int,
+        newRadiusPx: Float,
+        newShowLabels: Boolean
+    ) {
+        val changed = cardWidthPx != newWidthPx ||
+            cardHeightPx != newHeightPx ||
+            cornerRadiusPx != newRadiusPx ||
+            showLabels != newShowLabels
+        if (changed) {
+            cardWidthPx = newWidthPx
+            cardHeightPx = newHeightPx
+            cornerRadiusPx = newRadiusPx
+            showLabels = newShowLabels
+            if (items.isNotEmpty()) {
+                notifyItemRangeChanged(0, items.size)
+            }
+        }
+    }
+
+    var attachedRecyclerView: RecyclerView? = null
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        attachedRecyclerView = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView)
+        if (attachedRecyclerView === recyclerView) {
+            attachedRecyclerView = null
+        }
+    }
+
+    private fun hasSameCardVisuals(a: ModernCarouselItem, b: ModernCarouselItem): Boolean {
+        if (a === b) return true
+        if (a.key != b.key || a.title != b.title || a.imageUrl != b.imageUrl) return false
+        if (a.heroPreview.poster != b.heroPreview.poster || a.heroPreview.backdrop != b.heroPreview.backdrop) return false
+        if (a.metaPreview?.rawPosterUrl != b.metaPreview?.rawPosterUrl) return false
+        val cwA = (a.payload as? ModernPayload.ContinueWatching)?.item as? ContinueWatchingItem.InProgress
+        val cwB = (b.payload as? ModernPayload.ContinueWatching)?.item as? ContinueWatchingItem.InProgress
+        return cwA?.progress?.progressPercent == cwB?.progress?.progressPercent &&
+            cwA?.progress?.position == cwB?.progress?.position &&
+            cwA?.progress?.duration == cwB?.progress?.duration
+    }
+
+    private fun itemsMatchVisuals(a: List<ModernCarouselItem>, b: List<ModernCarouselItem>, count: Int): Boolean {
+        for (i in 0 until count) {
+            if (!hasSameCardVisuals(a[i], b[i])) return false
+        }
+        return true
+    }
+
+    fun submitItems(newItems: List<ModernCarouselItem>) {
+        if (items === newItems) return
+        if (items.size == newItems.size && itemsMatchVisuals(items, newItems, items.size)) {
+            items = newItems
+            pendingItems = null
+            return
+        }
+
+        val rv = attachedRecyclerView
+        if (rv != null && (rv.isComputingLayout || rv.isInLayout || rv.scrollState != RecyclerView.SCROLL_STATE_IDLE)) {
+            pendingItems = newItems
+            return
+        }
+        pendingItems = null
+        applyItems(newItems)
+    }
+
+    fun onScrollSettled() {
+        val rv = attachedRecyclerView
+        if (rv != null) {
+            for (i in 0 until rv.childCount) {
+                val child = rv.getChildAt(i)
+                val vh = rv.getChildViewHolder(child) as? LeanbackCardViewHolder
+                if (vh != null && vh.itemView.hasFocus()) {
+                    vh.updateFocusVisual(true)
+                }
+            }
+        }
+        val pending = pendingItems ?: return
+        pendingItems = null
+        applyItems(pending)
+    }
+
+    private fun applyItems(newItems: List<ModernCarouselItem>) {
+        val oldItems = items
+        val oldSize = oldItems.size
+        val newSize = newItems.size
+        items = newItems
+
+        val rv = attachedRecyclerView
+        if (rv != null && rv.isComputingLayout) {
+            rv.post {
+                if (attachedRecyclerView === rv) {
+                    applyItemsInternal(oldItems, oldSize, newSize, newItems)
+                }
+            }
+        } else {
+            applyItemsInternal(oldItems, oldSize, newSize, newItems)
+        }
+    }
+
+    private fun applyItemsInternal(
+        oldItems: List<ModernCarouselItem>,
+        oldSize: Int,
+        newSize: Int,
+        newItems: List<ModernCarouselItem>
+    ) {
+        val rv = attachedRecyclerView as? ModernInteropHorizontalGridView
+        val hadFocus = rv?.hasFocus() == true
+        val prevSelectedPos = rv?.selectedPosition?.coerceAtLeast(0) ?: 0
+
+        val plan = computeLeanbackUpdatePlan(
+            oldItems = oldItems,
+            newItems = newItems,
+            keyOf = { it.key },
+            visualsMatch = ::hasSameCardVisuals
+        )
+        if (plan is LeanbackUpdatePlan.NoOp) return
+
+        try {
+            isSubmittingItems = true
+            when (plan) {
+                is LeanbackUpdatePlan.NoOp -> Unit
+                is LeanbackUpdatePlan.InPlaceChanges -> {
+                    val positions = plan.changedPositions
+                    for (i in positions.indices) {
+                        notifyItemChanged(positions[i])
+                    }
+                }
+                is LeanbackUpdatePlan.AppendAndChange -> {
+                    notifyItemRangeInserted(plan.insertStart, plan.insertCount)
+                    val positions = plan.changedPrefixPositions
+                    for (i in positions.indices) {
+                        notifyItemChanged(positions[i])
+                    }
+                }
+                is LeanbackUpdatePlan.MyersDiff -> {
+                    try {
+                        val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                            override fun getOldListSize(): Int = oldSize
+                            override fun getNewListSize(): Int = newSize
+                            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                                return oldItems[oldItemPosition].key == newItems[newItemPosition].key
+                            }
+                            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                                return hasSameCardVisuals(oldItems[oldItemPosition], newItems[newItemPosition])
+                            }
+                        }, false)
+                        diffResult.dispatchUpdatesTo(this)
+                    } catch (_: Exception) {
+                        notifyDataSetChanged()
+                    }
+                }
+                is LeanbackUpdatePlan.FullReset -> {
+                    notifyDataSetChanged()
+                }
+            }
+        } finally {
+            isSubmittingItems = false
+        }
+
+        // Placeholder-to-Data Focus Guard
+        if (hadFocus && newItems.isNotEmpty()) {
+            val safePos = prevSelectedPos.coerceIn(0, newItems.lastIndex)
+            rv.post {
+                val focusedChild = rv.findFocus()
+                val cardStillHasFocus = focusedChild != null && focusedChild !== rv
+                if (rv.isAttachedToWindow && !cardStillHasFocus && rv.mayTakeFocus()) {
+                    rv.setSelectedPosition(safePos)
+                    val vh = rv.findViewHolderForAdapterPosition(safePos)
+                    if (vh != null) {
+                        vh.itemView.requestFocus()
+                        (vh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                    } else {
+                        rv.post {
+                            val deferredFocusedChild = rv.findFocus()
+                            val deferredCardHasFocus = deferredFocusedChild != null && deferredFocusedChild !== rv
+                            if (rv.isAttachedToWindow && !deferredCardHasFocus && rv.mayTakeFocus()) {
+                                val deferredVh = rv.findViewHolderForAdapterPosition(safePos)
+                                deferredVh?.itemView?.requestFocus()
+                                (deferredVh as? LeanbackCardViewHolder)?.updateFocusVisual(true)
+                                rv.ensureChildFocusAndRing(targetPos = safePos, animated = false)
+                            }
+                        }
+                    }
+                    rv.ensureChildFocusAndRing(targetPos = safePos, animated = false)
+                }
+            }
+        }
+    }
+
+    override fun getItemCount(): Int = items.size
+
+    override fun getItemViewType(position: Int): Int = LeanbackPoolManager.VIEW_TYPE_MODERN_CARD
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): LeanbackCardViewHolder {
+        val context = parent.context
+        val metrics = context.resources.displayMetrics
+
+        val root = FocusIsolatedRootLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            layoutParams = ViewGroup.LayoutParams(cardWidthPx, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+
+        val glowSpreadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 18f, metrics)
+        val glowMarginPx = (glowSpreadPx * 1.35f).toInt()
+
+        val cardContainer = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(cardWidthPx, cardHeightPx)
+            clipToOutline = false
+            clipChildren = false
+        }
+
+        val posterImage = ImageView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            clipToOutline = true
+        }
+        cardContainer.addView(posterImage)
+
+        val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            val h = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3.5f, metrics).toInt().coerceAtLeast(2)
+            val horizMargin = (cornerRadiusPx * 0.75f).toInt().coerceAtLeast(6)
+            val bMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 4f, metrics).toInt()
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                h
+            ).apply {
+                gravity = Gravity.BOTTOM
+                leftMargin = horizMargin
+                rightMargin = horizMargin
+                bottomMargin = bMargin
+            }
+            max = 100
+            progress = 0
+            progressDrawable = PillProgressBarDrawable.create(h.toFloat())
+            visibility = View.GONE
+        }
+        cardContainer.addView(progressBar)
+
+        root.addView(cardContainer)
+
+        val titleText = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, metrics).toInt()
+            }
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            visibility = if (showLabels) View.VISIBLE else View.GONE
+        }.also { root.addView(it) }
+
+        val borderWidthPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2.0f, metrics)
+            .toInt()
+            .coerceAtLeast(2)
+
+        return LeanbackCardViewHolder(
+            root = root,
+            cardContainer = cardContainer,
+            posterImage = posterImage,
+            titleText = titleText,
+            progressBar = progressBar,
+            cornerRadiusPx = cornerRadiusPx,
+            borderWidthPx = borderWidthPx,
+            glowMarginPx = glowMarginPx,
+            adapter = this
+        )
+    }
+
+    private val prefetchedKeys = LinkedHashSet<String>()
+
+    override fun onBindViewHolder(holder: LeanbackCardViewHolder, position: Int) {
+        holder.adapter = this
+        val item = items[position]
+        holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
+    }
+
+    fun onFocusedPositionChanged(context: Context, position: Int) {
+        val count = items.size
+        if (count <= 1) return
+        val wPx = cardWidthPx.coerceAtLeast(1)
+        val hPx = cardHeightPx.coerceAtLeast(1)
+        val aheadMax = minOf(position + 2, count - 1)
+        if (position + 1 > aheadMax) return
+        val imageLoader = SingletonImageLoader.get(context)
+        for (i in (position + 1)..aheadMax) {
+            val nextItem = items.getOrNull(i) ?: continue
+            val nextUrl = nextItem.imageUrl ?: nextItem.heroPreview.poster ?: nextItem.heroPreview.backdrop
+            LeanbackArtworkLoader.prefetch(
+                context = context,
+                imageLoader = imageLoader,
+                imageUrl = nextUrl,
+                fallbackUrl = nextItem.metaPreview?.rawPosterUrl,
+                widthPx = wPx,
+                heightPx = hPx,
+                prefetchedKeysTracker = prefetchedKeys
+            )
+        }
+    }
+
+    override fun onViewRecycled(holder: LeanbackCardViewHolder) {
+        holder.unbind()
+    }
+}
+
+internal fun resolveRowTargetGlowColor(
+    grid: HorizontalGridView?,
+    cardIndex: Int,
+    fallbackItem: ModernCarouselItem?
+): Int {
+    val vh = grid?.findViewHolderForAdapterPosition(cardIndex) as? LeanbackCardViewHolder
+    if (vh != null && vh.currentDominantColor != 0 &&
+        vh.currentDominantColor != Color.WHITE &&
+        vh.currentDominantColor != Color.BLACK
+    ) {
+        return vh.currentDominantColor
+    }
+    if (fallbackItem != null) {
+        val imageUrl = fallbackItem.imageUrl ?: fallbackItem.heroPreview.poster ?: fallbackItem.heroPreview.backdrop
+        val colorCacheKey = imageUrl ?: fallbackItem.key
+        val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
+        if (cachedColor != null && cachedColor != 0 && cachedColor != Color.WHITE && cachedColor != Color.BLACK) {
+            return cachedColor
+        }
+    }
+    return DEFAULT_MODERN_FOCUS_COLOR
+}

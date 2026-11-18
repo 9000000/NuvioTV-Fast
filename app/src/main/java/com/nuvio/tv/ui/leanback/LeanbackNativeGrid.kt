@@ -1,7 +1,10 @@
 package com.nuvio.tv.ui.leanback
 
+import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,10 +26,12 @@ import com.nuvio.tv.ui.leanback.container.InteropVerticalGridView
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
+import kotlinx.coroutines.awaitCancellation
 
 /**
  * Universal Composable Bridge for Android Leanback Native 2D Vertical Grids.
- * Replaces heavy Compose LazyVerticalGrid with 60fps hardware-accelerated VerticalGridView.
+ * Replaces Compose LazyVerticalGrid with 60fps hardware-accelerated VerticalGridView,
+ * screen-scoped RecycledViewPool reuse across filter/tab switches, and leak-free attach listeners.
  */
 @Composable
 fun LeanbackNativeGrid(
@@ -60,17 +65,17 @@ fun LeanbackNativeGrid(
     val cardWidthPx = with(density) { cardWidth.roundToPx() }
     val cardHeightPx = with(density) { cardHeight.roundToPx() }
     val cornerRadiusPx = with(density) { cornerRadius.toPx() }
-    val startPaddingPx = with(density) { paddingValues.calculateLeftPadding(layoutDirection).roundToPx() }
-    val endPaddingPx = with(density) { paddingValues.calculateRightPadding(layoutDirection).roundToPx() }
+    val startPaddingPx = with(density) { paddingValues.calculateStartPadding(layoutDirection).roundToPx() }
+    val endPaddingPx = with(density) { paddingValues.calculateEndPadding(layoutDirection).roundToPx() }
     val topPaddingPx = with(density) { paddingValues.calculateTopPadding().roundToPx() }
     val bottomPaddingPx = with(density) { paddingValues.calculateBottomPadding().roundToPx() }
     val horizontalSpacingPx = with(density) { horizontalSpacing.roundToPx() }
     val verticalSpacingPx = with(density) { verticalSpacing.roundToPx() }
 
-    // Vertical grids use GridLayoutManager with vertical orientation and screen-specific card sizes,
-    // so keep their pool isolated from HorizontalGridView / ModernRow pools.
-    val effectivePool = recycledViewPool ?: remember(gridKey) {
-        LeanbackPoolManager.createSharedPool(maxPerType = 24)
+    // Remember the pool at the screen Composable scope (independent of gridKey) so changing
+    // Discover filters or Folder tabs reuses all existing ViewHolders with zero re-inflation.
+    val effectivePool = recycledViewPool ?: remember {
+        LeanbackPoolManager.createGridPool()
     }
 
     val adapter = remember(gridKey) {
@@ -93,9 +98,9 @@ fun LeanbackNativeGrid(
 
     var gridViewRef by remember(gridKey) { mutableStateOf<InteropVerticalGridView?>(null) }
 
-    fun executeGridFocus(grid: InteropVerticalGridView, targetIdx: Int) {
-        val action = Runnable {
-            if (!grid.isAttachedToWindow) return@Runnable
+    fun executeAttachedGridFocus(grid: InteropVerticalGridView, targetIdx: Int) {
+        grid.post {
+            if (!grid.isAttachedToWindow) return@post
             if (animationsEnabled) {
                 grid.setSelectedPositionSmooth(targetIdx)
             } else {
@@ -116,40 +121,45 @@ fun LeanbackNativeGrid(
                 }
             }
         }
+    }
+
+    suspend fun awaitAndExecuteGridFocus(grid: InteropVerticalGridView, targetIdx: Int) {
         if (grid.isAttachedToWindow) {
-            grid.post(action)
+            executeAttachedGridFocus(grid, targetIdx)
         } else {
-            grid.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
-                override fun onViewAttachedToWindow(v: android.view.View) {
-                    grid.removeOnAttachStateChangeListener(this)
-                    grid.post(action)
+            val attachListener = object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) {
+                    v.removeOnAttachStateChangeListener(this)
+                    executeAttachedGridFocus(grid, targetIdx)
                 }
-                override fun onViewDetachedFromWindow(v: android.view.View) {}
-            })
+                override fun onViewDetachedFromWindow(v: View) {}
+            }
+            grid.addOnAttachStateChangeListener(attachListener)
+            try {
+                awaitCancellation()
+            } finally {
+                grid.removeOnAttachStateChangeListener(attachListener)
+            }
         }
     }
 
     var initialFocusDone by remember(gridKey) { mutableStateOf(false) }
 
-    LaunchedEffect(gridKey) {
-        initialFocusDone = false
-    }
-
-    LaunchedEffect(restoreFocusNonce) {
+    LaunchedEffect(restoreFocusNonce, gridViewRef) {
         if (restoreFocusNonce > 0) {
-            val grid = gridViewRef
-            if (grid != null && grid.isAttachedToWindow && initialFocusPosition in items.indices) {
-                executeGridFocus(grid, initialFocusPosition)
+            val grid = gridViewRef ?: return@LaunchedEffect
+            if (initialFocusPosition in items.indices) {
+                awaitAndExecuteGridFocus(grid, initialFocusPosition)
             }
         }
     }
 
-    LaunchedEffect(items.isNotEmpty()) {
+    LaunchedEffect(gridKey, items.isNotEmpty(), gridViewRef) {
         if (!initialFocusDone && items.isNotEmpty()) {
-            val grid = gridViewRef
-            if (grid != null && grid.isAttachedToWindow && initialFocusPosition in items.indices) {
-                executeGridFocus(grid, initialFocusPosition)
+            val grid = gridViewRef ?: return@LaunchedEffect
+            if (initialFocusPosition in items.indices) {
                 initialFocusDone = true
+                awaitAndExecuteGridFocus(grid, initialFocusPosition)
             }
         }
     }
@@ -179,7 +189,7 @@ fun LeanbackNativeGrid(
                 configuredVerticalSpacingPx = verticalSpacingPx
                 clipToPadding = false
                 clipChildren = false
-                setPadding(startPaddingPx, topPaddingPx, endPaddingPx, bottomPaddingPx)
+                setPaddingRelative(startPaddingPx, topPaddingPx, endPaddingPx, bottomPaddingPx)
                 // Seed the adapter before attaching so the first layout pass sees initial items immediately.
                 adapter.submitItems(items)
                 this.adapter = adapter
@@ -193,8 +203,8 @@ fun LeanbackNativeGrid(
                 setHasFixedSize(true)
                 setItemViewCacheSize(12)
                 setRecycledViewPool(effectivePool)
-                addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
-                    override fun onViewAttachedToWindow(v: android.view.View) {
+                addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: View) {
                         adapter.onHostAttached()
                         if (adapter.itemCount > 0 && childCount == 0) {
                             post {
@@ -205,15 +215,10 @@ fun LeanbackNativeGrid(
                             }
                         }
                     }
-                    override fun onViewDetachedFromWindow(v: android.view.View) {}
+                    override fun onViewDetachedFromWindow(v: View) {}
                 })
                 gridViewRef = this
                 onGridCreated?.invoke(this)
-
-                if (!initialFocusDone && initialFocusPosition in items.indices) {
-                    executeGridFocus(this, initialFocusPosition)
-                    initialFocusDone = true
-                }
             }
         },
         update = { gridView ->
@@ -235,12 +240,12 @@ fun LeanbackNativeGrid(
                 gridView.setVerticalSpacing(verticalSpacingPx)
                 gridView.configuredVerticalSpacingPx = verticalSpacingPx
             }
-            if (gridView.paddingLeft != startPaddingPx ||
+            if (gridView.paddingStart != startPaddingPx ||
                 gridView.paddingTop != topPaddingPx ||
-                gridView.paddingRight != endPaddingPx ||
+                gridView.paddingEnd != endPaddingPx ||
                 gridView.paddingBottom != bottomPaddingPx
             ) {
-                gridView.setPadding(startPaddingPx, topPaddingPx, endPaddingPx, bottomPaddingPx)
+                gridView.setPaddingRelative(startPaddingPx, topPaddingPx, endPaddingPx, bottomPaddingPx)
             }
             gridView.onNavigateUpOnFirstRow = onNavigateUpOnFirstRow
             gridView.onNavigateDownOnLastRow = onNavigateDownOnLastRow
@@ -275,9 +280,8 @@ fun LeanbackNativeGrid(
             if (gridViewRef === gridView) {
                 gridViewRef = null
             }
-            // Return attached ViewHolders cleanly to the shared pool when leaving this screen.
+            // Return attached ViewHolders cleanly to the screen pool when leaving or switching gridKey
             gridView.adapter = null
         }
     )
 }
-

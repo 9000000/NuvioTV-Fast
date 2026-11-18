@@ -655,7 +655,7 @@ open class MainActivity : ComponentActivity() {
                 }
                 val highlighterEnabled = BuildConfig.IS_DEBUG_BUILD && mainUiPrefs.composeHighlighterEnabled
                 com.nuvio.tv.ui.util.RecompositionHighlighterFlag.enabled = highlighterEnabled
-                val sharedLeanbackPool = com.nuvio.tv.ui.leanback.pool.rememberSharedLeanbackPool(maxPerType = 56)
+                val sharedLeanbackPool = com.nuvio.tv.ui.leanback.pool.rememberSharedLeanbackPool()
                 val profileBgSelection = resolveProfileBackgroundSelection(
                     profile = activeProfile,
                     entitlements = mainUiPrefs.memberAccess.entitlements

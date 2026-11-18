@@ -503,6 +503,7 @@ private fun EntityRailRow(
                 key = "${rail.mediaType}_${rail.railType}_${item.id}_$index",
                 title = item.name,
                 imageUrl = if (globalLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
+                fallbackImageUrl = item.rawPosterUrl,
                 isLandscape = globalLandscape,
                 isWatched = isWatched,
                 payload = item
@@ -529,55 +530,48 @@ private fun EntityRailRow(
             modifier = Modifier.padding(horizontal = NuvioTheme.spacing.xxxl)
         )
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(effectiveHeight + 52.dp)
-                .graphicsLayer { clip = false }
-        ) {
-            LeanbackNativeRow(
-                rowKey = "tmdb_entity_${rail.mediaType}_${rail.railType}",
-                items = leanbackItems,
-                cardWidth = effectiveWidth,
-                cardHeight = effectiveHeight,
-                cornerRadius = posterCardStyle.cornerRadius,
-                showLabels = true,
-                animationsEnabled = NuvioTheme.animationsEnabled,
-                paddingValues = PaddingValues(horizontal = NuvioTheme.spacing.xxxl),
-                itemSpacing = NuvioTheme.spacing.md,
-                initialFocusPosition = initialPos,
-                isPendingFocus = isPendingFocus,
-                pendingFocusIndex = initialPos,
-                pendingFocusNonce = if (restoreFocusToken > 0) restoreFocusToken else if (shouldRequestInitialFocus) 1 else 0,
-                entryFocusRequester = entryFocusRequester,
-                onClearPendingFocus = {
-                    if (shouldRequestInitialFocus) {
-                        onInitialFocusHandled()
-                    }
-                    if (restoreFocusToken > 0 && restoreItemId != null) {
-                        onRestoreFocusHandled()
-                    }
-                },
-                onNavigateUp = onNavigateUp,
-                onNavigateDown = onNavigateDown,
-                onItemFocused = { idx, _ ->
-                    onFocusedItemIndexChanged(idx)
-                },
-                onItemClick = { cardItem ->
-                    val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
-                    onItemClick(item)
-                },
-                onItemLongClick = { cardItem ->
-                    val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
-                    onItemLongPress(item)
-                },
-                onLoadMore = {
-                    if (rail.hasMore && !rail.isLoading) {
-                        onLoadMore(rail.mediaType, rail.railType)
-                    }
+        LeanbackNativeRow(
+            rowKey = "tmdb_entity_${rail.mediaType}_${rail.railType}",
+            items = leanbackItems,
+            cardWidth = effectiveWidth,
+            cardHeight = effectiveHeight,
+            cornerRadius = posterCardStyle.cornerRadius,
+            showLabels = true,
+            animationsEnabled = NuvioTheme.animationsEnabled,
+            paddingValues = PaddingValues(horizontal = NuvioTheme.spacing.xxxl),
+            itemSpacing = NuvioTheme.spacing.md,
+            initialFocusPosition = initialPos,
+            isPendingFocus = isPendingFocus,
+            pendingFocusIndex = initialPos,
+            pendingFocusNonce = if (restoreFocusToken > 0) restoreFocusToken else if (shouldRequestInitialFocus) 1 else 0,
+            entryFocusRequester = entryFocusRequester,
+            onClearPendingFocus = {
+                if (shouldRequestInitialFocus) {
+                    onInitialFocusHandled()
                 }
-            )
-        }
+                if (restoreFocusToken > 0 && restoreItemId != null) {
+                    onRestoreFocusHandled()
+                }
+            },
+            onNavigateUp = onNavigateUp,
+            onNavigateDown = onNavigateDown,
+            onItemFocused = { idx, _ ->
+                onFocusedItemIndexChanged(idx)
+            },
+            onItemClick = { cardItem ->
+                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                onItemClick(item)
+            },
+            onItemLongClick = { cardItem ->
+                val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                onItemLongPress(item)
+            },
+            onLoadMore = {
+                if (rail.hasMore && !rail.isLoading) {
+                    onLoadMore(rail.mediaType, rail.railType)
+                }
+            }
+        )
     }
 }
 

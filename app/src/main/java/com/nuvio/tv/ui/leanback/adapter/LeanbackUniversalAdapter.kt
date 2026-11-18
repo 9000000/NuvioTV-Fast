@@ -1,11 +1,13 @@
 package com.nuvio.tv.ui.leanback.adapter
 
+import android.content.Context
 import android.view.ViewGroup
-import android.widget.LinearLayout
+import androidx.leanback.widget.BaseGridView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
-import coil3.request.allowHardware
-import coil3.request.crossfade
+import coil3.SingletonImageLoader
+import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
+import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.holder.LeanbackAvatarViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackEpisodeViewHolder
@@ -13,13 +15,10 @@ import com.nuvio.tv.ui.leanback.holder.LeanbackPosterViewHolder
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
 
-private const val MAX_PREFETCHED_KEYS = 512
-private const val PREFETCH_TRIM_BATCH = 128
-
 /**
  * Universal polymorphic RecyclerView Adapter for all Android Leanback Cards.
- * Supports Poster, Episode, and Avatar items with safe notifyDataSetChanged execution,
- * dynamic dimension updating, and full focus lifecycle integration.
+ * Supports Poster, Episode, and Avatar items with O(N) in-place diffing for large grids,
+ * dynamic dimension updating, unified MemoryCache prefetching, and focus lifecycle guards.
  */
 class LeanbackUniversalAdapter(
     var cardWidthPx: Int,
@@ -44,9 +43,6 @@ class LeanbackUniversalAdapter(
     var attachedRecyclerView: RecyclerView? = null
     var isSubmittingItems: Boolean = false
         private set
-
-    val borderWidthPx: Int = 2
-    val glowMarginPx: Int = 16
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
@@ -128,7 +124,8 @@ class LeanbackUniversalAdapter(
         if (a.key != b.key || a.title != b.title || a.imageUrl != b.imageUrl) return false
         return when {
             a is LeanbackCardItem.Poster && b is LeanbackCardItem.Poster ->
-                a.subtitle == b.subtitle &&
+                a.fallbackImageUrl == b.fallbackImageUrl &&
+                    a.subtitle == b.subtitle &&
                     a.isLandscape == b.isLandscape &&
                     a.progressPercent == b.progressPercent &&
                     a.badgeText == b.badgeText &&
@@ -183,7 +180,7 @@ class LeanbackUniversalAdapter(
         }
 
         if (rv.scrollState != RecyclerView.SCROLL_STATE_IDLE) {
-            // Đang cuộn dở, giữ lại pendingItems để onScrollSettled xử lý an toàn
+            // Defer update until scroll settles to prevent mid-scroll layout hitches
             return
         }
 
@@ -194,7 +191,13 @@ class LeanbackUniversalAdapter(
         val oldItems = items
         val oldSize = oldItems.size
         val newSize = newItems.size
-        val isAppendOnly = oldSize > 0 && newSize > oldSize && itemsMatchPrefix(oldItems, newItems, oldSize)
+
+        val plan = computeLeanbackUpdatePlan(
+            oldItems = oldItems,
+            newItems = newItems,
+            keyOf = { it.key },
+            visualsMatch = ::hasSameCardVisuals
+        )
 
         items = newItems
         pendingItems = null
@@ -205,61 +208,77 @@ class LeanbackUniversalAdapter(
             return
         }
 
+        if (plan is LeanbackUpdatePlan.NoOp) return
+
         val hadFocus = rv.hasFocus()
         val prevSelectedPos = when (rv) {
-            is androidx.leanback.widget.BaseGridView -> rv.selectedPosition.coerceAtLeast(0)
+            is BaseGridView -> rv.selectedPosition.coerceAtLeast(0)
             else -> 0
         }
 
         try {
             isSubmittingItems = true
-            if (isAppendOnly) {
-                try {
-                    notifyItemRangeInserted(oldSize, newSize - oldSize)
-                    for (i in 0 until oldSize) {
-                        if (!hasSameCardVisuals(oldItems[i], newItems[i])) {
-                            notifyItemChanged(i)
+            when (plan) {
+                is LeanbackUpdatePlan.NoOp -> Unit
+                is LeanbackUpdatePlan.InPlaceChanges -> {
+                    try {
+                        val positions = plan.changedPositions
+                        for (i in positions.indices) {
+                            notifyItemChanged(positions[i])
                         }
+                    } catch (_: Exception) {
+                        safeNotifyDataSetChanged()
                     }
-                } catch (_: Exception) {
+                }
+                is LeanbackUpdatePlan.AppendAndChange -> {
+                    try {
+                        notifyItemRangeInserted(plan.insertStart, plan.insertCount)
+                        val positions = plan.changedPrefixPositions
+                        for (i in positions.indices) {
+                            notifyItemChanged(positions[i])
+                        }
+                    } catch (_: Exception) {
+                        safeNotifyDataSetChanged()
+                    }
+                }
+                is LeanbackUpdatePlan.MyersDiff -> {
+                    try {
+                        val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                            override fun getOldListSize(): Int = oldSize
+                            override fun getNewListSize(): Int = newSize
+                            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                                return oldItems[oldItemPosition].key == newItems[newItemPosition].key
+                            }
+                            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                                return hasSameCardVisuals(oldItems[oldItemPosition], newItems[newItemPosition])
+                            }
+                        }, false)
+                        diffResult.dispatchUpdatesTo(this)
+                    } catch (_: Exception) {
+                        safeNotifyDataSetChanged()
+                    }
+                }
+                is LeanbackUpdatePlan.FullReset -> {
                     safeNotifyDataSetChanged()
                 }
-            } else if (oldSize > 0 && newSize > 0 && oldSize <= 300 && newSize <= 300) {
-                try {
-                    val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-                        override fun getOldListSize(): Int = oldSize
-                        override fun getNewListSize(): Int = newSize
-                        override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                            return oldItems[oldItemPosition].key == newItems[newItemPosition].key
-                        }
-                        override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                            return hasSameCardVisuals(oldItems[oldItemPosition], newItems[newItemPosition])
-                        }
-                    }, false)
-                    diffResult.dispatchUpdatesTo(this)
-                } catch (_: Exception) {
-                    safeNotifyDataSetChanged()
-                }
-            } else {
-                safeNotifyDataSetChanged()
             }
         } finally {
             isSubmittingItems = false
         }
 
         // Placeholder-to-Data Focus Guard:
-        // Neo tiêu điểm an toàn khi chuyển đổi từ placeholder sang dữ liệu thật
+        // Re-anchor focus safely when transitioning from placeholder items to real content
         if (hadFocus && newItems.isNotEmpty()) {
             val safePos = prevSelectedPos.coerceIn(0, newItems.lastIndex)
             rv.post {
                 val focusedChild = rv.findFocus()
                 val cardStillHasFocus = focusedChild != null && focusedChild !== rv
                 val mayTake = when (rv) {
-                    is com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView -> rv.mayTakeFocus()
+                    is InteropHorizontalGridView -> rv.mayTakeFocus()
                     else -> rv.hasFocus()
                 }
                 if (rv.isAttachedToWindow && !cardStillHasFocus && mayTake) {
-                    if (rv is androidx.leanback.widget.BaseGridView) {
+                    if (rv is BaseGridView) {
                         rv.setSelectedPosition(safePos)
                     }
                     val vh = rv.findViewHolderForAdapterPosition(safePos)
@@ -280,13 +299,6 @@ class LeanbackUniversalAdapter(
                 }
             }
         }
-    }
-
-    private fun itemsMatchPrefix(oldItems: List<LeanbackCardItem>, newItems: List<LeanbackCardItem>, count: Int): Boolean {
-        for (i in 0 until count) {
-            if (oldItems[i].key != newItems[i].key) return false
-        }
-        return true
     }
 
     fun safeNotifyDataSetChanged() {
@@ -346,46 +358,32 @@ class LeanbackUniversalAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): LeanbackBaseViewHolder {
-        val parentLayout = (parent as? LinearLayout) ?: LinearLayout(parent.context)
-        val dp = parent.context.resources.displayMetrics.density
-        val glowSpreadDp = 18f
-        val glowSpreadPx = glowSpreadDp * dp
-        val dynamicGlowMarginPx = (glowSpreadPx * 1.35f).toInt()
-        val dynamicBorderWidthPx = (2f * dp).toInt().coerceAtLeast(2)
-
+        val context = parent.context
         return when (viewType) {
             LeanbackPoolManager.VIEW_TYPE_EPISODE -> {
                 LeanbackEpisodeViewHolder.create(
-                    parent = parentLayout,
+                    context = context,
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
                     cornerRadiusPx = cornerRadiusPx,
-                    borderWidthPx = dynamicBorderWidthPx,
-                    glowMarginPx = dynamicGlowMarginPx,
-                    showLabels = showLabels,
                     adapter = this
                 )
             }
             LeanbackPoolManager.VIEW_TYPE_AVATAR -> {
                 LeanbackAvatarViewHolder.create(
-                    parent = parentLayout,
+                    context = context,
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
                     cornerRadiusPx = cornerRadiusPx,
-                    borderWidthPx = dynamicBorderWidthPx,
-                    glowMarginPx = dynamicGlowMarginPx,
-                    showLabels = showLabels,
                     adapter = this
                 )
             }
             else -> {
                 LeanbackPosterViewHolder.create(
-                    parent = parentLayout,
+                    context = context,
                     cardWidthPx = cardWidthPx,
                     cardHeightPx = cardHeightPx,
-                    cornerRadiusPx = this@LeanbackUniversalAdapter.cornerRadiusPx,
-                    borderWidthPx = dynamicBorderWidthPx,
-                    glowMarginPx = dynamicGlowMarginPx,
+                    cornerRadiusPx = cornerRadiusPx,
                     showLabels = showLabels,
                     adapter = this
                 )
@@ -401,40 +399,71 @@ class LeanbackUniversalAdapter(
         holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
     }
 
-    fun onFocusedPositionChanged(context: android.content.Context, position: Int) {
-        val count = items.size
-        if (count <= 1) return
+    private fun prefetchItemAt(context: Context, imageLoader: coil3.ImageLoader, index: Int) {
+        val item = items.getOrNull(index) ?: return
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
+        when (item) {
+            is LeanbackCardItem.Poster -> {
+                LeanbackArtworkLoader.prefetch(
+                    context = context,
+                    imageLoader = imageLoader,
+                    imageUrl = item.imageUrl,
+                    fallbackUrl = item.fallbackImageUrl,
+                    widthPx = wPx,
+                    heightPx = hPx,
+                    prefetchedKeysTracker = prefetchedKeys
+                )
+            }
+            is LeanbackCardItem.Episode -> {
+                LeanbackArtworkLoader.prefetch(
+                    context = context,
+                    imageLoader = imageLoader,
+                    imageUrl = item.imageUrl,
+                    widthPx = wPx,
+                    heightPx = hPx,
+                    blurred = item.blurThumbnail,
+                    prefetchedKeysTracker = prefetchedKeys
+                )
+            }
+            is LeanbackCardItem.Avatar -> {
+                val diameter = minOf(wPx, hPx)
+                LeanbackArtworkLoader.prefetch(
+                    context = context,
+                    imageLoader = imageLoader,
+                    imageUrl = item.imageUrl,
+                    widthPx = diameter,
+                    heightPx = diameter,
+                    prefetchedKeysTracker = prefetchedKeys
+                )
+            }
+        }
+    }
+
+    fun onFocusedPositionChanged(context: Context, position: Int) {
+        val count = items.size
+        if (count <= 1) return
         val aheadMax = minOf(position + 2, count - 1)
         if (position + 1 > aheadMax) return
-        val imageLoader = coil3.SingletonImageLoader.get(context)
+        val imageLoader = SingletonImageLoader.get(context)
         for (i in (position + 1)..aheadMax) {
-            val nextItem = items.getOrNull(i) ?: continue
-            val nextUrl = nextItem.imageUrl?.trim()
-            if (!nextUrl.isNullOrEmpty()) {
-                val mappedUrl = com.nuvio.tv.core.image.sizedHomeArtworkUrl(nextUrl, wPx, hPx)
-                val memKeyStr = "${mappedUrl}_${wPx}x${hPx}"
-                if (prefetchedKeys.contains(memKeyStr)) continue
-                if (prefetchedKeys.size >= MAX_PREFETCHED_KEYS) {
-                    val iter = prefetchedKeys.iterator()
-                    repeat(PREFETCH_TRIM_BATCH) {
-                        if (iter.hasNext()) {
-                            iter.next()
-                            iter.remove()
-                        }
-                    }
-                }
-                prefetchedKeys.add(memKeyStr)
-                if (imageLoader.memoryCache?.get(coil3.memory.MemoryCache.Key(memKeyStr)) != null) continue
-                val req = coil3.request.ImageRequest.Builder(context)
-                    .data(nextUrl)
-                    .memoryCacheKey(memKeyStr)
-                    .size(wPx, hPx)
-                    .allowHardware(false)
-                    .crossfade(false)
-                    .build()
-                imageLoader.enqueue(req)
+            prefetchItemAt(context, imageLoader, i)
+        }
+    }
+
+    fun onGridPositionFocused(context: Context, position: Int, numColumns: Int) {
+        val count = items.size
+        if (count <= 1) return
+        val cols = numColumns.coerceAtLeast(1)
+        val imageLoader = SingletonImageLoader.get(context)
+        // Prefetch immediate neighbor and the 3 items below in the next row
+        if (position + 1 < count) {
+            prefetchItemAt(context, imageLoader, position + 1)
+        }
+        val nextRowCenter = position + cols
+        for (candidate in (nextRowCenter - 1)..(nextRowCenter + 1)) {
+            if (candidate in 0 until count) {
+                prefetchItemAt(context, imageLoader, candidate)
             }
         }
     }
@@ -443,4 +472,3 @@ class LeanbackUniversalAdapter(
         holder.unbind()
     }
 }
-

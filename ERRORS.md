@@ -258,3 +258,60 @@
 
 
 
+
+
+---
+
+## [2026-11-18 10:32] - Lỗi Chữ Ký Nullability Của `BaseGridView.removeView` Khi Nâng Lên `androidx.leanback:1.2.0`
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt:276`, `InteropVerticalGridView.kt:251`, `ModernInteropHorizontalGridView.kt:430`
+- **Agent**: mon
+- **Root Cause**: Khi nâng cấp `androidx.leanback:leanback` từ `1.0.0` lên `1.2.0`, lớp cơ sở `BaseGridView` bổ sung annotation `@NonNull` cho tham số của `removeView(@NonNull View view)`, làm chữ ký override cũ `override fun removeView(view: View?)` báo lỗi mismatch với Kotlin 2.3.
+- **Error Message**: 
+  ```
+  e: InteropHorizontalGridView.kt:276:5 'removeView' overrides nothing. Potential signatures for overriding: fun removeView(p0: View): Unit
+  ```
+- **Fix Applied**: Cập nhật chữ ký `override fun removeView(view: View)` trên cả 3 lớp con kế thừa `HorizontalGridView` và `VerticalGridView`.
+- **Prevention**: Khi nâng phiên bản các thư viện AndroidX cũ (1.0.0 -> 1.2.0+), luôn kiểm tra thay đổi `@NonNull`/`@Nullable` trên các phương thức `ViewGroup` / `BaseGridView` được override trong Kotlin.
+- **Status**: Fixed
+
+---
+
+## [2026-11-18 15:19] - Nhầm Tên Tham Số Đặt Tên (`defaultEpgIndex` vs `defaultScrollIndex`) Trong `LiveTvGuidePanels.kt`
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvGuidePanels.kt:652`
+- **Agent**: mon
+- **Root Cause**: Ở khối `factory` truyền đúng tên tham số `defaultScrollIndex = defaultEpgIndex` của `LeanbackVerticalEpgView.submitPrograms`, nhưng ở khối `update` bên dưới gõ nhầm tên tham số thành `defaultEpgIndex = defaultEpgIndex`.
+- **Error Message**: 
+  ```
+  e: LiveTvGuidePanels.kt:652:25 No parameter with name 'defaultEpgIndex' found.
+  e: LiveTvGuidePanels.kt:652:25 No value passed for parameter 'defaultScrollIndex'.
+  ```
+- **Fix Applied**: Đổi tham số tại `LiveTvGuidePanels.kt:652` thành `defaultScrollIndex = defaultEpgIndex`.
+- **Prevention**: Đối chiếu đồng nhất chữ ký named arguments giữa hai khối `factory` và `update` của `AndroidView`.
+- **Status**: Fixed
+
+---
+
+## [2026-11-18 15:52] - Lỗi Thanh Điều Hướng Khi Thay Bằng `LeanbackSidebarView` & `ModalNavigationDrawer` (Đã Rollback Theo Yêu Cầu)
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/MainActivity.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/sidebar/LeanbackSidebarView.kt`
+- **Agent**: mon
+- **Root Cause**: 
+  1. Đặt `modernSidebarEnabled` mặc định thành `false` đẩy người dùng sang `LegacySidebarScaffold` dùng `ModalNavigationDrawer` (`androidx.tv.material3`), vốn chỉ theo dõi Compose FocusNode và xung đột khi bên trong là `AndroidView`.
+  2. `VerticalGridView` của Leanback dùng `WRAP_CONTENT` + keyline alignment và `LaunchedEffect` reset `pendingSidebarFocusRequest` trước khi `AndroidView.factory` khởi tạo xong khi `showExpandedPanel` mới bật, khiến `isBlockedContentKeys` chặn phím D-pad.
+- **Error Message**: 
+  ```
+  User reported: thanh điều hướng bị lỗi / xóa hết các mã "làm lại thanh điều hướng như bản gốc và áp dụng Android Leanback Native , áp dụng Android Leanback Native vào trong mục live tv cho tôi" khôi phục lại
+  ```
+- **Fix Applied**: Đã xóa toàn bộ tệp mới (`ui/leanback/sidebar/`, `features/livetv/leanback/`, `LeanbackSidebarAndLiveTvTest.kt`) và khôi phục hoàn toàn `NativeSidebarView.kt`, `MainActivity.kt`, `LayoutPreferenceDataStore.kt`, `LayoutSettingsViewModel.kt`, `LayoutHomeSettings.kt`, `LiveTvGuidePanels.kt`, `LiveTvGuideScreen.kt`, `LiveTvChannelGrid.kt`, `LiveTvStates.kt` về trạng thái ổn định trước yêu cầu 2.
+- **Prevention**: Không dùng `ModalNavigationDrawer` của `tv-material3` bọc `AndroidView` tự quản lý focus phần cứng, và không đặt `VerticalGridView` ở chế độ `WRAP_CONTENT` trong container ẩn/hiện theo `LaunchedEffect`.
+- **Status**: Fixed
+
+---

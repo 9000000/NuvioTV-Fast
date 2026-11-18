@@ -18,6 +18,7 @@ sealed interface LeanbackCardItem {
         override val key: String,
         override val title: String,
         override val imageUrl: String?,
+        val fallbackImageUrl: String? = null,
         val subtitle: String? = null,
         val isLandscape: Boolean = false,
         val progressPercent: Int? = null,
@@ -59,4 +60,3 @@ sealed interface LeanbackCardItem {
         override val payload: Any? = null
     ) : LeanbackCardItem
 }
-

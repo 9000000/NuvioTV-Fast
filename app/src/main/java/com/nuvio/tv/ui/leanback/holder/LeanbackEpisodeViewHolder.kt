@@ -1,10 +1,9 @@
 package com.nuvio.tv.ui.leanback.holder
 
-import android.graphics.Bitmap
+import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
@@ -15,27 +14,19 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import coil3.BitmapImage
-import coil3.Image
-import coil3.SingletonImageLoader
-import coil3.asDrawable
-import coil3.request.ImageRequest
-import coil3.request.allowHardware
-import coil3.request.crossfade
-import coil3.request.transformations
-import coil3.target.Target
+import coil3.request.Disposable
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
+import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
 import com.nuvio.tv.ui.leanback.core.PillProgressBarDrawable
 import com.nuvio.tv.ui.leanback.core.PlayStoreGlowView
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
-import com.nuvio.tv.ui.util.BlurTransformation
 
 /**
  * Leanback ViewHolder for TV Episode cards (16:9 Landscape).
  * Displays episode thumbnail, episode badge (e.g. "EP 1" / "S1 E1"),
- * runtime, title, progress bar, and watched marker.
+ * runtime, title, progress bar, and watched marker with MemoryCache fast-path.
  */
 class LeanbackEpisodeViewHolder(
     root: LinearLayout,
@@ -56,13 +47,18 @@ class LeanbackEpisodeViewHolder(
 ) : LeanbackBaseViewHolder(
     root, cardContainer, glowView, cornerRadiusPx, borderWidthPx, glowMarginPx, adapter
 ) {
-    private var imageDisposable: coil3.request.Disposable? = null
+    private var imageDisposable: Disposable? = null
+    private var boundImageUrl: String? = null
+    private var boundBlurred: Boolean = false
+    private var boundWidthPx: Int = 0
+    private var boundHeightPx: Int = 0
 
     init {
         thumbnailImage.outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
-                if (cornerRadiusPx > 0f) {
-                    outline.setRoundRect(0, 0, view.width, view.height, cornerRadiusPx)
+                val radius = this@LeanbackEpisodeViewHolder.cornerRadiusPx
+                if (radius > 0f) {
+                    outline.setRoundRect(0, 0, view.width, view.height, radius)
                 } else {
                     outline.setRect(0, 0, view.width, view.height)
                 }
@@ -91,13 +87,27 @@ class LeanbackEpisodeViewHolder(
         cornerRadiusPx: Float,
         showLabels: Boolean
     ) {
-        if (currentItem?.key != item.key) {
-            thumbnailImage.setImageDrawable(null)
-        }
+        val epItem = item as? LeanbackCardItem.Episode
+        val imageUrl = item.imageUrl
+        val shouldBlurThumbnail = epItem?.blurThumbnail == true
+        val wPx = cardWidthPx.coerceAtLeast(1)
+        val hPx = cardHeightPx.coerceAtLeast(1)
+        val sameImageRequest = currentItem?.key == item.key &&
+            boundImageUrl == imageUrl &&
+            boundBlurred == shouldBlurThumbnail &&
+            boundWidthPx == wPx &&
+            boundHeightPx == hPx &&
+            (thumbnailImage.drawable != null || imageDisposable?.isDisposed == false)
+
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
 
-        val colorCacheKey = item.imageUrl ?: item.key
+        if (!sameImageRequest) {
+            thumbnailImage.setImageDrawable(null)
+            ensurePlaceholderBackground()
+        }
+
+        val colorCacheKey = imageUrl ?: item.key
         val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
         currentDominantColor = cachedColor ?: LeanbackColorEngine.defaultFallbackColor
 
@@ -120,9 +130,7 @@ class LeanbackEpisodeViewHolder(
             }
         }
 
-        val epItem = item as? LeanbackCardItem.Episode
-
-        // Episode Badge (e.g. "S1 E3") plus availability state.
+        // Episode Badge (e.g. "S1 E3") plus availability state
         val baseBadge = epItem?.episodeLabel
             ?: if (epItem?.episodeNumber != null) "EP ${epItem.episodeNumber}" else null
         val isUnavailable = epItem?.isAvailable == false
@@ -147,7 +155,7 @@ class LeanbackEpisodeViewHolder(
 
         // Title
         titleText.text = item.title
-        titleText.isSelected = root.hasFocus() // Enables horizontal marquee on focus
+        titleText.isSelected = root.hasFocus()
 
         // Episode overview
         if (descriptionText != null) {
@@ -160,8 +168,7 @@ class LeanbackEpisodeViewHolder(
             }
         }
 
-        // Release date chip. It gets its own view so runtime/rating can never push it out of
-        // the single-line meta row below the title.
+        // Release date chip
         if (dateText != null) {
             val dateLabel = epItem?.releaseDate?.takeIf { it.isNotBlank() }
             if (dateLabel != null) {
@@ -174,13 +181,17 @@ class LeanbackEpisodeViewHolder(
 
         // Meta (runtime and rating)
         if (metaText != null) {
-            val parts = mutableListOf<String>()
-            formatRuntimeMinutes(epItem?.runtimeMinutes)?.let(parts::add)
-            epItem?.imdbRating?.takeIf { it.isNotBlank() }?.let { parts.add("★ $it") }
-
-            if (parts.isNotEmpty()) {
+            val formattedRuntime = formatRuntimeMinutes(epItem?.runtimeMinutes)
+            val formattedRating = epItem?.imdbRating?.takeIf { it.isNotBlank() }?.let { "★ $it" }
+            val metaStr = when {
+                formattedRuntime != null && formattedRating != null -> "$formattedRuntime • $formattedRating"
+                formattedRuntime != null -> formattedRuntime
+                formattedRating != null -> formattedRating
+                else -> null
+            }
+            if (metaStr != null) {
                 metaText.visibility = View.VISIBLE
-                metaText.text = parts.joinToString(" • ")
+                metaText.text = metaStr
             } else {
                 metaText.visibility = View.GONE
             }
@@ -202,68 +213,53 @@ class LeanbackEpisodeViewHolder(
             watchedBadgeView?.visibility = View.GONE
         }
 
-        // Coil image loading
-        val imageUrl = item.imageUrl
+        // Coil image loading with MemoryCache fast-path
         if (!imageUrl.isNullOrBlank()) {
-            val ctx = thumbnailImage.context
-            val hasCachedColor = cachedColor != null
-            val shouldBlurThumbnail = epItem?.blurThumbnail == true
-            val boundKey = item.key
-            val request = ImageRequest.Builder(ctx)
-                .data(imageUrl)
-                .size(cardWidthPx.coerceAtLeast(1), cardHeightPx.coerceAtLeast(1))
-                .allowHardware(false)
-                .crossfade(false)
-                .apply {
-                    if (shouldBlurThumbnail) {
-                        transformations(BlurTransformation())
-                    }
-                }
-                .target(
-                    object : Target {
-                        override fun onStart(placeholder: Image?) {
-                            if (currentItem?.key != boundKey) return
-                            thumbnailImage.setImageDrawable(placeholder?.asDrawable(ctx.resources))
-                        }
-
-                        override fun onSuccess(result: Image) {
-                            if (currentItem?.key != boundKey) return
-                            thumbnailImage.setImageDrawable(result.asDrawable(ctx.resources))
-                            cardContainer.background = null
-                            val existingColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
-                            if (existingColor != null) {
-                                currentDominantColor = existingColor
-                                if (root.hasFocus()) {
-                                    updateFocusVisual(true)
-                                }
-                            } else {
-                                val bmp = (result as? BitmapImage)?.bitmap
-                                if (bmp != null && !bmp.isRecycled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || bmp.config != Bitmap.Config.HARDWARE)) {
-                                    LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
-                                        if (currentItem?.key == boundKey) {
-                                            currentDominantColor = extracted
-                                            if (root.hasFocus()) {
-                                                updateFocusVisual(true)
-                                            }
-                                        }
-                                    }
-                                } else if (root.hasFocus()) {
-                                    updateFocusVisual(true)
-                                }
-                            }
-                        }
-
-                        override fun onError(error: Image?) {
-                            if (currentItem?.key != boundKey) return
-                            thumbnailImage.setImageDrawable(error?.asDrawable(ctx.resources))
-                        }
+            if (!sameImageRequest) {
+                val boundKey = item.key
+                boundImageUrl = imageUrl
+                boundBlurred = shouldBlurThumbnail
+                boundWidthPx = wPx
+                boundHeightPx = hPx
+                imageDisposable?.dispose()
+                imageDisposable = LeanbackArtworkLoader.loadIntoImageView(
+                    imageView = thumbnailImage,
+                    imageUrl = imageUrl,
+                    widthPx = wPx,
+                    heightPx = hPx,
+                    blurred = shouldBlurThumbnail,
+                    isStillBound = { currentItem?.key == boundKey },
+                    onCacheHit = { result ->
+                        cardContainer.background = null
+                        resolveDominantColorFromImage(
+                            result = result,
+                            boundKey = boundKey,
+                            colorCacheKey = colorCacheKey,
+                            notifyIfCachedAndFocused = false
+                        )
+                    },
+                    onAsyncSuccess = { result ->
+                        cardContainer.background = null
+                        resolveDominantColorFromImage(
+                            result = result,
+                            boundKey = boundKey,
+                            colorCacheKey = colorCacheKey,
+                            notifyIfCachedAndFocused = true
+                        )
+                    },
+                    onAsyncError = {
+                        boundImageUrl = null
+                        ensurePlaceholderBackground()
                     }
                 )
-                .build()
-            imageDisposable?.dispose()
-            imageDisposable = SingletonImageLoader.get(ctx).enqueue(request)
+            }
         } else {
+            imageDisposable?.dispose()
+            imageDisposable = null
+            boundImageUrl = null
+            boundBlurred = false
             thumbnailImage.setImageDrawable(null)
+            ensurePlaceholderBackground()
         }
 
         updateFocusVisual(root.hasFocus())
@@ -278,24 +274,25 @@ class LeanbackEpisodeViewHolder(
         super.unbind()
         imageDisposable?.dispose()
         imageDisposable = null
+        boundImageUrl = null
+        boundBlurred = false
+        boundWidthPx = 0
+        boundHeightPx = 0
         thumbnailImage.setImageDrawable(null)
     }
 
     companion object {
         fun create(
-            parent: LinearLayout,
+            context: Context,
             cardWidthPx: Int,
             cardHeightPx: Int,
             cornerRadiusPx: Float,
-            borderWidthPx: Int,
-            glowMarginPx: Int,
-            showLabels: Boolean,
             adapter: LeanbackUniversalAdapter
         ): LeanbackEpisodeViewHolder {
-            val context = parent.context
+            val chrome = computeLeanbackCardChromeMetrics(context)
             val dp = context.resources.displayMetrics.density
 
-            val root = LinearLayout(context).apply {
+            val root = FocusIsolatedRootLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 clipChildren = false
                 clipToPadding = false
@@ -309,27 +306,18 @@ class LeanbackEpisodeViewHolder(
                 clipChildren = false
                 clipToPadding = false
                 layoutParams = LinearLayout.LayoutParams(cardWidthPx, cardHeightPx)
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#1A1A1A"))
-                    cornerRadius = cornerRadiusPx
-                }
             }
-
-            val glowSpreadDp = 18f
-            val glowSpreadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, glowSpreadDp, context.resources.displayMetrics)
-            val effectiveGlowMarginPx = (glowSpreadPx * 1.35f).toInt()
-            val effectiveBorderWidthPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2.0f, context.resources.displayMetrics).toInt().coerceAtLeast(2)
 
             val glowView = PlayStoreGlowView(context).apply {
                 this.cornerRadiusPx = cornerRadiusPx
-                this.glowSpreadPx = glowSpreadPx
-                this.glowMarginPx = effectiveGlowMarginPx.toFloat()
+                this.glowSpreadPx = chrome.glowSpreadPx
+                this.glowMarginPx = chrome.glowMarginPx.toFloat()
                 layoutParams = FrameLayout.LayoutParams(
-                    cardWidthPx + (effectiveGlowMarginPx * 2),
-                    cardHeightPx + (effectiveGlowMarginPx * 2)
+                    cardWidthPx + (chrome.glowMarginPx * 2),
+                    cardHeightPx + (chrome.glowMarginPx * 2)
                 ).apply {
-                    leftMargin = -effectiveGlowMarginPx
-                    topMargin = -effectiveGlowMarginPx
+                    leftMargin = -chrome.glowMarginPx
+                    topMargin = -chrome.glowMarginPx
                 }
                 visibility = View.GONE
             }
@@ -344,7 +332,6 @@ class LeanbackEpisodeViewHolder(
             }
             cardContainer.addView(thumbnailImage)
 
-            // Gradient scrim for text legibility
             val gradientView = View(context).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -362,7 +349,6 @@ class LeanbackEpisodeViewHolder(
             }
             cardContainer.addView(gradientView)
 
-            // Episode text block (badge, title, overview, meta) anchored above the progress bar.
             val textContainer = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = FrameLayout.LayoutParams(
@@ -376,7 +362,6 @@ class LeanbackEpisodeViewHolder(
                 }
             }
 
-            // Episode Badge (e.g. "EP 1")
             val episodeBadge = TextView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -394,7 +379,6 @@ class LeanbackEpisodeViewHolder(
             }
             textContainer.addView(episodeBadge)
 
-            // Title inside card bottom
             val titleText = TextView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -409,8 +393,6 @@ class LeanbackEpisodeViewHolder(
             }
             textContainer.addView(titleText)
 
-            // Episode overview. The old Compose card showed it, and it is what lets viewers
-            // decide which episode to watch without opening the options overlay.
             val descriptionText = TextView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -427,7 +409,6 @@ class LeanbackEpisodeViewHolder(
             }
             textContainer.addView(descriptionText)
 
-            // Meta text (runtime, rating)
             val metaText = TextView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -444,13 +425,12 @@ class LeanbackEpisodeViewHolder(
 
             cardContainer.addView(textContainer)
 
-            // Progress bar
-            val pbHeightPx = (3.5f * dp)
+            val pbHeightPx = 3.5f * dp
             val horizMargin = (cornerRadiusPx * 0.75f).toInt().coerceAtLeast(6)
             val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
-                    pbHeightPx.toInt()
+                    pbHeightPx.toInt().coerceAtLeast(2)
                 ).apply {
                     gravity = Gravity.BOTTOM
                     leftMargin = horizMargin
@@ -462,8 +442,6 @@ class LeanbackEpisodeViewHolder(
             }
             cardContainer.addView(progressBar)
 
-            // Release date chip (top-start). It is a separate view so runtime/rating can never
-            // push the air date out of the card's single-line meta row.
             val dateText = TextView(context).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -487,7 +465,6 @@ class LeanbackEpisodeViewHolder(
             }
             cardContainer.addView(dateText)
 
-            // Watched indicator badge (top-end)
             val watchedSizePx = (22f * dp).toInt()
             val watchedBadgeView = TextView(context).apply {
                 layoutParams = FrameLayout.LayoutParams(
@@ -525,10 +502,10 @@ class LeanbackEpisodeViewHolder(
                 metaText = metaText,
                 progressBar = progressBar,
                 cornerRadiusPx = cornerRadiusPx,
-                borderWidthPx = effectiveBorderWidthPx,
-                glowMarginPx = effectiveGlowMarginPx,
+                borderWidthPx = chrome.borderWidthPx,
+                glowMarginPx = chrome.glowMarginPx,
                 adapter = adapter
-            )
+            ).also { it.ensurePlaceholderBackground() }
         }
     }
 }
@@ -543,4 +520,3 @@ private fun formatRuntimeMinutes(runtimeMinutes: Int?): String? {
         else -> "${minutes}m"
     }
 }
-

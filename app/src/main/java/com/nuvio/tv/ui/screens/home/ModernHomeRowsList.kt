@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
+import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
 
 import com.nuvio.tv.domain.model.catalogRowLegacyKey
@@ -313,7 +314,7 @@ internal fun ModernHomeRowsList(
     // Isolate Modern Home's LeanbackCardViewHolder pool from LeanbackUniversalAdapter's shared pool
     // so ViewHolders of incompatible types never cross-pollinate on navigation transitions.
     val sharedRecycledViewPool = remember {
-        LeanbackPoolManager.createModernHomePool(maxPerType = 56)
+        LeanbackPoolManager.createModernHomePool()
     }
     val coroutineScope = rememberCoroutineScope()
     var scrollJob by remember { mutableStateOf<Job?>(null) }
@@ -397,7 +398,7 @@ internal fun ModernHomeRowsList(
                             }
                         }
                     }
-                    val modernGrid = targetGrid as? InteropHorizontalGridView
+                    val modernGrid = targetGrid as? ModernInteropHorizontalGridView
                     modernGrid?.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
                     targetGrid.post {
                         modernGrid?.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
@@ -440,7 +441,7 @@ internal fun ModernHomeRowsList(
         }
         rowGrids.forEach { (key, grid) ->
             if (key != ringOwnerKey) {
-                (grid as? InteropHorizontalGridView)?.floatingRingView?.hideRing(false)
+                (grid as? ModernInteropHorizontalGridView)?.floatingRingView?.hideRing(false)
             }
         }
     }
@@ -505,15 +506,13 @@ internal fun ModernHomeRowsList(
                             )
                             val wPx = with(density) { metrics.width.roundToPx() }.coerceAtLeast(1)
                             val hPx = with(density) { metrics.height.roundToPx() }.coerceAtLeast(1)
-                            val mappedUrl = com.nuvio.tv.core.image.sizedHomeArtworkUrl(url, wPx, hPx)
-                            val cacheKey = "${mappedUrl}_${wPx}x${hPx}"
-                            if (verticalPrefetchImageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) continue
-                            verticalPrefetchImageLoader.enqueue(
-                                ImageRequest.Builder(context)
-                                    .data(url)
-                                    .memoryCacheKey(cacheKey)
-                                    .size(width = wPx, height = hPx)
-                                    .build()
+                            LeanbackArtworkLoader.prefetch(
+                                context = context,
+                                imageLoader = verticalPrefetchImageLoader,
+                                imageUrl = url,
+                                fallbackUrl = item.metaPreview?.rawPosterUrl,
+                                widthPx = wPx,
+                                heightPx = hPx
                             )
                         }
                     }
@@ -562,7 +561,7 @@ internal fun ModernHomeRowsList(
         retryCount: Int = 0
     ) {
         if (overlayGenerationRef.get() != expectedGen) return
-        val grid = rowGrids[rowKey] as? InteropHorizontalGridView
+        val grid = rowGrids[rowKey] as? ModernInteropHorizontalGridView
         if (grid != null && grid.isAttachedToWindow) {
             grid.setSelectedPosition(targetCardIndex)
             grid.requestFocus()
@@ -612,7 +611,7 @@ internal fun ModernHomeRowsList(
         overlayHost?.deactivateGlideFocusAndHideRing()
         // Hand focus back cleanly without snapping selectedPosition backward over a pending horizontal move
         val key = effectiveActiveRowKey()
-        val grid = key?.let { rowGrids[it] as? InteropHorizontalGridView }
+        val grid = key?.let { rowGrids[it] as? ModernInteropHorizontalGridView }
         if (grid != null && grid.isAttachedToWindow && !grid.hasFocus()) {
             grid.requestFocus()
         }
@@ -621,7 +620,7 @@ internal fun ModernHomeRowsList(
     fun measureFocusedCardInOverlay(rowKey: String?): FloatArray? {
         val host = verticalOverlayHostRef.get() ?: return null
         if (!host.isAttachedToWindow) return null
-        val grid = rowKey?.let { rowGrids[it] as? InteropHorizontalGridView }
+        val grid = rowKey?.let { rowGrids[it] as? ModernInteropHorizontalGridView }
         val cardView = grid?.floatingRingView?.currentTargetView ?: grid?.findFocus() ?: return null
         if (!cardView.isAttachedToWindow || cardView.width <= 0 || cardView.height <= 0) return null
         val hostLoc = IntArray(2)
@@ -695,7 +694,7 @@ internal fun ModernHomeRowsList(
 
         val prevKey = navTargetRowKey.get() ?: currentRowKeyTracker.get() ?: activeRowKey.value
         if (prevKey != null && prevKey != landingRow.key) {
-            (rowGrids[prevKey] as? InteropHorizontalGridView)?.let { prevGrid ->
+            (rowGrids[prevKey] as? ModernInteropHorizontalGridView)?.let { prevGrid ->
                 prevGrid.prepareForRowChange()
                 prevGrid.floatingRingView?.hideRing(true)
             }
@@ -836,7 +835,7 @@ internal fun ModernHomeRowsList(
                 dominantColor = startColor
             )
             if (currentKey != null) {
-                (rowGrids[currentKey] as? InteropHorizontalGridView)?.floatingRingView?.hideRing(true)
+                (rowGrids[currentKey] as? ModernInteropHorizontalGridView)?.floatingRingView?.hideRing(true)
             }
             host?.activateGlideFocus()
 
@@ -1036,7 +1035,7 @@ internal fun ModernHomeRowsList(
                 dominantColor = targetColor
             )
             if (prevKey != null) {
-                (rowGrids[prevKey] as? InteropHorizontalGridView)?.let { prevGrid ->
+                (rowGrids[prevKey] as? ModernInteropHorizontalGridView)?.let { prevGrid ->
                     prevGrid.prepareForRowChange()
                     if (sizeChanged && prevGrid.floatingRingView?.visibility == View.VISIBLE) {
                         prevGrid.post { prevGrid.floatingRingView?.hideRing(true) }
@@ -1048,7 +1047,7 @@ internal fun ModernHomeRowsList(
         } else {
             isVerticalGlideRef.set(false)
             if (prevKey != null) {
-                (rowGrids[prevKey] as? InteropHorizontalGridView)?.let { prevGrid ->
+                (rowGrids[prevKey] as? ModernInteropHorizontalGridView)?.let { prevGrid ->
                     prevGrid.prepareForRowChange()
                     prevGrid.floatingRingView?.hideRing(true)
                 }
@@ -1060,7 +1059,7 @@ internal fun ModernHomeRowsList(
             targetGrid.setSelectedPosition(targetCardIndex)
             targetGrid.requestFocus()
             if (!canUseFixedStepRing) {
-                val modernGrid = targetGrid as? InteropHorizontalGridView
+                val modernGrid = targetGrid as? ModernInteropHorizontalGridView
                 modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
                 targetGrid.post {
                     modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
@@ -1148,7 +1147,7 @@ internal fun ModernHomeRowsList(
                 if (grid != null && grid.isAttachedToWindow) {
                     grid.setSelectedPosition(savedIndex)
                     grid.requestFocus()
-                    (grid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(targetPos = savedIndex, animated = false)
+                    (grid as? ModernInteropHorizontalGridView)?.ensureChildFocusAndRing(targetPos = savedIndex, animated = false)
                 } else {
                     localPendingFocusRowKey = targetKey
                     localPendingFocusIndex = savedIndex
@@ -1320,7 +1319,7 @@ internal fun ModernHomeRowsList(
                                 if (firstRow != null) {
                                     val targetCardIndex = (focusedItemByRowMap[firstRow.key] ?: 0)
                                         .coerceIn(0, (firstRow.items.list.size - 1).coerceAtLeast(0))
-                                    val currentGrid = rowGrids[currentActiveRowKey] as? InteropHorizontalGridView
+                                    val currentGrid = rowGrids[currentActiveRowKey] as? ModernInteropHorizontalGridView
                                     currentGrid?.prepareForRowChange()
                                     currentGrid?.floatingRingView?.hideRing(false)
                                     navTargetRowKey.set(firstRow.key)
@@ -1347,7 +1346,7 @@ internal fun ModernHomeRowsList(
                                                     firstGrid.setSelectedPosition(targetCardIndex)
                                                 }
                                                 firstGrid.requestFocus()
-                                                val modernGrid = firstGrid as? InteropHorizontalGridView
+                                                val modernGrid = firstGrid as? ModernInteropHorizontalGridView
                                                 modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
                                                 firstGrid.post {
                                                     modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
@@ -1397,7 +1396,7 @@ internal fun ModernHomeRowsList(
                             val activeGrid = rowGrids[intendedKey]
                             if (activeGrid != null && activeGrid.isAttachedToWindow) {
                                 activeGrid.requestFocus()
-                                (activeGrid as? InteropHorizontalGridView)?.ensureChildFocusAndRing(animated = false)
+                                (activeGrid as? ModernInteropHorizontalGridView)?.ensureChildFocusAndRing(animated = false)
                             }
                         } else {
                             navTargetRowKey.set(rowKey)
@@ -1462,9 +1461,6 @@ internal fun ModernHomeRowsList(
                     rowTitleBottom = 4.dp, // rowTitleBottom sát poster
                     focusedItemByRow = focusedItemByRow,
                     loadMoreRequestedTotals = loadMoreRequestedTotals,
-                    pendingRowFocusKey = pendingRowFocusKey,
-                    pendingRowFocusIndex = pendingRowFocusIndex,
-                    pendingRowFocusNonce = pendingRowFocusNonce,
                     onRowItemFocused = stableOnRowItemFocused,
                     useLandscapePosters = useLandscapePosters,
                     showLabels = showLabels,

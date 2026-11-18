@@ -52,9 +52,6 @@ internal fun ModernRowSection(
     rowTitleBottom: Dp,
     focusedItemByRow: StableRef<MutableMap<String, Int>>,
     loadMoreRequestedTotals: StableRef<MutableMap<String, Int>>,
-    pendingRowFocusKey: State<String?>,
-    pendingRowFocusIndex: State<Int?>,
-    pendingRowFocusNonce: State<Int>,
     onRowItemFocused: (String, Int, Boolean) -> Unit,
     useLandscapePosters: Boolean,
     showLabels: Boolean,
@@ -145,7 +142,7 @@ internal fun ModernRowSection(
             if (!needsFocusRestore.value) return@LaunchedEffect
             needsFocusRestore.value = false
             blockingFocusExit.value = false
-            val grid = rowGrids?.get(rowKey) as? InteropHorizontalGridView
+            val grid = rowGrids?.get(rowKey) as? ModernInteropHorizontalGridView
             if (grid != null && grid.isAttachedToWindow && row.items.list.isNotEmpty()) {
                 val targetIdx = (focusedItemByRow[rowKey] ?: 0).coerceIn(0, row.items.list.lastIndex)
                 grid.post {
@@ -170,37 +167,6 @@ internal fun ModernRowSection(
         val latestOnCatalogItemLongPress = rememberUpdatedState(onCatalogItemLongPress)
         val latestOnContinueWatchingOptions = rememberUpdatedState(onContinueWatchingOptions)
         val latestOnLoadMoreCatalog = rememberUpdatedState(onLoadMoreCatalog)
-
-        LaunchedEffect(rowKey, pendingRowFocusNonce.value) {
-            if (pendingRowFocusKey.value != rowKey) return@LaunchedEffect
-            val targetIndex = (pendingRowFocusIndex.value ?: 0)
-                .coerceIn(0, (row.items.list.size - 1).coerceAtLeast(0))
-
-            val grid = rowGrids?.get(rowKey)
-            if (grid != null && grid.isAttachedToWindow) {
-                grid.post {
-                    if (grid.isAttachedToWindow && latestIsActiveRow.value()) {
-                        if (animationsEnabled) {
-                            grid.setSelectedPositionSmooth(targetIndex)
-                        } else {
-                            grid.setSelectedPosition(targetIndex)
-                        }
-                        grid.requestFocus()
-                        val vh = grid.findViewHolderForAdapterPosition(targetIndex)
-                        if (vh != null) {
-                            vh.itemView.requestFocus()
-                        } else {
-                            grid.post {
-                                if (grid.isAttachedToWindow && latestIsActiveRow.value()) {
-                                    val deferredVh = grid.findViewHolderForAdapterPosition(targetIndex)
-                                    deferredVh?.itemView?.requestFocus()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         val stableOnItemFocused = remember(rowKey, isContinueWatchingRow) {
             { index: Int, item: ModernCarouselItem ->

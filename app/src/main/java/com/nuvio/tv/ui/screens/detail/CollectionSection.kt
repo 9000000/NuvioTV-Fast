@@ -47,6 +47,7 @@ fun CollectionSection(
                 key = item.id,
                 title = item.name,
                 imageUrl = item.landscapePoster ?: item.backdropUrl ?: item.poster,
+                fallbackImageUrl = item.rawPosterUrl,
                 subtitle = item.releaseInfo,
                 isLandscape = true,
                 isWatched = isItemWatched(item),
