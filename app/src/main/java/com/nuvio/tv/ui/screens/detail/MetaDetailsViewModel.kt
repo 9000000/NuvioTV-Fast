@@ -104,6 +104,8 @@ class MetaDetailsViewModel @Inject constructor(
     private val watchedItemsPreferences: WatchedItemsPreferences,
     private val trailerService: TrailerService,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
+    private val trailerPlayerPool: com.nuvio.tv.core.player.TrailerPlayerPool,
+    private val backgroundTrailerController: com.nuvio.tv.core.player.BackgroundTrailerController,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktCommentsService: TraktCommentsService,
     private val traktRelatedService: TraktRelatedService,
@@ -158,6 +160,8 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerAutoplayEnabled = false
     private var trailerPlayInBackground = false
     private var trailerHasPlayed = false
+    private var trailerHandoffActive = false
+    private var handoffTrailerYoutubeKey: String? = null
     private var suppressSeasonAutoSwitch = false
 
     private var isPlayButtonFocused = false
@@ -175,6 +179,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val _optimisticUnmarks = mutableSetOf<Pair<Int, Int>>()
 
     init {
+        applyTrailerHandoff()
         posterOptions.bind(viewModelScope)
         observeMetaViewSettings()
         observeTrailerAutoplaySettings()
@@ -186,6 +191,7 @@ class MetaDetailsViewModel @Inject constructor(
         observeMovieWatched()
         observeRelatedWatchedStatus()
         observeBlurUnwatchedEpisodes()
+        observeSeasonPostersEnabled()
         observeEpisodeOptionsOverlayStyle()
         observeOverallRatingsVisibility()
         observeDetailImdbRatingsVisibility()
@@ -390,6 +396,7 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
             MetaDetailsEvent.OnRemovalConfirmed -> confirmPickerRemoval()
             MetaDetailsEvent.OnRemovalCancelled -> cancelPickerRemoval()
+            is MetaDetailsEvent.OnShowMessage -> showMessage(event.message, event.isError)
             MetaDetailsEvent.OnClearMessage -> clearMessage()
             MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
         }
@@ -645,6 +652,18 @@ class MetaDetailsViewModel @Inject constructor(
                 _uiState.update { state ->
                     if (state.blurUnwatchedEpisodes == enabled) state else state.copy(blurUnwatchedEpisodes = enabled)
                 }
+                }
+        }
+    }
+
+    private fun observeSeasonPostersEnabled() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.detailSeasonPostersEnabled
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    _uiState.update { state ->
+                        if (state.seasonPostersEnabled == enabled) state else state.copy(seasonPostersEnabled = enabled)
+                    }
                 }
         }
     }
@@ -1036,7 +1055,7 @@ class MetaDetailsViewModel @Inject constructor(
         )?.resolveForMeta(enriched)
 
         applyMeta(
-            meta = enriched,
+            meta = withHandoffTrailer(enriched),
             initialNextToWatch = cachedNextToWatch
         )
 
@@ -1578,7 +1597,7 @@ class MetaDetailsViewModel @Inject constructor(
             ?: return meta
 
         val isSeries = meta.apiType in listOf("series", "tv")
-        val needsEpisodes = settings.useEpisodes && isSeries
+        val needsEpisodes = (settings.useEpisodes || settings.useSeasonPosters) && isSeries
 
         // Fetch main enrichment and episode enrichment in parallel.
         val (enrichment, episodeMap) = coroutineScope {
@@ -1692,7 +1711,8 @@ class MetaDetailsViewModel @Inject constructor(
                             useTmdbReleaseDates = false
                         ),
                         thumbnail = if (settings.useEpisodes) ep?.thumbnail ?: video.thumbnail else video.thumbnail,
-                        runtime = if (settings.useEpisodes) ep?.runtimeMinutes ?: video.runtime else video.runtime
+                        runtime = if (settings.useEpisodes) ep?.runtimeMinutes ?: video.runtime else video.runtime,
+                        seasonPoster = if (settings.useSeasonPosters) ep?.seasonPoster ?: video.seasonPoster else video.seasonPoster
                     )
                 }
             )
@@ -2843,8 +2863,43 @@ class MetaDetailsViewModel @Inject constructor(
 
     // --- Trailer ---
 
+    private fun applyTrailerHandoff() {
+        val transfer = backgroundTrailerController.pendingTransfer(itemId)
+        val poolHandoff = if (transfer == null) trailerPlayerPool.peekHandoff(itemId) else null
+        if (transfer == null && poolHandoff == null) return
+        if (isServerItem || !AppFeaturePolicy.inAppTrailerPlaybackEnabled) {
+            backgroundTrailerController.cancelTransfer(itemId)
+            trailerPlayerPool.cancelHandoff(itemId)
+            return
+        }
+        val playInBackground = trailerPlayerPool.playInBackgroundPreference
+        trailerHandoffActive = true
+        trailerHasPlayed = true
+        handoffTrailerYoutubeKey = transfer?.youtubeKey ?: poolHandoff?.youtubeKey
+        _uiState.update { state ->
+            state.copy(
+                trailerUrl = transfer?.videoUrl ?: poolHandoff?.videoUrl,
+                trailerAudioUrl = transfer?.audioUrl ?: poolHandoff?.audioUrl,
+                isTrailerLoading = false
+            )
+        }
+        setTrailerPlaybackState(
+            isPlaying = !playInBackground,
+            showControls = false,
+            hideLogo = false,
+            isBackgroundPlaying = playInBackground
+        )
+    }
+
+    private fun withHandoffTrailer(meta: Meta): Meta {
+        val key = handoffTrailerYoutubeKey?.takeIf { it.isNotBlank() } ?: return meta
+        if (meta.trailers.any { it.ytId == key }) return meta
+        return meta.copy(trailers = listOf(MetaTrailer(type = "Trailer", ytId = key)) + meta.trailers)
+    }
+
     private fun fetchTrailerUrl() {
         if (isServerItem) return
+        if (trailerHandoffActive) return
         val meta = _uiState.value.meta ?: return
 
         trailerFetchJob?.cancel()

@@ -499,6 +499,8 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
                         if (trailerPreviewUrlsState[itemId] != fallbackSource.videoUrl) {
                             trailerPreviewUrlsState[itemId] = fallbackSource.videoUrl
                         }
+                        fallbackSource.youtubeKey?.let { trailerPreviewYoutubeKeys[itemId] = it }
+                            ?: trailerPreviewYoutubeKeys.remove(itemId)
                         val fallbackAudio = fallbackSource.audioUrl
                         if (fallbackAudio.isNullOrBlank()) {
                             trailerPreviewAudioUrlsState.remove(itemId)
@@ -513,12 +515,15 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
                         }
                         trailerPreviewUrlsState.remove(itemId)
                         trailerPreviewAudioUrlsState.remove(itemId)
+                        trailerPreviewYoutubeKeys.remove(itemId)
                     }
                 } else {
                     val videoUrl = trailerSource.videoUrl
                     if (trailerPreviewUrlsState[itemId] != videoUrl) {
                         trailerPreviewUrlsState[itemId] = videoUrl
                     }
+                    trailerSource.youtubeKey?.let { trailerPreviewYoutubeKeys[itemId] = it }
+                        ?: trailerPreviewYoutubeKeys.remove(itemId)
                     val audioUrl = trailerSource.audioUrl
                     if (audioUrl.isNullOrBlank()) {
                         trailerPreviewAudioUrlsState.remove(itemId)

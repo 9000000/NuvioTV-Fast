@@ -55,7 +55,8 @@ fun StreamDto.toDomain(addonName: String, addonLogo: String?): Stream {
                 addonName = addonName,
                 addonLogo = addonLogo,
                 isStreamProvided = true,
-                headers = dto.headers
+                headers = dto.headers,
+                label = dto.label?.trim()?.takeIf { it.isNotBlank() }
             )
         }
     )

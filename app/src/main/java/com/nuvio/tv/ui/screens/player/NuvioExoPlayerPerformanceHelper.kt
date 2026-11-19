@@ -63,8 +63,6 @@ object NuvioExoPlayerPerformanceHelper {
     // Parallel chunk fetching keeps more sockets alive than the old cap of 8, which was evicting
     // live chunk connections mid playback and forcing cold reopens.
     const val NUVIO_SHARED_POOL_MAX_IDLE = 32
-    private const val BACK_BUFFER_TARGET_SHARE_NUM = 1L
-    private const val BACK_BUFFER_TARGET_SHARE_DEN = 2L
 
     // ─── Customization Variables ──────────────────────────────────────────────
     @Volatile
@@ -306,13 +304,6 @@ object NuvioExoPlayerPerformanceHelper {
         }
     }
 
-    // Both buffers hold bitrate times duration, so half of minBufferMs gives the back buffer a third of the target whatever the stream.
-    private fun effectiveBackBufferMs(): Int {
-        if (backBufferMs <= 0) return 0
-        val ceiling = (minBufferMs.toLong() * BACK_BUFFER_TARGET_SHARE_NUM / BACK_BUFFER_TARGET_SHARE_DEN).toInt()
-        return backBufferMs.coerceAtMost(ceiling)
-    }
-
     /**
      * Builds a [DefaultLoadControl] tuned for Nuvio performance when enabled,
      * or a standard ExoPlayer [DefaultLoadControl] when disabled.
@@ -335,12 +326,11 @@ object NuvioExoPlayerPerformanceHelper {
             }
             val allocator = DefaultAllocator(true, DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE, 0, enabled)
             liveAllocator = allocator
-            val fittedBackBufferMs = com.nuvio.tv.core.player.BufferSizing
-                .backBufferMsForTarget(effectiveBackBufferMs(), targetBufferBytes.toLong())
-            builtBackBufferMs = fittedBackBufferMs
+            val resolvedBackBufferMs = backBufferMs.coerceAtLeast(0)
+            builtBackBufferMs = resolvedBackBufferMs
             android.util.Log.i(
                 "ExoPerformance",
-                "buildLoadControl: targetBufferSizeMb=$targetBufferSizeMb, chunkOverheadMb=$chunkOverheadMb, effectiveTargetBufferMb=$effectiveTargetBufferMb, targetBytes=$targetBufferBytes, backBufferMs=$fittedBackBufferMs (set=$backBufferMs)"
+                "buildLoadControl: targetBufferSizeMb=$targetBufferSizeMb, chunkOverheadMb=$chunkOverheadMb, effectiveTargetBufferMb=$effectiveTargetBufferMb, targetBytes=$targetBufferBytes, backBufferMs=$resolvedBackBufferMs"
             )
             // Same parameters the Builder took; the subclass adds the seek-thumbnail read-ahead reserve (4K-E).
             com.nuvio.tv.core.player.ReservableLoadControl(
@@ -355,7 +345,7 @@ object NuvioExoPlayerPerformanceHelper {
                 prioritizeTimeOverSizeThresholds = false,
                 // Forward buffer protects playback and the back buffer only protects a seek back,
                 // so the back buffer is the side that gives way when both cannot fit the target.
-                backBufferDurationMs = fittedBackBufferMs,
+                backBufferDurationMs = resolvedBackBufferMs,
                 retainBackBufferFromKeyframe = true,
             )
         } else {
@@ -419,7 +409,7 @@ object NuvioExoPlayerPerformanceHelper {
         if (!enabled) return false
         val bufferedPos = player.bufferedPosition
         val currentPos = player.currentPosition
-        val backMs = builtBackBufferMs.takeIf { it >= 0 } ?: effectiveBackBufferMs()
+        val backMs = builtBackBufferMs.takeIf { it >= 0 } ?: backBufferMs.coerceAtLeast(0)
         val backBufferStart = (currentPos - backMs.toLong() - SEEK_BACKWARD_TOLERANCE_MS)
             .coerceAtLeast(0L)
         return positionMs in backBufferStart..bufferedPos

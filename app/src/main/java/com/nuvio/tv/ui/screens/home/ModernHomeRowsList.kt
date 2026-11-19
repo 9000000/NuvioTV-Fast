@@ -54,6 +54,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -240,7 +243,6 @@ internal fun ModernHomeRowsList(
     contentFocusRequester: FocusRequester,
     rowsViewportHeight: Dp,
     catalogBottomPadding: Dp,
-    trailerContentAlpha: () -> Float,
     verticalRowBringIntoViewSpec: BringIntoViewSpec,
     onRowItemFocusedInternal: (String, Int, Boolean) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -1201,7 +1203,6 @@ internal fun ModernHomeRowsList(
                     .fillMaxSize()
                     .recompositionHighlighter()
                     .clipToBounds()
-                    .graphicsLayer { alpha = trailerContentAlpha() }
                     .focusRequester(contentFocusRequester)
                     .focusRestorer { focusRestorerRequester() }
                     .onPreviewKeyEvent { event ->
@@ -1502,7 +1503,6 @@ internal fun ModernHomeRowsList(
                     .matchParentSize()
                     .graphicsLayer {
                         clip = false
-                        alpha = trailerContentAlpha()
                     },
                 factory = { ctx ->
                     VerticalRingOverlayHost(ctx).also { host ->

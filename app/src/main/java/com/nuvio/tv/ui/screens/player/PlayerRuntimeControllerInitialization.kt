@@ -539,14 +539,10 @@ internal fun PlayerRuntimeController.initializePlayer(
                         .coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
                 }
                 val budgetBytes = budgetMbEffective.toLong() * 1024L * 1024L
-                // Build with the user's back buffer so seek-back works immediately, except on a heap
-                // bound device, where the load control would hold it for the whole session.
+                // Build with the user's back buffer so seek-back works immediately (Live TV always 0).
+                // First frame lowers it to 0 only for confirmed DV7 on low-RAM; everything else keeps it.
                 configuredBackBufferMs = if (isLiveTv) 0 else bufferSettings.backBufferDurationMs
-                val backBufferMsAtBuild = if (isLiveTv || (libdoviConversionActive && MemoryBudget.isLowRamTier)) {
-                    0
-                } else {
-                    configuredBackBufferMs
-                }
+                val backBufferMsAtBuild = configuredBackBufferMs
                 Log.i(
                     PlayerRuntimeController.TAG,
                     "BUFFER_GATE: engine=exo-custom master=on isLiveTv=$isLiveTv " +
@@ -2827,7 +2823,7 @@ private fun PlayerRuntimeController.recordFirstFrameDiagnostics(
         val keepZeroForDv7 = conversionSucceeded > 0L && MemoryBudget.isLowRamTier
         val resolvedBackBufferMs = if (keepZeroForDv7) 0 else configuredBackBufferMs
         if (resolvedBackBufferMs != effectiveBackBufferDurationMs) {
-            lc.setBackBufferDurationOverrideMs(resolvedBackBufferMs)
+            lc.setBackBufferDurationOverrideMs(resolvedBackBufferMs, player)
             effectiveBackBufferDurationMs = resolvedBackBufferMs
         }
         // Shrinking the byte budget starves the forward buffer, so it stays tied to the budget
@@ -2837,7 +2833,8 @@ private fun PlayerRuntimeController.recordFirstFrameDiagnostics(
             val effectiveConversionMb = (MemoryBudget.conversionBudgetMb(currentManagedBudgetMb) - currentParallelChunkOverheadMb)
                 .coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
             lc.setBudgetBytesOverride(
-                effectiveConversionMb.toLong() * 1024L * 1024L
+                effectiveConversionMb.toLong() * 1024L * 1024L,
+                player
             )
         }
         Log.i(

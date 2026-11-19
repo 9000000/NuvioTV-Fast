@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.tracking.TrackingProviderId
+import com.nuvio.tv.core.tracking.TrackingRatings
 import com.nuvio.tv.core.tracking.TrackingSourceController
 import com.nuvio.tv.core.tracking.TrackingSourceSelection
 import com.nuvio.tv.core.tracking.availableLibrarySourceModes
@@ -30,6 +31,8 @@ data class TrackingSettingsUiState(
     val librarySourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val connectedProviderIds: Set<TrackingProviderId> = emptySet(),
     val simklAnimeIdPreference: SimklAnimeIdPreference = SimklAnimeIdPreference.DEFAULT,
+    val ratingSource: TrackingProviderId? = null,
+    val availableRatingSources: List<TrackingProviderId> = emptyList(),
     val isReady: Boolean = false
 ) {
     val availableWatchProgressSources: List<WatchProgressSource>
@@ -44,6 +47,7 @@ class TrackingSettingsViewModel @Inject constructor(
     private val sourceController: TrackingSourceController,
     private val settingsDataStore: TraktSettingsDataStore,
     private val simklSyncRepository: SimklSyncRepository,
+    private val trackingRatings: TrackingRatings,
     traktAuthDataStore: TraktAuthDataStore,
     simklAuthRepository: SimklAuthRepository,
     mdbListAuth: MdbListAuthStore,
@@ -65,8 +69,9 @@ class TrackingSettingsViewModel @Inject constructor(
                 sourceController.watchProgressSource,
                 sourceController.librarySourceMode,
                 connected,
-                settingsDataStore.simklAnimeIdPreference
-            ) { watchProgressSource, librarySourceMode, connectedProviderIds, animeIdPref ->
+                settingsDataStore.simklAnimeIdPreference,
+                trackingRatings.source
+            ) { watchProgressSource, librarySourceMode, connectedProviderIds, animeIdPref, ratingSource ->
                 if (connectedProviderIds == null) return@combine TrackingSettingsUiState()
                 val effective = effectiveTrackingSourceSelection(
                     requested = TrackingSourceSelection(watchProgressSource, librarySourceMode),
@@ -77,6 +82,8 @@ class TrackingSettingsViewModel @Inject constructor(
                     librarySourceMode = effective.librarySourceMode,
                     connectedProviderIds = connectedProviderIds,
                     simklAnimeIdPreference = animeIdPref,
+                    ratingSource = ratingSource?.takeIf { it in connectedProviderIds },
+                    availableRatingSources = trackingRatings.availableSources(connectedProviderIds),
                     isReady = true
                 )
             }.collect { state ->
@@ -97,6 +104,12 @@ class TrackingSettingsViewModel @Inject constructor(
     fun selectLibrarySourceMode(mode: LibrarySourceMode) {
         viewModelScope.launch {
             sourceController.selectLibrarySourceMode(mode)
+        }
+    }
+
+    fun selectRatingSource(source: TrackingProviderId?) {
+        viewModelScope.launch {
+            trackingRatings.setSource(source)
         }
     }
 

@@ -208,6 +208,7 @@ data class SplashBackground(
 val LocalSplashBackground = compositionLocalOf { SplashBackground() }
 
 private const val SIDEBAR_AUTO_COLLAPSE_DELAY_MS = 3_000L
+private const val SIDEBAR_FOCUS_RECOVERY_ATTEMPTS = 15
 
 private const val MAX_SUPPORTED_FONT_SCALE = 1.15f
 
@@ -308,6 +309,9 @@ open class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var trailerPlayerPool: com.nuvio.tv.core.player.TrailerPlayerPool
+
+    @Inject
+    lateinit var backgroundTrailerController: com.nuvio.tv.core.player.BackgroundTrailerController
 
     @Inject
     lateinit var externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker
@@ -742,6 +746,7 @@ open class MainActivity : ComponentActivity() {
                     LocalMemberAccess provides mainUiPrefs.memberAccess,
                     LocalAmbientIdleController provides ambientIdleController,
                     com.nuvio.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool,
+                    com.nuvio.tv.core.player.LocalBackgroundTrailerController provides backgroundTrailerController,
                     LocalSplashBackground provides splashBackground,
                     LocalStartupLoadingState provides startupLoadingState,
                     LocalStartupSplashEnabled provides startupSplashEnabled,
@@ -1495,8 +1500,6 @@ open class MainActivity : ComponentActivity() {
     }
 }
 
-
-
 @Composable
 private fun ModernSidebarScaffold(
     contentFocusRequester: FocusRequester,
@@ -1666,7 +1669,11 @@ private fun ModernSidebarScaffold(
             return@LaunchedEffect
         }
         val targetRoute = selectedDrawerRoute ?: drawerItems.firstOrNull()?.route
-        nativeSidebarRef?.requestSidebarFocus(targetRoute)
+        repeat(15) {
+            if (nativeSidebarRef?.hasFocus() == true) return@LaunchedEffect
+            nativeSidebarRef?.requestSidebarFocus(targetRoute)
+            delay(16)
+        }
     }
 
 

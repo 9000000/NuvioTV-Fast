@@ -65,6 +65,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawBehind
+import com.nuvio.tv.ui.components.BackgroundTrailerRequestEffect
+import com.nuvio.tv.core.player.LocalBackgroundTrailerController
+import com.nuvio.tv.core.player.BackgroundTrailerRequest
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.runtime.State
@@ -504,6 +508,22 @@ fun MetaDetailsScreen(
         }
     }
 
+    val ratingViewModel: RatingViewModel = hiltViewModel()
+    val ratingContext = LocalContext.current
+    LaunchedEffect(ratingViewModel) {
+        ratingViewModel.results.collect { result ->
+            val message = when {
+                !result.saved -> ratingContext.getString(
+                    R.string.rating_failed,
+                    result.provider?.let { ratingContext.getString(trackingProviderNameRes(it)) }.orEmpty()
+                )
+                result.removed -> ratingContext.getString(R.string.rating_removed)
+                else -> ratingContext.getString(R.string.rating_saved)
+            }
+            viewModel.onEvent(MetaDetailsEvent.OnShowMessage(message, isError = !result.saved))
+        }
+    }
+
     LaunchedEffect(uiState.userMessage) {
         if (uiState.userMessage != null) {
             delay(2500)
@@ -537,10 +557,16 @@ fun MetaDetailsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    val rootBackgroundTrailerController = LocalBackgroundTrailerController.current
+    val rootBackgroundColor = NuvioTheme.colors.Background
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background)
+            .drawBehind {
+                val ownTrailerRendering = (uiState.isTrailerPlaying || uiState.isBackgroundTrailerPlaying) &&
+                    rootBackgroundTrailerController?.isRendering(uiState.trailerUrl) == true
+                if (!ownTrailerRendering) drawRect(rootBackgroundColor)
+            }
             .onPreviewKeyEvent { keyEvent ->
                 if (currentIsTrailerPlaying) {
                     if (currentShowTrailerControls) {
@@ -625,6 +651,33 @@ fun MetaDetailsScreen(
     ) {
         when {
             uiState.isLoading -> {
+                val loadingTrailerUrl = uiState.trailerUrl?.takeIf {
+                    uiState.isTrailerPlaying || uiState.isBackgroundTrailerPlaying
+                }
+                if (rootBackgroundTrailerController != null) {
+                    val loadingTrailerOwner = remember { "details_loading_${System.identityHashCode(Any())}" }
+                    BackgroundTrailerRequestEffect(
+                        controller = rootBackgroundTrailerController,
+                        owner = loadingTrailerOwner,
+                        request = loadingTrailerUrl?.let { url ->
+                            BackgroundTrailerRequest(
+                                videoUrl = url,
+                                audioUrl = uiState.trailerAudioUrl,
+                                isPaused = isTrailerPaused,
+                                cropToFill = uiState.isBackgroundTrailerPlaying,
+                                autoCropLetterbox = uiState.isBackgroundTrailerPlaying,
+                                onEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) }
+                            )
+                        }
+                    )
+                }
+                val loadingTrailerRendering = loadingTrailerUrl != null &&
+                    rootBackgroundTrailerController?.isRendering(loadingTrailerUrl) == true
+                val loadingBackdropAlpha by animateFloatAsState(
+                    targetValue = if (loadingTrailerRendering) 0f else 1f,
+                    animationSpec = tween(durationMillis = 800),
+                    label = "loadingBackdropFade"
+                )
                 if (playOnLoad && !playOnLoadReturnContentRevealed) {
                     PlaybackHandoffBackdrop(backdropUrl = heroBackdropUrl)
                 } else {
@@ -648,12 +701,25 @@ fun MetaDetailsScreen(
                         AsyncImage(
                             model = loadingBackdropRequest,
                             contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = loadingBackdropAlpha },
                             contentScale = ContentScale.Crop,
                             alignment = Alignment.TopEnd
                         )
+                    } else if (loadingTrailerUrl != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = loadingBackdropAlpha }
+                                .background(NuvioTheme.colors.Background)
+                        )
                     }
-                    MetaDetailsSkeleton(backdropAware = !heroBackdropUrl.isNullOrBlank())
+                    if (!(uiState.isTrailerPlaying && loadingTrailerRendering)) {
+                        MetaDetailsSkeleton(
+                            backdropAware = !heroBackdropUrl.isNullOrBlank() || loadingTrailerUrl != null
+                        )
+                    }
                 }
             }
             uiState.error != null -> {
@@ -838,6 +904,7 @@ fun MetaDetailsScreen(
                     watchedEpisodes = uiState.watchedEpisodes,
                     episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
                     blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
+                    seasonPostersEnabled = uiState.seasonPostersEnabled,
                     randomEpisodeEnabled = uiState.randomEpisodeEnabled,
                     episodeShuffle = uiState.episodeShuffle,
                     shufflePoolEmpty = uiState.shufflePoolEmpty,
@@ -1181,6 +1248,7 @@ private fun MetaDetailsContent(
     watchedEpisodes: Set<Pair<Int, Int>>,
     episodeWatchedPendingKeys: Set<String>,
     blurUnwatchedEpisodes: Boolean,
+    seasonPostersEnabled: Boolean,
     randomEpisodeEnabled: Boolean,
     episodeShuffle: com.nuvio.tv.domain.model.EpisodeShuffleSettings,
     shufflePoolEmpty: Boolean,
@@ -1361,6 +1429,9 @@ private fun MetaDetailsContent(
     var consumeReturnEpisodeFocusOnClear by rememberSaveable(meta.id) { mutableStateOf(false) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
     var showHeroPlayOptionsDialog by rememberSaveable(meta.id) { mutableStateOf(false) }
+    var showRatingDialog by rememberSaveable(meta.id) { mutableStateOf(false) }
+    val titleRatingMedia = remember(meta) { meta.ratingReference() }
+    val titleRatingState by rememberRatingState(titleRatingMedia)
     var showSynopsisOverlay by rememberSaveable(meta.id) { mutableStateOf(false) }
     var showRandomEpisodeOverlay by rememberSaveable(meta.id) { mutableStateOf(false) }
     var randomEpisodePlaybackPending by rememberSaveable(meta.id) { mutableStateOf(false) }
@@ -1959,6 +2030,17 @@ private fun MetaDetailsContent(
     }
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
+    val seasonPosterStyle = remember(seasonPostersEnabled, meta, seasons) {
+        if (!seasonPostersEnabled) {
+            null
+        } else {
+            resolveSeasonPosters(meta, seasons)?.let { posters ->
+                SeasonPosterTabsStyle(
+                    posters = seasons.associateWith { season -> posters[season] ?: meta.poster }
+                )
+            }
+        }
+    }
     // Tracks whether the initial auto-scroll to the "next to play" episode has fired per season.
     val initialEpisodeScrollDoneBySeason = remember(meta.id) { mutableStateMapOf<Int, Boolean>() }
     val episodeFocusRequestersBySeason = remember(meta.id) { mutableMapOf<Int, MutableMap<String, FocusRequester>>() }
@@ -2330,10 +2412,15 @@ private fun MetaDetailsContent(
 
     // Always-composed bottom gradient alpha (avoids add/remove during scroll)
 
+    val contentBackgroundTrailerController = LocalBackgroundTrailerController.current
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(backgroundColor)
+            .drawBehind {
+                val ownTrailerRendering = (isTrailerPlaying || isBackgroundTrailerPlaying) &&
+                    contentBackgroundTrailerController?.isRendering(trailerUrl) == true
+                if (!ownTrailerRendering) drawRect(backgroundColor)
+            }
             .onPreviewKeyEvent { randomEpisodePlaybackPending }
     ) {
         // Sticky background — backdrop or trailer
@@ -2724,6 +2811,8 @@ private fun MetaDetailsContent(
                         isMovieWatched = isMovieWatched,
                         isMovieWatchedPending = isMovieWatchedPending,
                         onToggleMovieWatched = onToggleMovieWatched,
+                        ratingState = titleRatingState,
+                        onRateClick = { showRatingDialog = true },
                         mdbListRatings = visibleMdbListRatings,
                         mdbListRatingOrder = mdbListRatingOrder,
                         hideMetaInfoImdb = !showStandardOverallRatings,
@@ -2791,7 +2880,8 @@ private fun MetaDetailsContent(
                             upFocusRequester = heroPlayFocusRequester,
                             downFocusRequester = seasonDownFocusRequester,
                             onNavigateDown = onSeasonTabsNavigateDown,
-                            isFocusEnabled = (initialHeroFocusRequested || pendingRestoreType != null) && pendingRestoreType != RestoreTarget.EPISODE
+                            isFocusEnabled = (initialHeroFocusRequested || pendingRestoreType != null) && pendingRestoreType != RestoreTarget.EPISODE,
+                            posterStyle = seasonPosterStyle
                         )
                     }
                 }
@@ -2876,7 +2966,8 @@ private fun MetaDetailsContent(
                                 initialEpisodeScrollDoneBySeason[selectedSeason] = true
                             },
                             anchorEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason],
-                            windowResetKey = meta.id
+                            windowResetKey = meta.id,
+                            ratingMedia = { video -> meta.ratingReference(video) }
                         )
                     }
             }
@@ -3306,6 +3397,15 @@ private fun MetaDetailsContent(
             )
         }
 
+        if (showRatingDialog && titleRatingState.isAvailable) {
+            RatingDialog(
+                media = titleRatingMedia,
+                title = meta.name,
+                state = titleRatingState,
+                onDismiss = { showRatingDialog = false }
+            )
+        }
+
         if (showHeroPlayOptionsDialog && isPlayEnabled) {
             PlayManualOverrideDialog(
                 title = meta.name,
@@ -3505,11 +3605,16 @@ private fun BackdropLayer(
     // background and full-screen trailer keeps the same player running, so no new first frame
     // arrives and resetting here would leave the gradient and backdrop stuck on screen.
     val isAnyTrailerPlaying = isTrailerPlaying || isBackgroundTrailerPlaying
-    var isTrailerRendered by remember(isAnyTrailerPlaying, trailerUrl) { mutableStateOf(false) }
+    val backgroundTrailerController = LocalBackgroundTrailerController.current
+    var isTrailerRendered by remember(isAnyTrailerPlaying, trailerUrl) {
+        mutableStateOf(isAnyTrailerPlaying && backgroundTrailerController?.isRendering(trailerUrl) == true)
+    }
+    val isTrailerShown = isTrailerRendered ||
+        (isAnyTrailerPlaying && backgroundTrailerController?.isRendering(trailerUrl) == true)
     val backdropAlphaState = animateFloatAsState(
         targetValue = when {
-            isTrailerPlaying && isTrailerRendered -> 0f
-            isBackgroundTrailerVisible && isTrailerRendered -> 0f
+            isTrailerPlaying && isTrailerShown -> 0f
+            isBackgroundTrailerVisible && isTrailerShown -> 0f
             isScrolledPastHero -> 0.15f
             else -> 1f
         },
@@ -3527,7 +3632,7 @@ private fun BackdropLayer(
         label = "trailerFade"
     )
     val gradientAlphaState = animateFloatAsState(
-        targetValue = if ((isTrailerPlaying && isTrailerRendered) || isScrolledPastHero) 0f else 1f,
+        targetValue = if ((isTrailerPlaying && isTrailerShown) || isScrolledPastHero) 0f else 1f,
         animationSpec = tween(durationMillis = if (isScrolledPastHero) 300 else 800),
         label = "gradientFade"
     )
@@ -3555,26 +3660,56 @@ private fun BackdropLayer(
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopEnd
         )
-        TrailerPlayer(
-            trailerUrl = trailerUrl,
-            trailerAudioUrl = trailerAudioUrl,
-            isPlaying = isTrailerPlaying || isBackgroundTrailerPlaying,
-            isPaused = isTrailerPaused || isBackgroundTrailerPaused,
-            seekRequestToken = if (showTrailerControls) trailerSeekToken else 0,
-            seekDeltaMs = if (showTrailerControls) trailerSeekDeltaMs else 0L,
-            onRemoteKey = onTrailerControlKey,
-            onProgressChanged = onTrailerProgressChanged,
-            onEnded = onTrailerEnded,
-            onError = onTrailerEnded,
-            onFirstFrameRendered = { isTrailerRendered = true },
-            cropToFill = isBackgroundTrailerPlaying,
-            autoCropLetterbox = isBackgroundTrailerPlaying,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    alpha = if (isAnyTrailerPlaying) trailerAlphaState.value else 1f
-                }
-        )
+        if (backgroundTrailerController != null) {
+            val trailerOwner = remember { "details_backdrop_${System.identityHashCode(Any())}" }
+            val latestOnTrailerEnded by rememberUpdatedState(onTrailerEnded)
+            val latestOnTrailerProgressChanged by rememberUpdatedState(onTrailerProgressChanged)
+            val latestOnTrailerControlKey by rememberUpdatedState(onTrailerControlKey)
+            val request = if (isAnyTrailerPlaying && trailerUrl != null) {
+                BackgroundTrailerRequest(
+                    videoUrl = trailerUrl,
+                    audioUrl = trailerAudioUrl,
+                    isPaused = isTrailerPaused || isBackgroundTrailerPaused,
+                    cropToFill = isBackgroundTrailerPlaying,
+                    autoCropLetterbox = isBackgroundTrailerPlaying,
+                    seekRequestToken = if (showTrailerControls) trailerSeekToken else 0,
+                    seekDeltaMs = if (showTrailerControls) trailerSeekDeltaMs else 0L,
+                    alpha = { trailerAlphaState.value },
+                    onEnded = { latestOnTrailerEnded() },
+                    onFirstFrameRendered = { isTrailerRendered = true },
+                    onProgressChanged = { position, duration -> latestOnTrailerProgressChanged(position, duration) },
+                    onRemoteKey = { keyCode, action, repeatCount -> latestOnTrailerControlKey(keyCode, action, repeatCount) }
+                )
+            } else {
+                null
+            }
+            BackgroundTrailerRequestEffect(
+                controller = backgroundTrailerController,
+                owner = trailerOwner,
+                request = request
+            )
+        } else {
+            TrailerPlayer(
+                trailerUrl = trailerUrl,
+                trailerAudioUrl = trailerAudioUrl,
+                isPlaying = isTrailerPlaying || isBackgroundTrailerPlaying,
+                isPaused = isTrailerPaused || isBackgroundTrailerPaused,
+                seekRequestToken = if (showTrailerControls) trailerSeekToken else 0,
+                seekDeltaMs = if (showTrailerControls) trailerSeekDeltaMs else 0L,
+                onRemoteKey = onTrailerControlKey,
+                onProgressChanged = onTrailerProgressChanged,
+                onEnded = onTrailerEnded,
+                onError = onTrailerEnded,
+                onFirstFrameRendered = { isTrailerRendered = true },
+                cropToFill = isBackgroundTrailerPlaying,
+                autoCropLetterbox = isBackgroundTrailerPlaying,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = if (isAnyTrailerPlaying) trailerAlphaState.value else 1f
+                    }
+            )
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
