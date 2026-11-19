@@ -103,6 +103,12 @@ class LeanbackCardViewHolder(
         posterImage.clipToOutline = true
 
         root.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+            val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
+            if (hasFocus && gridView?.mayTakeFocus() == false) {
+                // Reject stray focus on an inactive row
+                root.clearFocus()
+                return@OnFocusChangeListener
+            }
             updateFocusVisual(hasFocus)
             if (hasFocus) {
                 val pos = bindingAdapterPosition

@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
@@ -562,7 +563,13 @@ internal fun ModernHomeRowsList(
         expectedGen: Long,
         retryCount: Int = 0
     ) {
-        if (overlayGenerationRef.get() != expectedGen) return
+        if (overlayGenerationRef.get() != expectedGen) {
+            if (isVerticalGlideRef.get() && scrollJob?.isActive != true && verticalHoldJobRef.get()?.isActive != true) {
+                isVerticalGlideRef.set(false)
+                verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+            }
+            return
+        }
         val grid = rowGrids[rowKey] as? ModernInteropHorizontalGridView
         if (grid != null && grid.isAttachedToWindow) {
             grid.setSelectedPosition(targetCardIndex)
@@ -971,27 +978,29 @@ internal fun ModernHomeRowsList(
         val currentIdx = currentKey?.let { key -> rows.indexOfFirst { it.key == key } }
             ?.takeIf { it >= 0 }
             ?: targetRowIndexTracker.coerceIn(0, rows.lastIndex)
-        val targetIdx = currentIdx + sign
 
-        if (sign < 0 && targetIdx < 0) {
-            return latestRequestUpdateBannerFocus.value?.invoke() == true
-        }
-        if (targetIdx !in rows.indices) {
-            return false
-        }
-
-        val targetRow = rows[targetIdx]
-        if (targetRow.items.list.isEmpty()) {
-            val addonId = targetRow.addonId
-            val apiType = targetRow.apiType
-            val catalogId = targetRow.catalogId
+        var candidateIdx = currentIdx + sign
+        while (candidateIdx in rows.indices && rows[candidateIdx].items.list.isEmpty()) {
+            val emptyRow = rows[candidateIdx]
+            val addonId = emptyRow.addonId
+            val apiType = emptyRow.apiType
+            val catalogId = emptyRow.catalogId
             if (addonId != null && apiType != null && catalogId != null) {
                 latestOnRequestLazyCatalogLoad.value(
                     catalogRowLegacyKey(addonId, apiType, catalogId)
                 )
             }
-            return true
+            candidateIdx += sign
         }
+
+        if (sign < 0 && candidateIdx < 0) {
+            return latestRequestUpdateBannerFocus.value?.invoke() == true
+        }
+        if (candidateIdx !in rows.indices) {
+            return false
+        }
+        val targetIdx = candidateIdx
+        val targetRow = rows[targetIdx]
 
         val prevKey = currentKey ?: currentRowKeyTracker.get() ?: activeRowKey.value
         val measuredBefore = measureFocusedCardInOverlay(prevKey)
@@ -1036,6 +1045,7 @@ internal fun ModernHomeRowsList(
                 cornerRadiusPx = targetR,
                 dominantColor = targetColor
             )
+            overlayHost.activateGlideFocus()
             if (prevKey != null) {
                 (rowGrids[prevKey] as? ModernInteropHorizontalGridView)?.let { prevGrid ->
                     prevGrid.prepareForRowChange()
@@ -1260,6 +1270,19 @@ internal fun ModernHomeRowsList(
                             expandedCatalogFocusKey.value != null &&
                             activeItemIndex.value == 0
                         ) return@onPreviewKeyEvent true
+                        false
+                    }
+                    .onKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            when (event.key) {
+                                Key.DirectionDown -> {
+                                    return@onKeyEvent stepVerticalRow(1)
+                                }
+                                Key.DirectionUp -> {
+                                    return@onKeyEvent stepVerticalRow(-1)
+                                }
+                            }
+                        }
                         false
                     },
                 contentPadding = PaddingValues(bottom = rowsViewportHeight),

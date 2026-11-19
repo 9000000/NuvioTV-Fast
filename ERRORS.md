@@ -1,5 +1,62 @@
 # Error Log
 
+## [2026-11-19 11:35] - Lỗi Hàng Bên Dưới Tự Hiện Khung Viền Ở Poster Thứ 8 Khi Hàng Hiện Tại Load Xong
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt` & `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt`
+- **Agent**: mon
+- **Root Cause**: 
+  1. Khi hàng hiện tại hoàn tất tải dữ liệu từ placeholder (8 thẻ fake) sang danh sách thật, các ViewHolder placeholder cũ bị remove khỏi RecyclerView. Trong khoảng vài mili-giây trước khi thẻ mới được bind, thẻ đang có focus bị detach khiến Android Framework (`ViewRootImpl`) tự động tìm kiếm view fallback qua `FocusFinder.findNextFocus(DOWN)`.
+  2. `FocusFinder` duyệt danh sách candidate views của hàng bên dưới từ cuối lên đầu (`mChildrenCount - 1`), trỏ trúng thẻ thứ 8 (child cuối cùng của 8 thẻ placeholder của hàng bên dưới).
+  3. Hàng bên dưới vốn KHÔNG PHẢI là active row (`canTakeFocus?.invoke() == false`), nhưng biểu thức kiểm tra `mayTakeFocus(): Boolean = hasFocus() || canTakeFocus?.invoke() != false` đã sai lầm khi tự hợp thức hóa focus bằng `hasFocus()`. Đồng thời `descendantFocusability` của hàng bên dưới không bị khóa (`FOCUS_BLOCK_DESCENDANTS`), và `notifyCardFocused` / `requestChildFocus` không kiểm tra `mayTakeFocus()`. Do đó, thẻ thứ 8 của hàng bên dưới nhận focus, kích hoạt `floatingRingView?.moveToTarget` và làm xuất hiện thêm khung viền thứ 2 trên màn hình.
+- **Error Message**: 
+  ```
+  User reported: "lỗi khi di chuyển xuống hàng mà poster chưa load xong và đợi khi load xong thì hàng bên dưới của hàng hiện tại hiện thêm một khung viền tự động trỏ vào poster thứ 8"
+  ```
+- **Fix Applied**: 
+  1. Trong `ModernInteropHorizontalGridView.kt`:
+     - Chuẩn hóa `mayTakeFocus(): Boolean = canTakeFocus?.invoke() != false`: Tuyệt đối không cho phép một hàng không active nhận quyền focus chỉ vì vô tình nhận được stray focus từ hệ thống.
+     - Setter của `canTakeFocus`: Khi `canTakeFocus?.invoke() == false`, lập tức đặt `descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS` và gọi `floatingRingView?.hideRing(true)`. Chặn đứng 100% việc Android `FocusFinder` có thể tìm thấy bất kỳ thẻ con nào của hàng không active.
+     - Kiểm tra `mayTakeFocus()` trong `notifyCardFocused`, `requestChildFocus`, và `onGlobalFocusChanged`: Nếu hàng không có quyền active, từ chối mọi yêu cầu focus và lập tức ẩn ring (`hideRing(true)`).
+  2. Trong `LeanbackModernRowAdapter.kt`:
+     - Trong `LeanbackCardViewHolder.init`: Bổ sung kiểm tra trong `root.onFocusChangeListener`, nếu `hasFocus` mà `gridView?.mayTakeFocus() == false`, lập tức gọi `root.clearFocus()` và return, không kích hoạt focus visual hay thông báo selection.
+- **Prevention**: Trong giao diện Leanback TV nhiều hàng, luôn khóa quyền nhận focus của con cháu (`FOCUS_BLOCK_DESCENDANTS`) đối với tất cả các hàng không phải hàng đang active, không dùng `hasFocus()` để ghi đè quyền `mayTakeFocus`, và từ chối ngay lập tức mọi sự kiện stray focus rơi vào hàng không active.
+- **Status**: Fixed
+
+---
+
+## [2026-11-19 11:15] - Lỗi Kẹt Cuộn Xuống & Phím Trái/Phải Chập Chờn Trên Màn Hình Home TV Box
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt` & `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt`
+- **Agent**: mon
+- **Root Cause**: 
+  1. *Điều hướng ngang (Trái/Phải)*: `ACTION_UP` xóa sớm `pendingTargetPosition = NO_POSITION` và gọi lại `setSelectedPositionSmooth` khi Leanback chưa cuộn xong (`scrollState != SCROLL_STATE_IDLE`). Khi người dùng bấm phím tiếp theo, `currentPos` bị tính ngược về vị trí cũ (`selectedPosition`), dẫn tới nuốt phím. Đồng thời `ensureTargetChildFocused` bị return sớm do so sánh với `selectedPosition` khi `pendingTargetPosition` bị xóa.
+  2. *Cuộn dọc (Xuống)*: `stepVerticalRow` gặp hàng catalog rỗng (`items.list.isEmpty()`) lập tức `return true` mà không nhảy qua hàng rỗng, khóa cứng người dùng tại hàng hiện tại.
+  3. *Mất focus dọc*: `handoffOverlayToGrid` không dọn cờ `isVerticalGlideRef` khi generation không khớp, và `stepVerticalRow` không kích hoạt focus cho `overlayHost` trong lúc cuộn khiến các Android TV Box cấu hình yếu bị rơi focus và nuốt phím tiếp theo.
+- **Error Message**: 
+  ```
+  User reported:
+  - "trên một số box ở màn home không cuộn xuống được"
+  - "và cả trái phải lúc được"
+  ```
+- **Fix Applied**: 
+  1. Trong `ModernInteropHorizontalGridView.kt`:
+     - Xóa việc reset `pendingTargetPosition` và bỏ gọi thừa `setSelectedPositionSmooth` / `ensureChildFocusAndRing` trong `ACTION_UP` (để `onChildViewHolderSelected` hoặc `SCROLL_STATE_IDLE` dọn dẹp khi thẻ thực sự hạ cánh).
+     - Tối ưu hóa `currentPos` trong `ACTION_DOWN` luôn ưu tiên `pendingTargetPosition` rồi đến `resolvedHolderPos` và `resolvedSelectedPos`.
+     - Sửa `ensureTargetChildFocused` chỉ hủy khi có `pendingTargetPosition` mới hơn khác với `targetPos`.
+  2. Trong `ModernHomeRowsList.kt`:
+     - Nâng cấp `stepVerticalRow` tự động quét tìm hàng kế tiếp không rỗng (bỏ qua hàng trống đang tải và trigger lazy load cho chúng).
+     - Kích hoạt `overlayHost.activateGlideFocus()` trong lúc fixed step ring hoạt động để overlay host giữ và điều hướng phím an toàn.
+     - Bổ sung fail-safe reset `isVerticalGlideRef` trong `handoffOverlayToGrid` khi generation đổi mà không còn job cuộn nào chạy.
+     - Bổ sung `.onKeyEvent` cho `LazyColumn` làm lưới an toàn bắt DPAD_DOWN / DPAD_UP khi focus rơi vào Compose container.
+- **Prevention**: Trong các danh sách lồng ghép Leanback HorizontalGridView và Compose LazyColumn trên TV, tuyệt đối không can thiệp xóa trạng thái điều hướng ngang trong sự kiện nhả phím `ACTION_UP`, luôn quét tìm hàng hợp lệ tiếp theo khi gặp hàng rỗng và duy trì focus an toàn trên overlay host trong suốt animation chuyển hàng.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-18 21:30] - Lỗi Kết Nối Simkl Với Client ID Mới (unauthorized_client: V2 vs V1)
 
 - **Type**: Integration

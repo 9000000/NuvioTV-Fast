@@ -50,7 +50,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         if (!hadRowFocus && !currentlyHasFocus) {
             return@OnGlobalFocusChangeListener
         }
-        val hasRowFocus = currentlyHasFocus || (newFocus != null && isDescendant(newFocus))
+        val hasRowFocus = (currentlyHasFocus || (newFocus != null && isDescendant(newFocus))) && mayTakeFocus()
         hadRowFocus = hasRowFocus
         if (!hasRowFocus) {
             isHoldingHorizontalKey = false
@@ -98,10 +98,22 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
     }
 
     var canTakeFocus: (() -> Boolean)? = null
+        set(value) {
+            field = value
+            val allowed = value?.invoke() != false
+            descendantFocusability = if (allowed) {
+                ViewGroup.FOCUS_AFTER_DESCENDANTS
+            } else {
+                ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            }
+            if (!allowed) {
+                floatingRingView?.hideRing(true)
+            }
+        }
 
     private var isNavigatingToSidebar: Boolean = false
 
-    fun mayTakeFocus(): Boolean = hasFocus() || canTakeFocus?.invoke() != false
+    fun mayTakeFocus(): Boolean = canTakeFocus?.invoke() != false
 
     val hasPendingHorizontalNavigation: Boolean
         get() = isHoldingHorizontalKey ||
@@ -154,7 +166,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         get() = adapter as? LeanbackRowAdapter
 
     fun notifyCardFocused(cardContainer: View, isLandscape: Boolean, dominantColor: Int) {
-        if (isOverlayRingActive) {
+        if (isOverlayRingActive || !mayTakeFocus()) {
             floatingRingView?.hideRing(true)
             return
         }
@@ -200,11 +212,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             floatingRingView?.hideRing(true)
             return
         }
-        val activeTarget = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
-            pendingTargetPosition
-        } else {
-            selectedPosition
-        }
+        val activeTarget = pendingTargetPosition
         if (activeTarget != RecyclerView.NO_POSITION && activeTarget != targetPos) return
 
         val vh = findViewHolderForAdapterPosition(targetPos) as? LeanbackCardViewHolder
@@ -354,8 +362,12 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
     }
 
     override fun requestChildFocus(child: View?, focused: View?) {
+        if (!mayTakeFocus()) {
+            floatingRingView?.hideRing(true)
+            return
+        }
         if (isBusyLayout) {
-            post { super.requestChildFocus(child, focused) }
+            post { if (mayTakeFocus()) super.requestChildFocus(child, focused) }
             return
         }
         super.requestChildFocus(child, focused)
@@ -479,26 +491,10 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     } else {
                         currentSelected
                     }
-                    pendingTargetPosition = RecyclerView.NO_POSITION
 
                     if (event.keyCode == towardStartKey && target <= 0) {
                         hasReleasedKeyAfterArrivingAt0 = true
                         arrivedAt0FromEnd = false
-                    }
-
-                    if (animationsEnabled) {
-                        setSelectedPositionSmooth(target)
-                    } else {
-                        setSelectedPosition(target)
-                    }
-
-                    val vh = findViewHolderForAdapterPosition(target) as? LeanbackCardViewHolder
-                    if (vh != null) {
-                        if (!vh.itemView.hasFocus()) {
-                            vh.itemView.requestFocus()
-                        }
-                    } else {
-                        ensureChildFocusAndRing(animated = false)
                     }
                     return true
                 }
@@ -521,8 +517,9 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             val resolvedSelectedPos = selectedPosition.takeIf { it != RecyclerView.NO_POSITION }
             val currentPos = when {
                 pendingTargetPosition != RecyclerView.NO_POSITION -> pendingTargetPosition
-                scrollState == RecyclerView.SCROLL_STATE_IDLE -> resolvedHolderPos ?: resolvedSelectedPos ?: 0
-                else -> resolvedSelectedPos ?: resolvedHolderPos ?: 0
+                resolvedHolderPos != null -> resolvedHolderPos
+                resolvedSelectedPos != null -> resolvedSelectedPos
+                else -> 0
             }
             when (event.keyCode) {
                 towardStartKey -> {
