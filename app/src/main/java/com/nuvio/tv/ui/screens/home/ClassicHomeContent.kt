@@ -32,9 +32,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.Modifier
@@ -50,7 +51,13 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import coil3.imageLoader
+import com.nuvio.tv.core.image.HomeImageLoadingProfile
+import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.domain.model.isPlaceholder
+import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.util.dpadVerticalFastScroll
 import com.nuvio.tv.ui.util.asStable
 import androidx.compose.ui.unit.dp
@@ -81,6 +88,19 @@ private class FocusSnapshot(
     var rowIndex: Int,
     var itemIndex: Int,
     var rowKey: String? = null
+)
+
+private data class ClassicVisibilityWindow(
+    val firstVisible: Int,
+    val lastVisible: Int,
+    val rowsOffset: Int,
+    val rowCount: Int
+)
+
+private data class ClassicVerticalPrefetchSnapshot(
+    val lastVisible: Int,
+    val signature: String,
+    val isScrolling: Boolean
 )
 
 private const val CLASSIC_CATALOG_POSTER_SCALE = 1.35f
@@ -117,6 +137,8 @@ fun ClassicHomeContent(
 ) {
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
     val density = LocalDensity.current
+    val context = LocalContext.current
+    val loadingProfile = remember(context) { HomeImageLoadingProfile.forContext(context) }
     val classicCatalogPosterCardStyle = remember(posterCardStyle) {
         posterCardStyle.copy(
             width = posterCardStyle.width * CLASSIC_CATALOG_POSTER_SCALE,
@@ -428,37 +450,237 @@ fun ClassicHomeContent(
         return
     }
 
-    // Lazy catalog loading: trigger load when rows approach visibility
+    // Lazy catalog loading & vertical poster prefetch when rows approach visibility
     val latestOnRequestLazyCatalogLoad = rememberUpdatedState(onRequestLazyCatalogLoad)
     val latestVisibleHomeRows = rememberUpdatedState(visibleHomeRows)
-    LaunchedEffect(columnListState) {
-        val prefetchAhead = 1
+    val heroOffset = if (uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()) 1 else 0
+    val cwOffset = if (uiState.continueWatchingEnabled && uiState.continueWatchingItems.isNotEmpty()) 1 else 0
+    val upcomingOffset = if (uiState.continueWatchingEnabled && uiState.upcomingItems.isNotEmpty()) 1 else 0
+    val latestRowsOffset = rememberUpdatedState(heroOffset + cwOffset + upcomingOffset)
+
+    LaunchedEffect(columnListState, loadingProfile) {
         snapshotFlow {
             val info = columnListState.layoutInfo
             val firstVisible = info.visibleItemsInfo.firstOrNull()?.index ?: -1
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            firstVisible to lastVisible
-        }.collectLatest { (firstVisible, lastVisible) ->
-            if (lastVisible < 0) return@collectLatest
-            // Debounce: restarts on every new emission during rapid scroll.
-            // Only fires when visible indices stabilize for 240ms.
-            delay(240)
-            val rows = latestVisibleHomeRows.value
-            // Offset for hero + CW sections that precede homeRows in LazyColumn
-            val heroOffset = if (uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()) 1 else 0
-            val cwOffset = if (uiState.continueWatchingEnabled && uiState.continueWatchingItems.isNotEmpty()) 1 else 0
-            val rowsOffset = heroOffset + cwOffset
-            for (idx in firstVisible.coerceAtLeast(0)..(lastVisible + prefetchAhead)) {
-                val rowIdx = idx - rowsOffset
-                val row = rows.getOrNull(rowIdx) ?: continue
-                if (row is HomeRow.Catalog && row.row.isLoading &&
-                    row.row.items.firstOrNull()?.id?.startsWith("__placeholder_") == true
-                ) {
-                    val key = row.row.legacyKey()
-                    latestOnRequestLazyCatalogLoad.value(key)
+            ClassicVisibilityWindow(
+                firstVisible = firstVisible,
+                lastVisible = lastVisible,
+                rowsOffset = latestRowsOffset.value,
+                rowCount = latestVisibleHomeRows.value.size
+            )
+        }
+            .distinctUntilChanged()
+            .filter { it.lastVisible >= 0 }
+            .collectThrottledLeadingTrailing(
+                leadingIntervalMs = 80L,
+                trailingDelayMs = 100L
+            ) { (firstVisible, lastVisible, _, _) ->
+                val rows = latestVisibleHomeRows.value
+                val rowsOffset = latestRowsOffset.value
+                val window = computeLazyCatalogPrefetchWindow(
+                    firstVisible = firstVisible,
+                    lastVisible = lastVisible,
+                    aheadCount = loadingProfile.lazyPrefetchAheadClassic,
+                    totalCount = rowsOffset + rows.size
+                )
+                for (idx in window) {
+                    val rowIdx = idx - rowsOffset
+                    val row = rows.getOrNull(rowIdx) ?: continue
+                    when (row) {
+                        is HomeRow.Catalog -> {
+                            val firstItem = row.row.items.firstOrNull()
+                            val isPlaceholderRow = firstItem?.id?.startsWith("__placeholder_") == true ||
+                                firstItem?.poster.isPlaceholder()
+                            if (row.row.isLoading && isPlaceholderRow) {
+                                latestOnRequestLazyCatalogLoad.value(row.row.legacyKey())
+                            }
+                        }
+                        is HomeRow.PlaceholderCatalog -> {
+                            latestOnRequestLazyCatalogLoad.value(row.catalogKey)
+                        }
+                        is HomeRow.CollectionRow -> Unit
+                    }
                 }
             }
+    }
+
+    val verticalPrefetchImageLoader = context.imageLoader
+    val prefetchedClassicVerticalKeys = remember { LinkedHashSet<String>(512) }
+    val classicCatalogPortraitWidthPx = with(density) { classicCatalogPosterCardStyle.width.roundToPx() }.coerceAtLeast(1)
+    val classicCatalogPortraitHeightPx = with(density) { classicCatalogPosterCardStyle.height.roundToPx() }.coerceAtLeast(1)
+    val classicCatalogLandscapeWidthPx = with(density) { 260.dp.roundToPx() }.coerceAtLeast(1)
+    val classicCatalogLandscapeHeightPx = with(density) { 146.dp.roundToPx() }.coerceAtLeast(1)
+    val classicSecondaryWidthPx = with(density) { classicSecondaryPosterCardStyle.width.roundToPx() }.coerceAtLeast(1)
+    val classicSecondaryHeightPx = with(density) { classicSecondaryPosterCardStyle.height.roundToPx() }.coerceAtLeast(1)
+
+    LaunchedEffect(
+        verticalPrefetchImageLoader,
+        columnListState,
+        loadingProfile,
+        globalLandscape,
+        classicCatalogPortraitWidthPx,
+        classicCatalogPortraitHeightPx,
+        classicCatalogLandscapeWidthPx,
+        classicCatalogLandscapeHeightPx,
+        classicSecondaryWidthPx,
+        classicSecondaryHeightPx
+    ) {
+        fun computeClassicVerticalWindow(
+            lastVisible: Int,
+            rowsOffset: Int,
+            totalRows: Int
+        ): IntRange {
+            val aheadRows = loadingProfile.verticalPrefetchRows
+            if (lastVisible < 0 || totalRows <= 0 || aheadRows <= 0) return IntRange.EMPTY
+            val lastVisibleRowIndex = lastVisible - rowsOffset
+            return if (lastVisibleRowIndex < 0) {
+                0..minOf(aheadRows - 1, totalRows - 1)
+            } else {
+                computeVerticalImagePrefetchWindow(
+                    lastVisibleRowIndex = lastVisibleRowIndex,
+                    aheadRows = aheadRows,
+                    totalRows = totalRows
+                )
+            }
         }
+
+        snapshotFlow {
+            val lastVisible = columnListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val rows = latestVisibleHomeRows.value
+            val rowsOffset = latestRowsOffset.value
+            val lastVisibleRowIndex = lastVisible - rowsOffset
+            val window = computeClassicVerticalWindow(lastVisible, rowsOffset, rows.size)
+            val signature = encodeVerticalPrefetchWindowSignature(
+                anchorRowIndex = lastVisibleRowIndex,
+                window = window,
+                rowKey = { idx ->
+                    when (val row = rows[idx]) {
+                        is HomeRow.Catalog -> row.row.stableKey()
+                        is HomeRow.CollectionRow -> "collection_${row.collection.id}"
+                        is HomeRow.PlaceholderCatalog -> row.stableCatalogKey
+                    }
+                },
+                isLoading = { idx ->
+                    when (val row = rows[idx]) {
+                        is HomeRow.Catalog -> row.row.isLoading
+                        is HomeRow.CollectionRow -> false
+                        is HomeRow.PlaceholderCatalog -> true
+                    }
+                },
+                firstRealUrl = { idx ->
+                    when (val row = rows[idx]) {
+                        is HomeRow.Catalog -> {
+                            val isLandscape = globalLandscape ||
+                                row.row.items.firstOrNull()?.posterShape == PosterShape.LANDSCAPE
+                            row.row.items.firstNotNullOfOrNull { item ->
+                                if (item.id.startsWith("__placeholder_")) {
+                                    null
+                                } else {
+                                    item.classicRowImageUrl(isLandscape)?.takeIf {
+                                        !it.isBlank() && !it.isPlaceholder()
+                                    }
+                                }
+                            }
+                        }
+                        is HomeRow.CollectionRow -> {
+                            row.collection.folders.firstNotNullOfOrNull { folder ->
+                                folder.coverImageUrl?.takeIf { !it.isBlank() && !it.isPlaceholder() }
+                            }
+                        }
+                        is HomeRow.PlaceholderCatalog -> null
+                    }
+                },
+                itemCount = { idx ->
+                    when (val row = rows[idx]) {
+                        is HomeRow.Catalog -> row.row.items.size
+                        is HomeRow.CollectionRow -> row.collection.folders.size
+                        is HomeRow.PlaceholderCatalog -> 0
+                    }
+                },
+                focusedIndex = { key -> rowFocusedItemIndex[key] ?: 0 }
+            )
+            ClassicVerticalPrefetchSnapshot(
+                lastVisible = lastVisible,
+                signature = signature,
+                isScrolling = columnListState.isScrollInProgress
+            )
+        }
+            .distinctUntilChanged { old, new -> old.signature == new.signature }
+            .filter { it.lastVisible >= 0 }
+            .collectThrottledLeadingTrailing(
+                leadingIntervalMs = 60L,
+                trailingDelayMs = 60L,
+                shouldBypassThrottle = { !it.isScrolling }
+            ) { snapshot ->
+                val rows = latestVisibleHomeRows.value
+                val rowsOffset = latestRowsOffset.value
+                val window = computeClassicVerticalWindow(snapshot.lastVisible, rowsOffset, rows.size)
+                for (rowIdx in window) {
+                    when (val homeRow = rows[rowIdx]) {
+                        is HomeRow.Catalog -> {
+                            val catalogRow = homeRow.row
+                            val items = catalogRow.items
+                            if (items.isEmpty()) continue
+                            val isLandscape = globalLandscape ||
+                                items.firstOrNull()?.posterShape == PosterShape.LANDSCAPE
+                            val firstItem = items.firstOrNull()
+                            val firstUrl = firstItem?.classicRowImageUrl(isLandscape)
+                            if (firstItem?.id?.startsWith("__placeholder_") == true || firstUrl.isPlaceholder()) {
+                                continue
+                            }
+                            val wPx = if (isLandscape) classicCatalogLandscapeWidthPx else classicCatalogPortraitWidthPx
+                            val hPx = if (isLandscape) classicCatalogLandscapeHeightPx else classicCatalogPortraitHeightPx
+                            val rowKey = catalogRow.stableKey()
+                            val cardIndices = computeRowCardPrefetchIndices(
+                                focusedIndex = rowFocusedItemIndex[rowKey] ?: 0,
+                                itemCount = items.size,
+                                prefetchCount = loadingProfile.verticalPrefetchItems
+                            )
+                            for (itemIdx in cardIndices) {
+                                val item = items[itemIdx]
+                                if (item.id.startsWith("__placeholder_")) continue
+                                val imageUrl = item.classicRowImageUrl(isLandscape)?.trim()
+                                if (imageUrl.isNullOrEmpty() || imageUrl.isPlaceholder()) continue
+                                LeanbackArtworkLoader.prefetch(
+                                    context = context,
+                                    imageLoader = verticalPrefetchImageLoader,
+                                    imageUrl = imageUrl,
+                                    fallbackUrl = item.rawPosterUrl,
+                                    widthPx = wPx,
+                                    heightPx = hPx,
+                                    prefetchedKeysTracker = prefetchedClassicVerticalKeys
+                                )
+                            }
+                        }
+                        is HomeRow.CollectionRow -> {
+                            val collection = homeRow.collection
+                            val folders = collection.folders
+                            if (folders.isEmpty()) continue
+                            val collectionKey = "collection_${collection.id}"
+                            val cardIndices = computeRowCardPrefetchIndices(
+                                focusedIndex = rowFocusedItemIndex[collectionKey] ?: 0,
+                                itemCount = folders.size,
+                                prefetchCount = loadingProfile.verticalPrefetchItems
+                            )
+                            for (itemIdx in cardIndices) {
+                                val folder = folders[itemIdx]
+                                val imageUrl = folder.coverImageUrl?.trim()
+                                if (imageUrl.isNullOrEmpty() || imageUrl.isPlaceholder()) continue
+                                LeanbackArtworkLoader.prefetch(
+                                    context = context,
+                                    imageLoader = verticalPrefetchImageLoader,
+                                    imageUrl = imageUrl,
+                                    widthPx = classicSecondaryWidthPx,
+                                    heightPx = classicSecondaryHeightPx,
+                                    prefetchedKeysTracker = prefetchedClassicVerticalKeys
+                                )
+                            }
+                        }
+                        is HomeRow.PlaceholderCatalog -> Unit
+                    }
+                }
+            }
     }
 
     val isVerticalScrollingState = remember(columnListState) {
@@ -1000,3 +1222,6 @@ private fun CollectionFolder.toClassicFocusArtwork(useBackdrop: Boolean): Classi
         seed = "$id|$title"
     )
 }
+
+private fun MetaPreview.classicRowImageUrl(isLandscape: Boolean): String? =
+    if (isLandscape) (landscapePoster ?: backdropUrl ?: poster) else (poster ?: backdropUrl)
