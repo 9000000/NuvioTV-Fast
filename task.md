@@ -1,32 +1,71 @@
-# Danh Sách Task - Sửa Lỗi D-Pad Down Trên Điều Khiển Bluetooth / Hồng Ngoại Ở Màn Hình Home
+# Danh Sách Task - Tối Ưu Cơ Chế Tải Catalog & Prefetch Poster Màn Hình Home
 
-> **Kế hoạch tương ứng**: [PLAN-fix-dpad-down-home-navigation.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-fix-dpad-down-home-navigation.md)
+> **Kế hoạch tương ứng**: [PLAN-poster-loading-optimization.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-poster-loading-optimization.md)
 
 ---
 
 ## 📋 Task Breakdown
 
-- [x] **TASK-01**: Chống xung lặp sớm (`repeatCount = 1`) từ Remote IR / Bluetooth và chặn Snap-Backward trong `ModernHomeRowsList`
+### Phase 1: Tầng Catalog & Sửa Bug Giam Hàng Lazy
+- [x] **TASK-01**: Tạo cấu hình phân hạng phần cứng `HomeImageLoadingProfile` theo RAM thiết bị
+  - **Vai trò**: Core / Performance Engineer
+  - **Mô tả**: Định nghĩa `HomeImageLoadingProfile` (Low-RAM `<= 2.3GB` vs Standard `> 2.3GB`) chứa toàn bộ hằng số không magic-number cho `okHttpMaxRequests`, `okHttpMaxRequestsPerHost`, `connectionPoolMaxIdle`, `bitmapDecodeParallelism`, `catalogConcurrency`, `eagerCatalogRows`, `dripAheadRows`, `verticalPrefetchRows`, `verticalPrefetchItems`, `horizontalPrefetchAhead`, `horizontalPrefetchBehind`.
+  - **File**: [HomePosterLoading.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/image/HomePosterLoading.kt)
+  - **Trạng thái**: Completed (`fe327fb1e`)
+
+- [x] **TASK-02**: Sửa bug giam hàng lazy, nâng concurrency và bổ sung Background Drip-Load cho Catalog
+  - **Vai trò**: ViewModel / Data Pipeline Engineer
   - **Mô tả**:
-    1. Thêm `lastVerticalSingleStepAtMs` và ngưỡng `VERTICAL_HOLD_GRACE_PERIOD_MS = 200L` trước khi kích hoạt `startOrExtendVerticalHoldScroll`, tránh việc xung `repeatCount = 1` của điều khiển IR / Bluetooth gọi `scrollJob?.cancel()` làm đứt gãy bước nhảy đơn.
-    2. Trong `endVerticalHoldScroll()`, đảm bảo `landingIdx` không bao giờ lùi ngược về hàng trước `targetRowIndexTracker` (`maxOf` khi `dir > 0`, `minOf` khi `dir < 0`).
-    3. Xử lý trực tiếp cả `repeatCount == 0` tại `LazyColumn.onPreviewKeyEvent`.
-  - **File**: [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt)
-  - **Trạng thái**: Completed
+    1. Sửa `loadCatalogPipeline` để mỗi hàng lazy tải xong đều flush UI ngay (không chờ `pendingCatalogLoads == 0`).
+    2. Điều chỉnh `catalogLoadSemaphore`, `eagerCatalogLoadCount`, và rút ngắn debounce sau lần render đầu ở `scheduleUpdateCatalogRows` & `observeModernHomePresentationPipeline`.
+    3. Thêm `scheduleBackgroundDripLazyCatalogs()` tự động nạp cuốn chiếu các hàng lazy tiếp theo sau khi hàng eager hoàn tất (có giới hạn cửa sổ + kiểm tra `OpenFilesGuard`).
+    4. Cache in-memory `customPosterUrlPattern` & `customPosterEnabledScreens` trong `CatalogRepositoryImpl` thay vì gọi `.first()` mỗi catalog.
+  - **File**: [HomeViewModel.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/HomeViewModel.kt), [HomeViewModelCatalogPipeline.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt), [HomeViewModelPresentationPipeline.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/HomeViewModelPresentationPipeline.kt), [CatalogRepositoryImpl.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/data/repository/CatalogRepositoryImpl.kt)
+  - **Trạng thái**: Completed (`4bcd3a384`)
 
-- [x] **TASK-02**: Đồng bộ ngưỡng bảo vệ repeat & mở khóa focus tức thời trong `ModernInteropHorizontalGridView`
+### Phase 2: Tầng Kích Hoạt Lazy Catalog Ở UI
+- [x] **TASK-03**: Thay `collectLatest + delay(240)` bằng Throttle chủ động & mở rộng cửa sổ nhìn trước Lazy Catalog
+  - **Vai trò**: UI / TV Navigation Engineer
   - **Mô tả**:
-    1. Bổ sung `prepareForIncomingFocus()` mở `descendantFocusability = FOCUS_AFTER_DESCENDANTS` tức thì và bật cờ `pendingIncomingFocus = true` khi chuyển hàng.
-    2. Giải phóng `pendingIncomingFocus = false` trong `prepareForRowChange()`.
-  - **File**: [ModernInteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt)
-  - **Trạng thái**: Completed
+    1. Trong `ModernHomeRowsList.kt`: nâng `prefetchAheadForLazy` lên theo profile (`3–4` hàng), thay `collectLatest + delay(240)` bằng cơ chế throttle không bị hủy liên tục khi cuộn nhanh, đồng thời gọi kích hoạt sớm trong `stepVerticalRow` / hold-scroll.
+    2. Trong `ClassicHomeContent.kt`: nâng `prefetchAhead` lên `2–3` hàng và áp dụng cơ chế throttle tương tự.
+  - **File**: [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt), [ClassicHomeContent.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ClassicHomeContent.kt)
+  - **Trạng thái**: Completed (`2b9d6c81e`)
 
-- [x] **TASK-03**: Mở khóa `focusSearch` trục dọc cho `InteropHorizontalGridView` (Classic Home)
-  - **Mô tả**: Sửa `focusSearch(focused, direction)` trong `InteropHorizontalGridView.kt` để chỉ khóa biên trái/phải nội bộ mà không chặn `View.FOCUS_DOWN` / `View.FOCUS_UP`, giúp bấm 1 lần ở Classic Home cũng chuyển hàng bình thường.
-  - **File**: [InteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt)
-  - **Trạng thái**: Completed
+### Phase 3: Tầng Prefetch Poster & Lọc Rác Placeholder
+- [x] **TASK-04**: Chặn hoàn toàn URL `placeholder://empty` đi vào Coil Pipeline
+  - **Vai trò**: Image / Leanback Engineer
+  - **Mô tả**: Kiểm tra `isPlaceholder()` ngay đầu `LeanbackArtworkLoader.loadIntoImageView`, `LeanbackArtworkLoader.prefetch`, `LeanbackArtworkLoader.resolveNormalizedFallbackUrl`, `LeanbackCardViewHolder.bind` và `LeanbackPosterViewHolder.bind` để loại bỏ request rác vào Coil.
+  - **File**: [LeanbackArtworkLoader.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackArtworkLoader.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt), [LeanbackPosterViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackPosterViewHolder.kt)
+  - **Trạng thái**: Completed (`1101a6d0f`)
 
-- [x] **TASK-04**: Kiểm thử hồi quy & xác nhận kịch bản Remote IR / Bluetooth
-  - **Mô tả**: Chạy unit test suite `com.nuvio.tv.ui.screens.home.*` và kiểm tra kịch bản `ACTION_DOWN(repeatCount=0)` + `ACTION_DOWN(repeatCount=1)` + `ACTION_UP`.
-  - **File**: `app/src/test/java/com/nuvio/tv/ui/screens/home/`
-  - **Trạng thái**: Completed
+- [x] **TASK-05**: Sửa lỗi "chết đứng" & mở rộng Vertical Poster Prefetch (Modern + Classic)
+  - **Vai trò**: UI / Image Prefetch Engineer
+  - **Mô tả**:
+    1. Trong `ModernHomeRowsList.kt`: theo dõi cả `lastVisibleRowIndex` lẫn trạng thái dữ liệu của các hàng kế tiếp để tự prefetch ngay khi hàng lazy/eager vừa load xong JSON; nâng phạm vi lên `2–3` hàng × `6–8` poster tính từ `focusedItemByRow[row.key] ?: 0`.
+    2. Trong `ClassicHomeContent.kt`: bổ sung Vertical Poster Prefetch sử dụng chung `LeanbackArtworkLoader.prefetch` với kích thước card chuẩn của Classic Home.
+  - **File**: [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt), [ClassicHomeContent.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ClassicHomeContent.kt)
+  - **Trạng thái**: Completed (`2b9d6c81e`)
+
+- [x] **TASK-06**: Sửa điểm neo Horizontal Poster Prefetch theo mép phải hiển thị
+  - **Vai trò**: Leanback Engineer
+  - **Mô tả**: Trong `LeanbackRowAdapter` và `LeanbackUniversalAdapter`, tính điểm neo từ `lastVisibleAdapterPosition` (hoặc vị trí bound xa nhất về phía phải) thay vì `focusedPosition`, tải trước `4–6` poster ngoài màn hình về phía phải (và `2` poster khi cuộn ngược trái) theo `HomeImageLoadingProfile` + kích hoạt prefetch ban đầu khi hàng active nhận dữ liệu.
+  - **File**: [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt), [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt)
+  - **Trạng thái**: Completed (`1101a6d0f`, `f61e18e12`)
+
+### Phase 4: Mạng OkHttp, Decode Parallelism, Fallback & Color Engine
+- [x] **TASK-07**: Áp dụng Tiered OkHttp/Decode config, Negative Cache cho Custom Poster Fallback và tối ưu thời điểm trích màu
+  - **Vai trò**: Core / Performance Engineer
+  - **Mô tả**:
+    1. Kết nối `HomeImageLoadingProfile` vào `NuvioApplication.newImageLoader()` (`Dispatcher`, `ConnectionPool`, `bitmapFactoryMaxParallelism`).
+    2. Thêm negative cache TTL ngắn hạn trong `CustomPosterFallbackInterceptor` cho custom poster URL lỗi để fallback ngay sang `rawPosterUrl`.
+    3. Giới hạn `LeanbackColorEngine.extractDominantColorAsync` chỉ chạy tự động cho card đang focus hoặc vị trí đầu hàng; các card khác trích on-demand khi focus.
+  - **File**: [NuvioApplication.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/NuvioApplication.kt), [CustomPosterFallbackInterceptor.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/image/CustomPosterFallbackInterceptor.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt), [LeanbackPosterViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackPosterViewHolder.kt)
+  - **Trạng thái**: Completed (`fe327fb1e`, `1101a6d0f`)
+
+### Phase 5: Kiểm Chứng & Nghiệm Thu
+- [x] **TASK-08**: Viết Unit Tests & Chạy Kiểm Thử Xác Minh (Automated Verified; ADB Profiling sẵn sàng đo trên TV thật)
+  - **Vai trò**: QA / Verification Engineer
+  - **Mô tả**: Bổ sung unit test cho `HomePosterLoading`, `CustomPosterFallbackInterceptor`, `LeanbackArtworkLoader`, `HomeViewModelCatalogPipeline` (lazy flush + drip-load) và `HomePrefetchTriggerTest`; chạy `:app:compileFullDebugKotlin` & `:app:testFullDebugUnitTest` (135/136 passed, 1 lỗi pre-existing trên HEAD ở `HomeEnrichmentRetryTest.kt:115`).
+  - **File**: [HomePosterLoadingTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/core/image/HomePosterLoadingTest.kt), [CustomPosterFallbackInterceptorTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/core/image/CustomPosterFallbackInterceptorTest.kt), [LeanbackCoreOptimizationTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt), [HomeCatalogLazyPipelineTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/home/HomeCatalogLazyPipelineTest.kt), [HomePrefetchTriggerTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/home/HomePrefetchTriggerTest.kt)
+  - **Trạng thái**: Automated Tests Verified (`d22fee2ca`) | Manual ADB Profiling on TV Box pending device run
