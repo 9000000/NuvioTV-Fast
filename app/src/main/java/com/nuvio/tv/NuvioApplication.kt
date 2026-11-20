@@ -125,15 +125,20 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
     @OptIn(coil3.annotation.ExperimentalCoilApi::class)
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun newImageLoader(context: android.content.Context): ImageLoader {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memoryInfo = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memoryInfo)
+        val loadingProfile = com.nuvio.tv.core.image.HomeImageLoadingProfile.forDevice(memoryInfo.totalMem)
+
         val imageOkHttpClient by lazy {
             val imageDispatcher = okhttp3.Dispatcher().apply {
-                maxRequests = 32
-                maxRequestsPerHost = 16
+                maxRequests = loadingProfile.okHttpMaxRequests
+                maxRequestsPerHost = loadingProfile.okHttpMaxRequestsPerHost
             }
             OkHttpClient.Builder()
                 .eventListenerFactory(com.nuvio.tv.core.image.ArtworkDiagnostics.networkEvents)
                 .dispatcher(imageDispatcher)
-                .connectionPool(okhttp3.ConnectionPool(10, 5, TimeUnit.MINUTES))
+                .connectionPool(okhttp3.ConnectionPool(loadingProfile.connectionPoolMaxIdle, 5, TimeUnit.MINUTES))
                 .dns(IPv4FirstDns())
                 .socketFactory(NoDelaySocketFactory)
                 .connectTimeout(4, TimeUnit.SECONDS)
@@ -158,10 +163,6 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                     com.nuvio.tv.core.network.ArcDns.onChange(it.connectionPool::evictAll)
                 }
         }
-
-        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val memoryInfo = ActivityManager.MemoryInfo()
-        activityManager.getMemoryInfo(memoryInfo)
 
         return ImageLoader.Builder(this)
             .eventListenerFactory(com.nuvio.tv.core.image.ArtworkDiagnostics.imageEvents)
@@ -223,7 +224,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                     resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels
                 ).let { coil3.size.Size(it, it) }
             )
-            .bitmapFactoryMaxParallelism(com.nuvio.tv.core.image.HOME_POSTER_BITMAP_PARALLELISM)
+            .bitmapFactoryMaxParallelism(loadingProfile.bitmapDecodeParallelism)
             .build()
     }
 }
