@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.leanback.holder
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.KeyEvent
@@ -25,7 +26,25 @@ import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
  * from escaping up to `DecorView` / `AndroidComposeView` during RecyclerView detach or recycling.
  */
 class FocusIsolatedRootLayout(context: Context) : LinearLayout(context) {
+    private var clearFocusDepth: Int = 0
+
     override fun getRootView(): View = this
+
+    override fun clearFocus() {
+        clearFocusDepth++
+        try {
+            super.clearFocus()
+        } finally {
+            clearFocusDepth--
+        }
+    }
+
+    override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
+        // Prevent View.clearFocusInternal() -> rootViewRequestFocus() from refocusing this card
+        // while clearing focus, which avoids infinite clearFocus/requestFocus recursion.
+        if (clearFocusDepth > 0) return false
+        return super.requestFocus(direction, previouslyFocusedRect)
+    }
 }
 
 internal data class LeanbackCardChromeMetrics(

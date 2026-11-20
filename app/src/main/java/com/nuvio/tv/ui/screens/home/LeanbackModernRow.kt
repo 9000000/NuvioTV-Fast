@@ -95,8 +95,15 @@ fun LeanbackModernRow(
     }
 
     fun executeRowFocus(grid: ModernInteropHorizontalGridView, targetIdx: Int) {
+        if (canTakeFocus?.invoke() != false) {
+            grid.prepareForIncomingFocus()
+        }
         grid.post {
-            if (!grid.isAttachedToWindow || !grid.mayTakeFocus()) return@post
+            if (!grid.isAttachedToWindow) return@post
+            if (canTakeFocus?.invoke() != false) {
+                grid.prepareForIncomingFocus()
+            }
+            if (!grid.mayTakeFocus()) return@post
             grid.setSelectedPosition(targetIdx)
             grid.requestFocus()
             grid.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
@@ -224,7 +231,9 @@ fun LeanbackModernRow(
             container
         },
         update = { container ->
+            container.isDetaching = false
             val gridView = container.gridView
+            gridView.isDetaching = false
             val focusRing = container.floatingRingView
             if (gridView.configuredRowHeightPx != totalRowHeightPx) {
                 val lp = container.layoutParams

@@ -212,6 +212,7 @@ fun ModernHomeContent(
         object {
             var activeRowKey: String? = null
             var activeItemIndex: Int = 0
+            var lastKnownRowIndex: Int = 0
         }
     }
     val activeRowKey = remember { mutableStateOf<String?>(null) }
@@ -444,6 +445,7 @@ fun ModernHomeContent(
 
                 focusHolder.activeRowKey = resolvedRow.key
                 focusHolder.activeItemIndex = resolvedIndex
+                focusHolder.lastKnownRowIndex = rowIndexByKey.map[resolvedRow.key] ?: focusHolder.lastKnownRowIndex
                 activeRowKey.value = resolvedRow.key
                 activeItemIndex.intValue = resolvedIndex
                 focusedItemByRow[resolvedRow.key] = resolvedIndex
@@ -458,13 +460,24 @@ fun ModernHomeContent(
         }
 
         val hadActiveRow = focusHolder.activeRowKey != null
-        val existingActive = focusHolder.activeRowKey?.let { rowByKey[it] }
-        val firstRow = carouselRows.list.firstOrNull()
+        val existingActive = focusHolder.activeRowKey
+            ?.let { rowByKey[it] }
+            ?.takeIf { it.items.list.isNotEmpty() }
+        val firstRow = carouselRows.list.firstOrNull { it.items.list.isNotEmpty() }
+            ?: carouselRows.list.firstOrNull()
+        val recoveredAfterRemoval = hadActiveRow && existingActive == null
 
         val resolvedActive = when {
             !userHasNavigated.value && !focusState.hasSavedFocus -> firstRow
             existingActive != null -> existingActive
-            hadActiveRow -> null // Wait for data to reappear
+            recoveredAfterRemoval -> {
+                val nearestIdx = findNearestNonEmptyRowIndex(
+                    rows = carouselRows.list,
+                    preferredIdx = focusHolder.lastKnownRowIndex,
+                    visibleItems = verticalRowListState.layoutInfo.visibleItemsInfo
+                )
+                if (nearestIdx >= 0) carouselRows.list[nearestIdx] else firstRow
+            }
             else -> firstRow     // Initial state
         }
 
@@ -472,16 +485,32 @@ fun ModernHomeContent(
             val resolvedIndex = focusedItemByRow[resolvedActive.key]
                 ?.coerceIn(0, (resolvedActive.items.size - 1).coerceAtLeast(0))
                 ?: 0
+            focusHolder.lastKnownRowIndex = rowIndexByKey.map[resolvedActive.key] ?: focusHolder.lastKnownRowIndex
             focusHolder.activeRowKey = resolvedActive.key
             focusHolder.activeItemIndex = resolvedIndex
             activeRowKey.value = resolvedActive.key
             activeItemIndex.intValue = resolvedIndex
             focusedItemByRow[resolvedActive.key] = resolvedIndex
-            heroItem.value = resolvedActive.items.getOrNull(resolvedIndex)?.heroPreview
-                ?: resolvedActive.items.firstOrNull()?.heroPreview
+            val resolvedItem = resolvedActive.items.getOrNull(resolvedIndex)
+                ?: resolvedActive.items.firstOrNull()
+            heroItem.value = resolvedItem?.heroPreview
 
-            if (!focusState.hasSavedFocus && (!hadActiveRow || !userHasNavigated.value)) {
-                initialAutoSelectedKey = resolvedActive.key
+            if (recoveredAfterRemoval) {
+                focusedCatalogSelection.value = when (val payload = resolvedItem?.payload) {
+                    is ModernPayload.Catalog -> if (!payload.itemId.startsWith("__placeholder_")) {
+                        FocusedCatalogSelection(payload.focusKey, payload)
+                    } else null
+                    is ModernPayload.CollectionFolder -> FocusedCatalogSelection(payload.focusKey, payload)
+                    else -> null
+                }
+            }
+
+            if ((recoveredAfterRemoval && !isSidebarExpanded.value) ||
+                (!focusState.hasSavedFocus && (!hadActiveRow || !userHasNavigated.value))
+            ) {
+                if (!focusState.hasSavedFocus && (!hadActiveRow || !userHasNavigated.value)) {
+                    initialAutoSelectedKey = resolvedActive.key
+                }
                 pendingRowFocusKey.value = resolvedActive.key
                 pendingRowFocusIndex.value = resolvedIndex
                 pendingRowFocusNonce.intValue++
@@ -1103,8 +1132,12 @@ fun ModernHomeContent(
             )
 
             val latestOnFocusedRowKeyChanged by rememberUpdatedState(onFocusedRowKeyChanged)
+            val latestRowIndexByKey = rememberUpdatedState(rowIndexByKey)
             val onActiveRowKeyChangeLambda = remember {
                 { key: String? ->
+                    key?.let { latestRowIndexByKey.value.map[it] }?.let { idx ->
+                        focusHolder.lastKnownRowIndex = idx
+                    }
                     focusHolder.activeRowKey = key
                     activeRowKey.value = key
                     // saveFocusState only runs on dispose, which a system Home press never

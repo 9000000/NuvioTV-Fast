@@ -149,7 +149,11 @@ internal fun ModernRowSection(
                     // Only re-anchor focus while this row still owns it; the user may have
                     // moved to another row while the data was being applied.
                     if (grid.isAttachedToWindow && isActiveRow()) {
+                        grid.prepareForIncomingFocus()
                         grid.setSelectedPosition(targetIdx)
+                        if (!grid.hasFocus()) {
+                            grid.requestFocus()
+                        }
                         grid.ensureChildFocusAndRing(targetPos = targetIdx, animated = false)
                     }
                 }

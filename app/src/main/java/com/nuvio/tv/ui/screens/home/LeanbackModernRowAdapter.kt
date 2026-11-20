@@ -106,7 +106,9 @@ class LeanbackCardViewHolder(
             val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
             if (hasFocus && gridView?.mayTakeFocus() == false) {
                 // Reject stray focus on an inactive row
+                gridView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 root.clearFocus()
+                updateFocusVisual(false)
                 return@OnFocusChangeListener
             }
             updateFocusVisual(hasFocus)
@@ -312,16 +314,20 @@ class LeanbackCardViewHolder(
 
         // Sync focus visual to current focus state when bound or recycled
         val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
-        val isRowFocused = gridView?.hasFocus() == true
+        val mayTakeFocus = gridView?.mayTakeFocus() != false
+        val isRowFocused = mayTakeFocus && gridView?.hasFocus() == true
         val targetPos = gridView?.selectedPosition?.coerceAtLeast(0) ?: 0
         val isCurrentSelectedPos = isRowFocused && bindingAdapterPosition != RecyclerView.NO_POSITION && bindingAdapterPosition == targetPos
 
-        if (root.hasFocus() || isCurrentSelectedPos) {
+        if (mayTakeFocus && (root.hasFocus() || isCurrentSelectedPos)) {
             if (!root.hasFocus()) {
                 root.requestFocus()
             }
             updateFocusVisual(true)
         } else {
+            if (!mayTakeFocus && root.hasFocus()) {
+                root.clearFocus()
+            }
             updateFocusVisual(false)
         }
     }
@@ -361,6 +367,7 @@ class LeanbackRowAdapter(
 
     private var items: List<ModernCarouselItem> = emptyList()
     private var pendingItems: List<ModernCarouselItem>? = null
+    private var pendingApplyPosted: Boolean = false
     var isSubmittingItems: Boolean = false
         private set
 
@@ -398,6 +405,7 @@ class LeanbackRowAdapter(
         super.onDetachedFromRecyclerView(recyclerView)
         if (attachedRecyclerView === recyclerView) {
             attachedRecyclerView = null
+            pendingApplyPosted = false
         }
     }
 
@@ -440,11 +448,17 @@ class LeanbackRowAdapter(
     fun onScrollSettled() {
         val rv = attachedRecyclerView
         if (rv != null) {
+            val mayTakeFocus = (rv as? ModernInteropHorizontalGridView)?.mayTakeFocus() != false
             for (i in 0 until rv.childCount) {
                 val child = rv.getChildAt(i)
                 val vh = rv.getChildViewHolder(child) as? LeanbackCardViewHolder
                 if (vh != null && vh.itemView.hasFocus()) {
-                    vh.updateFocusVisual(true)
+                    if (mayTakeFocus) {
+                        vh.updateFocusVisual(true)
+                    } else {
+                        vh.itemView.clearFocus()
+                        vh.updateFocusVisual(false)
+                    }
                 }
             }
         }
@@ -453,22 +467,37 @@ class LeanbackRowAdapter(
         applyItems(pending)
     }
 
+    private fun scheduleFlushPendingItems(rv: RecyclerView) {
+        if (pendingApplyPosted) return
+        pendingApplyPosted = true
+        rv.post {
+            pendingApplyPosted = false
+            if (attachedRecyclerView !== rv) return@post
+            if (rv.isComputingLayout || rv.isInLayout) {
+                scheduleFlushPendingItems(rv)
+                return@post
+            }
+            if (rv.scrollState != RecyclerView.SCROLL_STATE_IDLE) return@post
+            val pending = pendingItems ?: return@post
+            pendingItems = null
+            applyItems(pending)
+        }
+    }
+
     private fun applyItems(newItems: List<ModernCarouselItem>) {
+        val rv = attachedRecyclerView
+        if (rv != null && (rv.isComputingLayout || rv.isInLayout)) {
+            // Defer updating `items` until RecyclerView finishes layout so getItemCount() stays consistent.
+            pendingItems = newItems
+            scheduleFlushPendingItems(rv)
+            return
+        }
+
         val oldItems = items
         val oldSize = oldItems.size
         val newSize = newItems.size
         items = newItems
-
-        val rv = attachedRecyclerView
-        if (rv != null && rv.isComputingLayout) {
-            rv.post {
-                if (attachedRecyclerView === rv) {
-                    applyItemsInternal(oldItems, oldSize, newSize, newItems)
-                }
-            }
-        } else {
-            applyItemsInternal(oldItems, oldSize, newSize, newItems)
-        }
+        applyItemsInternal(oldItems, oldSize, newSize, newItems)
     }
 
     private fun applyItemsInternal(

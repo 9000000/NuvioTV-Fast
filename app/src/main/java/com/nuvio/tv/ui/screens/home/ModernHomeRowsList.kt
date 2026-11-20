@@ -101,6 +101,7 @@ private const val VERTICAL_HOLD_START_VELOCITY_DP_PER_SEC = 520f
 private const val VERTICAL_HOLD_MAX_VELOCITY_DP_PER_SEC = 960f
 private const val VERTICAL_HOLD_RAMP_SEC = 0.32f
 private const val VERTICAL_HOLD_IDLE_TIMEOUT_MS = 420L
+private const val VERTICAL_HOLD_GRACE_PERIOD_MS = 200L
 private const val VERTICAL_STEP_DURATION_MS = 160
 private const val VERTICAL_SETTLE_DURATION_MS = 135
 
@@ -223,6 +224,37 @@ private fun findAnchoredRowInfo(
     return bestFallback ?: visibleItems.firstOrNull()
 }
 
+internal fun findNearestNonEmptyRowIndex(
+    rows: List<HeroCarouselRow>,
+    preferredIdx: Int,
+    visibleItems: List<LazyListItemInfo> = emptyList()
+): Int {
+    if (rows.isEmpty()) return -1
+    val clamped = preferredIdx.coerceIn(0, rows.lastIndex)
+    var bestVisibleIdx = -1
+    var bestVisibleDist = Int.MAX_VALUE
+    for (i in visibleItems.indices) {
+        val idx = visibleItems[i].index
+        if (idx in rows.indices && rows[idx].items.list.isNotEmpty()) {
+            val dist = kotlin.math.abs(idx - clamped)
+            if (dist < bestVisibleDist || (dist == bestVisibleDist && idx >= clamped)) {
+                bestVisibleDist = dist
+                bestVisibleIdx = idx
+            }
+        }
+    }
+    if (bestVisibleIdx >= 0) return bestVisibleIdx
+    for (offset in 0..rows.size) {
+        val fwd = clamped + offset
+        if (fwd in rows.indices && rows[fwd].items.list.isNotEmpty()) return fwd
+        if (offset > 0) {
+            val bwd = clamped - offset
+            if (bwd in rows.indices && rows[bwd].items.list.isNotEmpty()) return bwd
+        }
+    }
+    return -1
+}
+
 @OptIn(
     ExperimentalFoundationApi::class,
     ExperimentalTvMaterial3Api::class,
@@ -313,6 +345,7 @@ internal fun ModernHomeRowsList(
     val latestOnActiveItemIndexChange = rememberUpdatedState(onActiveItemIndexChange)
 
     val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val attachedRowKeys = remember { mutableSetOf<String>() }
     val rowGrids = remember { mutableMapOf<String, androidx.leanback.widget.HorizontalGridView>() }
     // Isolate Modern Home's LeanbackCardViewHolder pool from LeanbackUniversalAdapter's shared pool
     // so ViewHolders of incompatible types never cross-pollinate on navigation transitions.
@@ -322,7 +355,6 @@ internal fun ModernHomeRowsList(
     val coroutineScope = rememberCoroutineScope()
     var scrollJob by remember { mutableStateOf<Job?>(null) }
     var localPendingFocusRowKey by remember { mutableStateOf<String?>(null) }
-    val stableClearPendingFocus = remember { { localPendingFocusRowKey = null } }
     var localPendingFocusIndex by remember { mutableIntStateOf(0) }
     var localPendingFocusNonce by remember { mutableIntStateOf(0) }
     var targetRowIndexTracker by remember { mutableIntStateOf(0) }
@@ -336,10 +368,20 @@ internal fun ModernHomeRowsList(
     val verticalHoldJobRef = remember { AtomicReference<Job?>(null) }
     val verticalHoldTimeoutRef = remember { AtomicReference<Job?>(null) }
     val verticalHoldDirectionRef = remember { AtomicInteger(0) }
+    val lastVerticalSingleStepAtMsRef = remember { AtomicLong(0L) }
+    val lastVerticalSingleStepDirRef = remember { AtomicInteger(0) }
     val overlayGenerationRef = remember { AtomicLong(0L) }
     val verticalOverlayHostRef = remember { AtomicReference<VerticalRingOverlayHost?>(null) }
     val latestOnFastScrollingChanged = rememberUpdatedState(onFastScrollingChanged)
     val isVerticalGlideActiveLambda = remember { { isVerticalGlideRef.get() } }
+    val stableClearPendingFocus = remember {
+        {
+            localPendingFocusRowKey = null
+            if (!isVerticalGlideRef.get() && verticalHoldDirectionRef.get() == 0) {
+                verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -357,6 +399,10 @@ internal fun ModernHomeRowsList(
     LaunchedEffect(pendingRowFocusNonce.value) {
         val targetKey = pendingRowFocusKey.value ?: return@LaunchedEffect
         val targetIdx = pendingRowFocusIndex.value ?: 0
+        if (isVerticalGlideRef.get() || verticalHoldDirectionRef.get() != 0) {
+            onPendingRowFocusCleared()
+            return@LaunchedEffect
+        }
         navTargetRowKey.set(targetKey)
         currentRowKeyTracker.set(targetKey)
         // Publish the target immediately: the target row may not be composed yet, and without
@@ -386,6 +432,7 @@ internal fun ModernHomeRowsList(
             targetGrid.post {
                 // The user may have moved on before this post ran; never pull focus back.
                 if (targetGrid.isAttachedToWindow && navTargetRowKey.get() == targetKey) {
+                    (targetGrid as? ModernInteropHorizontalGridView)?.prepareForIncomingFocus()
                     targetGrid.setSelectedPosition(targetIdx)
                     targetGrid.requestFocus()
                     val vh = targetGrid.findViewHolderForAdapterPosition(targetIdx)
@@ -528,13 +575,177 @@ internal fun ModernHomeRowsList(
     val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     val requestUpdateBannerFocus = LocalRequestUpdateBannerFocus.current
     val latestRequestUpdateBannerFocus = rememberUpdatedState(requestUpdateBannerFocus)
-    // The row that currently owns (or is about to own) focus. Falls back to activeRowKey when the
-    // nav target was removed from the list.
+    // The row that currently owns (or is about to own) focus. Falls back to the nearest
+    // surviving non-empty row if the tracked row was removed or became empty.
     val effectiveActiveRowKey: () -> String? = remember {
         {
-            navTargetRowKey.get()
-                ?.takeIf { key -> latestCarouselRowsForLazy.value.list.any { it.key == key } }
-                ?: activeRowKey.value
+            val rows = latestCarouselRowsForLazy.value.list
+            fun validNonEmpty(key: String?): String? =
+                key?.takeIf { candidate ->
+                    rows.any { it.key == candidate && it.items.list.isNotEmpty() }
+                }
+
+            validNonEmpty(navTargetRowKey.get())
+                ?: validNonEmpty(activeRowKey.value)
+                ?: validNonEmpty(currentRowKeyTracker.get())
+                ?: findNearestNonEmptyRowIndex(
+                    rows = rows,
+                    preferredIdx = targetRowIndexTracker,
+                    visibleItems = verticalRowListState.layoutInfo.visibleItemsInfo
+                ).takeIf { it >= 0 }?.let { rows[it].key }
+        }
+    }
+
+    // Synchronously evacuate View focus from any AndroidView row about to be removed or
+    // emptied BEFORE CompositionImpl.applyChanges() runs Operation$RemoveNode / removeAndroidView().
+    // Otherwise ViewGroup.removeViewInternal() sees hasFocus() == true and triggers
+    // rootViewRequestFocus() -> AndroidComposeView.requestFocus() -> subcompose() mid-applyChanges(),
+    // throwing ComposeRuntimeError ("pending composition has not been applied").
+    remember(carouselRows) {
+        val rows = carouselRows.list
+        val validNonEmptyKeys = HashSet<String>(rows.size).apply {
+            rows.forEach { if (it.items.list.isNotEmpty()) add(it.key) }
+        }
+        val focusedRemovedEntries = rowGrids.entries.filter { (key, grid) ->
+            key !in validNonEmptyKeys && grid.isAttachedToWindow && grid.hasFocus()
+        }
+        if (focusedRemovedEntries.isNotEmpty()) {
+            focusedRemovedEntries.forEach { (_, grid) ->
+                (grid as? ModernInteropHorizontalGridView)?.prepareForDetachment()
+                (grid.parent as? ModernRowContainerLayout)?.isDetaching = true
+            }
+            val isGlideActive = isVerticalGlideRef.get() || verticalHoldDirectionRef.get() != 0
+            var focusTransferred = false
+            if (!isSidebarExpandedState.value) {
+                if (!isGlideActive) {
+                    val nearestIdx = findNearestNonEmptyRowIndex(
+                        rows = rows,
+                        preferredIdx = targetRowIndexTracker,
+                        visibleItems = verticalRowListState.layoutInfo.visibleItemsInfo
+                    )
+                    val fallbackRow = if (nearestIdx >= 0) rows[nearestIdx] else null
+                    if (fallbackRow != null) {
+                        targetRowIndexTracker = nearestIdx
+                        navTargetRowKey.set(fallbackRow.key)
+                        currentRowKeyTracker.set(fallbackRow.key)
+                        val safeIdx = (focusedItemByRowMap[fallbackRow.key] ?: 0)
+                            .coerceIn(0, (fallbackRow.items.list.size - 1).coerceAtLeast(0))
+                        val fallbackGrid = rowGrids[fallbackRow.key] as? ModernInteropHorizontalGridView
+                        if (fallbackGrid != null && fallbackGrid.isAttachedToWindow) {
+                            fallbackGrid.prepareForIncomingFocus()
+                            fallbackGrid.setSelectedPosition(safeIdx)
+                            focusTransferred = fallbackGrid.requestFocus()
+                            if (focusTransferred) {
+                                fallbackGrid.ensureChildFocusAndRing(targetPos = safeIdx, animated = false)
+                            }
+                        }
+                    }
+                }
+                if (!focusTransferred) {
+                    val overlayHost = verticalOverlayHostRef.get()
+                    if (overlayHost != null && overlayHost.isAttachedToWindow) {
+                        overlayHost.activateGlideFocus()
+                        focusTransferred = overlayHost.hasFocus()
+                    }
+                }
+            }
+            focusedRemovedEntries.forEach { (_, grid) ->
+                if (grid.hasFocus()) {
+                    grid.clearFocus()
+                }
+            }
+        }
+        true
+    }
+
+    LaunchedEffect(carouselRows) {
+        val rows = carouselRows.list
+        val validKeys = HashSet<String>(rows.size).apply {
+            rows.forEach { add(it.key) }
+        }
+        val validNonEmptyKeys = HashSet<String>(rows.size).apply {
+            rows.forEach { if (it.items.list.isNotEmpty()) add(it.key) }
+        }
+        rowFocusRequesters.keys.retainAll(validKeys)
+        attachedRowKeys.retainAll(validKeys)
+
+        val currentNav = navTargetRowKey.get()
+        val currentTracker = currentRowKeyTracker.get()
+        val currentActive = activeRowKey.value
+        val navLost = currentNav != null && currentNav !in validNonEmptyKeys
+        val trackerLost = currentTracker != null && currentTracker !in validNonEmptyKeys
+        val activeLost = currentActive != null && currentActive !in validNonEmptyKeys
+        val pendingLost = localPendingFocusRowKey != null && localPendingFocusRowKey !in validNonEmptyKeys
+
+        if (navLost || trackerLost || activeLost || pendingLost) {
+            val nearestIdx = findNearestNonEmptyRowIndex(
+                rows = rows,
+                preferredIdx = targetRowIndexTracker,
+                visibleItems = verticalRowListState.layoutInfo.visibleItemsInfo
+            )
+            val fallbackRow = if (nearestIdx >= 0) rows[nearestIdx] else null
+            if (fallbackRow != null) {
+                targetRowIndexTracker = nearestIdx
+                navTargetRowKey.set(fallbackRow.key)
+                currentRowKeyTracker.set(fallbackRow.key)
+                latestOnActiveRowKeyChange.value(fallbackRow.key)
+                val safeIdx = (focusedItemByRowMap[fallbackRow.key] ?: 0)
+                    .coerceIn(0, (fallbackRow.items.list.size - 1).coerceAtLeast(0))
+                latestOnActiveItemIndexChange.value(safeIdx)
+                if (pendingLost) {
+                    localPendingFocusRowKey = fallbackRow.key
+                    localPendingFocusIndex = safeIdx
+                    localPendingFocusNonce++
+                }
+                if (!isSidebarExpandedState.value &&
+                    !isVerticalGlideRef.get() &&
+                    verticalHoldDirectionRef.get() == 0
+                ) {
+                    val fallbackGrid = rowGrids[fallbackRow.key] as? ModernInteropHorizontalGridView
+                    if (fallbackGrid != null && fallbackGrid.isAttachedToWindow) {
+                        fallbackGrid.prepareForIncomingFocus()
+                        fallbackGrid.setSelectedPosition(safeIdx)
+                        val focusTaken = fallbackGrid.requestFocus()
+                        fallbackGrid.ensureChildFocusAndRing(targetPos = safeIdx, animated = false)
+                        if (focusTaken) {
+                            if (verticalOverlayHostRef.get()?.hasFocus() == true) {
+                                verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+                            }
+                        } else if (!pendingLost) {
+                            localPendingFocusRowKey = fallbackRow.key
+                            localPendingFocusIndex = safeIdx
+                            localPendingFocusNonce++
+                        }
+                    } else if (!pendingLost) {
+                        localPendingFocusRowKey = fallbackRow.key
+                        localPendingFocusIndex = safeIdx
+                        localPendingFocusNonce++
+                    }
+                }
+            } else {
+                navTargetRowKey.set(null)
+                currentRowKeyTracker.set(null)
+                if (pendingLost) localPendingFocusRowKey = null
+            }
+        }
+        val isGlideActive = isVerticalGlideRef.get() || verticalHoldDirectionRef.get() != 0
+        if (!isSidebarExpandedState.value &&
+            !isGlideActive &&
+            verticalOverlayHostRef.get()?.hasFocus() == true
+        ) {
+            val targetKey = effectiveActiveRowKey()
+            val targetRow = targetKey?.let { key -> rows.firstOrNull { it.key == key } }
+            val targetGrid = targetKey?.let { rowGrids[it] as? ModernInteropHorizontalGridView }
+            if (targetRow != null && targetGrid != null && targetGrid.isAttachedToWindow) {
+                val safeIdx = (focusedItemByRowMap[targetRow.key] ?: 0)
+                    .coerceIn(0, (targetRow.items.list.size - 1).coerceAtLeast(0))
+                targetGrid.prepareForIncomingFocus()
+                targetGrid.setSelectedPosition(safeIdx)
+                if (targetGrid.requestFocus()) {
+                    targetGrid.ensureChildFocusAndRing(targetPos = safeIdx, animated = false)
+                    verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+                }
+            }
         }
     }
 
@@ -570,15 +781,41 @@ internal fun ModernHomeRowsList(
             }
             return
         }
-        val grid = rowGrids[rowKey] as? ModernInteropHorizontalGridView
+        val rows = latestCarouselRowsForLazy.value.list
+        val resolvedRow = rows.firstOrNull { it.key == rowKey && it.items.list.isNotEmpty() }
+            ?: findNearestNonEmptyRowIndex(
+                rows = rows,
+                preferredIdx = targetRowIndexTracker,
+                visibleItems = verticalRowListState.layoutInfo.visibleItemsInfo
+            ).takeIf { it >= 0 }?.let { idx ->
+                targetRowIndexTracker = idx
+                val fallback = rows[idx]
+                navTargetRowKey.set(fallback.key)
+                currentRowKeyTracker.set(fallback.key)
+                latestOnActiveRowKeyChange.value(fallback.key)
+                fallback
+            }
+        if (resolvedRow == null) {
+            isVerticalGlideRef.set(false)
+            verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+            return
+        }
+        val resolvedKey = resolvedRow.key
+        val resolvedCardIdx = if (resolvedKey == rowKey) {
+            targetCardIndex.coerceIn(0, (resolvedRow.items.list.size - 1).coerceAtLeast(0))
+        } else {
+            (focusedItemByRowMap[resolvedKey] ?: 0).coerceIn(0, (resolvedRow.items.list.size - 1).coerceAtLeast(0))
+        }
+        val grid = rowGrids[resolvedKey] as? ModernInteropHorizontalGridView
         if (grid != null && grid.isAttachedToWindow) {
-            grid.setSelectedPosition(targetCardIndex)
+            grid.prepareForIncomingFocus()
+            grid.setSelectedPosition(resolvedCardIdx)
             grid.requestFocus()
-            val vh = grid.findViewHolderForAdapterPosition(targetCardIndex) as? LeanbackCardViewHolder
+            val vh = grid.findViewHolderForAdapterPosition(resolvedCardIdx) as? LeanbackCardViewHolder
             val ring = grid.floatingRingView
             if (vh != null && ring != null && vh.cardContainer.width > 0 && vh.cardContainer.height > 0) {
                 isVerticalGlideRef.set(false)
-                grid.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
+                grid.ensureChildFocusAndRing(targetPos = resolvedCardIdx, animated = false)
                 if (ring.visibility == View.VISIBLE && ring.width > 0 && ring.height > 0) {
                     verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
                     return
@@ -586,19 +823,26 @@ internal fun ModernHomeRowsList(
             }
             if (retryCount < 8) {
                 grid.post {
-                    handoffOverlayToGrid(rowKey, targetCardIndex, expectedGen, retryCount + 1)
+                    handoffOverlayToGrid(resolvedKey, resolvedCardIdx, expectedGen, retryCount + 1)
                 }
                 return
             }
             isVerticalGlideRef.set(false)
-            grid.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
+            grid.ensureChildFocusAndRing(targetPos = resolvedCardIdx, animated = false)
             verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
         } else {
+            val overlayHost = verticalOverlayHostRef.get()
+            if (retryCount < 4 && overlayHost != null && overlayHost.isAttachedToWindow) {
+                overlayHost.post {
+                    handoffOverlayToGrid(resolvedKey, resolvedCardIdx, expectedGen, retryCount + 1)
+                }
+                return
+            }
             isVerticalGlideRef.set(false)
-            localPendingFocusRowKey = rowKey
-            localPendingFocusIndex = targetCardIndex
+            localPendingFocusRowKey = resolvedKey
+            localPendingFocusIndex = resolvedCardIdx
             localPendingFocusNonce++
-            verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+            overlayHost?.deactivateGlideFocusAndHideRing()
         }
     }
 
@@ -621,8 +865,11 @@ internal fun ModernHomeRowsList(
         // Hand focus back cleanly without snapping selectedPosition backward over a pending horizontal move
         val key = effectiveActiveRowKey()
         val grid = key?.let { rowGrids[it] as? ModernInteropHorizontalGridView }
-        if (grid != null && grid.isAttachedToWindow && !grid.hasFocus()) {
-            grid.requestFocus()
+        if (grid != null && grid.isAttachedToWindow) {
+            grid.prepareForIncomingFocus()
+            if (!grid.hasFocus()) {
+                grid.requestFocus()
+            }
         }
     }
 
@@ -683,7 +930,7 @@ internal fun ModernHomeRowsList(
         val anchoredInfo = findAnchoredRowInfo(visible, probeY, lastNonEmptyIdx)
         val baseIdx = (anchoredInfo?.index ?: targetRowIndexTracker).coerceIn(0, lastNonEmptyIdx)
         // Bias landing row in the user's glide direction so releasing never snaps backward
-        val landingIdx = when {
+        val rawLandingIdx = when {
             dir > 0 && anchoredInfo != null &&
                 anchoredInfo.offset < -(anchoredInfo.size * 0.25f) &&
                 baseIdx + 1 <= lastNonEmptyIdx &&
@@ -693,6 +940,11 @@ internal fun ModernHomeRowsList(
                 baseIdx > 0 &&
                 rows.getOrNull(baseIdx - 1)?.items?.list?.isNotEmpty() == true -> baseIdx - 1
             else -> baseIdx
+        }
+        val landingIdx = when {
+            dir > 0 -> maxOf(rawLandingIdx, targetRowIndexTracker).coerceIn(0, lastNonEmptyIdx)
+            dir < 0 -> minOf(rawLandingIdx, targetRowIndexTracker).coerceIn(0, lastNonEmptyIdx)
+            else -> rawLandingIdx.coerceIn(0, lastNonEmptyIdx)
         }
         val landingRow = rows.getOrNull(landingIdx) ?: run {
             overlayGenerationRef.incrementAndGet()
@@ -792,6 +1044,15 @@ internal fun ModernHomeRowsList(
             verticalHoldJobRef.get()?.isActive != true
 
         if (needsStart) {
+            // Protect the initial single-step scrollJob from early repeat pulses (repeatCount == 1)
+            // emitted by IR (NEC protocol) or Bluetooth remotes during a normal single press.
+            val nowMs = android.os.SystemClock.uptimeMillis()
+            val elapsedSinceSingleStep = nowMs - lastVerticalSingleStepAtMsRef.get()
+            if (lastVerticalSingleStepDirRef.get() == sign &&
+                elapsedSinceSingleStep in 0 until VERTICAL_HOLD_GRACE_PERIOD_MS
+            ) {
+                return true
+            }
             scrollJob?.cancel()
             verticalHoldJobRef.getAndSet(null)?.cancel()
             val glideGen = overlayGenerationRef.incrementAndGet()
@@ -1002,6 +1263,9 @@ internal fun ModernHomeRowsList(
         val targetIdx = candidateIdx
         val targetRow = rows[targetIdx]
 
+        lastVerticalSingleStepAtMsRef.set(android.os.SystemClock.uptimeMillis())
+        lastVerticalSingleStepDirRef.set(sign)
+
         val prevKey = currentKey ?: currentRowKeyTracker.get() ?: activeRowKey.value
         val measuredBefore = measureFocusedCardInOverlay(prevKey)
         val overlayHost = verticalOverlayHostRef.get()
@@ -1067,9 +1331,10 @@ internal fun ModernHomeRowsList(
             overlayHost?.deactivateGlideFocusAndHideRing()
         }
 
-        if (targetGrid != null && targetGrid.isAttachedToWindow) {
+        val movedToTargetGrid = if (targetGrid != null && targetGrid.isAttachedToWindow) {
+            (targetGrid as? ModernInteropHorizontalGridView)?.prepareForIncomingFocus()
             targetGrid.setSelectedPosition(targetCardIndex)
-            targetGrid.requestFocus()
+            val granted = targetGrid.requestFocus()
             if (!canUseFixedStepRing) {
                 val modernGrid = targetGrid as? ModernInteropHorizontalGridView
                 modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
@@ -1077,10 +1342,32 @@ internal fun ModernHomeRowsList(
                     modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
                 }
             }
+            if (!granted) {
+                localPendingFocusRowKey = targetRow.key
+                localPendingFocusIndex = targetCardIndex
+                localPendingFocusNonce++
+            }
+            granted
         } else {
             localPendingFocusRowKey = targetRow.key
             localPendingFocusIndex = targetCardIndex
             localPendingFocusNonce++
+            false
+        }
+        if (!canUseFixedStepRing && !movedToTargetGrid) {
+            // Move focus off prevGrid before LazyColumn scrolls it off-screen and recycles its
+            // AndroidView via Operation$RemoveNode.
+            if (overlayHost != null && overlayHost.isAttachedToWindow) {
+                overlayHost.activateGlideFocus()
+            } else if (prevKey != null) {
+                (rowGrids[prevKey] as? ModernInteropHorizontalGridView)?.let { prevGrid ->
+                    if (prevGrid.hasFocus()) {
+                        prevGrid.prepareForDetachment()
+                        (prevGrid.parent as? ModernRowContainerLayout)?.isDetaching = true
+                        prevGrid.clearFocus()
+                    }
+                }
+            }
         }
 
         scrollJob?.cancel()
@@ -1107,7 +1394,9 @@ internal fun ModernHomeRowsList(
                     }
                 }
             } finally {
-                if (canUseFixedStepRing && overlayGenerationRef.get() == stepGen) {
+                if (overlayGenerationRef.get() == stepGen &&
+                    (canUseFixedStepRing || verticalOverlayHostRef.get()?.hasFocus() == true)
+                ) {
                     handoffOverlayToGrid(targetRow.key, targetCardIndex, stepGen)
                 }
             }
@@ -1143,9 +1432,18 @@ internal fun ModernHomeRowsList(
 
     val focusRestorerRequester = remember {
         {
-            // Prefer the navigation target: activeRowKey state can still point at the row the
-            // user just left while focus is already moving to the next one.
-            effectiveActiveRowKey()?.let { rowFocusRequesters[it] } ?: FocusRequester.Default
+            // Only return a FocusRequester currently attached to an active row composition;
+            // returning an unattached/offscreen requester logs FocusRelatedWarning and fails to focus.
+            val activeKey = effectiveActiveRowKey()
+            val attachedRequester = activeKey
+                ?.takeIf { it in attachedRowKeys }
+                ?.let { rowFocusRequesters[it] }
+                ?: verticalRowListState.layoutInfo.visibleItemsInfo
+                    .firstNotNullOfOrNull { info ->
+                        val key = info.key as? String
+                        if (key != null && key in attachedRowKeys) rowFocusRequesters[key] else null
+                    }
+            attachedRequester ?: FocusRequester.Default
         }
     }
 
@@ -1157,6 +1455,7 @@ internal fun ModernHomeRowsList(
                 val grid = rowGrids[targetKey]
                 val savedIndex = (focusedItemByRowMap[targetKey] ?: 0)
                 if (grid != null && grid.isAttachedToWindow) {
+                    (grid as? ModernInteropHorizontalGridView)?.prepareForIncomingFocus()
                     grid.setSelectedPosition(savedIndex)
                     grid.requestFocus()
                     (grid as? ModernInteropHorizontalGridView)?.ensureChildFocusAndRing(targetPos = savedIndex, animated = false)
@@ -1261,6 +1560,22 @@ internal fun ModernHomeRowsList(
                             expandedCatalogFocusKey.value != null &&
                             currentRowKey == lastRowKey
                         ) return@onPreviewKeyEvent true
+                        if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
+                            when (event.key) {
+                                Key.DirectionDown -> {
+                                    if (verticalHoldDirectionRef.get() != 0) {
+                                        endVerticalHoldScroll()
+                                    }
+                                    return@onPreviewKeyEvent stepVerticalRow(1)
+                                }
+                                Key.DirectionUp -> {
+                                    if (verticalHoldDirectionRef.get() != 0) {
+                                        endVerticalHoldScroll()
+                                    }
+                                    return@onPreviewKeyEvent stepVerticalRow(-1)
+                                }
+                            }
+                        }
                         val blockKey = if (layoutDirection == LayoutDirection.Rtl)
                             Key.DirectionRight else Key.DirectionLeft
                         if (blockLeftOnFirstExpandedItem &&
@@ -1295,6 +1610,12 @@ internal fun ModernHomeRowsList(
                     if (isContinueWatchingRowKey(row.key)) "modern_cw_row" else "modern_catalog_row"
                 }
             ) { _, row ->
+                DisposableEffect(row.key) {
+                    attachedRowKeys.add(row.key)
+                    onDispose {
+                        attachedRowKeys.remove(row.key)
+                    }
+                }
                 val onNavigateLeftOnFirstItem = remember(openSidebar, row.key) {
                     {
                         onUserNavigated()
@@ -1346,6 +1667,17 @@ internal fun ModernHomeRowsList(
                                     val currentGrid = rowGrids[currentActiveRowKey] as? ModernInteropHorizontalGridView
                                     currentGrid?.prepareForRowChange()
                                     currentGrid?.floatingRingView?.hideRing(false)
+                                    val firstGrid = rowGrids[firstRow.key]
+                                    if (firstGrid == null && currentGrid != null && currentGrid.hasFocus()) {
+                                        val overlayHost = verticalOverlayHostRef.get()
+                                        if (overlayHost != null && overlayHost.isAttachedToWindow) {
+                                            overlayHost.activateGlideFocus()
+                                        } else {
+                                            currentGrid.prepareForDetachment()
+                                            (currentGrid.parent as? ModernRowContainerLayout)?.isDetaching = true
+                                            currentGrid.clearFocus()
+                                        }
+                                    }
                                     navTargetRowKey.set(firstRow.key)
                                     currentRowKeyTracker.set(firstRow.key)
                                     latestOnActiveRowKeyChange.value(firstRow.key)
@@ -1358,20 +1690,23 @@ internal fun ModernHomeRowsList(
                                             verticalRowListState.scrollToItem(0)
                                         }
                                     }
-                                    val firstGrid = rowGrids[firstRow.key]
                                     if (firstGrid != null) {
                                         firstGrid.post {
                                             if (firstGrid.isAttachedToWindow &&
                                                 navTargetRowKey.get() == firstRow.key
                                             ) {
+                                                val modernGrid = firstGrid as? ModernInteropHorizontalGridView
+                                                modernGrid?.prepareForIncomingFocus()
                                                 if (animationsEnabled) {
                                                     firstGrid.setSelectedPositionSmooth(targetCardIndex)
                                                 } else {
                                                     firstGrid.setSelectedPosition(targetCardIndex)
                                                 }
                                                 firstGrid.requestFocus()
-                                                val modernGrid = firstGrid as? ModernInteropHorizontalGridView
                                                 modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
+                                                if (!isVerticalGlideRef.get()) {
+                                                    verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+                                                }
                                                 firstGrid.post {
                                                     modernGrid?.ensureChildFocusAndRing(targetPos = targetCardIndex, animated = false)
                                                 }
@@ -1410,7 +1745,9 @@ internal fun ModernHomeRowsList(
                         // handlers, so this no longer depends on a timing window.
                         val rows = latestCarouselRowsForLazy.value.list
                         fun knownKey(key: String?): String? =
-                            key?.takeIf { candidate -> rows.any { it.key == candidate } }
+                            key?.takeIf { candidate ->
+                                rows.any { it.key == candidate && it.items.list.isNotEmpty() }
+                            }
                         val intendedKey = knownKey(navTargetRowKey.get())
                             ?: knownKey(currentRowKeyTracker.get())
                             ?: knownKey(activeRowKey.value)
@@ -1419,8 +1756,10 @@ internal fun ModernHomeRowsList(
                         if (intendedKey != null && intendedKey != rowKey) {
                             val activeGrid = rowGrids[intendedKey]
                             if (activeGrid != null && activeGrid.isAttachedToWindow) {
+                                val modernActiveGrid = activeGrid as? ModernInteropHorizontalGridView
+                                modernActiveGrid?.prepareForIncomingFocus()
                                 activeGrid.requestFocus()
-                                (activeGrid as? ModernInteropHorizontalGridView)?.ensureChildFocusAndRing(animated = false)
+                                modernActiveGrid?.ensureChildFocusAndRing(animated = false)
                             }
                         } else {
                             navTargetRowKey.set(rowKey)

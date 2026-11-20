@@ -1,5 +1,122 @@
 # Error Log
 
+## [2026-11-20 13:29] - Văng App (`ComposeRuntimeError: pending composition has not been applied`) Khi Gỡ Hàng `AndroidView` Đang Giữ Focus Lúc `Operation$RemoveNode`
+
+- **Type**: Runtime
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt:591`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt:125`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernRowFloatingFocusRingView.kt:326`, `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt:233`
+- **Agent**: mon
+- **Root Cause**: Khi một hàng `PlaceholderCatalog` đang giữ View focus (hoặc bị `LazyColumn` cuộn ra ngoài viewport khi chuyển sang hàng chưa attach) bị gỡ khỏi cây Compose qua `Operation$RemoveNode` -> `LayoutNode.detach` -> `AndroidComposeView.removeAndroidView`, `ViewGroup.removeViewInternal(androidViewHolder)` kiểm tra thấy `androidViewHolder.hasFocus() == true` và gọi `rootViewRequestFocus()` -> `AndroidComposeView.requestFocus()` -> `TwoDimensionalFocusSearch` -> `searchBeyondBounds` -> `LayoutNodeSubcompositionsState.subcompose()` ngay giữa lúc `CompositionImpl.applyChanges()` đang chạy (khi `pending` composition chưa apply xong), ném `ComposeRuntimeError`. Lưu ý: `LayoutNode.detach` chạy `onDetach` (`removeAndroidView`) trước `NodeChain.runDetachLifecycle()`, nên `Modifier.Node.onDetach()` chạy quá muộn.
+- **Error Message**:
+  ```
+  FATAL EXCEPTION: main (PID 6654, com.nuvio.tv.debug)
+  androidx.compose.runtime.ComposeRuntimeError: Compose Runtime internal error. Unexpected or incorrect use of the Compose internal runtime API (pending composition has not been applied).
+    at androidx.compose.ui.layout.LayoutNodeSubcompositionsState.subcompose(...)
+    at androidx.compose.foundation.lazy.layout.LazyLayoutBeyondBoundsModifierLocal.layout(...)
+    at androidx.compose.ui.focus.TwoDimensionalFocusSearchKt.generateAndSearchChildren(...)
+    at androidx.compose.ui.platform.AndroidComposeView.requestFocus(...)
+    at android.view.ViewGroup.removeViewInternal(ViewGroup.java:5629)
+    at androidx.compose.ui.platform.AndroidComposeView.removeAndroidView(...)
+    at androidx.compose.ui.node.LayoutNode.detach$ui(...)
+    at androidx.compose.runtime.changelist.Operation$RemoveNode.execute(...)
+  ```
+- **Fix Applied**:
+  1. Thêm `remember(carouselRows)` trong `ModernHomeRowsList.kt` chạy đồng bộ ngay trong pha Composition (trước `applyChanges()` / `Operation$RemoveNode`) để phát hiện các `rowGrids` sắp bị xóa hoặc trở nên rỗng nhưng đang `hasFocus() == true`, chuyển View focus ngay sang `fallbackGrid` (nếu đã attach) hoặc `verticalOverlayHostRef` (`activateGlideFocus()`), và đánh dấu `prepareForDetachment()` + `ModernRowContainerLayout.isDetaching = true` rồi `clearFocus()` nếu vẫn còn focus.
+  2. Bổ sung `isDetaching` trên `ModernInteropHorizontalGridView` và `ModernRowContainerLayout` để không chặn `clearChildFocus` hoặc chạy lại `post { requestFocus() }` lúc hàng sắp detach, và reset `isDetaching = false` trong `LeanbackModernRow.update` / `prepareForIncomingFocus()`.
+  3. Cập nhật `stepVerticalRow` và `onNavigateBack` trong `ModernHomeRowsList.kt` để luôn chuyển focus khỏi `prevGrid`/`currentGrid` (sang `targetGrid` hoặc `overlayHost.activateGlideFocus()`) trước khi `LazyColumn` cuộn hàng cũ ra ngoài màn hình.
+- **Prevention**: Không bao giờ để một `AndroidViewHolder` bị `RemoveNode` hoặc bị recycle khi vẫn đang giữ Android View focus; luôn di dời hoặc xóa focus đồng bộ trong pha Composition (hoặc trước khi kích hoạt scroll off-screen).
+- **Status**: Fixed
+
+---
+
+## [2026-11-20 13:25] - Mất Focus, Đóng Băng Điều Hướng DPAD & `FocusRelatedWarning` Khi Cuộn Qua Hàng Lazy Rỗng (`items=0`) Ở Màn Hình Home
+
+- **Type**: Logic
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeContent.kt:460`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt:570`, `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt:97`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRows.kt:148`
+- **Agent**: mon
+- **Root Cause**: 
+  1. *Kẹt `activeRowKey` vào hàng đã bị xóa (`hadActiveRow -> null // Wait for data to reappear`)*: Khi người dùng cuộn qua các hàng catalog lazy (`HomeRow.PlaceholderCatalog`) như `plaviohd-live-plaviotv`, `plaviohd-live-streamz`, `cat_search` lúc đang ở trạng thái placeholder (có item giả) rồi server/cache trả về `items=0` hoặc lỗi khiến hàng bị gỡ bỏ khỏi `carouselRows.list`, `ModernHomeContent` giữ nguyên `focusHolder.activeRowKey` và `activeRowKey.value` trỏ tới key đã xóa. `effectiveActiveRowKey()` cũng chỉ kiểm tra tồn tại trên `navTargetRowKey`, không kiểm tra `activeRowKey.value` và `currentRowKeyTracker`. Hệ quả là mọi hàng còn lại đều có `isActiveRow() == false` (`FOCUS_BLOCK_DESCENDANTS`), Hero phía trên chuyển thành đen hoàn toàn, focus cửa sổ thành `null`, toàn bộ phím DPAD Lên/Xuống/Trái/Phải/OK bị vô hiệu hóa (chỉ còn phím Back hiện Toast thoát app).
+  2. *`FocusRelatedWarning: FocusRequester is not initialized` tại `.focusRestorer`*: `rowFocusRequesters` trả về `FocusRequester` của hàng đã bị gỡ hoặc vừa cuộn ra ngoài viewport của `LazyColumn` (không còn `FocusRequesterNode` gắn trên cây Compose).
+  3. *Rơi focus trong lúc handoff overlay / `LocalPendingFocus`*: `handoffOverlayToGrid` tắt `overlayHost` (`clearFocus()`) ngay trước khi hàng đích attach và `executeRowFocus` chưa gọi `prepareForIncomingFocus()`.
+- **Error Message**: 
+  ```
+  User test on com.nuvio.tv.debug (v1.6.5, MuMu 127.0.0.1:16416):
+  - PID 2197 (13:05:14..13:05:15): 20x System.out: FocusRelatedWarning: FocusRequester is not initialized
+  - PID 3868 (13:06:01): Home catalog loaded plaviohd-live-plaviotv items=0 -> mất khung focus, hero đen, mọi phím DPAD đứng im -> người dùng bấm Back thoát app (Toast confirm_exit_toast) và báo "đa test xong và lỗi".
+  ```
+- **Fix Applied**: 
+  1. Trong `ModernHomeContent.kt` & `ModernHomeRowsList.kt`: Thêm helper dùng chung `findNearestNonEmptyRowIndex(...)` để khi hàng đang giữ focus bị gỡ hoặc rỗng (nhưng vẫn còn các hàng khác trong `carouselRows`), tự động khôi phục focus, `activeRowKey`, `navTargetRowKey`, `heroItem` và `focusedCatalogSelection` về hàng còn dữ liệu gần nhất (ưu tiên hàng đang hiển thị trong viewport) thay vì chờ vô hạn.
+  2. Trong `ModernHomeRowsList.kt`: Kiểm tra `effectiveActiveRowKey()` trên toàn bộ chuỗi fallback (`navTargetRowKey`, `activeRowKey`, `currentRowKeyTracker`, hàng hiển thị gần nhất), thêm `LaunchedEffect(carouselRows)` dọn key cũ và phục hồi focus ngay nếu hàng đích biến mất; theo dõi `attachedRowKeys` qua `DisposableEffect(row.key)` trong `itemsIndexed` để `focusRestorerRequester` chỉ trả `FocusRequester` đang gắn node hợp lệ; giữ `overlayHost` thêm tối đa 4 frame khi `grid == null` trong `handoffOverlayToGrid`.
+  3. Trong `LeanbackModernRow.kt` & `ModernHomeRows.kt`: Gọi `prepareForIncomingFocus()` trước `requestFocus()` trong `executeRowFocus` và khi placeholder đổi sang dữ liệu thật.
+- **Prevention**: Không bao giờ để `activeRowKey`/`navTargetRowKey` trỏ tới một row key không còn tồn tại trong danh sách hiển thị khi vẫn còn row khác khả dụng, và luôn kiểm tra `FocusRequester` đang gắn vào cây Compose trước khi trả cho `focusRestorer`.
+- **Status**: Fixed
+
+---
+
+## [2026-11-20 08:10] - Văng App (`StackOverflowError`) Khi Cuộn / Tải Xuống Hàng Catalog Dưới Ở Màn Hình Modern Home
+
+- **Type**: Runtime
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackBaseViewHolder.kt:27`, `app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt:105`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt:93`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt:130`
+- **Agent**: fixer
+- **Root Cause**: 
+  1. *Vòng lặp đệ quy `clearFocus() -> rootViewRequestFocus() -> requestFocus()` trên `FocusIsolatedRootLayout`*: `LeanbackCardViewHolder.root` sử dụng `FocusIsolatedRootLayout` vốn override `getRootView(): View = this` để ngăn `rootViewRequestFocus()` nhảy lên `DecorView`/`AndroidComposeView`. Tuy nhiên, khi `LazyColumn` cuộn và subcompose làm `AndroidComposeView.clearOwnerFocus()` gọi `clearFocus()` xuống cây View của hàng đã không còn active (`mayTakeFocus() == false`), hoặc khi `LeanbackCardViewHolder` `onFocusChangeListener` từ chối stray focus bằng `root.clearFocus()`, hàm `View.clearFocusInternal()` của Android gọi `rootViewRequestFocus()` -> `getRootView().requestFocus()` -> gọi ngược lại `root.requestFocus()` trên chính thẻ đang bị clear. Thẻ nhận lại focus (`hasFocus = true`), `onFocusChangeListener` lại thấy `mayTakeFocus() == false` rồi gọi `root.clearFocus()` tạo thành đệ quy vô tận gây `StackOverflowError` (8MB stack).
+  2. *Gán sớm `items = newItems` trong `LeanbackModernRowAdapter.applyItems` & đồng bộ focus khi `bind`*: `applyItems` gán `items = newItems` trước khi kiểm tra `rv.isComputingLayout` rồi mới `rv.post { applyItemsInternal(...) }`, có thể làm lệch `getItemCount()` với snapshot của `RecyclerView`. Đồng thời `LeanbackCardViewHolder.bind()` và `onScrollSettled()` chưa kiểm tra `mayTakeFocus()` trước khi giữ/cấp focus visual.
+- **Error Message**: 
+  ```
+  java.lang.StackOverflowError: stack size 8188KB
+    at com.nuvio.tv.ui.screens.home.ModernHomeRowsListKt$ModernHomeRowsList$8$1$4$1$3$isActiveRowLambda$1$1.invoke(ModernHomeRowsList.kt:1468)
+    at com.nuvio.tv.ui.screens.home.ModernRowContainerLayout.clearChildFocus(ModernRowFloatingFocusRingView.kt:340)
+    at com.nuvio.tv.ui.screens.home.ModernInteropHorizontalGridView.clearChildFocus(ModernInteropHorizontalGridView.kt:150)
+    at com.nuvio.tv.ui.screens.home.LeanbackCardViewHolder._init_$lambda$0(LeanbackModernRowAdapter.kt:109)
+    at android.view.View.onFocusChanged(View.java:8769)
+    at android.view.View.rootViewRequestFocus(View.java:8611)
+    at android.view.View.clearFocusInternal(View.java:8597)
+    at com.nuvio.tv.ui.screens.home.LeanbackCardViewHolder._init_$lambda$0(LeanbackModernRowAdapter.kt:109)
+  ```
+- **Fix Applied**: 
+  1. Trong `FocusIsolatedRootLayout` (`LeanbackBaseViewHolder.kt`): Thêm `clearFocusDepth` bọc `clearFocus()` và chặn `requestFocus()` trả `false` khi đang ở bên trong `clearFocus()`, vừa giữ cô lập khỏi `DecorView`/`AndroidComposeView` vừa ngăn `rootViewRequestFocus()` tự cấp lại focus cho chính thẻ vừa clear.
+  2. Trong `ModernInteropHorizontalGridView.kt` & `InteropHorizontalGridView.kt`: Áp dụng cơ chế `clearFocusDepth` tương tự để chặn self-refocus trong `clearFocus()`, đồng thời dọn `clearFocus()` nếu `canTakeFocus` chuyển sang `false` mà grid vẫn giữ zombie focus (và không có `pendingIncomingFocus`).
+  3. Trong `LeanbackModernRowAdapter.kt`:
+     - Khi từ chối stray focus ở `onFocusChangeListener`, khóa `FOCUS_BLOCK_DESCENDANTS` và gọi `updateFocusVisual(false)` cùng `root.clearFocus()`.
+     - Kiểm tra `mayTakeFocus()` trong `bind()` và `onScrollSettled()` trước khi `requestFocus()` hoặc `updateFocusVisual(true)`.
+     - Hoãn cập nhật `items = newItems` trong `applyItems()` qua `pendingItems` + `scheduleFlushPendingItems(rv)` khi `rv.isComputingLayout || rv.isInLayout` để luôn đồng bộ với `RecyclerView`.
+- **Prevention**: Khi override `getRootView(): View = this` trên bất kỳ `View`/`ViewGroup` focusable nào để cô lập focus khỏi Compose/DecorView, luôn phải chặn `requestFocus()` trong lúc đang thực thi `clearFocus()`, vì `View.clearFocusInternal()` mặc định gọi `getRootView().requestFocus()`.
+- **Status**: Fixed
+
+---
+
+## [2026-11-19 21:55] - Lỗi Chỉ Nhấn Giữ Nút Di Chuyển Xuống Mới Xuống Được Ở Màn Hình Home Trên Một Vài Điều Khiển Bluetooth / Hồng Ngoại
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt`, `app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt`, `app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt`
+- **Agent**: mon
+- **Root Cause**: 
+  1. *Xung đột Early Repeat Cancel & Snap-Back trên điều khiển Hồng ngoại (IR) / Bluetooth*: Theo giao thức IR NEC và một số remote Bluetooth HID có `repeat_delay` ngắn, một lần bấm nút Xuống bình thường (~80-130ms) phát ra `ACTION_DOWN(repeatCount = 0)` rồi kèm theo 1 xung `ACTION_DOWN(repeatCount = 1)` chỉ sau ~40-100ms trước khi người dùng nhấc tay (`ACTION_UP`). Do code kích hoạt `startOrExtendVerticalHoldScroll` ngay từ `repeatCount == 1` (`event.repeatCount > 0`), nó lập tức gọi `scrollJob?.cancel()` chặt đứt bước nhảy 1 hàng (`stepVerticalRow(1)`). Khi người dùng nhả phím (`ACTION_UP`), `endVerticalHoldScroll()` thấy Hàng 0 chưa cuộn qua 25% chiều cao hàng nên bỏ qua `targetRowIndexTracker` (= 1), gán `landingIdx = 0` và kéo giật màn hình ngược trở về Hàng 0.
+  2. *Bất đối xứng tại `LazyColumn.onPreviewKeyEvent` & Khóa `FOCUS_BLOCK_DESCENDANTS`*: `LazyColumn.onPreviewKeyEvent` chỉ bắt `repeatCount > 0` mà bỏ qua `repeatCount == 0`, đồng thời `targetGrid` chưa được mở khóa `descendantFocusability = FOCUS_AFTER_DESCENDANTS` tức thì trên UI thread trước khi `requestFocus()`.
+  3. *Classic Home (`InteropHorizontalGridView.focusSearch`)*: Hàm `focusSearch` chặn cả hướng dọc (`FOCUS_DOWN` / `FOCUS_UP`) không cho thoát ra khỏi hàng khi `onNavigateDown` không được truyền.
+- **Error Message**: 
+  ```
+  User reported:
+  - "hiện tại chỉ có 1 vài box android tv báo lỗi chỉ nhấn giữ nút di chuyển xuống mới xuống được ở màn hình home , các mục khác hoạt động bình thường"
+  - "kiểm tra lại tôi cho rằng không phải do box cấu hình yếu mà do điều khiển dùng bluetooth hoặc dùng hồng ngoại"
+  ```
+- **Fix Applied**: 
+  1. Trong `ModernHomeRowsList.kt`:
+     - Thêm cơ chế bảo vệ bước nhảy đơn (`VERTICAL_HOLD_GRACE_PERIOD_MS = 200L` với `lastVerticalSingleStepAtMsRef`): Khi nhận xung lặp sớm (`repeatCount > 0`) trong vòng 200ms kể từ bước nhảy đơn `repeatCount = 0`, chỉ consume sự kiện (`return true`) mà không gọi `scrollJob?.cancel()`, bảo vệ bước nhảy 1 hàng hoàn tất trọn vẹn.
+     - Trong `endVerticalHoldScroll()`: Chặn tuyệt đối Snap-Backward (`landingIdx = maxOf(rawLandingIdx, targetRowIndexTracker)` khi đi xuống và `minOf(rawLandingIdx, targetRowIndexTracker)` khi đi lên).
+     - Trong `LazyColumn.onPreviewKeyEvent`: Xử lý trực tiếp cả `repeatCount == 0` (`stepVerticalRow`) tại cùng cửa ngõ với `repeatCount > 0`.
+  2. Trong `ModernInteropHorizontalGridView.kt`:
+     - Bổ sung `prepareForIncomingFocus()` mở khóa tức thời `descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS` và cờ `pendingIncomingFocus = true` ngay khi `stepVerticalRow` hoặc `handoffOverlayToGrid` chọn hàng đích.
+  3. Trong `InteropHorizontalGridView.kt`:
+     - Cho phép `focusSearch` ủy quyền lên `parent` đối với `View.FOCUS_DOWN` và `View.FOCUS_UP`.
+- **Prevention**: Khi kết hợp điều hướng từng bước (Single Step) và nhấn giữ cuộn nhanh (Hold Fast Scroll) trên Android TV, luôn đặt khoảng thời gian bảo vệ (grace period >= thời gian animation bước đơn) trước khi hủy job bước đơn để tương thích với các điều khiển Hồng ngoại (IR NEC) và Bluetooth phát xung `repeatCount = 1` sớm, đồng thời không bao giờ cho phép vị trí hạ cánh khi nhả phím lùi ngược về sau đích đến của bước đơn.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-19 11:35] - Lỗi Hàng Bên Dưới Tự Hiện Khung Viền Ở Poster Thứ 8 Khi Hàng Hiện Tại Load Xong
 
 - **Type**: Logic

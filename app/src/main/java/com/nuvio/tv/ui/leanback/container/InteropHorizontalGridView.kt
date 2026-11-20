@@ -127,7 +127,18 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         })
     }
 
+    private var clearFocusDepth: Int = 0
+
     override fun getRootView(): View = this
+
+    override fun clearFocus() {
+        clearFocusDepth++
+        try {
+            super.clearFocus()
+        } finally {
+            clearFocusDepth--
+        }
+    }
 
     fun ensureTargetChildFocused(targetPos: Int, direction: Int, retryCount: Int = 0) {
         if (!isAttachedToWindow || !mayTakeFocus()) return
@@ -158,6 +169,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         get() = isComputingLayout || isInLayout || !isAttachedToWindow
 
     override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
+        if (clearFocusDepth > 0) return false
         isNavigatingToSidebar = false
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         if (!mayTakeFocus()) return false
@@ -234,6 +246,9 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     override fun focusSearch(focused: View?, direction: Int): View? {
         if (isBusyLayout) {
             return focused ?: findFocus() ?: this
+        }
+        if (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP) {
+            return (parent as? ViewGroup)?.focusSearch(focused, direction)
         }
         val total = universalAdapter?.itemCount ?: 0
         val currentPos = selectedPosition

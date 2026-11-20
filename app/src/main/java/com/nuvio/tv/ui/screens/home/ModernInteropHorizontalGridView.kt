@@ -90,30 +90,50 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         floatingRingView?.hideRing(true)
     }
 
+    private var clearFocusDepth: Int = 0
+
     override fun clearFocus() {
-        super.clearFocus()
-        if (!hasFocus()) {
-            floatingRingView?.hideRing(true)
+        clearFocusDepth++
+        try {
+            super.clearFocus()
+            if (!hasFocus()) {
+                floatingRingView?.hideRing(true)
+            }
+        } finally {
+            clearFocusDepth--
         }
     }
+
+    private var pendingIncomingFocus: Boolean = false
 
     var canTakeFocus: (() -> Boolean)? = null
         set(value) {
             field = value
             val allowed = value?.invoke() != false
-            descendantFocusability = if (allowed) {
-                ViewGroup.FOCUS_AFTER_DESCENDANTS
-            } else {
-                ViewGroup.FOCUS_BLOCK_DESCENDANTS
-            }
-            if (!allowed) {
+            if (allowed) {
+                pendingIncomingFocus = false
+                descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            } else if (!pendingIncomingFocus) {
+                descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 floatingRingView?.hideRing(true)
+                if (hasFocus()) {
+                    clearFocus()
+                }
             }
         }
 
     private var isNavigatingToSidebar: Boolean = false
+    @Volatile
+    var isDetaching: Boolean = false
 
-    fun mayTakeFocus(): Boolean = canTakeFocus?.invoke() != false
+    fun prepareForIncomingFocus() {
+        isDetaching = false
+        isNavigatingToSidebar = false
+        pendingIncomingFocus = true
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+    }
+
+    fun mayTakeFocus(): Boolean = !isDetaching && (pendingIncomingFocus || canTakeFocus?.invoke() != false)
 
     val hasPendingHorizontalNavigation: Boolean
         get() = isHoldingHorizontalKey ||
@@ -124,7 +144,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         get() = rowAdapter?.isSubmittingItems == true
 
     override fun clearChildFocus(child: View?) {
-        val deliberateRowChange = isNavigatingToSidebar || canTakeFocus?.invoke() == false
+        val deliberateRowChange = isDetaching || isNavigatingToSidebar || canTakeFocus?.invoke() == false
         val shouldProtectFocus = isAttachedToWindow &&
             !deliberateRowChange &&
             (hasPendingHorizontalNavigation || isSubmittingItems)
@@ -176,7 +196,17 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
     fun prepareForRowChange() {
         isHoldingHorizontalKey = false
         isHoldingVerticalKey = false
+        pendingIncomingFocus = false
         pendingTargetPosition = RecyclerView.NO_POSITION
+        if (canTakeFocus?.invoke() == false) {
+            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        }
+    }
+
+    fun prepareForDetachment() {
+        isDetaching = true
+        prepareForRowChange()
+        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
     }
 
     fun ensureChildFocusAndRing(targetPos: Int = -1, animated: Boolean = false, retryCount: Int = 0) {
@@ -316,6 +346,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         get() = isComputingLayout || isInLayout || !isAttachedToWindow
 
     override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
+        if (clearFocusDepth > 0) return false
         isNavigatingToSidebar = false
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         if (!mayTakeFocus()) return false

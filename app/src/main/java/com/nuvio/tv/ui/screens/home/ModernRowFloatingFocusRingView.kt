@@ -326,6 +326,8 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
 class ModernRowContainerLayout(context: Context) : FrameLayout(context) {
     lateinit var gridView: ModernInteropHorizontalGridView
     lateinit var floatingRingView: ModernRowFloatingFocusRingView
+    @Volatile
+    var isDetaching: Boolean = false
 
     override fun clearFocus() {
         super.clearFocus()
@@ -335,7 +337,8 @@ class ModernRowContainerLayout(context: Context) : FrameLayout(context) {
     }
 
     override fun clearChildFocus(child: View?) {
-        if (::gridView.isInitialized &&
+        if (!isDetaching &&
+            ::gridView.isInitialized &&
             gridView.isVerticalGlideActive?.invoke() != true &&
             gridView.canTakeFocus?.invoke() != false &&
             (gridView.hasPendingHorizontalNavigation || gridView.isSubmittingItems)
