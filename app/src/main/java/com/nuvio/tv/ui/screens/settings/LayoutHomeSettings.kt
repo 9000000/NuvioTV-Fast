@@ -208,14 +208,12 @@ internal fun LayoutSidebarSection(
     uiState: LayoutSettingsUiState,
     onEvent: (LayoutSettingsEvent) -> Unit
 ) {
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-        SettingsToggleRow(
-            title = stringResource(R.string.layout_modern_sidebar_blur),
-            subtitle = stringResource(R.string.layout_modern_sidebar_blur_sub),
-            checked = uiState.modernSidebarBlurEnabled,
-            onToggle = { onEvent(LayoutSettingsEvent.SetModernSidebarBlurEnabled(!uiState.modernSidebarBlurEnabled)) }
-        )
-    }
+    SettingsToggleRow(
+        title = stringResource(R.string.layout_modern_sidebar_blur),
+        subtitle = stringResource(R.string.layout_modern_sidebar_blur_sub),
+        checked = uiState.modernSidebarBlurEnabled,
+        onToggle = { onEvent(LayoutSettingsEvent.SetModernSidebarBlurEnabled(!uiState.modernSidebarBlurEnabled)) }
+    )
     SettingsToggleRow(
         title = stringResource(R.string.layout_hide_floating_pill),
         subtitle = stringResource(R.string.layout_hide_floating_pill_sub),

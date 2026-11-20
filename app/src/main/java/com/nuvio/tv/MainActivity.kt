@@ -22,8 +22,19 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import com.nuvio.tv.ui.components.captureBlurredWindowRegion
+import com.nuvio.tv.ui.components.findHostWindow
 import com.nuvio.tv.ui.theme.NuvioStrokes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -916,8 +927,7 @@ open class MainActivity : ComponentActivity() {
                         )
                     } else {
                     val sidebarCollapsed = mainUiPrefs.sidebarCollapsed
-                    val modernSidebarBlurEnabled =
-                        mainUiPrefs.modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                    val modernSidebarBlurEnabled = mainUiPrefs.modernSidebarBlurPref
                     val hideBuiltInHeadersForFloatingPill = !sidebarCollapsed
 
                     val showLiveTvInDrawer by com.nuvio.tv.features.livetv.LiveTvRepository.isNavigationEnabled.collectAsState()
@@ -1652,11 +1662,73 @@ private fun ModernSidebarScaffold(
     val sidebarBlocksContentKeys by remember { derivedStateOf { isSidebarExpanded || sidebarExpandProgress > 0.05f } }
     val sidebarShowExpandedPanel by remember { derivedStateOf { sidebarExpandProgress > 0.01f } }
     val sidebarShowCollapsedPill by remember { derivedStateOf { sidebarExpandProgress < 0.98f } }
-    val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled && (isSidebarExpanded || sidebarShowExpandedPanel)
-    // Translucent sidebar surfaces: follow the blur setting on Android 12+,
-    // always translucent below Android 12 (blur unsupported there).
-    val sidebarTranslucent = modernSidebarBlurEnabled ||
-        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S
+    val supportsRealtimeHazeBlur = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    val useRealtimeHazeBlur = modernSidebarBlurEnabled && supportsRealtimeHazeBlur
+    val useLegacySnapshotBlur = modernSidebarBlurEnabled && !supportsRealtimeHazeBlur
+    val shouldApplySidebarHaze = showSidebar && useRealtimeHazeBlur && (isSidebarExpanded || sidebarShowExpandedPanel)
+    // Translucent sidebar surfaces whenever blur is enabled (realtime Haze on Android 12+,
+    // one-shot blurred window snapshot on Android < 12).
+    val sidebarTranslucent = modernSidebarBlurEnabled
+
+    val hostContext = LocalContext.current
+    val hostDensity = LocalDensity.current
+    val blurPanelRadius = NuvioTheme.effects.blurPanel
+    var panelBoundsInWindow by remember { mutableStateOf<android.graphics.Rect?>(null) }
+    var legacyBlurImageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var legacyBlurRawBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var legacyBlurCaptureReady by remember { mutableStateOf(false) }
+
+    // Hide the panel and collapsed pill for ~1-2 frames while PixelCopy snapshots the clean background.
+    val awaitingLegacyBlurSnapshot = useLegacySnapshotBlur && isSidebarExpanded && !legacyBlurCaptureReady
+
+    DisposableEffect(Unit) {
+        onDispose {
+            legacyBlurImageBitmap = null
+            legacyBlurRawBitmap?.let { bmp -> if (!bmp.isRecycled) bmp.recycle() }
+            legacyBlurRawBitmap = null
+        }
+    }
+
+    LaunchedEffect(isSidebarExpanded, sidebarShowExpandedPanel, useLegacySnapshotBlur) {
+        if (!useLegacySnapshotBlur || (!isSidebarExpanded && !sidebarShowExpandedPanel)) {
+            legacyBlurImageBitmap = null
+            legacyBlurRawBitmap?.let { bmp -> if (!bmp.isRecycled) bmp.recycle() }
+            legacyBlurRawBitmap = null
+            legacyBlurCaptureReady = false
+        }
+    }
+
+    LaunchedEffect(isSidebarExpanded, useLegacySnapshotBlur, showSidebar) {
+        if (!showSidebar || !useLegacySnapshotBlur || !isSidebarExpanded) {
+            return@LaunchedEffect
+        }
+        try {
+            // Wait two frames so Compose submits a clean frame with panel + pill hidden
+            // and onGloballyPositioned has recorded the exact panel bounds.
+            withFrameNanos { }
+            withFrameNanos { }
+            val window = hostContext.findHostWindow()
+            val bounds = panelBoundsInWindow
+            if (window != null && bounds != null) {
+                val blurRadiusPx = with(hostDensity) { blurPanelRadius.toPx() }
+                val captured = captureBlurredWindowRegion(
+                    window = window,
+                    regionInWindow = bounds,
+                    blurRadiusPx = blurRadiusPx
+                )
+                if (captured != null) {
+                    val previous = legacyBlurRawBitmap
+                    legacyBlurRawBitmap = captured
+                    legacyBlurImageBitmap = captured.asImageBitmap()
+                    if (previous != null && previous !== captured && !previous.isRecycled) {
+                        previous.recycle()
+                    }
+                }
+            }
+        } finally {
+            legacyBlurCaptureReady = true
+        }
+    }
 
 
 
@@ -1797,7 +1869,7 @@ private fun ModernSidebarScaffold(
                     .fillMaxHeight()
                     .padding(start = NuvioTheme.spacing.lg - NuvioTheme.spacing.xxs, top = NuvioTheme.spacing.lg, bottom = NuvioTheme.spacing.md, end = NuvioTheme.spacing.sm)
                     .graphicsLayer {
-                        alpha = sidebarSurfaceAlpha
+                        alpha = if (awaitingLegacyBlurSnapshot) 0f else sidebarSurfaceAlpha
                     }
                     .selectableGroup()
             ) {
@@ -1806,18 +1878,19 @@ private fun ModernSidebarScaffold(
                     val panelShape = RoundedCornerShape(sidebarTokens.panelRadius)
                     val panelCornerRadiusPx = with(LocalDensity.current) { sidebarTokens.panelRadius.toPx() }
                     val delayedBlurProgress = ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
-                    val showPanelBlur = modernSidebarBlurEnabled &&
+                    val showRealtimePanelBlur = useRealtimeHazeBlur &&
                         isSidebarExpanded &&
                         !sidebarCollapsePending &&
                         delayedBlurProgress > 0f
-                    val blurPanelRadius = NuvioTheme.effects.blurPanel
                     val bgElevated = NuvioTheme.colors.BackgroundElevated
                     val borderBase = NuvioTheme.colors.Border
                     val isAmoledBlack = bgElevated == Color.Black
-                    val panelBackgroundColor = remember(sidebarTranslucent, isAmoledBlack) {
+                    val hasActiveLegacyBlur = useLegacySnapshotBlur && legacyBlurImageBitmap != null
+                    val panelBackgroundColor = remember(sidebarTranslucent, isAmoledBlack, useLegacySnapshotBlur, hasActiveLegacyBlur) {
                         val baseColor = if (isAmoledBlack) Color.Black else Color(0xFF161618)
                         val alpha = when {
-                            sidebarTranslucent -> 0.70f
+                            sidebarTranslucent && (!useLegacySnapshotBlur || hasActiveLegacyBlur) -> 0.70f
+                            sidebarTranslucent -> 0.88f // Fallback if snapshot capture failed on Android < 12
                             isAmoledBlack -> 1f
                             else -> 0.97f
                         }
@@ -1831,9 +1904,21 @@ private fun ModernSidebarScaffold(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .onGloballyPositioned { coords ->
+                                val pos = coords.positionInWindow()
+                                val size = coords.size
+                                if (size.width > 0 && size.height > 0) {
+                                    panelBoundsInWindow = android.graphics.Rect(
+                                        pos.x.toInt(),
+                                        pos.y.toInt(),
+                                        (pos.x + size.width).toInt(),
+                                        (pos.y + size.height).toInt()
+                                    )
+                                }
+                            }
                             .clip(panelShape)
                             .then(
-                                if (showPanelBlur) {
+                                if (showRealtimePanelBlur) {
                                     Modifier.hazeEffect(state = sidebarHazeState) {
                                         blurRadius = blurPanelRadius * delayedBlurProgress
                                         noiseFactor = 0.04f * delayedBlurProgress
@@ -1843,15 +1928,34 @@ private fun ModernSidebarScaffold(
                                     Modifier
                                 }
                             )
-                            .background(color = panelBackgroundColor, shape = panelShape)
-                            .then(
-                                if (panelBorderColor != Color.Transparent) {
-                                    Modifier.border(width = NuvioStrokes.tokens.hairline, color = panelBorderColor, shape = panelShape)
-                                } else {
-                                    Modifier
-                                }
-                            )
                     ) {
+                        if (useLegacySnapshotBlur) {
+                            legacyBlurImageBitmap?.let { blurredSnapshot ->
+                                Image(
+                                    bitmap = blurredSnapshot,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.FillBounds,
+                                    filterQuality = FilterQuality.Medium,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(color = panelBackgroundColor)
+                                .then(
+                                    if (panelBorderColor != Color.Transparent) {
+                                        Modifier.border(
+                                            width = NuvioStrokes.tokens.hairline,
+                                            color = panelBorderColor,
+                                            shape = panelShape
+                                        )
+                                    } else {
+                                        Modifier
+                                    }
+                                )
+                        )
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
@@ -1954,9 +2058,9 @@ private fun ModernSidebarScaffold(
                     iconRes = selectedDrawerItem.iconRes,
                     icon = selectedDrawerItem.icon,
                     iconOnly = isFloatingPillIconOnly && !keepFloatingPillExpanded,
-                    blurEnabled = modernSidebarBlurEnabled,
+                    blurEnabled = useRealtimeHazeBlur,
                     translucent = sidebarTranslucent,
-                    hazeState = if (modernSidebarBlurEnabled) sidebarHazeState else null,
+                    hazeState = if (useRealtimeHazeBlur) sidebarHazeState else null,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset {
@@ -1966,7 +2070,7 @@ private fun ModernSidebarScaffold(
                             )
                         }
                         .graphicsLayer {
-                            alpha = 1f - sidebarExpandProgress
+                            alpha = if (awaitingLegacyBlurSnapshot) 0f else (1f - sidebarExpandProgress)
                         },
                     onExpand = {
                         isSidebarExpanded = true
