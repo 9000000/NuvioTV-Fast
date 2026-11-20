@@ -6,8 +6,10 @@ import androidx.leanback.widget.BaseGridView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil3.SingletonImageLoader
+import com.nuvio.tv.core.image.HomeImageLoadingProfile
 import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
+import com.nuvio.tv.ui.leanback.core.HorizontalPrefetchProfileCache
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.holder.LeanbackAvatarViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
@@ -411,6 +413,16 @@ class LeanbackUniversalAdapter(
     }
 
     private val prefetchedKeys = LinkedHashSet<String>()
+    private val loadingProfileCache = HorizontalPrefetchProfileCache()
+
+    internal var loadingProfileProvider: ((Context) -> HomeImageLoadingProfile)?
+        get() = loadingProfileCache.providerOverride
+        set(value) {
+            loadingProfileCache.providerOverride = value
+        }
+
+    internal fun resolveLoadingProfile(context: Context): HomeImageLoadingProfile =
+        loadingProfileCache.get(context)
 
     override fun onBindViewHolder(holder: LeanbackBaseViewHolder, position: Int) {
         holder.adapter = this
@@ -490,18 +502,20 @@ class LeanbackUniversalAdapter(
         focusedPosition: Int,
         firstVisiblePosition: Int,
         lastVisiblePosition: Int,
-        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
-        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+        aheadCount: Int? = null,
+        behindCount: Int? = null
     ) {
         val count = items.size
         if (count <= 1) return
+        val resolvedAhead = aheadCount ?: resolveLoadingProfile(context).horizontalPrefetchAhead
+        val resolvedBehind = behindCount ?: resolveLoadingProfile(context).horizontalPrefetchBehind
         val indices = LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
             focusedPosition = focusedPosition,
             firstVisiblePosition = firstVisiblePosition,
             lastVisiblePosition = lastVisiblePosition,
             itemCount = count,
-            aheadCount = aheadCount,
-            behindCount = behindCount
+            aheadCount = resolvedAhead,
+            behindCount = resolvedBehind
         )
         if (indices.isEmpty()) return
         val imageLoader = SingletonImageLoader.get(context)
@@ -510,10 +524,11 @@ class LeanbackUniversalAdapter(
         }
     }
 
+    @JvmOverloads
     fun prefetchFromVisibleRange(
         context: Context,
-        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
-        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+        aheadCount: Int? = null,
+        behindCount: Int? = null
     ) {
         val rv = attachedRecyclerView ?: return
         val count = items.size
@@ -536,8 +551,8 @@ class LeanbackUniversalAdapter(
     fun onFocusedPositionChanged(
         context: Context,
         position: Int,
-        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
-        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+        aheadCount: Int? = null,
+        behindCount: Int? = null
     ) {
         val count = items.size
         if (count <= 1) return
