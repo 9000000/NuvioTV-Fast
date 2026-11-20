@@ -6,6 +6,7 @@ import androidx.leanback.widget.BaseGridView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil3.SingletonImageLoader
+import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.holder.LeanbackAvatarViewHolder
@@ -55,6 +56,7 @@ class LeanbackUniversalAdapter(
             pendingNotifyOnAttach = false
             safeNotifyDataSetChanged()
         }
+        scheduleInitialEdgePrefetch(recyclerView, items)
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
@@ -76,6 +78,7 @@ class LeanbackUniversalAdapter(
             pendingNotifyOnAttach = false
             safeNotifyDataSetChanged()
         }
+        scheduleInitialEdgePrefetch(rv, items)
     }
 
     fun flushPendingUpdates() {
@@ -299,6 +302,19 @@ class LeanbackUniversalAdapter(
                 }
             }
         }
+
+        if (newItems.size > 1 && hasRealItems(newItems) && rv.isAttachedToWindow &&
+            (rv.hasFocus() || LeanbackArtworkLoader.isRowNearViewport(rv))
+        ) {
+            val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(rv)
+            if (lastVisible < 0 || firstVisible > 0 || newItems.size > lastVisible + 1) {
+                rv.post {
+                    if (attachedRecyclerView === rv && rv.isAttachedToWindow && hasRealItems(items)) {
+                        prefetchFromVisibleRange(rv.context)
+                    }
+                }
+            }
+        }
     }
 
     fun safeNotifyDataSetChanged() {
@@ -341,6 +357,9 @@ class LeanbackUniversalAdapter(
             if (vh != null && vh.itemView.hasFocus()) {
                 vh.updateFocusVisual(true)
             }
+        }
+        if (rv.isAttachedToWindow && hasRealItems(items)) {
+            prefetchFromVisibleRange(rv.context)
         }
     }
 
@@ -399,6 +418,32 @@ class LeanbackUniversalAdapter(
         holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
     }
 
+    private fun hasRealItems(list: List<LeanbackCardItem>): Boolean {
+        for (i in list.indices) {
+            val url = list[i].imageUrl
+            if (!url.isNullOrBlank() && !url.trim().isPlaceholder()) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun scheduleInitialEdgePrefetch(rv: RecyclerView, list: List<LeanbackCardItem>) {
+        if (list.size <= 1 || !hasRealItems(list)) return
+        rv.post {
+            if (attachedRecyclerView === rv &&
+                rv.isAttachedToWindow &&
+                hasRealItems(items) &&
+                (rv.hasFocus() || LeanbackArtworkLoader.isRowNearViewport(rv))
+            ) {
+                val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(rv)
+                if (lastVisible < 0 || firstVisible > 0 || items.size > lastVisible + 1) {
+                    prefetchFromVisibleRange(rv.context)
+                }
+            }
+        }
+    }
+
     private fun prefetchItemAt(context: Context, imageLoader: coil3.ImageLoader, index: Int) {
         val item = items.getOrNull(index) ?: return
         val wPx = cardWidthPx.coerceAtLeast(1)
@@ -440,15 +485,71 @@ class LeanbackUniversalAdapter(
         }
     }
 
-    fun onFocusedPositionChanged(context: Context, position: Int) {
+    private fun prefetchRowIndices(
+        context: Context,
+        focusedPosition: Int,
+        firstVisiblePosition: Int,
+        lastVisiblePosition: Int,
+        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
+        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+    ) {
         val count = items.size
         if (count <= 1) return
-        val aheadMax = minOf(position + 2, count - 1)
-        if (position + 1 > aheadMax) return
+        val indices = LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+            focusedPosition = focusedPosition,
+            firstVisiblePosition = firstVisiblePosition,
+            lastVisiblePosition = lastVisiblePosition,
+            itemCount = count,
+            aheadCount = aheadCount,
+            behindCount = behindCount
+        )
+        if (indices.isEmpty()) return
         val imageLoader = SingletonImageLoader.get(context)
-        for (i in (position + 1)..aheadMax) {
-            prefetchItemAt(context, imageLoader, i)
+        for (i in indices.indices) {
+            prefetchItemAt(context, imageLoader, indices[i])
         }
+    }
+
+    fun prefetchFromVisibleRange(
+        context: Context,
+        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
+        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+    ) {
+        val rv = attachedRecyclerView ?: return
+        val count = items.size
+        if (count <= 1 || !hasRealItems(items)) return
+        val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(rv)
+        val focusedPosition = (rv as? BaseGridView)?.selectedPosition
+            ?.takeIf { it in 0 until count }
+            ?: if (firstVisible >= 0) firstVisible else 0
+        prefetchRowIndices(
+            context = context,
+            focusedPosition = focusedPosition,
+            firstVisiblePosition = firstVisible,
+            lastVisiblePosition = lastVisible,
+            aheadCount = aheadCount,
+            behindCount = behindCount
+        )
+    }
+
+    @JvmOverloads
+    fun onFocusedPositionChanged(
+        context: Context,
+        position: Int,
+        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
+        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+    ) {
+        val count = items.size
+        if (count <= 1) return
+        val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(attachedRecyclerView)
+        prefetchRowIndices(
+            context = context,
+            focusedPosition = position,
+            firstVisiblePosition = firstVisible,
+            lastVisiblePosition = lastVisible,
+            aheadCount = aheadCount,
+            behindCount = behindCount
+        )
     }
 
     fun onGridPositionFocused(context: Context, position: Int, numColumns: Int) {

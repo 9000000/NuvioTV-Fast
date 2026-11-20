@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.leanback.holder
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.util.TypedValue
@@ -15,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import coil3.request.Disposable
+import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
@@ -48,6 +50,7 @@ class LeanbackPosterViewHolder(
     private var boundFallbackUrl: String? = null
     private var boundWidthPx: Int = 0
     private var boundHeightPx: Int = 0
+    private var lastLoadedColorKey: String? = null
 
     init {
         posterImage.outlineProvider = object : ViewOutlineProvider() {
@@ -76,6 +79,35 @@ class LeanbackPosterViewHolder(
         }
     }
 
+    override fun updateFocusVisual(hasFocus: Boolean) {
+        val item = currentItem
+        if (hasFocus && item != null) {
+            val loadableUrl = item.imageUrl?.takeIf { it.isNotBlank() && !it.trim().isPlaceholder() }
+            val colorCacheKey = loadableUrl ?: item.key
+            val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
+            if (cachedColor != null) {
+                currentDominantColor = cachedColor
+                lastLoadedColorKey = colorCacheKey
+            } else if (loadableUrl != null && lastLoadedColorKey != colorCacheKey) {
+                val bmp = (posterImage.drawable as? BitmapDrawable)?.bitmap
+                if (bmp != null && !bmp.isRecycled) {
+                    lastLoadedColorKey = colorCacheKey
+                    val boundKey = item.key
+                    LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
+                        if (currentItem?.key == boundKey) {
+                            val changed = currentDominantColor != extracted
+                            currentDominantColor = extracted
+                            if (root.hasFocus() && changed) {
+                                super.updateFocusVisual(true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        super.updateFocusVisual(hasFocus)
+    }
+
     override fun bind(
         item: LeanbackCardItem,
         cardWidthPx: Int,
@@ -84,11 +116,14 @@ class LeanbackPosterViewHolder(
         showLabels: Boolean
     ) {
         val posterItem = item as? LeanbackCardItem.Poster
-        val imageUrl = item.imageUrl
-        val fallbackUrl = posterItem?.fallbackImageUrl
+        val rawImageUrl = item.imageUrl
+        val hasLoadableImage = !rawImageUrl.isNullOrBlank() && !rawImageUrl.trim().isPlaceholder()
+        val imageUrl = if (hasLoadableImage) rawImageUrl else null
+        val fallbackUrl = posterItem?.fallbackImageUrl?.takeIf { !it.isBlank() && !it.trim().isPlaceholder() }
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
-        val sameImageRequest = currentItem?.key == item.key &&
+        val sameImageRequest = hasLoadableImage &&
+            currentItem?.key == item.key &&
             boundImageUrl == imageUrl &&
             boundFallbackUrl == fallbackUrl &&
             boundWidthPx == wPx &&
@@ -99,6 +134,7 @@ class LeanbackPosterViewHolder(
         updateCornerRadius(cornerRadiusPx)
 
         if (!sameImageRequest) {
+            lastLoadedColorKey = null
             posterImage.setImageDrawable(null)
             ensurePlaceholderBackground()
         }
@@ -168,7 +204,7 @@ class LeanbackPosterViewHolder(
         }
 
         // Coil image loading with zero GPU overdraw & MemoryCache fast-path
-        if (!imageUrl.isNullOrBlank()) {
+        if (imageUrl != null) {
             if (!sameImageRequest) {
                 val boundKey = item.key
                 boundImageUrl = imageUrl
@@ -185,21 +221,27 @@ class LeanbackPosterViewHolder(
                     isStillBound = { currentItem?.key == boundKey },
                     onCacheHit = { result ->
                         cardContainer.background = null
-                        resolveDominantColorFromImage(
-                            result = result,
-                            boundKey = boundKey,
-                            colorCacheKey = colorCacheKey,
-                            notifyIfCachedAndFocused = false
-                        )
+                        if (root.hasFocus() || bindingAdapterPosition == 0) {
+                            lastLoadedColorKey = colorCacheKey
+                            resolveDominantColorFromImage(
+                                result = result,
+                                boundKey = boundKey,
+                                colorCacheKey = colorCacheKey,
+                                notifyIfCachedAndFocused = false
+                            )
+                        }
                     },
                     onAsyncSuccess = { result ->
                         cardContainer.background = null
-                        resolveDominantColorFromImage(
-                            result = result,
-                            boundKey = boundKey,
-                            colorCacheKey = colorCacheKey,
-                            notifyIfCachedAndFocused = true
-                        )
+                        if (root.hasFocus() || bindingAdapterPosition == 0) {
+                            lastLoadedColorKey = colorCacheKey
+                            resolveDominantColorFromImage(
+                                result = result,
+                                boundKey = boundKey,
+                                colorCacheKey = colorCacheKey,
+                                notifyIfCachedAndFocused = true
+                            )
+                        }
                     },
                     onAsyncError = {
                         boundImageUrl = null
@@ -212,6 +254,9 @@ class LeanbackPosterViewHolder(
             imageDisposable = null
             boundImageUrl = null
             boundFallbackUrl = null
+            boundWidthPx = 0
+            boundHeightPx = 0
+            lastLoadedColorKey = null
             posterImage.setImageDrawable(null)
             ensurePlaceholderBackground()
         }
@@ -227,6 +272,7 @@ class LeanbackPosterViewHolder(
         boundFallbackUrl = null
         boundWidthPx = 0
         boundHeightPx = 0
+        lastLoadedColorKey = null
         posterImage.setImageDrawable(null)
     }
 

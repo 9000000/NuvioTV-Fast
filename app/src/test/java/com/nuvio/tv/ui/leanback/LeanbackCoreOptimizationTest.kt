@@ -1,11 +1,22 @@
 package com.nuvio.tv.ui.leanback
 
+import android.content.Context
+import android.widget.ImageView
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import coil3.memory.MemoryCache
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
+import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.adapter.computeLeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import io.mockk.Called
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -154,6 +165,165 @@ class LeanbackCoreOptimizationTest {
                 changedPrefixPositions = listOf(0)
             ),
             plan
+        )
+    }
+
+    @Test
+    fun `artwork loader prefetch ignores placeholder empty and blank urls without enqueue`() {
+        val context = mockk<Context>(relaxed = true)
+        val imageLoader = mockk<ImageLoader>(relaxed = true)
+        val tracker = LinkedHashSet<String>()
+
+        LeanbackArtworkLoader.prefetch(
+            context = context,
+            imageLoader = imageLoader,
+            imageUrl = PLACEHOLDER_IMAGE_URL,
+            widthPx = 240,
+            heightPx = 360,
+            prefetchedKeysTracker = tracker
+        )
+        LeanbackArtworkLoader.prefetch(
+            context = context,
+            imageLoader = imageLoader,
+            imageUrl = "  $PLACEHOLDER_IMAGE_URL  ",
+            widthPx = 240,
+            heightPx = 360,
+            prefetchedKeysTracker = tracker
+        )
+        LeanbackArtworkLoader.prefetch(
+            context = context,
+            imageLoader = imageLoader,
+            imageUrl = "   ",
+            widthPx = 240,
+            heightPx = 360,
+            prefetchedKeysTracker = tracker
+        )
+        LeanbackArtworkLoader.prefetch(
+            context = context,
+            imageLoader = imageLoader,
+            imageUrl = null,
+            widthPx = 240,
+            heightPx = 360,
+            prefetchedKeysTracker = tracker
+        )
+
+        assertTrue("Placeholder or blank URLs must not populate prefetchedKeysTracker", tracker.isEmpty())
+        verify(exactly = 0) { imageLoader.enqueue(any()) }
+        assertNull(
+            LeanbackArtworkLoader.resolveNormalizedFallbackUrl(
+                imageUrl = "https://example.com/poster.jpg",
+                fallbackUrl = PLACEHOLDER_IMAGE_URL
+            )
+        )
+    }
+
+    @Test
+    fun `artwork loader loadIntoImageView ignores placeholder empty without touching imageView or SingletonImageLoader`() {
+        val imageView = mockk<ImageView>()
+        val imageLoader = mockk<ImageLoader>(relaxed = true)
+        var callbackInvoked = false
+
+        mockkObject(SingletonImageLoader)
+        try {
+            every { SingletonImageLoader.get(any()) } returns imageLoader
+
+            val disposable = LeanbackArtworkLoader.loadIntoImageView(
+                imageView = imageView,
+                imageUrl = PLACEHOLDER_IMAGE_URL,
+                fallbackUrl = "https://example.com/fallback.jpg",
+                widthPx = 240,
+                heightPx = 360,
+                isStillBound = { true },
+                onCacheHit = { callbackInvoked = true },
+                onAsyncSuccess = { callbackInvoked = true },
+                onAsyncError = { callbackInvoked = true }
+            )
+
+            assertNull(disposable)
+            assertTrue(!callbackInvoked)
+            verify { imageView wasNot Called }
+            verify(exactly = 0) { SingletonImageLoader.get(any()) }
+            verify(exactly = 0) { imageLoader.enqueue(any()) }
+        } finally {
+            unmockkObject(SingletonImageLoader)
+        }
+    }
+
+    @Test
+    fun `computeHorizontalPrefetchIndices covers start middle end and empty or single item rows`() {
+        // Start of row with 6 visible cards (0..5) -> prefetches offscreen right edge 6..11
+        assertEquals(
+            listOf(6, 7, 8, 9, 10, 11),
+            LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+                focusedPosition = 0,
+                firstVisiblePosition = 0,
+                lastVisiblePosition = 5,
+                itemCount = 20
+            )
+        )
+
+        // Middle of row -> prioritizes forward edge beyond lastVisible, then nearest behind firstVisible
+        assertEquals(
+            listOf(11, 12, 13, 14, 15, 16, 4, 3),
+            LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+                focusedPosition = 8,
+                firstVisiblePosition = 5,
+                lastVisiblePosition = 10,
+                itemCount = 20
+            )
+        )
+
+        // End of row -> clamps right edge cleanly and still prefetches nearest left offscreen items
+        assertEquals(
+            listOf(13, 12),
+            LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+                focusedPosition = 19,
+                firstVisiblePosition = 14,
+                lastVisiblePosition = 19,
+                itemCount = 20
+            )
+        )
+
+        // Unknown visible bounds (< 0) -> falls back around focusedPosition
+        assertEquals(
+            listOf(5, 6, 7, 8, 9, 10, 3, 2),
+            LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+                focusedPosition = 4,
+                firstVisiblePosition = -1,
+                lastVisiblePosition = -1,
+                itemCount = 20
+            )
+        )
+
+        // Near end -> distinct valid indices only
+        val nearEnd = LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+            focusedPosition = 6,
+            firstVisiblePosition = 2,
+            lastVisiblePosition = 7,
+            itemCount = 10
+        )
+        assertEquals(listOf(8, 9, 1, 0), nearEnd)
+        assertEquals(nearEnd.distinct(), nearEnd)
+        assertTrue(nearEnd.all { it in 0 until 10 })
+
+        // Single item and empty list -> emptyList()
+        assertEquals(
+            emptyList<Int>(),
+            LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+                focusedPosition = 0,
+                firstVisiblePosition = 0,
+                lastVisiblePosition = 0,
+                itemCount = 1
+            )
+        )
+        assertEquals(
+            emptyList<Int>(),
+            LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+                focusedPosition = 0,
+                firstVisiblePosition = -1,
+                lastVisiblePosition = -1,
+                itemCount = 0
+            )
         )
     }
 }

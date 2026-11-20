@@ -1,7 +1,9 @@
 package com.nuvio.tv.ui.leanback.core
 
 import android.content.Context
+import android.view.View
 import android.widget.ImageView
+import androidx.recyclerview.widget.RecyclerView
 import coil3.Image
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
@@ -15,6 +17,7 @@ import coil3.request.transformations
 import coil3.target.Target
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
 import com.nuvio.tv.core.image.sizedHomeArtworkUrl
+import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.util.BlurTransformation
 
 /**
@@ -29,9 +32,101 @@ object LeanbackArtworkLoader {
     private const val MAX_PREFETCHED_KEYS = 512
     private const val PREFETCH_TRIM_BATCH = 128
 
+    const val DEFAULT_HORIZONTAL_PREFETCH_AHEAD = 6
+    const val DEFAULT_HORIZONTAL_PREFETCH_BEHIND = 2
+
     fun resolveNormalizedFallbackUrl(imageUrl: String, fallbackUrl: String?): String? {
         val trimmed = fallbackUrl?.trim()
-        return if (!trimmed.isNullOrEmpty() && trimmed != imageUrl) trimmed else null
+        return if (!trimmed.isNullOrEmpty() && !trimmed.isPlaceholder() && trimmed != imageUrl) trimmed else null
+    }
+
+    /**
+     * Computes offscreen adapter indices to prefetch around the visible horizontal slice.
+     * Forward items beyond [lastVisiblePosition] are prioritized before trailing items behind
+     * [firstVisiblePosition], skipping items currently bound on screen.
+     */
+    fun computeHorizontalPrefetchIndices(
+        focusedPosition: Int,
+        firstVisiblePosition: Int,
+        lastVisiblePosition: Int,
+        itemCount: Int,
+        aheadCount: Int = DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
+        behindCount: Int = DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+    ): List<Int> {
+        if (itemCount <= 1) return emptyList()
+        val safeAhead = aheadCount.coerceAtLeast(0)
+        val safeBehind = behindCount.coerceAtLeast(0)
+        if (safeAhead == 0 && safeBehind == 0) return emptyList()
+
+        val hasVisibleBounds =
+            lastVisiblePosition >= 0 &&
+            firstVisiblePosition >= 0 &&
+            lastVisiblePosition >= firstVisiblePosition
+
+        val rightAnchor: Int
+        val leftAnchor: Int
+        val visibleRange: IntRange
+        if (hasVisibleBounds) {
+            val clampedFirst = firstVisiblePosition.coerceIn(0, itemCount - 1)
+            val clampedLast = lastVisiblePosition.coerceIn(clampedFirst, itemCount - 1)
+            visibleRange = clampedFirst..clampedLast
+            if (focusedPosition >= 0) {
+                val clampedFocus = focusedPosition.coerceIn(0, itemCount - 1)
+                rightAnchor = maxOf(clampedFocus, clampedLast)
+                leftAnchor = minOf(clampedFocus, clampedFirst)
+            } else {
+                rightAnchor = clampedLast
+                leftAnchor = clampedFirst
+            }
+        } else {
+            visibleRange = IntRange.EMPTY
+            rightAnchor = focusedPosition.coerceIn(0, itemCount - 1)
+            leftAnchor = rightAnchor
+        }
+
+        val result = ArrayList<Int>(safeAhead + safeBehind)
+        val aheadEnd = minOf(itemCount - 1, rightAnchor + safeAhead)
+        for (i in (rightAnchor + 1)..aheadEnd) {
+            if (i in 0 until itemCount && i !in visibleRange) {
+                result.add(i)
+            }
+        }
+        val behindStart = maxOf(0, leftAnchor - safeBehind)
+        for (i in (leftAnchor - 1) downTo behindStart) {
+            if (i in 0 until itemCount && i !in visibleRange && !result.contains(i)) {
+                result.add(i)
+            }
+        }
+        return result
+    }
+
+    internal fun resolveVisibleBounds(rv: RecyclerView?): Pair<Int, Int> {
+        if (rv == null || rv.childCount == 0) return -1 to -1
+        var first = Int.MAX_VALUE
+        var last = Int.MIN_VALUE
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i) ?: continue
+            val pos = rv.getChildAdapterPosition(child)
+            if (pos != RecyclerView.NO_POSITION) {
+                if (pos < first) first = pos
+                if (pos > last) last = pos
+            }
+        }
+        return if (first == Int.MAX_VALUE || last == Int.MIN_VALUE) -1 to -1 else first to last
+    }
+
+    internal fun isRowNearViewport(rv: RecyclerView): Boolean {
+        if (!rv.isAttachedToWindow || rv.visibility != View.VISIBLE) return false
+        if (rv.width == 0 || rv.height == 0) return true
+        if (!rv.isShown) return false
+        val screenHeight = rv.resources.displayMetrics.heightPixels
+        if (screenHeight <= 0) return true
+        val location = IntArray(2)
+        rv.getLocationInWindow(location)
+        val top = location[1]
+        val bottom = top + rv.height
+        val margin = rv.height.coerceAtLeast(screenHeight / 4)
+        return bottom >= -margin && top <= screenHeight + margin
     }
 
     fun buildBaseMemoryKey(
@@ -84,6 +179,7 @@ object LeanbackArtworkLoader {
         onAsyncSuccess: (Image) -> Unit,
         onAsyncError: () -> Unit = {}
     ): Disposable? {
+        if (imageUrl.isBlank() || imageUrl.trim().isPlaceholder()) return null
         val ctx = imageView.context
         val w = widthPx.coerceAtLeast(1)
         val h = heightPx.coerceAtLeast(1)
@@ -151,7 +247,7 @@ object LeanbackArtworkLoader {
         prefetchedKeysTracker: LinkedHashSet<String>? = null
     ) {
         val url = imageUrl?.trim()
-        if (url.isNullOrEmpty()) return
+        if (url.isNullOrEmpty() || url.isPlaceholder()) return
         val w = widthPx.coerceAtLeast(1)
         val h = heightPx.coerceAtLeast(1)
         val normalizedFallback = resolveNormalizedFallbackUrl(url, fallbackUrl)
