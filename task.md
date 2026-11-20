@@ -69,3 +69,22 @@
   - **Mô tả**: Bổ sung unit test cho `HomePosterLoading`, `CustomPosterFallbackInterceptor`, `LeanbackArtworkLoader`, `HomeViewModelCatalogPipeline` (lazy flush + drip-load) và `HomePrefetchTriggerTest`; chạy `:app:compileFullDebugKotlin` & `:app:testFullDebugUnitTest` (135/136 passed, 1 lỗi pre-existing trên HEAD ở `HomeEnrichmentRetryTest.kt:115`).
   - **File**: [HomePosterLoadingTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/core/image/HomePosterLoadingTest.kt), [CustomPosterFallbackInterceptorTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/core/image/CustomPosterFallbackInterceptorTest.kt), [LeanbackCoreOptimizationTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt), [HomeCatalogLazyPipelineTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/home/HomeCatalogLazyPipelineTest.kt), [HomePrefetchTriggerTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/home/HomePrefetchTriggerTest.kt)
   - **Trạng thái**: Automated Tests Verified (`d22fee2ca`) | Manual ADB Profiling on TV Box pending device run
+
+
+---
+
+# Danh Sách Task - Sidebar bo tròn + Blur như bản gốc
+
+> **Kế hoạch tương ứng**: [PLAN-sidebar-rounded-blur.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-sidebar-rounded-blur.md)
+
+- [x] **SIDEBAR-01**: `NativeSidebarView` chế độ floating dùng nền trong suốt + `outlineProvider` bo tròn (`panelCornerRadiusPx`) + `clipToOutline`
+  - **Vai trò**: Android View / UI Engineer
+  - **File**: [NativeSidebarView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/components/NativeSidebarView.kt)
+- [x] **SIDEBAR-02**: Thêm cờ `sidebarTranslucent = modernSidebarBlurEnabled || SDK_INT < S`; bọc `AndroidView` trong Box Compose: `clip(RoundedCornerShape(panelRadius))` → `hazeEffect` (chỉ khi blur, 26dp, noise 0.04, delayed progress) → tint `#161618` (0.65 khi translucent / 0.97 / AMOLED 1.0) → border AMOLED
+  - **Vai trò**: Compose / UI Engineer
+  - **File**: [MainActivity.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/MainActivity.kt) (`ModernSidebarScaffold`, ≈ L1787-L1887)
+- [x] **SIDEBAR-03**: `CollapsedSidebarPill` thêm tham số `translucent` → alpha 0.65/0.96 theo `sidebarTranslucent` (blur vẫn theo `blurEnabled`)
+  - **Vai trò**: Compose / UI Engineer
+  - **File**: [MainActivity.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/MainActivity.kt) (`CollapsedSidebarPill`, ≈ L1923)
+- [x] **SIDEBAR-04**: Build `compileFullDebugKotlin` + kiểm thử thủ công 10 kịch bản trong plan (không thêm hiệu ứng scale)
+  - **Vai trò**: QA

@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.components
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -10,6 +11,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -114,6 +116,21 @@ class NativeSidebarView @JvmOverloads constructor(
     private fun Float.toPx(): Float = this * dp
     private val itemCornerRadiusPx by lazy { 24f.toPx() }
 
+    /** Corner radius of the floating panel; the background/blur is drawn by the Compose host. */
+    var panelCornerRadiusPx: Float = 30f.toPx()
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidateOutline()
+            }
+        }
+
+    private val roundedOutlineProvider = object : ViewOutlineProvider() {
+        override fun getOutline(view: View, outline: Outline) {
+            outline.setRoundRect(0, 0, view.width, view.height, panelCornerRadiusPx)
+        }
+    }
+
     private val headerContainer: FrameLayout
     private val itemsContainer: LinearLayout
 
@@ -145,24 +162,20 @@ class NativeSidebarView @JvmOverloads constructor(
     }
 
     private fun applySidebarStyle() {
-        val bgDrawable = GradientDrawable().apply {
-            if (isFloating) {
-                setColor(Color.parseColor("#FA141416"))
-                cornerRadii = floatArrayOf(
-                    0f, 0f,
-                    24f.toPx(), 24f.toPx(),
-                    24f.toPx(), 24f.toPx(),
-                    0f, 0f
-                )
-                setStroke(1.toPx(), Color.parseColor("#25FFFFFF"))
-            } else {
-                // Classic Full-Height solid dark TV drawer
+        if (isFloating) {
+            // Transparent: the Compose wrapper draws the rounded tint + haze blur behind us.
+            background = null
+            outlineProvider = roundedOutlineProvider
+            clipToOutline = true
+        } else {
+            // Classic Full-Height solid dark TV drawer
+            background = GradientDrawable().apply {
                 setColor(Color.parseColor("#FF101012"))
-                cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f)
                 setStroke(1.toPx(), Color.parseColor("#18FFFFFF"))
             }
+            outlineProvider = ViewOutlineProvider.BACKGROUND
+            clipToOutline = false
         }
-        background = bgDrawable
         if (isFloating) {
             setPadding(12.toPx(), 24.toPx(), 12.toPx(), 24.toPx())
         } else {

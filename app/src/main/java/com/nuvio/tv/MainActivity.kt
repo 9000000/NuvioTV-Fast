@@ -23,6 +23,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import com.nuvio.tv.ui.theme.NuvioStrokes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Box
@@ -1651,6 +1653,10 @@ private fun ModernSidebarScaffold(
     val sidebarShowExpandedPanel by remember { derivedStateOf { sidebarExpandProgress > 0.01f } }
     val sidebarShowCollapsedPill by remember { derivedStateOf { sidebarExpandProgress < 0.98f } }
     val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled && (isSidebarExpanded || sidebarShowExpandedPanel)
+    // Translucent sidebar surfaces: follow the blur setting on Android 12+,
+    // always translucent below Android 12 (blur unsupported there).
+    val sidebarTranslucent = modernSidebarBlurEnabled ||
+        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S
 
 
 
@@ -1797,11 +1803,61 @@ private fun ModernSidebarScaffold(
             ) {
                 if (showExpandedPanel) {
                     val sidebarAccentColor = NuvioTheme.colors.Secondary.toArgb()
+                    val panelShape = RoundedCornerShape(sidebarTokens.panelRadius)
+                    val panelCornerRadiusPx = with(LocalDensity.current) { sidebarTokens.panelRadius.toPx() }
+                    val delayedBlurProgress = ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
+                    val showPanelBlur = modernSidebarBlurEnabled &&
+                        isSidebarExpanded &&
+                        !sidebarCollapsePending &&
+                        delayedBlurProgress > 0f
+                    val blurPanelRadius = NuvioTheme.effects.blurPanel
+                    val bgElevated = NuvioTheme.colors.BackgroundElevated
+                    val borderBase = NuvioTheme.colors.Border
+                    val isAmoledBlack = bgElevated == Color.Black
+                    val panelBackgroundColor = remember(sidebarTranslucent, isAmoledBlack) {
+                        val baseColor = if (isAmoledBlack) Color.Black else Color(0xFF161618)
+                        val alpha = when {
+                            sidebarTranslucent -> 0.70f
+                            isAmoledBlack -> 1f
+                            else -> 0.97f
+                        }
+                        baseColor.copy(alpha = alpha)
+                    }
+                    val panelBorderColor = if (!sidebarTranslucent && isAmoledBlack) {
+                        borderBase.copy(alpha = 0.9f)
+                    } else {
+                        Color.Transparent
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(panelShape)
+                            .then(
+                                if (showPanelBlur) {
+                                    Modifier.hazeEffect(state = sidebarHazeState) {
+                                        blurRadius = blurPanelRadius * delayedBlurProgress
+                                        noiseFactor = 0.04f * delayedBlurProgress
+                                        inputScale = HazeInputScale.Fixed(0.66f)
+                                    }
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .background(color = panelBackgroundColor, shape = panelShape)
+                            .then(
+                                if (panelBorderColor != Color.Transparent) {
+                                    Modifier.border(width = NuvioStrokes.tokens.hairline, color = panelBorderColor, shape = panelShape)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                    ) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
                             NativeSidebarView(ctx).apply {
                                 this.isFloating = true
+                                this.panelCornerRadiusPx = panelCornerRadiusPx
                                 this.accentColor = sidebarAccentColor
                                 nativeSidebarRef = this
                                 setHeader(
@@ -1842,6 +1898,7 @@ private fun ModernSidebarScaffold(
                         },
                         update = { view ->
                             nativeSidebarRef = view
+                            view.panelCornerRadiusPx = panelCornerRadiusPx
                             view.accentColor = sidebarAccentColor
                             view.setHeader(
                                 profileName = activeProfileName,
@@ -1883,6 +1940,7 @@ private fun ModernSidebarScaffold(
                             }
                         }
                     )
+                    }
                 }
             }
 
@@ -1897,6 +1955,7 @@ private fun ModernSidebarScaffold(
                     icon = selectedDrawerItem.icon,
                     iconOnly = isFloatingPillIconOnly && !keepFloatingPillExpanded,
                     blurEnabled = modernSidebarBlurEnabled,
+                    translucent = sidebarTranslucent,
                     hazeState = if (modernSidebarBlurEnabled) sidebarHazeState else null,
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -1926,6 +1985,7 @@ private fun CollapsedSidebarPill(
     icon: ImageVector?,
     iconOnly: Boolean,
     blurEnabled: Boolean,
+    translucent: Boolean,
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier,
     onExpand: () -> Unit
@@ -1936,8 +1996,8 @@ private fun CollapsedSidebarPill(
     val bgCard = colors.BackgroundCard
     val borderBase = colors.Border
     val mediaColors = colors.media
-    val pillBackgroundBrush = remember(blurEnabled) {
-        val alpha = if (blurEnabled) 0.65f else 0.96f
+    val pillBackgroundBrush = remember(translucent) {
+        val alpha = if (translucent) 0.70f else 0.96f
         Brush.verticalGradient(listOf(
             Color(0xFF1C1C1E).copy(alpha = alpha),
             Color(0xFF1C1C1E).copy(alpha = alpha)
