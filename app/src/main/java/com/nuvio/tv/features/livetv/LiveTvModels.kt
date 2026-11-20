@@ -148,6 +148,7 @@ data class LiveTvSettings(
     val epgRefreshHours: Int = 12,
     val epgPastHours: Int = 24,
     val epgFutureDays: Int = 3,
+    val customEpgUrl: String = "",
 )
 
 data class CustomGroup(val id: String, val name: String, val icon: String? = null)

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -78,6 +79,8 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
+import com.nuvio.tv.features.livetv.EpgDatabase
+import com.nuvio.tv.features.livetv.LiveTvEpgSyncService
 import com.nuvio.tv.features.livetv.LiveTvPlaylist
 import com.nuvio.tv.features.livetv.LiveTvRepository
 import com.nuvio.tv.features.livetv.LiveTvStalkerSettings
@@ -167,6 +170,8 @@ fun LiveTvSettingsContent(
     var editingPlaylist by remember { mutableStateOf<LiveTvPlaylist?>(null) }
     var showXtreamDialog by remember { mutableStateOf(false) }
     var showStalkerDialog by remember { mutableStateOf(false) }
+    var showEpgDialog by remember { mutableStateOf(false) }
+    var isSyncingEpg by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -329,6 +334,67 @@ fun LiveTvSettingsContent(
                             onClick = { showStalkerDialog = true }
                         )
                     }
+
+                    // --- SECTION 4: EPG / XMLTV GUIDE ---
+                    item(key = "section_epg_header") {
+                        Text(
+                            text = stringResource(R.string.livetv_section_epg),
+                            style = TextStyle(
+                                color = NuvioTheme.colors.Primary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            ),
+                            modifier = Modifier.padding(top = 14.dp, bottom = 4.dp, start = 8.dp)
+                        )
+                    }
+
+                    item(key = "epg_custom_url_row") {
+                        val customUrl = uiState.settings.customEpgUrl
+                        val isConfigured = customUrl.isNotBlank()
+                        SettingsActionRow(
+                            title = stringResource(R.string.livetv_epg_source_title),
+                            subtitle = stringResource(R.string.livetv_epg_source_desc),
+                            value = if (isConfigured) customUrl else stringResource(R.string.livetv_epg_not_configured),
+                            valueColor = if (isConfigured) NuvioTheme.colors.Success else NuvioTheme.colors.TextMuted,
+                            leadingIcon = Icons.Default.Tv,
+                            onClick = { showEpgDialog = true }
+                        )
+                    }
+
+                    item(key = "epg_sync_now_row") {
+                        SettingsActionRow(
+                            title = stringResource(R.string.livetv_epg_sync_title),
+                            subtitle = stringResource(R.string.livetv_epg_sync_desc),
+                            value = if (isSyncingEpg) stringResource(R.string.livetv_epg_sync_started) else "",
+                            leadingIcon = Icons.Default.Sync,
+                            onClick = {
+                                if (!isSyncingEpg) {
+                                    coroutineScope.launch {
+                                        isSyncingEpg = true
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.livetv_epg_sync_started),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        withContext(Dispatchers.IO) {
+                                            val epgDb = EpgDatabase(context.applicationContext)
+                                            LiveTvEpgSyncService.syncAll(
+                                                playlists = uiState.playlists,
+                                                channels = uiState.channels,
+                                                epgDatabase = epgDb
+                                            )
+                                        }
+                                        isSyncingEpg = false
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.livetv_epg_sync_done),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            }
+                        )
+                    }
                 }
 
                 SettingsVerticalScrollIndicators(state = listState)
@@ -342,8 +408,13 @@ fun LiveTvSettingsContent(
             title = stringResource(R.string.livetv_add_playlist),
             initialName = "",
             initialUrl = "",
-            onSave = { name, url ->
-                LiveTvRepository.addPlaylistUrl(name = name.ifBlank { null }, url = url)
+            initialEpgUrl = "",
+            onSave = { name, url, epgUrl ->
+                LiveTvRepository.addPlaylistUrl(
+                    name = name.ifBlank { null },
+                    url = url,
+                    epgUrl = epgUrl.ifBlank { null }
+                )
                 showAddPlaylistDialog = false
             },
             onDismiss = { showAddPlaylistDialog = false }
@@ -355,8 +426,14 @@ fun LiveTvSettingsContent(
             title = "Edit Playlist",
             initialName = pl.name,
             initialUrl = pl.source,
-            onSave = { name, url ->
-                LiveTvRepository.updatePlaylist(pl.id, name.ifBlank { "Playlist" }, url)
+            initialEpgUrl = pl.epgUrl.orEmpty(),
+            onSave = { name, url, epgUrl ->
+                LiveTvRepository.updatePlaylist(
+                    playlistId = pl.id,
+                    name = name.ifBlank { "Playlist" },
+                    source = url,
+                    epgUrl = epgUrl.ifBlank { null }
+                )
                 editingPlaylist = null
             },
             onDismiss = { editingPlaylist = null }
@@ -388,6 +465,17 @@ fun LiveTvSettingsContent(
                 showStalkerDialog = false
             },
             onDismiss = { showStalkerDialog = false }
+        )
+    }
+
+    if (showEpgDialog) {
+        LiveTvEpgDialog(
+            initialUrl = uiState.settings.customEpgUrl,
+            onSave = { newUrl ->
+                LiveTvRepository.setCustomEpgUrl(newUrl)
+                showEpgDialog = false
+            },
+            onDismiss = { showEpgDialog = false }
         )
     }
 
@@ -452,6 +540,16 @@ private fun PlaylistRowItem(
                         ),
                         maxLines = 1
                     )
+                    if (!playlist.epgUrl.isNullOrBlank()) {
+                        Text(
+                            text = "📅 EPG: ${playlist.epgUrl}",
+                            style = TextStyle(
+                                color = NuvioTheme.colors.Primary,
+                                fontSize = 11.sp
+                            ),
+                            maxLines = 1
+                        )
+                    }
                 }
                 Text(
                     text = if (playlist.isEnabled) "Enabled" else "Disabled",
@@ -499,11 +597,13 @@ private fun LiveTvPlaylistDialog(
     title: String,
     initialName: String,
     initialUrl: String,
-    onSave: (name: String, url: String) -> Unit,
+    initialEpgUrl: String = "",
+    onSave: (name: String, url: String, epgUrl: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     var url by remember(initialUrl) { mutableStateOf(initialUrl) }
+    var epgUrl by remember(initialEpgUrl) { mutableStateOf(initialEpgUrl) }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -513,7 +613,7 @@ private fun LiveTvPlaylistDialog(
     NuvioDialog(
         onDismiss = onDismiss,
         title = title,
-        subtitle = "Enter the playlist name and remote URL (e.g. .m3u or .m3u8 link)",
+        subtitle = "Enter the playlist name, remote URL, and optional EPG guide URL",
         width = 680.dp
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -531,6 +631,15 @@ private fun LiveTvPlaylistDialog(
                 value = url,
                 onValueChange = { url = it },
                 placeholder = "https://example.com/channels.m3u",
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next
+            )
+
+            // EPG URL field
+            TVTextField(
+                value = epgUrl,
+                onValueChange = { epgUrl = it },
+                placeholder = stringResource(R.string.livetv_epg_url_hint),
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Done
             )
@@ -554,10 +663,85 @@ private fun LiveTvPlaylistDialog(
                 Button(
                     onClick = {
                         if (url.trim().isNotBlank()) {
-                            onSave(name.trim(), url.trim())
+                            onSave(name.trim(), url.trim(), epgUrl.trim())
                         }
                     },
                     enabled = url.trim().isNotBlank(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.Primary,
+                        contentColor = NuvioTheme.colors.OnPrimary
+                    )
+                ) {
+                    Text(stringResource(R.string.action_save))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveTvEpgDialog(
+    initialUrl: String,
+    onSave: (epgUrl: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var url by remember(initialUrl) { mutableStateOf(initialUrl) }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.livetv_section_epg),
+        subtitle = stringResource(R.string.livetv_epg_dialog_subtitle),
+        width = 680.dp
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            TVTextField(
+                value = url,
+                onValueChange = { url = it },
+                placeholder = stringResource(R.string.livetv_epg_url_hint),
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Done,
+                modifier = Modifier.focusRequester(focusRequester)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
+            ) {
+                if (initialUrl.isNotBlank()) {
+                    Button(
+                        onClick = {
+                            onSave("")
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.Error.copy(alpha = 0.2f),
+                            contentColor = NuvioTheme.colors.Error
+                        )
+                    ) {
+                        Text(stringResource(R.string.action_delete))
+                    }
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+
+                Button(
+                    onClick = {
+                        onSave(url.trim())
+                    },
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioTheme.colors.Primary,
                         contentColor = NuvioTheme.colors.OnPrimary

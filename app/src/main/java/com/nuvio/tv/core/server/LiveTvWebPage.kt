@@ -48,6 +48,12 @@ object LiveTvWebPage {
         val btnClearStalker = if (isVi) "Xóa cấu hình Stalker" else "Clear Stalker Config"
         val navToggleLabel = if (isVi) "Hiển thị Live TV trên thanh menu TV" else "Show Live TV in TV Sidebar"
         val navToggleDesc = if (isVi) "Hiển thị lối tắt Live TV trên thanh điều hướng chính của TV" else "Display shortcut in the main TV navigation drawer"
+        val epgUrlLabel = if (isVi) "Đường dẫn EPG / XMLTV (Tùy chọn)" else "EPG / XMLTV URL (Optional)"
+        val epgUrlPlaceholder = "https://example.com/epg.xml.gz"
+        val globalEpgTitle = if (isVi) "Lịch phát sóng chung (EPG / XMLTV)" else "Global TV Guide (EPG / XMLTV)"
+        val globalEpgDesc = if (isVi) "Cung cấp lịch phát sóng chung cho toàn bộ các kênh (kể cả Xtream / Stalker / M3U)" else "Set a custom XMLTV guide link (.xml or .xml.gz) for all channels"
+        val btnSaveEpg = if (isVi) "Lưu link EPG" else "Save EPG URL"
+        val btnClearEpg = if (isVi) "Xóa link EPG" else "Clear EPG URL"
         val dollar = "$"
 
         return """
@@ -367,6 +373,10 @@ object LiveTvWebPage {
         <label for="pl-url">$playlistUrlLabel</label>
         <input type="url" id="pl-url" placeholder="$playlistUrlPlaceholder">
       </div>
+      <div class="form-group">
+        <label for="pl-epg">$epgUrlLabel</label>
+        <input type="url" id="pl-epg" placeholder="$epgUrlPlaceholder">
+      </div>
       <button class="btn" onclick="addPlaylist()">$btnAddPlaylist</button>
 
       <div style="text-align: center; margin: 16px 0 10px; font-size: 12px; color: var(--text-muted);">--- HOẶC ---</div>
@@ -443,13 +453,26 @@ object LiveTvWebPage {
         </label>
       </div>
     </div>
+
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-title">📅 $globalEpgTitle</div>
+      <div class="card-desc">$globalEpgDesc</div>
+      <div class="form-group">
+        <label for="custom-epg">$epgUrlLabel</label>
+        <input type="url" id="custom-epg" placeholder="$epgUrlPlaceholder">
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" onclick="saveCustomEpg()">$btnSaveEpg</button>
+        <button class="btn btn-danger" onclick="clearCustomEpg()">$btnClearEpg</button>
+      </div>
+    </div>
   </div>
 </div>
 
 <div id="toast">✅ Đã lưu lên TV thành công!</div>
 
 <script>
-  let currentConfig = { playlists: [], xtream: null, stalker: null, isNavigationEnabled: true };
+  let currentConfig = { playlists: [], xtream: null, stalker: null, isNavigationEnabled: true, customEpgUrl: '' };
 
   function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -496,10 +519,12 @@ object LiveTvWebPage {
         const pName = escapeHtml(p.name || 'Playlist');
         const pUrl = p.isLocal ? 'Tệp cục bộ' : escapeHtml(p.url || '');
         const pId = escapeHtml(p.id || p.url || '');
+        const pEpg = p.epgUrl ? '<div class="playlist-url" style="color: #818cf8; font-size: 11px;">📅 ' + escapeHtml(p.epgUrl) + '</div>' : '';
         return '<div class="playlist-item">' +
           '<div class="playlist-info">' +
             '<div class="playlist-name">' + pName + '</div>' +
             '<div class="playlist-url">' + pUrl + '</div>' +
+            pEpg +
           '</div>' +
           '<button class="btn-del" data-id="' + pId + '" onclick="deletePlaylist(this.getAttribute(\'data-id\'))">🗑️</button>' +
         '</div>';
@@ -521,11 +546,16 @@ object LiveTvWebPage {
 
     // Render Settings
     document.getElementById('nav-toggle').checked = !!currentConfig.isNavigationEnabled;
+    const customEpgEl = document.getElementById('custom-epg');
+    if (customEpgEl) {
+      customEpgEl.value = currentConfig.customEpgUrl || '';
+    }
   }
 
   async function addPlaylist() {
     const name = document.getElementById('pl-name').value.trim();
     const url = document.getElementById('pl-url').value.trim();
+    const epgUrl = document.getElementById('pl-epg').value.trim();
     if (!url) {
       alert('${if (isVi) "Vui lòng nhập đường dẫn Playlist URL!" else "Please enter a Playlist URL!"}');
       return;
@@ -534,11 +564,12 @@ object LiveTvWebPage {
       const res = await fetch('/api/livetv/playlist/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify({ name: name || url, url: url })
+        body: JSON.stringify({ name: name || url, url: url, epgUrl: epgUrl })
       });
       if (res.ok) {
         document.getElementById('pl-name').value = '';
         document.getElementById('pl-url').value = '';
+        document.getElementById('pl-epg').value = '';
         showToast('${if (isVi) "✅ Đã thêm playlist lên TV!" else "✅ Playlist added to TV!"}');
         loadConfig();
       } else {
@@ -678,9 +709,46 @@ object LiveTvWebPage {
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ isEnabled: enabled })
       });
-      showToast(enabled ? '${if (isVi) "✅ Đã bật Live TV trên menu TV" else "✅ Live TV enabled in TV sidebar"}' : '${if (isVi) "✅ Đã tắt Live TV trên menu TV" else "✅ Live TV disabled in TV sidebar"}');
+      showToast(enabled ? '${if (isVi) "✅ Đã bật Live TV trên menu TV" else "✅ Live TV disabled in TV sidebar"}' : '${if (isVi) "✅ Đã tắt Live TV trên menu TV" else "✅ Live TV disabled in TV sidebar"}');
     } catch (e) {
       console.error(e);
+    }
+  }
+
+  async function saveCustomEpg() {
+    const epgUrl = document.getElementById('custom-epg').value.trim();
+    try {
+      const res = await fetch('/api/livetv/epg', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ epgUrl: epgUrl })
+      });
+      if (res.ok) {
+        showToast('${if (isVi) "✅ Đã lưu link EPG lên TV!" else "✅ EPG URL saved to TV!"}');
+        loadConfig();
+      } else {
+        alert('Error saving EPG');
+      }
+    } catch (e) {
+      alert('Network error: ' + e);
+    }
+  }
+
+  async function clearCustomEpg() {
+    if (!confirm('${if (isVi) "Xóa liên kết EPG chung trên TV?" else "Clear custom EPG URL on TV?"}')) return;
+    try {
+      const res = await fetch('/api/livetv/epg', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ epgUrl: '' })
+      });
+      if (res.ok) {
+        document.getElementById('custom-epg').value = '';
+        showToast('${if (isVi) "✅ Đã xóa link EPG!" else "✅ EPG URL cleared!"}');
+        loadConfig();
+      }
+    } catch (e) {
+      alert('Error: ' + e);
     }
   }
 

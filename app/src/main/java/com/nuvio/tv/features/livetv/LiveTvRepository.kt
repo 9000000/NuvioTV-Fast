@@ -237,10 +237,10 @@ object LiveTvRepository {
     }
 
     fun addPlaylistUrl(url: String) {
-        addPlaylistUrl(name = null, url = url)
+        addPlaylistUrl(name = null, url = url, epgUrl = null)
     }
 
-    fun addPlaylistUrl(name: String?, url: String) {
+    fun addPlaylistUrl(name: String?, url: String, epgUrl: String? = null) {
         ensureLoaded()
         val normalized = url.trim()
         if (normalized.isBlank()) return
@@ -250,7 +250,9 @@ object LiveTvRepository {
             return
         }
 
-        val playlists = current + createUrlPlaylist(normalized, name)
+        val normalizedEpg = epgUrl?.trim()?.takeIf(String::isNotBlank)
+        val newPlaylist = createUrlPlaylist(normalized, name).copy(epgUrl = normalizedEpg)
+        val playlists = current + newPlaylist
         persistPlaylists(playlists)
         _uiState.value = _uiState.value.copy(
             playlistUrl = playlists.firstEnabledUrlSource(),
@@ -262,10 +264,10 @@ object LiveTvRepository {
     }
 
     fun addLocalPlaylist(fileName: String?, content: String) {
-        addLocalPlaylist(name = null, fileName = fileName, content = content)
+        addLocalPlaylist(name = null, fileName = fileName, content = content, epgUrl = null)
     }
 
-    fun addLocalPlaylist(name: String?, fileName: String?, content: String) {
+    fun addLocalPlaylist(name: String?, fileName: String?, content: String, epgUrl: String? = null) {
         ensureLoaded()
         val normalizedContent = content.trim()
         if (normalizedContent.isBlank()) return
@@ -276,12 +278,14 @@ object LiveTvRepository {
                 ?.trim()
                 ?.takeIf(String::isNotBlank)
             ?: "Local playlist"
+        val normalizedEpg = epgUrl?.trim()?.takeIf(String::isNotBlank)
         val playlist = LiveTvPlaylist(
             id = stablePlaylistId("local:${fallbackName}:${normalizedContent.hashCode()}:${Random.nextInt()}", _uiState.value.playlists.size),
             name = fallbackName,
             type = LiveTvPlaylistType.LocalFile,
             source = normalizedContent,
             isEnabled = true,
+            epgUrl = normalizedEpg,
         )
         val playlists = _uiState.value.playlists + playlist
         persistPlaylists(playlists)
@@ -294,7 +298,7 @@ object LiveTvRepository {
         refresh()
     }
 
-    fun updatePlaylist(playlistId: String, name: String, source: String) {
+    fun updatePlaylist(playlistId: String, name: String, source: String, epgUrl: String? = null) {
         ensureLoaded()
         val current = _uiState.value.playlists
         val existing = current.firstOrNull { it.id == playlistId } ?: return
@@ -310,11 +314,13 @@ object LiveTvRepository {
             return
         }
 
+        val normalizedEpg = epgUrl?.trim()?.takeIf(String::isNotBlank)
         val playlists = current.map { playlist ->
             if (playlist.id == playlistId) {
                 playlist.copy(
                     name = normalizedName,
                     source = normalizedSource,
+                    epgUrl = normalizedEpg,
                 )
             } else {
                 playlist
@@ -327,6 +333,14 @@ object LiveTvRepository {
             errorMessage = null,
         )
         publishNavigationVisibility()
+        refresh()
+    }
+
+    fun setCustomEpgUrl(epgUrl: String) {
+        val current = LiveTvStorage.loadLiveTvSettings()
+        val normalized = epgUrl.trim()
+        val updated = current.copy(customEpgUrl = normalized)
+        updateLiveTvSettings(updated)
         refresh()
     }
 

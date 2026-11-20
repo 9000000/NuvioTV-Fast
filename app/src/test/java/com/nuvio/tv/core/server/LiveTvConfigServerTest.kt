@@ -52,6 +52,64 @@ class LiveTvConfigServerTest {
     }
 
     @Test
+    fun `add playlist parses and passes epgUrl correctly`() {
+        var addedName: String? = null
+        var addedUrl: String? = null
+        var addedEpgUrl: String? = null
+        val server = LiveTvConfigServer(
+            onAddUrlPlaylist = { name, url, epgUrl ->
+                addedName = name
+                addedUrl = url
+                addedEpgUrl = epgUrl
+            }
+        )
+        val body = Gson().toJson(
+            mapOf(
+                "name" to "Kênh VTV",
+                "url" to "https://example.com/vtv.m3u",
+                "epgUrl" to "https://example.com/epg.xml.gz"
+            )
+        )
+
+        val response = server.serve(
+            FakeSession(
+                method = NanoHTTPD.Method.POST,
+                uri = "/api/livetv/playlist/add",
+                body = body
+            )
+        )
+
+        assertEquals(NanoHTTPD.Response.Status.OK, response.status)
+        assertEquals("Kênh VTV", addedName)
+        assertEquals("https://example.com/vtv.m3u", addedUrl)
+        assertEquals("https://example.com/epg.xml.gz", addedEpgUrl)
+    }
+
+    @Test
+    fun `save epg endpoint sets custom epg url`() {
+        var savedEpgUrl: String? = null
+        val server = LiveTvConfigServer(
+            onSetCustomEpgUrl = { savedEpgUrl = it }
+        )
+        val body = Gson().toJson(
+            mapOf(
+                "epgUrl" to "https://example.com/global_epg.xml"
+            )
+        )
+
+        val response = server.serve(
+            FakeSession(
+                method = NanoHTTPD.Method.POST,
+                uri = "/api/livetv/epg",
+                body = body
+            )
+        )
+
+        assertEquals(NanoHTTPD.Response.Status.OK, response.status)
+        assertEquals("https://example.com/global_epg.xml", savedEpgUrl)
+    }
+
+    @Test
     fun `upload playlist preserves vietnamese utf8 name and m3u content`() {
         var addedName: String? = null
         var addedFileName: String? = null

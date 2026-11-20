@@ -1,5 +1,23 @@
 # Error Log
 
+## [2026-11-20 17:23] - Lỗi Cú Pháp (`Syntax error: Expecting a top level declaration`) Khi Thêm Dialog Cài Đặt EPG trong `LiveTvSettingsScreen.kt`
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/settings/LiveTvSettingsScreen.kt:756`
+- **Agent**: mon
+- **Root Cause**: Khi cập nhật hàm composable `LiveTvPlaylistDialog` để bổ sung trường nhập URL EPG và thêm dialog `LiveTvEpgDialog`, chuỗi thay thế kết thúc trước phần đuôi của nút `Action Save` cũ, dẫn đến 9 dòng đóng ngoặc và button thừa nằm ngoài phạm vi hàm.
+- **Error Message**:
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/LiveTvSettingsScreen.kt:756:25 Syntax error: Expecting a top level declaration.
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/LiveTvSettingsScreen.kt:758:19 Functions which invoke @Composable functions must be marked with the @Composable annotation
+  ```
+- **Fix Applied**: Xóa 9 dòng code đóng ngoặc và nút bấm thừa ở cuối `LiveTvEpgDialog`, biên dịch lại sạch và chạy toàn bộ unit test thành công.
+- **Prevention**: Luôn kiểm tra kỹ ranh giới đóng ngoặc của hàm composable khi thực hiện `edit_file` trên các khối code dài.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-20 13:29] - Văng App (`ComposeRuntimeError: pending composition has not been applied`) Khi Gỡ Hàng `AndroidView` Đang Giữ Focus Lúc `Operation$RemoveNode`
 
 - **Type**: Runtime

@@ -28,6 +28,11 @@ object LiveTvEpgSyncService {
         val urls = mutableSetOf<String>()
         var needPersist = false
 
+        val customEpg = runCatching { LiveTvStorage.loadLiveTvSettings().customEpgUrl.trim() }.getOrDefault("")
+        if (customEpg.isNotBlank()) {
+            urls.add(customEpg)
+        }
+
         playlists.forEach { pl ->
             val direct = pl.epgUrl?.trim().orEmpty()
             if (direct.isNotBlank()) {

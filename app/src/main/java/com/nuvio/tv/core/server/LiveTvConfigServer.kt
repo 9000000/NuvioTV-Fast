@@ -16,8 +16,8 @@ class LiveTvConfigServer(
     private val context: Context? = null,
     port: Int = 8092,
     private val uiStateProvider: () -> LiveTvUiState = { LiveTvRepository.uiState.value },
-    private val onAddUrlPlaylist: (name: String?, url: String) -> Unit = { name, url ->
-        LiveTvRepository.addPlaylistUrl(name = name, url = url)
+    private val onAddUrlPlaylist: (name: String?, url: String, epgUrl: String?) -> Unit = { name, url, epgUrl ->
+        LiveTvRepository.addPlaylistUrl(name = name, url = url, epgUrl = epgUrl)
     },
     private val onAddLocalPlaylist: (name: String?, fileName: String?, content: String) -> Unit = { name, fileName, content ->
         LiveTvRepository.addLocalPlaylist(name = name, fileName = fileName, content = content)
@@ -28,8 +28,37 @@ class LiveTvConfigServer(
     },
     private val onSaveXtream: (LiveTvXtreamSettings) -> Unit = { LiveTvRepository.saveXtreamSettings(it) },
     private val onSaveStalker: (LiveTvStalkerSettings) -> Unit = { LiveTvRepository.saveStalkerSettings(it) },
-    private val onSetNavigationEnabled: (Boolean) -> Unit = { LiveTvRepository.setNavigationEnabled(it) }
+    private val onSetNavigationEnabled: (Boolean) -> Unit = { LiveTvRepository.setNavigationEnabled(it) },
+    private val onSetCustomEpgUrl: (String) -> Unit = { LiveTvRepository.setCustomEpgUrl(it) }
 ) : NanoHTTPD(port) {
+
+    constructor(
+        context: Context? = null,
+        port: Int = 8092,
+        uiStateProvider: () -> LiveTvUiState = { LiveTvRepository.uiState.value },
+        onAddUrlPlaylist: (name: String?, url: String) -> Unit,
+        onAddLocalPlaylist: (name: String?, fileName: String?, content: String) -> Unit = { name, fileName, content ->
+            LiveTvRepository.addLocalPlaylist(name = name, fileName = fileName, content = content)
+        },
+        onRemovePlaylist: (String) -> Unit = { LiveTvRepository.removePlaylist(it) },
+        onSetPlaylistEnabled: (String, Boolean) -> Unit = { id, enabled ->
+            LiveTvRepository.setPlaylistEnabled(id, enabled)
+        },
+        onSaveXtream: (LiveTvXtreamSettings) -> Unit = { LiveTvRepository.saveXtreamSettings(it) },
+        onSaveStalker: (LiveTvStalkerSettings) -> Unit = { LiveTvRepository.saveStalkerSettings(it) },
+        onSetNavigationEnabled: (Boolean) -> Unit = { LiveTvRepository.setNavigationEnabled(it) }
+    ) : this(
+        context = context,
+        port = port,
+        uiStateProvider = uiStateProvider,
+        onAddUrlPlaylist = { name, url, _ -> onAddUrlPlaylist(name, url) },
+        onAddLocalPlaylist = onAddLocalPlaylist,
+        onRemovePlaylist = onRemovePlaylist,
+        onSetPlaylistEnabled = onSetPlaylistEnabled,
+        onSaveXtream = onSaveXtream,
+        onSaveStalker = onSaveStalker,
+        onSetNavigationEnabled = onSetNavigationEnabled
+    )
 
     private val gson = Gson()
     private val mapType = object : TypeToken<Map<String, Any?>>() {}.type
@@ -48,6 +77,7 @@ class LiveTvConfigServer(
             method == Method.POST && uri == "/api/livetv/xtream" -> handleSaveXtream(session)
             method == Method.POST && uri == "/api/livetv/stalker" -> handleSaveStalker(session)
             method == Method.POST && uri == "/api/livetv/navigation" -> handleToggleNavigation(session)
+            method == Method.POST && uri == "/api/livetv/epg" -> handleSaveEpg(session)
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
         }
     }
@@ -65,10 +95,12 @@ class LiveTvConfigServer(
                     "id" to p.id,
                     "name" to p.name,
                     "url" to p.source,
+                    "epgUrl" to p.epgUrl,
                     "isLocal" to (p.type == LiveTvPlaylistType.LocalFile),
                     "isEnabled" to p.isEnabled
                 )
             },
+            "customEpgUrl" to uiState.settings.customEpgUrl,
             "xtream" to mapOf(
                 "serverUrl" to uiState.xtreamSettings.serverUrl,
                 "username" to uiState.xtreamSettings.username,
@@ -89,12 +121,13 @@ class LiveTvConfigServer(
         val body = parseBody(session)
         val name = body["name"]?.toString()?.trim().orEmpty()
         val url = body["url"]?.toString()?.trim().orEmpty()
+        val epgUrl = body["epgUrl"]?.toString()?.trim().orEmpty()
 
         if (url.isBlank()) {
             return jsonResponse(Response.Status.BAD_REQUEST, """{"error":"URL cannot be empty"}""")
         }
 
-        onAddUrlPlaylist(name.ifBlank { null }, url)
+        onAddUrlPlaylist(name.ifBlank { null }, url, epgUrl.ifBlank { null })
         return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
@@ -173,6 +206,13 @@ class LiveTvConfigServer(
         val body = parseBody(session)
         val isEnabled = (body["isEnabled"] as? Boolean) ?: true
         onSetNavigationEnabled(isEnabled)
+        return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
+    }
+
+    private fun handleSaveEpg(session: IHTTPSession): Response {
+        val body = parseBody(session)
+        val epgUrl = body["epgUrl"]?.toString()?.trim().orEmpty()
+        onSetCustomEpgUrl(epgUrl)
         return jsonResponse(Response.Status.OK, """{"status":"ok"}""")
     }
 
