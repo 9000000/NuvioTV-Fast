@@ -1,20 +1,33 @@
 package com.nuvio.tv.ui.leanback
 
+import android.app.ActivityManager
 import android.content.Context
+import android.view.View
 import android.widget.ImageView
+import androidx.recyclerview.widget.RecyclerView
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.memory.MemoryCache
+import coil3.request.ImageRequest
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
+import com.nuvio.tv.core.image.HomeImageLoadingProfile
 import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
+import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.adapter.computeLeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
+import com.nuvio.tv.ui.screens.home.HeroPreview
+import com.nuvio.tv.ui.screens.home.LeanbackRowAdapter
+import com.nuvio.tv.ui.screens.home.ModernCarouselItem
+import com.nuvio.tv.ui.screens.home.ModernPayload
+import com.nuvio.tv.ui.util.StableList
 import io.mockk.Called
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
+import io.mockk.slot
 import io.mockk.unmockkObject
 import io.mockk.verify
 import org.junit.Assert.assertEquals
@@ -326,4 +339,246 @@ class LeanbackCoreOptimizationTest {
             )
         )
     }
+
+    @Test
+    fun `leanback row and universal adapters resolve low-ram 4-2 vs standard 6-2 horizontal prefetch profiles`() {
+        val gib = 1024L * 1024L * 1024L
+        val (lowRamContext, lowRamAm) = mockDeviceContext(totalRamBytes = 2L * gib)
+        val (standardContext, _) = mockDeviceContext(totalRamBytes = 4L * gib)
+
+        val lowRamProfile = LeanbackArtworkLoader.resolveProfileForContext(lowRamContext)
+        val standardProfile = LeanbackArtworkLoader.resolveProfileForContext(standardContext)
+        assertEquals(4, lowRamProfile.horizontalPrefetchAhead)
+        assertEquals(2, lowRamProfile.horizontalPrefetchBehind)
+        assertEquals(6, standardProfile.horizontalPrefetchAhead)
+        assertEquals(2, standardProfile.horizontalPrefetchBehind)
+        verify(exactly = 1) { lowRamAm.getMemoryInfo(any()) }
+
+        val modernItems = (0 until 20).map { idx ->
+            val url = "https://example.com/modern_$idx.jpg"
+            ModernCarouselItem(
+                key = "modern_$idx",
+                title = "Item $idx",
+                subtitle = null,
+                imageUrl = url,
+                heroPreview = HeroPreview(
+                    title = "Item $idx",
+                    logo = null,
+                    description = null,
+                    contentTypeText = null,
+                    yearText = null,
+                    imdbText = null,
+                    genres = StableList(),
+                    poster = url,
+                    backdrop = null,
+                    imageUrl = url
+                ),
+                payload = ModernPayload.Catalog(
+                    focusKey = "focus_$idx",
+                    itemId = "id_$idx",
+                    itemType = "movie",
+                    addonBaseUrl = "https://addon.example",
+                    trailerTitle = "Item $idx",
+                    trailerReleaseInfo = null,
+                    trailerApiType = "movie"
+                )
+            )
+        }
+        val universalItems = (0 until 20).map { idx ->
+            LeanbackCardItem.Poster(
+                key = "poster_$idx",
+                title = "Poster $idx",
+                imageUrl = "https://example.com/poster_$idx.jpg"
+            )
+        }
+
+        val imageLoader = mockk<ImageLoader>(relaxed = true)
+        val enqueuedRequests = mutableListOf<ImageRequest>()
+        every { imageLoader.memoryCache } returns null
+        every { imageLoader.enqueue(capture(enqueuedRequests)) } returns mockk(relaxed = true)
+
+        mockkObject(SingletonImageLoader)
+        try {
+            every { SingletonImageLoader.get(any()) } returns imageLoader
+
+            // LeanbackRowAdapter: Low-RAM (4 ahead, 2 behind)
+            val lowRamRowAdapter = createRowAdapter().apply {
+                submitItems(modernItems)
+                attachedRecyclerView = mockAttachedRecyclerView(lowRamContext, visibleCount = 6, firstIndex = 0)
+            }
+            assertEquals(lowRamProfile, lowRamRowAdapter.resolveLoadingProfile(lowRamContext))
+            lowRamRowAdapter.onFocusedPositionChanged(lowRamContext, 0)
+            assertEquals(
+                (6..9).map { "https://example.com/modern_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+            // Cached profile reused across subsequent calls and scroll settle
+            enqueuedRequests.clear()
+            lowRamRowAdapter.attachedRecyclerView = mockAttachedRecyclerView(lowRamContext, visibleCount = 6, firstIndex = 5)
+            lowRamRowAdapter.onScrollSettled()
+            assertEquals(
+                listOf(11, 12, 13, 14, 4, 3).map { "https://example.com/modern_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+            verify(exactly = 2) { lowRamAm.getMemoryInfo(any()) }
+
+            // LeanbackRowAdapter: Standard (6 ahead, 2 behind)
+            enqueuedRequests.clear()
+            val standardRowAdapter = createRowAdapter().apply {
+                submitItems(modernItems)
+                attachedRecyclerView = mockAttachedRecyclerView(standardContext, visibleCount = 6, firstIndex = 0)
+            }
+            assertEquals(standardProfile, standardRowAdapter.resolveLoadingProfile(standardContext))
+            standardRowAdapter.onFocusedPositionChanged(standardContext, 0)
+            assertEquals(
+                (6..11).map { "https://example.com/modern_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+            enqueuedRequests.clear()
+            standardRowAdapter.attachedRecyclerView = mockAttachedRecyclerView(standardContext, visibleCount = 6, firstIndex = 6)
+            standardRowAdapter.onFocusedPositionChanged(standardContext, 9)
+            assertEquals(
+                listOf(12, 13, 14, 15, 16, 17, 5, 4).map { "https://example.com/modern_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+
+            // LeanbackUniversalAdapter: Low-RAM (4 ahead, 2 behind)
+            enqueuedRequests.clear()
+            val lowRamUniversalAdapter = createUniversalAdapter().apply {
+                submitItems(universalItems)
+                attachedRecyclerView = mockAttachedRecyclerView(lowRamContext, visibleCount = 6, firstIndex = 0)
+            }
+            assertEquals(lowRamProfile, lowRamUniversalAdapter.resolveLoadingProfile(lowRamContext))
+            lowRamUniversalAdapter.onFocusedPositionChanged(lowRamContext, 0)
+            assertEquals(
+                (6..9).map { "https://example.com/poster_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+            enqueuedRequests.clear()
+            lowRamUniversalAdapter.attachedRecyclerView = mockAttachedRecyclerView(lowRamContext, visibleCount = 6, firstIndex = 5)
+            lowRamUniversalAdapter.onScrollSettled()
+            assertEquals(
+                listOf(11, 12, 13, 14, 4, 3).map { "https://example.com/poster_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+            verify(exactly = 3) { lowRamAm.getMemoryInfo(any()) }
+
+            // LeanbackUniversalAdapter: Standard (6 ahead, 2 behind) + explicit override + submitItems while attached
+            enqueuedRequests.clear()
+            val standardUniversalAdapter = createUniversalAdapter().apply {
+                submitItems(universalItems)
+                attachedRecyclerView = mockAttachedRecyclerView(standardContext, visibleCount = 6, firstIndex = 0)
+            }
+            assertEquals(standardProfile, standardUniversalAdapter.resolveLoadingProfile(standardContext))
+            standardUniversalAdapter.onFocusedPositionChanged(standardContext, 0)
+            assertEquals(
+                (6..11).map { "https://example.com/poster_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+            enqueuedRequests.clear()
+            standardUniversalAdapter.loadingProfileProvider = { HomeImageLoadingProfile.forDevice(0L) }
+            standardUniversalAdapter.attachedRecyclerView = mockAttachedRecyclerView(standardContext, visibleCount = 6, firstIndex = 6)
+            standardUniversalAdapter.prefetchFromVisibleRange(standardContext)
+            assertEquals(
+                listOf(12, 13, 14, 15, 5, 4).map { "https://example.com/poster_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+
+            // Verify applyItemsInternal & applyItemsUpdate trigger edge prefetch with profile counts when attached
+            enqueuedRequests.clear()
+            val attachedRowAdapter = createRowAdapter()
+            val attachedRowRv = mockAttachedRecyclerView(lowRamContext, visibleCount = 6, firstIndex = 0)
+            attachedRowAdapter.attachedRecyclerView = attachedRowRv
+            attachedRowAdapter.submitItems(modernItems)
+            assertEquals(
+                (6..9).map { "https://example.com/modern_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+
+            enqueuedRequests.clear()
+            val attachedUniversalAdapter = createUniversalAdapter()
+            val attachedUniversalRv = mockAttachedRecyclerView(standardContext, visibleCount = 6, firstIndex = 0)
+            attachedUniversalAdapter.attachedRecyclerView = attachedUniversalRv
+            attachedUniversalAdapter.submitItems(universalItems)
+            assertEquals(
+                (6..11).map { "https://example.com/poster_$it.jpg" },
+                enqueuedRequests.map { it.data.toString() }
+            )
+        } finally {
+            unmockkObject(SingletonImageLoader)
+        }
+    }
+
+    private fun mockDeviceContext(totalRamBytes: Long): Pair<Context, ActivityManager> {
+        val am = mockk<ActivityManager>()
+        every { am.getMemoryInfo(any()) } answers {
+            firstArg<ActivityManager.MemoryInfo>().totalMem = totalRamBytes
+        }
+        val appCtx = mockk<Context>(relaxed = true)
+        every { appCtx.getSystemService(Context.ACTIVITY_SERVICE) } returns am
+        every { appCtx.applicationContext } returns appCtx
+
+        val activityCtx = mockk<Context>(relaxed = true)
+        every { activityCtx.applicationContext } returns appCtx
+        return activityCtx to am
+    }
+
+    private fun mockAttachedRecyclerView(context: Context, visibleCount: Int, firstIndex: Int): RecyclerView {
+        val rv = mockk<RecyclerView>(relaxed = true)
+        every { rv.context } returns context
+        every { rv.isAttachedToWindow } returns true
+        every { rv.childCount } returns visibleCount
+        every { rv.visibility } returns View.VISIBLE
+        val children = (0 until visibleCount).map { mockk<View>(relaxed = true) }
+        every { rv.getChildAt(any()) } answers { children[firstArg()] }
+        every { rv.getChildAdapterPosition(any()) } answers {
+            firstIndex + children.indexOf(firstArg<View>())
+        }
+        every { rv.post(any()) } answers {
+            firstArg<Runnable>().run()
+            true
+        }
+        return rv
+    }
+
+    private fun <T : RecyclerView.Adapter<*>> T.withTestObservable(): T = apply {
+        val observableField = RecyclerView.Adapter::class.java.getDeclaredField("mObservable").apply {
+            isAccessible = true
+        }
+        val observable = observableField.get(this)
+        val observersField = android.database.Observable::class.java.getDeclaredField("mObservers").apply {
+            isAccessible = true
+        }
+        if (observersField.get(observable) == null) {
+            observersField.set(observable, ArrayList<Any>())
+        }
+    }
+
+    private fun createRowAdapter(): LeanbackRowAdapter = LeanbackRowAdapter(
+        cardWidthPx = 240,
+        cardHeightPx = 360,
+        cornerRadiusPx = 12f,
+        showLabels = true,
+        animationsEnabled = { true },
+        onItemFocused = { _, _ -> },
+        onItemClick = {},
+        onItemLongClick = {},
+        onLoadMore = {},
+        onNavigateDown = { false },
+        onNavigateUp = { false },
+        onNavigateLeftOnFirstItem = { false },
+        onNavigateBack = { false }
+    ).withTestObservable()
+
+    private fun createUniversalAdapter(): LeanbackUniversalAdapter = LeanbackUniversalAdapter(
+        cardWidthPx = 240,
+        cardHeightPx = 360,
+        cornerRadiusPx = 12f,
+        showLabels = true,
+        animationsEnabled = { true },
+        onItemFocused = { _, _ -> },
+        onItemClick = {},
+        onItemLongClick = {},
+        onLoadMore = {}
+    ).withTestObservable()
 }

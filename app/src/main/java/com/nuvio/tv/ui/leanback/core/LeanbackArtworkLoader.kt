@@ -16,9 +16,32 @@ import coil3.request.crossfade
 import coil3.request.transformations
 import coil3.target.Target
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
+import com.nuvio.tv.core.image.HomeImageLoadingProfile
 import com.nuvio.tv.core.image.sizedHomeArtworkUrl
 import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.util.BlurTransformation
+
+internal class HorizontalPrefetchProfileCache(
+    private val defaultProvider: (Context) -> HomeImageLoadingProfile = { ctx ->
+        LeanbackArtworkLoader.resolveProfileForContext(ctx)
+    }
+) {
+    @Volatile
+    private var cachedProfile: HomeImageLoadingProfile? = null
+
+    @Volatile
+    var providerOverride: ((Context) -> HomeImageLoadingProfile)? = null
+        set(value) {
+            field = value
+            cachedProfile = null
+        }
+
+    fun get(context: Context): HomeImageLoadingProfile {
+        cachedProfile?.let { return it }
+        val provider = providerOverride ?: defaultProvider
+        return provider(context).also { cachedProfile = it }
+    }
+}
 
 /**
  * Unified Coil 3 Artwork Loader & MemoryCache Fast-Path coordinator for Android Leanback cards.
@@ -127,6 +150,20 @@ object LeanbackArtworkLoader {
         val bottom = top + rv.height
         val margin = rv.height.coerceAtLeast(screenHeight / 4)
         return bottom >= -margin && top <= screenHeight + margin
+    }
+
+    internal fun resolveProfileForContext(
+        context: Context,
+        provider: (Context) -> HomeImageLoadingProfile = HomeImageLoadingProfile::forContext
+    ): HomeImageLoadingProfile {
+        val appCtx = runCatching { context.applicationContext }.getOrNull()
+        val targetCtx = when {
+            appCtx == null || appCtx === context -> context
+            runCatching { appCtx.getSystemService(Context.ACTIVITY_SERVICE) != null }.getOrDefault(false) -> appCtx
+            runCatching { context.getSystemService(Context.ACTIVITY_SERVICE) != null }.getOrDefault(false) -> context
+            else -> appCtx
+        }
+        return provider(targetCtx)
     }
 
     fun buildBaseMemoryKey(
