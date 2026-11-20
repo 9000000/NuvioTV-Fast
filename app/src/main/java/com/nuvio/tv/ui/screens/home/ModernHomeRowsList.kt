@@ -42,11 +42,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
-import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -76,6 +78,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import coil3.imageLoader
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
+import com.nuvio.tv.core.image.HomeImageLoadingProfile
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.LocalSidebarExpanded
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
@@ -86,11 +89,8 @@ import com.nuvio.tv.ui.util.StableMap
 import com.nuvio.tv.ui.util.StableRef
 import com.nuvio.tv.ui.util.recompositionHighlighter
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -255,11 +255,179 @@ internal fun findNearestNonEmptyRowIndex(
     return -1
 }
 
+private const val PREFETCH_DEDUP_MAX_SIZE = 512
+private const val PREFETCH_DEDUP_TRIM_BATCH = 128
+
+private data class VerticalPrefetchSnapshot(
+    val lastVisibleRowIndex: Int,
+    val signature: String,
+    val isScrolling: Boolean
+)
+
+internal fun computeLazyCatalogPrefetchWindow(
+    firstVisible: Int,
+    lastVisible: Int,
+    aheadCount: Int,
+    totalCount: Int
+): IntRange {
+    if (lastVisible < 0 || totalCount <= 0) return IntRange.EMPTY
+    val start = firstVisible.coerceAtLeast(0)
+    val end = (lastVisible + aheadCount.coerceAtLeast(0)).coerceAtMost(totalCount - 1)
+    return if (start <= end) start..end else IntRange.EMPTY
+}
+
+internal fun computeVerticalImagePrefetchWindow(
+    lastVisibleRowIndex: Int,
+    aheadRows: Int,
+    totalRows: Int
+): IntRange {
+    if (lastVisibleRowIndex < 0 || aheadRows <= 0 || totalRows <= 0) return IntRange.EMPTY
+    val start = (lastVisibleRowIndex + 1).coerceAtLeast(0)
+    val end = (lastVisibleRowIndex + aheadRows).coerceAtMost(totalRows - 1)
+    return if (start <= end) start..end else IntRange.EMPTY
+}
+
+internal fun computeRowCardPrefetchIndices(
+    focusedIndex: Int,
+    itemCount: Int,
+    prefetchCount: Int
+): IntRange {
+    if (itemCount <= 0 || prefetchCount <= 0) return IntRange.EMPTY
+    val count = prefetchCount.coerceAtMost(itemCount)
+    val clampedFocused = focusedIndex.coerceIn(0, itemCount - 1)
+    val maxStart = (itemCount - count).coerceAtLeast(0)
+    val start = clampedFocused.coerceAtMost(maxStart)
+    val end = (start + count - 1).coerceAtMost(itemCount - 1)
+    return start..end
+}
+
+internal inline fun encodeVerticalPrefetchWindowSignature(
+    anchorRowIndex: Int,
+    window: IntRange,
+    crossinline rowKey: (Int) -> String,
+    crossinline isLoading: (Int) -> Boolean,
+    crossinline firstRealUrl: (Int) -> String?,
+    crossinline itemCount: (Int) -> Int,
+    crossinline focusedIndex: (String) -> Int
+): String {
+    if (window.isEmpty()) return "last=$anchorRowIndex|empty"
+    return buildString {
+        append("last=").append(anchorRowIndex)
+        for (idx in window) {
+            val key = rowKey(idx)
+            val realUrl = firstRealUrl(idx)?.takeIf { it.isNotBlank() && !it.isPlaceholder() } ?: "placeholder"
+            append('|')
+            append(key).append(':')
+            append(isLoading(idx)).append(':')
+            append(realUrl).append(':')
+            append(itemCount(idx)).append(':')
+            append(focusedIndex(key))
+        }
+    }
+}
+
+internal fun buildVerticalImagePrefetchSignature(
+    lastVisibleRowIndex: Int,
+    rows: List<HeroCarouselRow>,
+    aheadRows: Int,
+    focusedIndexProvider: (String) -> Int
+): String {
+    val window = computeVerticalImagePrefetchWindow(
+        lastVisibleRowIndex = lastVisibleRowIndex,
+        aheadRows = aheadRows,
+        totalRows = rows.size
+    )
+    return encodeVerticalPrefetchWindowSignature(
+        anchorRowIndex = lastVisibleRowIndex,
+        window = window,
+        rowKey = { rows[it].key },
+        isLoading = { rows[it].isLoading },
+        firstRealUrl = { idx ->
+            rows[idx].items.list.firstNotNullOfOrNull { item ->
+                (item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop)
+                    ?.takeIf { !it.isBlank() && !it.isPlaceholder() }
+            }
+        },
+        itemCount = { rows[it].items.list.size },
+        focusedIndex = focusedIndexProvider
+    )
+}
+
+internal fun MutableSet<String>.tryMarkPrefetchedBounded(
+    key: String,
+    maxSize: Int = PREFETCH_DEDUP_MAX_SIZE,
+    trimBatch: Int = PREFETCH_DEDUP_TRIM_BATCH
+): Boolean {
+    if (contains(key)) return false
+    if (size >= maxSize) {
+        val iter = iterator()
+        repeat(trimBatch) {
+            if (iter.hasNext()) {
+                iter.next()
+                iter.remove()
+            }
+        }
+    }
+    add(key)
+    return true
+}
+
+/**
+ * Leading+trailing throttle that never starves during continuous D-pad scrolling and
+ * always flushes the latest value once emissions settle.
+ */
+internal suspend fun <T> Flow<T>.collectThrottledLeadingTrailing(
+    leadingIntervalMs: Long,
+    trailingDelayMs: Long,
+    nowMs: () -> Long = { android.os.SystemClock.uptimeMillis() },
+    shouldBypassThrottle: (T) -> Boolean = { false },
+    action: suspend (T) -> Unit
+) {
+    coroutineScope {
+        var lastTriggerMs = Long.MIN_VALUE
+        var trailingJob: Job? = null
+        var pendingValue: T? = null
+        var hasPending = false
+
+        try {
+            collect { value ->
+                val currentMs = nowMs()
+                val elapsed = if (lastTriggerMs == Long.MIN_VALUE) leadingIntervalMs else currentMs - lastTriggerMs
+                if (shouldBypassThrottle(value) || elapsed >= leadingIntervalMs) {
+                    trailingJob?.cancel()
+                    trailingJob = null
+                    pendingValue = null
+                    hasPending = false
+                    lastTriggerMs = currentMs
+                    action(value)
+                } else {
+                    pendingValue = value
+                    hasPending = true
+                    if (trailingJob?.isActive != true) {
+                        trailingJob = launch {
+                            delay(trailingDelayMs)
+                            if (hasPending) {
+                                val latest = pendingValue
+                                pendingValue = null
+                                hasPending = false
+                                lastTriggerMs = nowMs()
+                                @Suppress("UNCHECKED_CAST")
+                                action(latest as T)
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            trailingJob?.cancel()
+        }
+    }
+}
+
 @OptIn(
     ExperimentalFoundationApi::class,
     ExperimentalTvMaterial3Api::class,
-    ExperimentalComposeUiApi::class,
-    kotlinx.coroutines.FlowPreview::class
+    ExperimentalComposeUiApi::class
 )
 @Composable
 internal fun ModernHomeRowsList(
@@ -498,6 +666,7 @@ internal fun ModernHomeRowsList(
 
     val density = LocalDensity.current
     val context = LocalContext.current
+    val loadingProfile = remember(context) { HomeImageLoadingProfile.forContext(context) }
     val layoutDirection = LocalLayoutDirection.current
     val rowStartPaddingPx = with(density) { 52.dp.toPx() }
     val portraitCardWidthPx = with(density) { portraitCatalogCardWidth.roundToPx() }.coerceAtLeast(1)
@@ -510,6 +679,16 @@ internal fun ModernHomeRowsList(
     val catalogCardHeightPx = if (useLandscapePosters) landscapeCardHeightPx else portraitCardHeightPx
     val posterCornerRadiusPx = with(density) { posterCardCornerRadius.toPx() }
     val cwCornerRadiusPx = with(density) { continueWatchingCornerRadius.toPx() }
+    fun isContinueWatchingRowKey(key: String?): Boolean =
+        key == MODERN_CONTINUE_WATCHING_ROW_KEY || key == MODERN_UPCOMING_ROW_KEY
+
+    fun rowCardDimensionsPx(rowKey: String?): Triple<Int, Int, Float> =
+        if (isContinueWatchingRowKey(rowKey)) {
+            Triple(cwCardWidthPx, cwCardHeightPx, cwCornerRadiusPx)
+        } else {
+            Triple(catalogCardWidthPx, catalogCardHeightPx, posterCornerRadiusPx)
+        }
+
     val titleLineHeight = MaterialTheme.typography.titleMedium.lineHeight
     val defaultCardTopInRowPx = with(density) {
         val titleHeightDp = runCatching { titleLineHeight.toDp() }.getOrDefault(24.dp)
@@ -520,51 +699,73 @@ internal fun ModernHomeRowsList(
     }
     val verticalPrefetchImageLoader = context.imageLoader
     val latestCarouselRowsForImagePrefetch = rememberUpdatedState(carouselRows)
+    val prefetchedVerticalItems = remember { LinkedHashSet<String>(PREFETCH_DEDUP_MAX_SIZE) }
 
     LaunchedEffect(
         verticalPrefetchImageLoader,
         verticalRowListState,
-        density,
-        useLandscapePosters,
-        effectiveExpandEnabled,
-        portraitCatalogCardWidth,
-        portraitCatalogCardHeight,
-        landscapeCatalogCardWidth,
-        landscapeCatalogCardHeight
+        loadingProfile,
+        cwCardWidthPx,
+        cwCardHeightPx,
+        catalogCardWidthPx,
+        catalogCardHeightPx
     ) {
-        val prefetchAheadRows = 1
-        val prefetchItemsPerRow = 4
         snapshotFlow {
-            verticalRowListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val lastVisibleRowIndex = verticalRowListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val rows = latestCarouselRowsForImagePrefetch.value.list
+            val signature = buildVerticalImagePrefetchSignature(
+                lastVisibleRowIndex = lastVisibleRowIndex,
+                rows = rows,
+                aheadRows = loadingProfile.verticalPrefetchRows,
+                focusedIndexProvider = { key -> focusedItemByRowMap[key] ?: 0 }
+            )
+            VerticalPrefetchSnapshot(
+                lastVisibleRowIndex = lastVisibleRowIndex,
+                signature = signature,
+                isScrolling = verticalRowListState.isScrollInProgress
+            )
         }
-            .distinctUntilChanged()
-            .debounce(240L) // VERTICAL_PREFETCH_DEBOUNCE_MS
-            .collect { lastVisibleRowIndex ->
-                withContext(Dispatchers.IO) {
-                    for (rowOffset in 1..prefetchAheadRows) {
-                        val row = latestCarouselRowsForImagePrefetch.value.list
-                            .getOrNull(lastVisibleRowIndex + rowOffset) ?: continue
-                        for (i in 0 until minOf(prefetchItemsPerRow, row.items.list.size)) {
-                            val item = row.items.list[i]
-                            val url = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop ?: continue
-                            val metrics = item.catalogCardMetrics(
-                                useLandscapePosters = useLandscapePosters,
-                                portraitCardWidth = portraitCatalogCardWidth,
-                                portraitCardHeight = portraitCatalogCardHeight,
-                                landscapeCardWidth = landscapeCatalogCardWidth,
-                                landscapeCardHeight = landscapeCatalogCardHeight
-                            )
-                            val wPx = with(density) { metrics.width.roundToPx() }.coerceAtLeast(1)
-                            val hPx = with(density) { metrics.height.roundToPx() }.coerceAtLeast(1)
-                            LeanbackArtworkLoader.prefetch(
-                                context = context,
-                                imageLoader = verticalPrefetchImageLoader,
-                                imageUrl = url,
-                                fallbackUrl = item.metaPreview?.rawPosterUrl,
-                                widthPx = wPx,
-                                heightPx = hPx
-                            )
-                        }
+            .distinctUntilChanged { old, new -> old.signature == new.signature }
+            .filter { it.lastVisibleRowIndex >= 0 }
+            .collectThrottledLeadingTrailing(
+                leadingIntervalMs = 60L,
+                trailingDelayMs = 60L,
+                shouldBypassThrottle = { !it.isScrolling }
+            ) { snapshot ->
+                val rows = latestCarouselRowsForImagePrefetch.value.list
+                val window = computeVerticalImagePrefetchWindow(
+                    lastVisibleRowIndex = snapshot.lastVisibleRowIndex,
+                    aheadRows = loadingProfile.verticalPrefetchRows,
+                    totalRows = rows.size
+                )
+                for (rowIdx in window) {
+                    val row = rows[rowIdx]
+                    val items = row.items.list
+                    if (items.isEmpty()) continue
+                    val firstUrl = items.firstOrNull()?.let {
+                        it.imageUrl ?: it.heroPreview.poster ?: it.heroPreview.backdrop
+                    }
+                    if (firstUrl.isPlaceholder()) continue
+                    val (wPx, hPx, _) = rowCardDimensionsPx(row.key)
+                    val cardIndices = computeRowCardPrefetchIndices(
+                        focusedIndex = focusedItemByRowMap[row.key] ?: 0,
+                        itemCount = items.size,
+                        prefetchCount = loadingProfile.verticalPrefetchItems
+                    )
+                    for (itemIdx in cardIndices) {
+                        val item = items[itemIdx]
+                        val url = (item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop)?.trim()
+                        if (url.isNullOrEmpty() || url.isPlaceholder()) continue
+                        val dedupKey = "${url}|${wPx}x${hPx}"
+                        if (!prefetchedVerticalItems.tryMarkPrefetchedBounded(dedupKey)) continue
+                        LeanbackArtworkLoader.prefetch(
+                            context = context,
+                            imageLoader = verticalPrefetchImageLoader,
+                            imageUrl = url,
+                            fallbackUrl = item.metaPreview?.rawPosterUrl,
+                            widthPx = wPx,
+                            heightPx = hPx
+                        )
                     }
                 }
             }
@@ -572,6 +773,29 @@ internal fun ModernHomeRowsList(
 
     val latestOnRequestLazyCatalogLoad = rememberUpdatedState(onRequestLazyCatalogLoad)
     val latestCarouselRowsForLazy = rememberUpdatedState(carouselRows)
+    fun requestLazyInWindow(firstVisible: Int, lastVisible: Int) {
+        val rows = latestCarouselRowsForLazy.value.list
+        val window = computeLazyCatalogPrefetchWindow(
+            firstVisible = firstVisible,
+            lastVisible = lastVisible,
+            aheadCount = loadingProfile.lazyPrefetchAheadModern,
+            totalCount = rows.size
+        )
+        for (idx in window) {
+            val row = rows[idx]
+            if (row.isLoading && row.items.list.firstOrNull()?.imageUrl.isPlaceholder()) {
+                val addonId = row.addonId ?: continue
+                val apiType = row.apiType ?: continue
+                val catalogId = row.catalogId ?: continue
+                latestOnRequestLazyCatalogLoad.value(
+                    catalogRowLegacyKey(addonId, apiType, catalogId)
+                )
+            }
+        }
+    }
+    fun requestLazyForRowIndexWindow(rowIndex: Int) {
+        requestLazyInWindow(firstVisible = rowIndex, lastVisible = rowIndex)
+    }
     val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     val requestUpdateBannerFocus = LocalRequestUpdateBannerFocus.current
     val latestRequestUpdateBannerFocus = rememberUpdatedState(requestUpdateBannerFocus)
@@ -748,16 +972,6 @@ internal fun ModernHomeRowsList(
             }
         }
     }
-
-    fun isContinueWatchingRowKey(key: String?): Boolean =
-        key == MODERN_CONTINUE_WATCHING_ROW_KEY || key == MODERN_UPCOMING_ROW_KEY
-
-    fun rowCardDimensionsPx(rowKey: String?): Triple<Int, Int, Float> =
-        if (isContinueWatchingRowKey(rowKey)) {
-            Triple(cwCardWidthPx, cwCardHeightPx, cwCornerRadiusPx)
-        } else {
-            Triple(catalogCardWidthPx, catalogCardHeightPx, posterCornerRadiusPx)
-        }
 
     fun resolveAnchoredLeftPx(cardWidthPx: Int): Float {
         val host = verticalOverlayHostRef.get()
@@ -1160,6 +1374,7 @@ internal fun ModernHomeRowsList(
                                 val passingRow = passingInfo?.let { liveRows.getOrNull(it.index) }
                                 if (passingRow != null && passingRow.key != lastPassingRowKey) {
                                     lastPassingRowKey = passingRow.key
+                                    requestLazyForRowIndexWindow(passingInfo.index)
                                     val (nextW, nextH, nextR) = rowCardDimensionsPx(passingRow.key)
                                     targetW = nextW
                                     targetH = nextH
@@ -1262,6 +1477,7 @@ internal fun ModernHomeRowsList(
         }
         val targetIdx = candidateIdx
         val targetRow = rows[targetIdx]
+        requestLazyForRowIndexWindow(targetIdx)
 
         lastVerticalSingleStepAtMsRef.set(android.os.SystemClock.uptimeMillis())
         lastVerticalSingleStepDirRef.set(sign)
@@ -1403,31 +1619,21 @@ internal fun ModernHomeRowsList(
         }
         return true
     }
-    LaunchedEffect(verticalRowListState) {
-        val prefetchAheadForLazy = 2
+    LaunchedEffect(verticalRowListState, loadingProfile) {
         snapshotFlow {
             val info = verticalRowListState.layoutInfo
             val firstVisible = info.visibleItemsInfo.firstOrNull()?.index ?: -1
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            firstVisible to lastVisible
-        }.collectLatest { (firstVisible, lastVisible) ->
-            if (lastVisible < 0) return@collectLatest
-            // Debounce: restarts on every new emission during rapid scroll.
-            // Only fires when visible indices stabilize for 240ms.
-            delay(240)
-            val rows = latestCarouselRowsForLazy.value
-            for (idx in firstVisible.coerceAtLeast(0)..(lastVisible + prefetchAheadForLazy)) {
-                val row = rows.list.getOrNull(idx) ?: continue
-                if (row.isLoading && row.items.list.firstOrNull()?.imageUrl.isPlaceholder()) {
-                    val legacyKey = catalogRowLegacyKey(
-                        row.addonId ?: continue,
-                        row.apiType ?: continue,
-                        row.catalogId ?: continue
-                    )
-                    latestOnRequestLazyCatalogLoad.value(legacyKey)
-                }
-            }
+            Triple(firstVisible, lastVisible, latestCarouselRowsForLazy.value.list.size)
         }
+            .distinctUntilChanged()
+            .filter { it.second >= 0 }
+            .collectThrottledLeadingTrailing(
+                leadingIntervalMs = 80L,
+                trailingDelayMs = 100L
+            ) { (firstVisible, lastVisible, _) ->
+                requestLazyInWindow(firstVisible, lastVisible)
+            }
     }
 
     val focusRestorerRequester = remember {
