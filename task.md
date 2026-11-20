@@ -88,3 +88,33 @@
   - **File**: [MainActivity.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/MainActivity.kt) (`CollapsedSidebarPill`, ≈ L1923)
 - [x] **SIDEBAR-04**: Build `compileFullDebugKotlin` + kiểm thử thủ công 10 kịch bản trong plan (không thêm hiệu ứng scale)
   - **Vai trò**: QA
+
+
+---
+
+# Danh Sách Task - Tối Ưu Tải Ảnh Khi Cuộn Dọc & Nạp Trước Poster Khi Di Chuyển Ngang
+
+> **Kế hoạch tương ứng**: [PLAN-scroll-image-load-optimization.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-scroll-image-load-optimization.md)
+
+- [x] **SCROLL-LOAD-01**: Bổ sung cơ chế `isHoldScrolling` trong `LeanbackArtworkLoader` để tạm dừng request mạng/giải mã ngoài RAM và bỏ qua prefetch khi cuộn lướt tốc độ cao
+  - **Vai trò**: Image / Performance Engineer
+  - **Mô tả**: Thêm cờ `@Volatile var isHoldScrolling: Boolean`. Trong `prefetch()`: nếu đang hold thì return ngay. Trong `loadIntoImageView()`: nếu có trong `findInMemoryCache` thì gán ngay lập tức (0ms); nếu chưa có trong RAM và `isHoldScrolling == true` thì hoãn request và ghi nhận trạng thái deferred để nạp lại khi dừng.
+  - **File**: [LeanbackArtworkLoader.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackArtworkLoader.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt)
+
+- [x] **SCROLL-LOAD-02**: Tích hợp cờ hold scroll vào `ModernHomeRowsList` và phục hồi nạp ảnh tức thì khi nhả phím
+  - **Vai trò**: UI / TV Navigation Engineer
+  - **Mô tả**: Trong `startOrExtendVerticalHoldScroll`, kích hoạt `LeanbackArtworkLoader.isHoldScrolling = true` và bỏ qua vòng lặp coroutine `VerticalPrefetchSnapshot`. Trong `endVerticalHoldScroll`, trả cờ về `false` và kích hoạt tải/prefetch lại toàn bộ card đang hiển thị trên hàng dừng lại. Đảm bảo `stepVerticalRow` (bấm từng nấc nhanh) giữ nguyên `isHoldScrolling = false` và tải bình thường.
+  - **File**: [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt)
+
+- [x] **SCROLL-LOAD-03**: Kích hoạt tải thêm danh mục sớm (Eager Pagination) và mở rộng nạp trước ảnh poster ngang (Deep Horizontal Prefetch)
+  - **Vai trò**: Leanback Grid / Catalog Pipeline Engineer
+  - **Mô tả**:
+    1. Trong `ModernInteropHorizontalGridView`: Nâng ngưỡng kích hoạt `onLoadMore` lên `target >= totalCount - 12` và gọi ngay trong `dispatchKeyEvent` khi bấm phím sang phải (`towardEndKey`) để tải trang tiếp theo ngầm từ sớm thay vì chờ cuộn tới cuối hàng.
+    2. Trong `HomePosterLoading.kt`: Nâng `horizontalPrefetchAhead` lên 8 (Low RAM) và 12 (Standard).
+    3. Trong `dispatchKeyEvent` khi di chuyển sang phải: gọi ngay lệnh prefetch ngang cho các poster tiếp theo (`target + 1 .. target + aheadCount`).
+  - **File**: [ModernInteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt), [HomePosterLoading.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/image/HomePosterLoading.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt)
+
+- [x] **SCROLL-LOAD-04**: Kiểm chứng tự động (Unit Tests) & kiểm tra build
+  - **Vai trò**: QA / Verification Engineer
+  - **Mô tả**: Viết unit test xác thực cờ `isHoldScrolling`, kiểm tra ngưỡng horizontal prefetch/loadMore và chạy `:app:compileFullDebugKotlin` + `:app:testFullDebugUnitTest`.
+  - **File**: [LeanbackCoreOptimizationTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt), [HomePrefetchTriggerTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/home/HomePrefetchTriggerTest.kt)

@@ -331,7 +331,8 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 }
 
                 val totalCount = rowAdapter?.itemCount ?: 0
-                if (position >= totalCount - 5 && totalCount > 0) {
+                val loadMoreThreshold = maxOf(8, totalCount - 12)
+                if (position >= loadMoreThreshold && totalCount > 0) {
                     post {
                         rowAdapter?.onLoadMore?.invoke()
                     }
@@ -641,6 +642,10 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
 
                     val target = (currentPos + 1).coerceAtMost((total - 1).coerceAtLeast(0))
                     pendingTargetPosition = target
+                    if (target >= (total - 12).coerceAtLeast(0) && total > 0) {
+                        rowAdapter?.onLoadMore?.invoke()
+                    }
+                    rowAdapter?.onFocusedPositionChanged(context, target)
                     val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
                         setSelectedPosition(target)

@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
+import android.os.SystemClock
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
@@ -404,12 +405,28 @@ class LeanbackRowAdapter(
     var onItemFocused: (Int, ModernCarouselItem) -> Unit,
     var onItemClick: (ModernCarouselItem) -> Unit,
     var onItemLongClick: (ModernCarouselItem) -> Unit,
-    var onLoadMore: () -> Unit,
+    onLoadMore: () -> Unit,
     var onNavigateDown: () -> Boolean,
     var onNavigateUp: () -> Boolean,
     var onNavigateLeftOnFirstItem: () -> Boolean,
     var onNavigateBack: () -> Boolean
 ) : RecyclerView.Adapter<LeanbackCardViewHolder>() {
+
+    private var lastLoadMoreTimestampMs = 0L
+    private var rawOnLoadMore: () -> Unit = onLoadMore
+    private val debouncedLoadMore: () -> Unit = {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastLoadMoreTimestampMs >= 250L) {
+            lastLoadMoreTimestampMs = now
+            rawOnLoadMore()
+        }
+    }
+
+    var onLoadMore: () -> Unit
+        get() = debouncedLoadMore
+        set(value) {
+            rawOnLoadMore = value
+        }
 
     private var items: List<ModernCarouselItem> = emptyList()
     private var pendingItems: List<ModernCarouselItem>? = null

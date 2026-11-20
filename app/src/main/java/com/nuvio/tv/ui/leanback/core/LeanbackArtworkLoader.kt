@@ -52,6 +52,9 @@ internal class HorizontalPrefetchProfileCache(
  * - Horizontal ahead-prefetch and Vertical row ahead-prefetch (with `allowHardware(false)` alignment)
  */
 object LeanbackArtworkLoader {
+    @Volatile
+    var isHoldScrolling: Boolean = false
+
     private const val MAX_PREFETCHED_KEYS = 512
     private const val PREFETCH_TRIM_BATCH = 128
 
@@ -232,6 +235,10 @@ object LeanbackArtworkLoader {
             return null
         }
 
+        if (isHoldScrolling) {
+            return null
+        }
+
         val request = ImageRequest.Builder(ctx)
             .data(imageUrl)
             .memoryCacheKey(baseMemKey)
@@ -283,6 +290,7 @@ object LeanbackArtworkLoader {
         blurred: Boolean = false,
         prefetchedKeysTracker: LinkedHashSet<String>? = null
     ) {
+        if (isHoldScrolling) return
         val url = imageUrl?.trim()
         if (url.isNullOrEmpty() || url.isPlaceholder()) return
         val w = widthPx.coerceAtLeast(1)

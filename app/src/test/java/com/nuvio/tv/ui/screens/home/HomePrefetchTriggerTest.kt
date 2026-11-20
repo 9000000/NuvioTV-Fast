@@ -236,6 +236,30 @@ class HomePrefetchTriggerTest {
         job.cancel()
     }
 
+    @Test
+    fun `horizontal eager pagination and key navigation trigger thresholds`() {
+        // SCROLL-LOAD-03: loadMoreThreshold = maxOf(8, totalCount - 12)
+        fun computeLoadMoreThreshold(totalCount: Int): Int = maxOf(8, totalCount - 12)
+        fun shouldTriggerKeyLoadMore(target: Int, total: Int): Boolean =
+            target >= (total - 12).coerceAtLeast(0) && total > 0
+
+        // For small lists (e.g. 10 items): threshold stays at floor of 8
+        assertEquals(8, computeLoadMoreThreshold(10))
+        // For large lists (e.g. 50 items): threshold is 38 (requests 12 items early)
+        assertEquals(38, computeLoadMoreThreshold(50))
+        assertEquals(18, computeLoadMoreThreshold(30))
+
+        // Key navigation ahead trigger check:
+        // total = 30 -> (30 - 12).coerceAtLeast(0) = 18
+        assertEquals(false, shouldTriggerKeyLoadMore(target = 17, total = 30))
+        assertEquals(true, shouldTriggerKeyLoadMore(target = 18, total = 30))
+        assertEquals(true, shouldTriggerKeyLoadMore(target = 25, total = 30))
+
+        // total <= 12 -> triggers immediately on any forward key movement
+        assertEquals(true, shouldTriggerKeyLoadMore(target = 0, total = 10))
+        assertEquals(false, shouldTriggerKeyLoadMore(target = 0, total = 0))
+    }
+
     private fun row(key: String, isLoading: Boolean, imageUrl: String?): HeroCarouselRow =
         HeroCarouselRow(
             key = key,

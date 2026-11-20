@@ -559,6 +559,7 @@ internal fun ModernHomeRowsList(
             verticalHoldTimeoutRef.getAndSet(null)?.cancel()
             scrollJob?.cancel()
             isVerticalGlideRef.set(false)
+            LeanbackArtworkLoader.isHoldScrolling = false
             latestOnFastScrollingChanged.value(false)
             verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
         }
@@ -732,6 +733,7 @@ internal fun ModernHomeRowsList(
                 trailingDelayMs = 60L,
                 shouldBypassThrottle = { !it.isScrolling }
             ) { snapshot ->
+                if (isVerticalGlideRef.get() || LeanbackArtworkLoader.isHoldScrolling) return@collectThrottledLeadingTrailing
                 val rows = latestCarouselRowsForImagePrefetch.value.list
                 val window = computeVerticalImagePrefetchWindow(
                     lastVisibleRowIndex = snapshot.lastVisibleRowIndex,
@@ -982,6 +984,26 @@ internal fun ModernHomeRowsList(
         }
     }
 
+    fun triggerLandingRowImageRefresh(grid: androidx.leanback.widget.HorizontalGridView?) {
+        if (grid == null) return
+        grid.post {
+            if (!grid.isAttachedToWindow) return@post
+            val adapter = grid.adapter as? LeanbackRowAdapter ?: return@post
+            adapter.onScrollSettled()
+            adapter.prefetchFromVisibleRange(grid.context)
+            for (i in 0 until grid.childCount) {
+                val child = grid.getChildAt(i) ?: continue
+                val vh = grid.getChildViewHolder(child) as? LeanbackCardViewHolder ?: continue
+                if (vh.posterImage.drawable == null) {
+                    val pos = grid.getChildAdapterPosition(child)
+                    if (pos != RecyclerView.NO_POSITION && pos in 0 until adapter.itemCount) {
+                        adapter.onBindViewHolder(vh, pos)
+                    }
+                }
+            }
+        }
+    }
+
     fun handoffOverlayToGrid(
         rowKey: String,
         targetCardIndex: Int,
@@ -1032,6 +1054,7 @@ internal fun ModernHomeRowsList(
                 grid.ensureChildFocusAndRing(targetPos = resolvedCardIdx, animated = false)
                 if (ring.visibility == View.VISIBLE && ring.width > 0 && ring.height > 0) {
                     verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+                    triggerLandingRowImageRefresh(grid)
                     return
                 }
             }
@@ -1044,6 +1067,7 @@ internal fun ModernHomeRowsList(
             isVerticalGlideRef.set(false)
             grid.ensureChildFocusAndRing(targetPos = resolvedCardIdx, animated = false)
             verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+            triggerLandingRowImageRefresh(grid)
         } else {
             val overlayHost = verticalOverlayHostRef.get()
             if (retryCount < 4 && overlayHost != null && overlayHost.isAttachedToWindow) {
@@ -1126,6 +1150,7 @@ internal fun ModernHomeRowsList(
         if (dir == 0 && activeJob == null) return
         activeJob?.cancel()
         latestOnFastScrollingChanged.value(false)
+        LeanbackArtworkLoader.isHoldScrolling = false
 
         val rows = latestCarouselRowsForLazy.value.list
         if (rows.isEmpty()) {
@@ -1186,6 +1211,7 @@ internal fun ModernHomeRowsList(
         val (landingW, landingH, landingR) = rowCardDimensionsPx(landingRow.key)
         val landingAnchorX = resolveAnchoredLeftPx(landingW)
         val landingGrid = rowGrids[landingRow.key]
+        triggerLandingRowImageRefresh(landingGrid)
         val landingColor = resolveRowTargetGlowColor(
             grid = landingGrid,
             cardIndex = targetCardIndex,
@@ -1272,6 +1298,7 @@ internal fun ModernHomeRowsList(
             val glideGen = overlayGenerationRef.incrementAndGet()
             verticalHoldDirectionRef.set(sign)
             isVerticalGlideRef.set(true)
+            LeanbackArtworkLoader.isHoldScrolling = true
             latestOnFastScrollingChanged.value(true)
 
             val host = verticalOverlayHostRef.get()
@@ -1448,6 +1475,7 @@ internal fun ModernHomeRowsList(
 
     fun stepVerticalRow(sign: Int): Boolean {
         onUserNavigated()
+        LeanbackArtworkLoader.isHoldScrolling = false
         val rows = latestCarouselRowsForLazy.value.list
         if (rows.isEmpty()) return false
         val currentKey = effectiveActiveRowKey()

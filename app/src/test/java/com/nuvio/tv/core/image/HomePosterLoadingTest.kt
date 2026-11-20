@@ -28,7 +28,7 @@ class HomePosterLoadingTest {
             lazyPrefetchAheadClassic = 2,
             verticalPrefetchRows = 2,
             verticalPrefetchItems = 6,
-            horizontalPrefetchAhead = 4,
+            horizontalPrefetchAhead = 8,
             horizontalPrefetchBehind = 2
         )
 
@@ -60,7 +60,7 @@ class HomePosterLoadingTest {
             lazyPrefetchAheadClassic = 3,
             verticalPrefetchRows = 3,
             verticalPrefetchItems = 8,
-            horizontalPrefetchAhead = 6,
+            horizontalPrefetchAhead = 12,
             horizontalPrefetchBehind = 2
         )
 
