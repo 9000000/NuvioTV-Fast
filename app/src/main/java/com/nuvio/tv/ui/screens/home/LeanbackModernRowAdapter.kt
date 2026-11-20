@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.home
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.util.TypedValue
@@ -16,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.leanback.widget.BaseGridView
 import androidx.leanback.widget.HorizontalGridView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -23,6 +25,7 @@ import coil3.BitmapImage
 import coil3.Image
 import coil3.SingletonImageLoader
 import coil3.request.Disposable
+import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.adapter.computeLeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
@@ -85,6 +88,7 @@ class LeanbackCardViewHolder(
     private var boundFallbackUrl: String? = null
     private var boundWidthPx: Int = 0
     private var boundHeightPx: Int = 0
+    private var lastLoadedColorKey: String? = null
 
     init {
         root.isFocusable = true
@@ -153,6 +157,33 @@ class LeanbackCardViewHolder(
         if (root.scaleX != 1.0f) root.scaleX = 1.0f
         if (root.scaleY != 1.0f) root.scaleY = 1.0f
 
+        val item = currentItem
+        if (hasFocus && item != null) {
+            val loadableUrl = (item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop)
+                ?.takeIf { it.isNotBlank() && !it.trim().isPlaceholder() }
+            val colorCacheKey = loadableUrl ?: item.key
+            val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
+            if (cachedColor != null) {
+                currentDominantColor = cachedColor
+                lastLoadedColorKey = colorCacheKey
+            } else if (loadableUrl != null && lastLoadedColorKey != colorCacheKey) {
+                val bmp = (posterImage.drawable as? BitmapDrawable)?.bitmap
+                if (bmp != null && !bmp.isRecycled) {
+                    lastLoadedColorKey = colorCacheKey
+                    val boundKey = item.key
+                    LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
+                        if (currentItem?.key == boundKey) {
+                            val changed = currentDominantColor != extracted
+                            currentDominantColor = extracted
+                            if (root.hasFocus() && changed) {
+                                updateFocusVisual(true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         val isLandscape = adapter.cardWidthPx > adapter.cardHeightPx
 
         val targetTranslationZ = if (hasFocus) 12f else 0f
@@ -173,6 +204,7 @@ class LeanbackCardViewHolder(
         boundColorKey: String,
         notifyIfCachedAndFocused: Boolean
     ) {
+        lastLoadedColorKey = boundColorKey
         val existingColor = LeanbackColorEngine.getCachedColor(boundColorKey)
         if (existingColor != null) {
             currentDominantColor = existingColor
@@ -203,12 +235,15 @@ class LeanbackCardViewHolder(
         cornerRadiusPx: Float,
         showLabels: Boolean
     ) {
-        val imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
-        val fallbackUrl = item.metaPreview?.rawPosterUrl
+        val rawCandidateUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+        val hasLoadableImage = !rawCandidateUrl.isNullOrBlank() && !rawCandidateUrl.trim().isPlaceholder()
+        val imageUrl = if (hasLoadableImage) rawCandidateUrl else null
+        val fallbackUrl = item.metaPreview?.rawPosterUrl?.takeIf { !it.isBlank() && !it.trim().isPlaceholder() }
         val colorCacheKey = imageUrl ?: item.key
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
-        val sameImageRequest = currentItem?.key == item.key &&
+        val sameImageRequest = hasLoadableImage &&
+            currentItem?.key == item.key &&
             boundImageUrl == imageUrl &&
             boundFallbackUrl == fallbackUrl &&
             boundWidthPx == wPx &&
@@ -219,6 +254,7 @@ class LeanbackCardViewHolder(
         updateCornerRadius(cornerRadiusPx)
 
         if (!sameImageRequest) {
+            lastLoadedColorKey = null
             posterImage.setImageDrawable(null)
             ensurePlaceholderBackground()
         }
@@ -263,7 +299,7 @@ class LeanbackCardViewHolder(
         }
 
         // Image loading via unified LeanbackArtworkLoader (matches CustomPoster FALLBACK_URL_KEY fast-path)
-        if (!imageUrl.isNullOrBlank()) {
+        if (imageUrl != null) {
             if (!sameImageRequest) {
                 val boundKey = item.key
                 val boundColorKey = colorCacheKey
@@ -281,21 +317,25 @@ class LeanbackCardViewHolder(
                     isStillBound = { currentItem?.key == boundKey },
                     onCacheHit = { result ->
                         cardContainer.background = null
-                        resolveCardColorFromImage(
-                            result = result,
-                            boundKey = boundKey,
-                            boundColorKey = boundColorKey,
-                            notifyIfCachedAndFocused = false
-                        )
+                        if (root.hasFocus() || bindingAdapterPosition == 0) {
+                            resolveCardColorFromImage(
+                                result = result,
+                                boundKey = boundKey,
+                                boundColorKey = boundColorKey,
+                                notifyIfCachedAndFocused = false
+                            )
+                        }
                     },
                     onAsyncSuccess = { result ->
                         cardContainer.background = null
-                        resolveCardColorFromImage(
-                            result = result,
-                            boundKey = boundKey,
-                            boundColorKey = boundColorKey,
-                            notifyIfCachedAndFocused = true
-                        )
+                        if (root.hasFocus() || bindingAdapterPosition == 0) {
+                            resolveCardColorFromImage(
+                                result = result,
+                                boundKey = boundKey,
+                                boundColorKey = boundColorKey,
+                                notifyIfCachedAndFocused = true
+                            )
+                        }
                     },
                     onAsyncError = {
                         boundImageUrl = null
@@ -308,6 +348,9 @@ class LeanbackCardViewHolder(
             imageDisposable = null
             boundImageUrl = null
             boundFallbackUrl = null
+            boundWidthPx = 0
+            boundHeightPx = 0
+            lastLoadedColorKey = null
             posterImage.setImageDrawable(null)
             ensurePlaceholderBackground()
         }
@@ -343,6 +386,7 @@ class LeanbackCardViewHolder(
         boundFallbackUrl = null
         boundWidthPx = 0
         boundHeightPx = 0
+        lastLoadedColorKey = null
         posterImage.setImageDrawable(null)
         cardContainer.foreground = null
         ensurePlaceholderBackground()
@@ -399,6 +443,7 @@ class LeanbackRowAdapter(
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
         attachedRecyclerView = recyclerView
+        scheduleInitialEdgePrefetch(recyclerView, items)
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
@@ -462,9 +507,15 @@ class LeanbackRowAdapter(
                 }
             }
         }
-        val pending = pendingItems ?: return
-        pendingItems = null
-        applyItems(pending)
+        val pending = pendingItems
+        if (pending != null) {
+            pendingItems = null
+            applyItems(pending)
+        }
+        val settledRv = attachedRecyclerView
+        if (settledRv != null && settledRv.isAttachedToWindow && hasRealItems(items)) {
+            prefetchFromVisibleRange(settledRv.context)
+        }
     }
 
     private fun scheduleFlushPendingItems(rv: RecyclerView) {
@@ -588,6 +639,20 @@ class LeanbackRowAdapter(
                 }
             }
         }
+
+        val hostRv = attachedRecyclerView
+        if (newItems.size > 1 && hasRealItems(newItems) && hostRv != null && hostRv.isAttachedToWindow &&
+            (hostRv.hasFocus() || LeanbackArtworkLoader.isRowNearViewport(hostRv))
+        ) {
+            val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(hostRv)
+            if (lastVisible < 0 || firstVisible > 0 || newItems.size > lastVisible + 1) {
+                hostRv.post {
+                    if (attachedRecyclerView === hostRv && hostRv.isAttachedToWindow && hasRealItems(items)) {
+                        prefetchFromVisibleRange(hostRv.context)
+                    }
+                }
+            }
+        }
     }
 
     override fun getItemCount(): Int = items.size
@@ -685,27 +750,114 @@ class LeanbackRowAdapter(
         holder.bind(item, cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
     }
 
-    fun onFocusedPositionChanged(context: Context, position: Int) {
-        val count = items.size
-        if (count <= 1) return
+    private fun hasRealItems(list: List<ModernCarouselItem>): Boolean {
+        for (i in list.indices) {
+            val item = list[i]
+            val url = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+            if (!url.isNullOrBlank() && !url.trim().isPlaceholder()) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun scheduleInitialEdgePrefetch(rv: RecyclerView, list: List<ModernCarouselItem>) {
+        if (list.size <= 1 || !hasRealItems(list)) return
+        rv.post {
+            if (attachedRecyclerView === rv &&
+                rv.isAttachedToWindow &&
+                hasRealItems(items) &&
+                (rv.hasFocus() || LeanbackArtworkLoader.isRowNearViewport(rv))
+            ) {
+                val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(rv)
+                if (lastVisible < 0 || firstVisible > 0 || items.size > lastVisible + 1) {
+                    prefetchFromVisibleRange(rv.context)
+                }
+            }
+        }
+    }
+
+    private fun prefetchItemAt(context: Context, imageLoader: coil3.ImageLoader, index: Int) {
+        val nextItem = items.getOrNull(index) ?: return
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
-        val aheadMax = minOf(position + 2, count - 1)
-        if (position + 1 > aheadMax) return
+        val nextUrl = nextItem.imageUrl ?: nextItem.heroPreview.poster ?: nextItem.heroPreview.backdrop
+        LeanbackArtworkLoader.prefetch(
+            context = context,
+            imageLoader = imageLoader,
+            imageUrl = nextUrl,
+            fallbackUrl = nextItem.metaPreview?.rawPosterUrl,
+            widthPx = wPx,
+            heightPx = hPx,
+            prefetchedKeysTracker = prefetchedKeys
+        )
+    }
+
+    private fun prefetchRowIndices(
+        context: Context,
+        focusedPosition: Int,
+        firstVisiblePosition: Int,
+        lastVisiblePosition: Int,
+        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
+        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+    ) {
+        val count = items.size
+        if (count <= 1) return
+        val indices = LeanbackArtworkLoader.computeHorizontalPrefetchIndices(
+            focusedPosition = focusedPosition,
+            firstVisiblePosition = firstVisiblePosition,
+            lastVisiblePosition = lastVisiblePosition,
+            itemCount = count,
+            aheadCount = aheadCount,
+            behindCount = behindCount
+        )
+        if (indices.isEmpty()) return
         val imageLoader = SingletonImageLoader.get(context)
-        for (i in (position + 1)..aheadMax) {
-            val nextItem = items.getOrNull(i) ?: continue
-            val nextUrl = nextItem.imageUrl ?: nextItem.heroPreview.poster ?: nextItem.heroPreview.backdrop
-            LeanbackArtworkLoader.prefetch(
-                context = context,
-                imageLoader = imageLoader,
-                imageUrl = nextUrl,
-                fallbackUrl = nextItem.metaPreview?.rawPosterUrl,
-                widthPx = wPx,
-                heightPx = hPx,
-                prefetchedKeysTracker = prefetchedKeys
-            )
+        for (i in indices.indices) {
+            prefetchItemAt(context, imageLoader, indices[i])
         }
+    }
+
+    fun prefetchFromVisibleRange(
+        context: Context,
+        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
+        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+    ) {
+        val rv = attachedRecyclerView ?: return
+        val count = items.size
+        if (count <= 1 || !hasRealItems(items)) return
+        val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(rv)
+        val focusedPosition = (rv as? BaseGridView)?.selectedPosition
+            ?.takeIf { it in 0 until count }
+            ?: if (firstVisible >= 0) firstVisible else 0
+        prefetchRowIndices(
+            context = context,
+            focusedPosition = focusedPosition,
+            firstVisiblePosition = firstVisible,
+            lastVisiblePosition = lastVisible,
+            aheadCount = aheadCount,
+            behindCount = behindCount
+        )
+    }
+
+    @JvmOverloads
+    fun onFocusedPositionChanged(
+        context: Context,
+        position: Int,
+        aheadCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_AHEAD,
+        behindCount: Int = LeanbackArtworkLoader.DEFAULT_HORIZONTAL_PREFETCH_BEHIND
+    ) {
+        val count = items.size
+        if (count <= 1) return
+        val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(attachedRecyclerView)
+        prefetchRowIndices(
+            context = context,
+            focusedPosition = position,
+            firstVisiblePosition = firstVisible,
+            lastVisiblePosition = lastVisible,
+            aheadCount = aheadCount,
+            behindCount = behindCount
+        )
     }
 
     override fun onViewRecycled(holder: LeanbackCardViewHolder) {
@@ -726,8 +878,8 @@ internal fun resolveRowTargetGlowColor(
         return vh.currentDominantColor
     }
     if (fallbackItem != null) {
-        val imageUrl = fallbackItem.imageUrl ?: fallbackItem.heroPreview.poster ?: fallbackItem.heroPreview.backdrop
-        val colorCacheKey = imageUrl ?: fallbackItem.key
+        val rawUrl = fallbackItem.imageUrl ?: fallbackItem.heroPreview.poster ?: fallbackItem.heroPreview.backdrop
+        val colorCacheKey = rawUrl?.takeIf { !it.isBlank() && !it.trim().isPlaceholder() } ?: fallbackItem.key
         val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
         if (cachedColor != null && cachedColor != 0 && cachedColor != Color.WHITE && cachedColor != Color.BLACK) {
             return cachedColor
