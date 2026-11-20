@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.LocaleCache
+import com.nuvio.tv.core.image.HomeImageLoadingProfile
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
 import com.nuvio.tv.core.recommendations.TvRecommendationManager
 import com.nuvio.tv.core.tmdb.MetaPreviewEnricher
@@ -103,7 +104,6 @@ class HomeViewModel @Inject constructor(
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
-        private const val MAX_CATALOG_LOAD_CONCURRENCY = 3
 
         /** How long a home catalog is left alone before a return to Home re-requests it. */
         private const val HOME_CATALOG_REFRESH_TTL_MS = 15L * 60L * 1000L
@@ -239,7 +239,16 @@ class HomeViewModel @Inject constructor(
     internal var currentHeroCatalogKeys: List<String> = emptyList()
     internal var catalogUpdateJob: Job? = null
     internal var hasRenderedFirstCatalog = false
-    internal val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
+    internal val imageLoadingProfile: HomeImageLoadingProfile by lazy {
+        HomeImageLoadingProfile.forContext(appContext)
+    }
+    internal val catalogLoadSemaphore: Semaphore by lazy {
+        Semaphore(imageLoadingProfile.catalogConcurrency)
+    }
+    internal var dripLazyCatalogJob: Job? = null
+    internal var isOpenFilesHighCheck: () -> Boolean = {
+        com.nuvio.tv.data.repository.OpenFilesGuard.isHigh()
+    }
     internal var pendingCatalogLoads = 0
     internal val activeCatalogLoadJobs = mutableSetOf<Job>()
     internal var activeCatalogLoadSignature: String? = null
@@ -337,7 +346,7 @@ class HomeViewModel @Inject constructor(
     internal var startupAuthNoticeJob: Job? = null
 
     // Lazy catalog loading
-    internal val eagerCatalogLoadCount: Int = 4
+    internal val eagerCatalogLoadCount: Int get() = imageLoadingProfile.eagerCatalogRows
     internal val lazyLoadRequestedKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
     internal val pendingLazyCatalogs = linkedMapOf<String, Pair<Addon, CatalogDescriptor>>()
     /** All placeholder descriptors for homeRow construction. */
@@ -928,14 +937,14 @@ class HomeViewModel @Inject constructor(
                 // catalog arrivals are batched into a single heavy update pass.
                 !hasRenderedFirstCatalog && hasAnyCatalogRows() -> {
                     hasRenderedFirstCatalog = true
-                    150L
+                    120L
                 }
                 // During bulk loading, batch aggressively — placeholders are
                 // already visible so the user won't notice the delay.
-                pendingCatalogLoads > 8 -> 300L
-                pendingCatalogLoads > 3 -> 250L
-                pendingCatalogLoads > 0 -> 200L
-                else -> 80L
+                pendingCatalogLoads > 8 -> 180L
+                pendingCatalogLoads > 3 -> 120L
+                pendingCatalogLoads > 0 -> 60L
+                else -> 50L
             }
             delay(debounceMs)
             updateCatalogRows()
@@ -961,7 +970,7 @@ class HomeViewModel @Inject constructor(
         val (addon, catalog) = pair
         val generation = catalogLoadGeneration
         pendingCatalogLoads = (pendingCatalogLoads + 1)
-        loadCatalogPipeline(addon, catalog, generation)
+        loadCatalogPipeline(addon, catalog, generation, isLazyLoad = true)
     }
 
     /**
@@ -1084,6 +1093,7 @@ class HomeViewModel @Inject constructor(
         posterStatusReconcileJob?.cancel()
         movieWatchedBatchJob?.cancel()
         seriesWatchedObserverJob?.cancel()
+        dripLazyCatalogJob?.cancel()
         cancelInFlightCatalogLoads()
         movieWatchedObserverJobs.values.forEach { it.cancel() }
         movieWatchedObserverJobs.clear()
