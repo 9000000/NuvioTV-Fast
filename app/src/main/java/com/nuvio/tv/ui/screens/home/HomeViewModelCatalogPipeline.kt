@@ -161,6 +161,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     lastHomeCatalogRefreshAtMs = android.os.SystemClock.elapsedRealtime()
     catalogLoadGeneration += 1
     val generation = catalogLoadGeneration
+    dripLazyCatalogJob?.cancel()
     cancelInFlightCatalogLoads()
 
     // On reload (not first load), keep existing UI data visible while new
@@ -343,6 +344,10 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         eagerCatalogs.forEach { (addon, catalog) ->
             loadCatalogPipeline(addon, catalog, generation)
         }
+        if (eagerCatalogs.isEmpty()) {
+            catalogsLoadInProgress = false
+            scheduleBackgroundDripLazyCatalogs(generation)
+        }
 
         // Immediately schedule an update so placeholder rows appear in the UI
         // while catalogs are still loading.
@@ -415,7 +420,8 @@ internal fun HomeViewModel.loadCatalogPipeline(
     /** True only for the ON_RESUME refresh, where a row already on screen must be merged into. */
     isRefresh: Boolean = false,
     requestedByUser: Boolean = false,
-    forceReplace: Boolean = false
+    forceReplace: Boolean = false,
+    isLazyLoad: Boolean = false
 ) {
     val loadJob = viewModelScope.launch {
         var hasCountedCompletion = false
@@ -455,7 +461,8 @@ internal fun HomeViewModel.loadCatalogPipeline(
                         synchronized(catalogStateLock) {
                             placeholderDescriptors.removeAll { it.catalogKey == key }
                         }
-                        if (!hasCountedCompletion) {
+                        val countedThisCompletion = !hasCountedCompletion
+                        if (countedThisCompletion) {
                             pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
                             hasCountedCompletion = true
                         }
@@ -466,19 +473,15 @@ internal fun HomeViewModel.loadCatalogPipeline(
                         if (pendingCatalogLoads == 0) {
                             catalogsLoadInProgress = false
                         }
-                        // Batch updates: only trigger a UI rebuild when all
-                        // eager catalogs have completed, or let the debounce
-                        // in scheduleUpdateCatalogRows coalesce intermediate
-                        // arrivals.  When pending == 0 we always flush.
-                        if (pendingCatalogLoads == 0) {
-                            scheduleUpdateCatalogRows()
-                        } else if (!hasRenderedFirstCatalog) {
-                            // First content arriving — show it quickly so the
-                            // user sees something beyond placeholders.
+                        // Flush immediately when all pending loads complete, on the initial
+                        // catalog render, or whenever a lazy row finishes so slower sibling
+                        // loads never stall its display.
+                        if (pendingCatalogLoads == 0 || !hasRenderedFirstCatalog || isLazyLoad) {
                             scheduleUpdateCatalogRows()
                         }
-                        // Otherwise, let the next completion or the final
-                        // pendingCatalogLoads==0 trigger the update.
+                        if (countedThisCompletion && !isLazyLoad && !isRefresh && pendingCatalogLoads == 0) {
+                            scheduleBackgroundDripLazyCatalogs(generation)
+                        }
                     }
                     is NetworkResult.Error -> {
                         val errorKey = catalogKey(
@@ -490,7 +493,8 @@ internal fun HomeViewModel.loadCatalogPipeline(
                         synchronized(catalogStateLock) {
                             placeholderDescriptors.removeAll { it.catalogKey == errorKey }
                         }
-                        if (!hasCountedCompletion) {
+                        val countedThisCompletion = !hasCountedCompletion
+                        if (countedThisCompletion) {
                             pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
                             hasCountedCompletion = true
                         }
@@ -502,8 +506,11 @@ internal fun HomeViewModel.loadCatalogPipeline(
                             catalogsLoadInProgress = false
                         }
                         // Same batching logic as success path.
-                        if (pendingCatalogLoads == 0 || !hasRenderedFirstCatalog) {
+                        if (pendingCatalogLoads == 0 || !hasRenderedFirstCatalog || isLazyLoad) {
                             scheduleUpdateCatalogRows()
+                        }
+                        if (countedThisCompletion && !isLazyLoad && !isRefresh && pendingCatalogLoads == 0) {
+                            scheduleBackgroundDripLazyCatalogs(generation)
                         }
                     }
                     NetworkResult.Loading -> {
@@ -514,6 +521,60 @@ internal fun HomeViewModel.loadCatalogPipeline(
         }
     }
     registerCatalogLoadJob(loadJob)
+}
+
+/**
+ * Progressively preloads a bounded window of unrequested lazy rows just below the fold
+ * after the eager wave settles, stepping back when open-file pressure is high.
+ */
+internal fun HomeViewModel.scheduleBackgroundDripLazyCatalogs(
+    generation: Long,
+    initialDelayMs: Long = 350L,
+    batchDelayMs: Long = 150L
+) {
+    dripLazyCatalogJob?.cancel()
+    dripLazyCatalogJob = viewModelScope.launch {
+        if (initialDelayMs > 0L) {
+            delay(initialDelayMs)
+        }
+        if (generation != catalogLoadGeneration) return@launch
+        if (isOpenFilesHighCheck()) {
+            Log.d(HomeViewModel.TAG, "Skipping background drip-load due to high open file count")
+            return@launch
+        }
+
+        val maxWindow = imageLoadingProfile.eagerCatalogRows + imageLoadingProfile.dripAheadRows
+        val orderedCatalogKeys = snapshotCatalogState().first
+            .asSequence()
+            .filterNot { it.startsWith("collection_") }
+            .take(maxWindow)
+            .toList()
+
+        val keysToDrip = synchronized(catalogStateLock) {
+            orderedCatalogKeys.filter { key ->
+                key !in lazyLoadRequestedKeys &&
+                    catalogsMap[key] == null &&
+                    pendingLazyCatalogs.containsKey(key)
+            }
+        }.take(imageLoadingProfile.dripAheadRows)
+
+        if (keysToDrip.isEmpty()) return@launch
+
+        val batches = keysToDrip.chunked(2)
+        batches.forEachIndexed { batchIndex, batch ->
+            if (generation != catalogLoadGeneration) return@launch
+            if (isOpenFilesHighCheck()) {
+                Log.d(HomeViewModel.TAG, "Stopping background drip-load due to high open file count")
+                return@launch
+            }
+            batch.forEach { key ->
+                requestLazyCatalogLoad(key)
+            }
+            if (batchIndex < batches.lastIndex && batchDelayMs > 0L) {
+                delay(batchDelayMs)
+            }
+        }
+    }
 }
 
 internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addonId: String, type: String) {

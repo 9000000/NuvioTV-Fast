@@ -344,10 +344,9 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                 hasSameModernPresentationStructure(old, new)
             }
             .debounce {
-                // Use a longer debounce while catalogs are still loading to
-                // avoid repeated expensive presentation builds during the
-                // initial burst of catalog arrivals.
-                if (catalogsLoadInProgress) 300L else 80L
+                // Use a longer debounce only before the first catalog render so
+                // subsequent eager and lazy row updates propagate rapidly.
+                if (!hasRenderedFirstCatalog && catalogsLoadInProgress) 180L else 50L
             }
             .collectLatest { input ->
                 val shouldWarmStart = _modernHomePresentation.value.rows.list.isEmpty()

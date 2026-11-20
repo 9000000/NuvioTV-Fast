@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
+import com.nuvio.tv.core.poster.CustomPosterScreen
+import com.nuvio.tv.core.poster.patternForScreen
 import com.nuvio.tv.core.poster.withCustomPosterUrls
 import com.nuvio.tv.data.mapper.toDomainOrNull
 import com.nuvio.tv.data.mediaserver.ServerCatalog
@@ -71,6 +73,9 @@ class CatalogRepositoryImpl @Inject constructor(
     private val moshi: Moshi = Moshi.Builder().build()
     private val catalogResponseAdapter = moshi.adapter(CatalogResponseDto::class.java)
 
+    @Volatile private var cachedPosterPattern: String? = null
+    @Volatile private var cachedEnabledScreens: Set<CustomPosterScreen>? = null
+
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val diskStore: CatalogDiskStore? by lazy {
         runCatching {
@@ -85,6 +90,26 @@ class CatalogRepositoryImpl @Inject constructor(
 
     init {
         ioScope.launch { runCatching { diskStore?.warm() } }
+        ioScope.launch {
+            try {
+                layoutPreferenceDataStore.customPosterUrlPattern.collect { pattern ->
+                    cachedPosterPattern = pattern
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
+        }
+        ioScope.launch {
+            try {
+                layoutPreferenceDataStore.customPosterEnabledScreens.collect { screens ->
+                    cachedEnabledScreens = screens
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     override fun getCatalog(
@@ -98,14 +123,15 @@ class CatalogRepositoryImpl @Inject constructor(
         skipStep: Int,
         extraArgs: Map<String, String>,
         supportsSkip: Boolean,
-        posterScreen: com.nuvio.tv.core.poster.CustomPosterScreen
+        posterScreen: CustomPosterScreen
     ): Flow<NetworkResult<CatalogRow>> = flow {
         emit(NetworkResult.Loading)
 
-        val posterPattern = layoutPreferenceDataStore.customPosterUrlPattern
-            .let { flow -> flow.first() }
-        val enabledScreens = layoutPreferenceDataStore.customPosterEnabledScreens.first()
-        val effectivePosterPattern = com.nuvio.tv.core.poster.patternForScreen(posterPattern, posterScreen, enabledScreens)
+        val posterPattern = cachedPosterPattern
+            ?: layoutPreferenceDataStore.customPosterUrlPattern.first().also { cachedPosterPattern = it }
+        val enabledScreens = cachedEnabledScreens
+            ?: layoutPreferenceDataStore.customPosterEnabledScreens.first().also { cachedEnabledScreens = it }
+        val effectivePosterPattern = patternForScreen(posterPattern, posterScreen, enabledScreens)
 
         if (ServerCatalog.isServerAddon(addonBaseUrl)) {
             val row = try {
