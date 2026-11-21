@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.core.tts.GoogleTtsVoiceInfo
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.ui.components.P2pConsentDialog
 
@@ -123,7 +124,8 @@ internal fun PlaybackSettingsDialogs(
     onDismiss: () -> Unit,
     customFontName: String? = null,
     onPickCustomFont: () -> Unit = {},
-    onClearCustomFont: () -> Unit = {}
+    onClearCustomFont: () -> Unit = {},
+    ttsVoices: List<GoogleTtsVoiceInfo> = emptyList()
 ) {
     when (dialog) {
         null -> Unit
@@ -152,7 +154,7 @@ internal fun PlaybackSettingsDialogs(
         )
         else -> {
             AutoPlaySettingsDialogs(dialog, settings, installedAddonNames, enabledPluginNames, onUpdate, onDismiss)
-            AudioSettingsDialogs(dialog, settings, onUpdate, onDismiss)
+            AudioSettingsDialogs(dialog, settings, onUpdate, onDismiss, ttsVoices)
             SubtitleSettingsDialogs(dialog, settings, onUpdate, onDismiss, customFontName, onPickCustomFont, onClearCustomFont)
             VideoSettingsDialogs(dialog, settings, onUpdate, onDismiss)
             P2pSettingsDialogs(dialog, p2p, onUpdate, onDismiss)

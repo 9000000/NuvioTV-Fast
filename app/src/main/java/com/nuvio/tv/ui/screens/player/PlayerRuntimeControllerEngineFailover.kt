@@ -102,6 +102,7 @@ internal fun PlayerRuntimeController.switchToInternalPlayerEngine(
             showControls = false,
             showAudioOverlay = false,
             showSubtitleOverlay = false,
+            showTtsOverlay = false,
             showSubtitleStylePanel = false,
             showSubtitleDelayOverlay = false,
             showSpeedDialog = false,

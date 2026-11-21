@@ -366,7 +366,16 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         durationMs = playerDuration
                     )
                     val playingNow = view.isPlayingNow()
-                    subtitleCueTracker.updateText(view.currentSubtitleText())
+                    val mpvSubText = view.currentSubtitleText()
+                    val mpvSubTiming = if (!mpvSubText.isNullOrBlank()) {
+                        view.getSubtitleCueTimingContext(
+                            rawText = mpvSubText,
+                            playbackSpeed = _uiState.value.playbackSpeed
+                        )
+                    } else {
+                        null
+                    }
+                    subtitleCueTracker.updateTextWithTiming(mpvSubText, mpvSubTiming)
                     val cacheBuffering = view.isPausedForCacheNow() || view.isCoreIdleNow()
                     var firstFrameReady = hasRenderedFirstFrame
                         if (!firstFrameReady) {
@@ -1319,7 +1328,8 @@ fun PlayerRuntimeController.scheduleHideControls() {
     hideControlsJob = scope.launch {
         delay(3000)
         if (_uiState.value.isPlaying && !_uiState.value.showAudioOverlay &&
-            !_uiState.value.showSubtitleOverlay && !_uiState.value.showSubtitleStylePanel &&
+            !_uiState.value.showSubtitleOverlay && !_uiState.value.showTtsOverlay &&
+            !_uiState.value.showSubtitleStylePanel &&
             !_uiState.value.showSpeedDialog && !_uiState.value.showMoreDialog &&
             !_uiState.value.showSubtitleDelayOverlay &&
             !_uiState.value.showSubtitleTimingDialog &&
@@ -1340,6 +1350,7 @@ internal fun PlayerRuntimeController.showSubtitleDelayOverlay() {
             showSubtitleDelayOverlay = true,
             showAudioOverlay = false,
             showSubtitleOverlay = false,
+            showTtsOverlay = false,
             showSubtitleStylePanel = false,
             showSubtitleTimingDialog = false,
             showSpeedDialog = false
@@ -1434,7 +1445,7 @@ internal fun PlayerRuntimeController.schedulePauseOverlay() {
         val s = _uiState.value
         val anyPanelOpen = s.showSubtitleOverlay || s.showSubtitleStylePanel ||
             s.showSpeedDialog || s.showMoreDialog || s.showEpisodesPanel ||
-            s.showSourcesPanel || s.showChaptersPanel || s.showAudioOverlay || s.showStreamInfoOverlay ||
+            s.showSourcesPanel || s.showChaptersPanel || s.showAudioOverlay || s.showTtsOverlay || s.showStreamInfoOverlay ||
             s.showSubtitleTimingDialog || s.showSubtitleDelayOverlay || s.showPartyPanel
         if (!s.isPlaying && s.pauseOverlayEnabled && s.error == null && !anyPanelOpen) {
             _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
@@ -1793,10 +1804,12 @@ fun PlayerRuntimeController.onEvent(
             }
         }
         PlayerEvent.OnShowAudioOverlay -> {
+            hideControlsJob?.cancel()
             _uiState.update {
                 it.copy(
                     showAudioOverlay = true,
                     showSubtitleOverlay = false,
+                    showTtsOverlay = false,
                     showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleTimingDialog = false,
@@ -1806,10 +1819,12 @@ fun PlayerRuntimeController.onEvent(
             }
         }
         PlayerEvent.OnShowSubtitleOverlay -> {
+            hideControlsJob?.cancel()
             _uiState.update {
                 it.copy(
                     showSubtitleOverlay = true,
                     showAudioOverlay = false,
+                    showTtsOverlay = false,
                     showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleTimingDialog = false,
@@ -1819,9 +1834,11 @@ fun PlayerRuntimeController.onEvent(
             }
         }
         PlayerEvent.OnOpenSubtitleStylePanel -> {
+            hideControlsJob?.cancel()
             _uiState.update {
                 it.copy(
                     showSubtitleOverlay = false,
+                    showTtsOverlay = false,
                     showSubtitleStylePanel = true,
                     showMoreDialog = false,
                     showSubtitleTimingDialog = false,
@@ -1882,6 +1899,7 @@ fun PlayerRuntimeController.onEvent(
                     showSpeedDialog = true,
                     showAudioOverlay = false,
                     showSubtitleOverlay = false,
+                    showTtsOverlay = false,
                     showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleTimingDialog = false,
@@ -1896,6 +1914,7 @@ fun PlayerRuntimeController.onEvent(
                     showMoreDialog = true,
                     showAudioOverlay = false,
                     showSubtitleOverlay = false,
+                    showTtsOverlay = false,
                     showSubtitleStylePanel = false,
                     showSubtitleTimingDialog = false,
                     showSubtitleDelayOverlay = false,
@@ -1973,6 +1992,7 @@ fun PlayerRuntimeController.onEvent(
                 it.copy(
                     showAudioOverlay = false,
                     showSubtitleOverlay = false,
+                    showTtsOverlay = false,
                     showSubtitleStylePanel = false,
                     showSubtitleTimingDialog = false,
                     showSpeedDialog = false,
@@ -2218,6 +2238,71 @@ fun PlayerRuntimeController.onEvent(
                     deviceLocalPlayerPreferences.setPlayerStatsHudActive(newActive)
                 }
             }
+        }
+        PlayerEvent.OnShowTtsOverlay -> {
+            hideControlsJob?.cancel()
+            cancelPauseOverlay()
+            subtitleTtsCoordinator.refreshVoices()
+            _uiState.update {
+                it.copy(
+                    showTtsOverlay = true,
+                    showAudioOverlay = false,
+                    showSubtitleOverlay = false,
+                    showSubtitleStylePanel = false,
+                    showMoreDialog = false,
+                    showSubtitleTimingDialog = false,
+                    showSubtitleDelayOverlay = false,
+                    showSpeedDialog = false,
+                    showControls = true
+                )
+            }
+        }
+        PlayerEvent.OnDismissTtsOverlay -> {
+            _uiState.update { it.copy(showTtsOverlay = false) }
+            scheduleHideControls()
+        }
+        is PlayerEvent.OnSetTtsEnabled -> {
+            scope.launch { playerSettingsDataStore.setTtsEnabled(event.enabled) }
+        }
+        is PlayerEvent.OnSetTtsVoiceName -> {
+            scope.launch { playerSettingsDataStore.setTtsVoiceName(event.voiceName) }
+        }
+        is PlayerEvent.OnSetTtsAllowNetworkVoiceFallback -> {
+            scope.launch { playerSettingsDataStore.setTtsAllowNetworkVoiceFallback(event.allowed) }
+        }
+        is PlayerEvent.OnSetTtsMovieVolume -> {
+            scope.launch { playerSettingsDataStore.setTtsMovieVolume(event.volume) }
+        }
+        is PlayerEvent.OnSetTtsVoiceVolume -> {
+            scope.launch { playerSettingsDataStore.setTtsVoiceVolume(event.volume) }
+        }
+        is PlayerEvent.OnSetTtsBaseSpeed -> {
+            scope.launch { playerSettingsDataStore.setTtsBaseSpeed(event.speed) }
+        }
+        is PlayerEvent.OnSetTtsPitch -> {
+            scope.launch { playerSettingsDataStore.setTtsPitch(event.pitch) }
+        }
+        is PlayerEvent.OnSetTtsAutoSpeedEnabled -> {
+            scope.launch { playerSettingsDataStore.setTtsAutoSpeedEnabled(event.enabled) }
+        }
+        is PlayerEvent.OnSetTtsMaxAutoSpeed -> {
+            scope.launch { playerSettingsDataStore.setTtsMaxAutoSpeed(event.maxSpeed) }
+        }
+        is PlayerEvent.OnSetTtsWaitForCueCompletion -> {
+            scope.launch { playerSettingsDataStore.setTtsWaitForCueCompletion(event.waitForCue) }
+        }
+        is PlayerEvent.OnSetTtsHideSubtitlesWhenEnabled -> {
+            scope.launch { playerSettingsDataStore.setTtsHideSubtitlesWhenEnabled(event.hideSubtitles) }
+        }
+        is PlayerEvent.OnPreviewTtsVoice -> {
+            if (event.sampleText != null) {
+                subtitleTtsCoordinator.previewVoice(sampleText = event.sampleText)
+            } else {
+                subtitleTtsCoordinator.previewVoice()
+            }
+        }
+        PlayerEvent.OnOpenTtsVoiceInstaller -> {
+            subtitleTtsCoordinator.openOfflineVoiceDataInstaller(context)
         }
     }
 }

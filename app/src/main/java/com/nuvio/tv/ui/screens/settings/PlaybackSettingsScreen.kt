@@ -92,6 +92,7 @@ fun PlaybackSettingsContent(
     )
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val enabledPluginNames by viewModel.enabledPluginNames.collectAsStateWithLifecycle(initialValue = emptyList())
+    val ttsVoices by viewModel.ttsVoices.collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var openDialog by remember { mutableStateOf<PlaybackDialog?>(null) }
@@ -210,6 +211,7 @@ fun PlaybackSettingsContent(
                 viewModel.clearCustomSubtitleFont()
                 customFontName = null
             }
-        }
+        },
+        ttsVoices = ttsVoices
     )
 }

@@ -23,6 +23,7 @@ import com.nuvio.tv.core.cloud.CloudLibraryPlaybackProgressStore
 import com.nuvio.tv.core.cloud.CloudLibraryPlaybackSessionStore
 import com.nuvio.tv.core.cloud.CloudLibraryRepository
 import com.nuvio.tv.core.plugin.PluginManager
+import com.nuvio.tv.core.tts.SubtitleTtsCoordinator
 import com.nuvio.tv.core.tracking.TrackingMediaReference
 import com.nuvio.tv.core.tracking.TrackingScrobbleCoordinator
 import com.nuvio.tv.core.torrent.TorrentService
@@ -113,6 +114,7 @@ class PlayerRuntimeController(
     internal val serverPlayback: ServerPlayback,
     internal val serverStreams: ServerStreams,
     internal val party: com.nuvio.tv.core.party.PartyRepository,
+    internal val subtitleTtsCoordinator: SubtitleTtsCoordinator,
     internal val profileId: Int,
     internal val savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
@@ -120,6 +122,8 @@ class PlayerRuntimeController(
 
     /** Resolved once so every `context.getString(...)` here follows the app language. */
     internal val context: Context = context.withAppLocale()
+
+    internal var ttsSessionToken: Long? = null
 
     companion object {
         private val CONVERTIBLE_DV_PROFILES = setOf("5", "7")
@@ -852,6 +856,7 @@ class PlayerRuntimeController(
         // causing the resume seek to be silently lost when ExoPlayer's STATE_READY
         // fired before the DB read completed.
         observeSubtitleSettings()
+        observeSubtitleTts()
         if (contentType.equals("cloud", ignoreCase = true)) {
             initializeCloudPlaybackSequence()
         } else {

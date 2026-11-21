@@ -17,6 +17,16 @@ internal fun PlayerRuntimeController.refreshStyledSubtitles() {
 internal fun PlayerRuntimeController.syncMpvStyledSubtitles() {
     val view = mpvView ?: return
     styledSubtitles.showMpvText(view.syncStyledSubtitles(_uiState.value.subtitleStyle.usesStyledRenderer))
+    val subText = view.currentSubtitleText()
+    val timingContext = if (!subText.isNullOrBlank()) {
+        view.getSubtitleCueTimingContext(
+            rawText = subText,
+            playbackSpeed = _uiState.value.playbackSpeed
+        )
+    } else {
+        null
+    }
+    subtitleCueTracker.updateTextWithTiming(subText, timingContext)
 }
 
 private fun PlayerRuntimeController.canStyleExoSubtitles(): Boolean =

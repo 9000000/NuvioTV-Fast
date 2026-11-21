@@ -3740,4 +3740,43 @@
     <string name="player_error_startup_no_stream_data">Playback did not start - the stream did not deliver data in time. The source may be slow or unavailable. Press back to try again, or pick a different stream.</string>
 <string name="stream_resume_from_time">Resume from %1$s</string>
     <string name="stream_resume_from_percent">Resume from %1$d%%</string>
+
+    <!-- Subtitle TTS (Google Offline Text-to-Speech) -->
+    <string name="tts_settings_header">Subtitle Narration (Google TTS)</string>
+    <string name="tts_enable_title">Read Subtitles Aloud</string>
+    <string name="tts_enable_subtitle">Use Google Text-to-Speech to read subtitles aloud</string>
+    <string name="tts_voice_title">Voice</string>
+    <string name="tts_voice_subtitle">Select Google TTS voice (offline preferred)</string>
+    <string name="tts_voice_default">System Default</string>
+    <string name="tts_voice_not_available">No voices available</string>
+    <string name="tts_voice_offline_tag">Offline</string>
+    <string name="tts_voice_online_tag">Online</string>
+    <string name="tts_allow_network_fallback_title">Allow Network Voice Fallback</string>
+    <string name="tts_allow_network_fallback_subtitle">Use online voice if offline voice is not installed</string>
+    <string name="tts_movie_volume_title">Movie Volume While Speaking</string>
+    <string name="tts_movie_volume_subtitle">Lower background audio so voice is clear</string>
+    <string name="tts_voice_volume_title">Voice Volume</string>
+    <string name="tts_voice_volume_subtitle">Adjust volume of spoken subtitles</string>
+    <string name="tts_base_speed_title">Base Speech Speed</string>
+    <string name="tts_pitch_title">Speech Pitch</string>
+    <string name="tts_auto_speed_title">Adaptive Speed (Match Subtitle Duration)</string>
+    <string name="tts_auto_speed_subtitle">Speed up dynamically to finish before next subtitle</string>
+    <string name="tts_max_auto_speed_title">Maximum Adaptive Speed</string>
+    <string name="tts_wait_for_cue_title">Wait for Cue Completion</string>
+    <string name="tts_wait_for_cue_subtitle">Delay next subtitle if current speech is still speaking</string>
+    <string name="tts_hide_subtitles_title">Hide Visual Subtitles</string>
+    <string name="tts_hide_subtitles_subtitle">Only hear voice without displaying text on screen</string>
+    <string name="tts_install_voice_title">Install Offline Voice Data</string>
+    <string name="tts_install_voice_subtitle">Open system settings to download offline voice pack</string>
+    <string name="tts_preview_button">Preview Voice</string>
+    <string name="tts_preview_toast">Playing sample speech...</string>
+    <string name="tts_install_voice_error">Could not open system TTS voice settings</string>
+    <string name="player_tts_dialog_title">Subtitle Narration</string>
+    <string name="player_tts_not_installed">Google Speech Services is not installed or unavailable</string>
+    <string name="player_tts_install_button">Install Voices</string>
+    <string name="player_tts_button_desc">Subtitle Narration</string>
+    <string name="player_tts_status_ready">Ready</string>
+    <string name="player_tts_status_not_ready">Unavailable</string>
+    <string name="player_tts_speed_format">%1$.2fx</string>
+    <string name="player_tts_percent_format">%1$d%%</string>
 </resources>

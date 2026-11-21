@@ -62,6 +62,7 @@ internal fun PlayerRuntimeController.showPartyPanel() {
             showMoreDialog = false,
             showAudioOverlay = false,
             showSubtitleOverlay = false,
+            showTtsOverlay = false,
             showSubtitleStylePanel = false,
             showSubtitleTimingDialog = false,
             showSpeedDialog = false,

@@ -317,16 +317,62 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         mpv.setPropertyDouble("speed", speed.toDouble())
     }
 
-    fun applyAudioAmplificationDb(db: Int) {
+    private var lastAmplificationDb: Int = 0
+    private var lastDuckingVolumeScale: Float = 1.0f
+    private var ttsHideSubtitles: Boolean = false
+
+    fun applyAudioOutputLevel(
+        db: Int = lastAmplificationDb,
+        duckingVolumeScale: Float = lastDuckingVolumeScale
+    ) {
+        lastAmplificationDb = db
+        lastDuckingVolumeScale = duckingVolumeScale.coerceIn(0.0f, 1.0f)
         if (!initialized) return
         val clampedDb = db.coerceIn(AUDIO_AMPLIFICATION_MIN_DB, AUDIO_AMPLIFICATION_MAX_DB)
-        val linearScale = 10.0.pow(clampedDb / 20.0)
+        val linearScale = 10.0.pow(clampedDb / 20.0) * lastDuckingVolumeScale
         val targetVolumePercent = (100.0 * linearScale).coerceIn(0.0, MPV_MAX_VOLUME_PERCENT)
         runCatching {
             mpv.setPropertyDouble("volume", targetVolumePercent)
         }.onFailure {
-            Log.w(TAG, "Failed to apply audio amplification on mpv (db=$clampedDb): ${it.message}")
+            Log.w(TAG, "Failed to apply audio output level on mpv (db=$clampedDb, scale=$lastDuckingVolumeScale): ${it.message}")
         }
+    }
+
+    fun applyAudioAmplificationDb(db: Int) {
+        applyAudioOutputLevel(db = db, duckingVolumeScale = lastDuckingVolumeScale)
+    }
+
+    fun setTtsHideSubtitles(hidden: Boolean) {
+        ttsHideSubtitles = hidden
+        if (!initialized) return
+        runCatching {
+            if (hidden) {
+                mpv.setPropertyBoolean("sub-visibility", false)
+            } else {
+                mpv.setPropertyBoolean("sub-visibility", !styledSubtitlesEnabled)
+            }
+        }.onFailure {
+            Log.w(TAG, "Failed to set sub-visibility for TTS: ${it.message}")
+        }
+    }
+
+    fun getSubtitleCueTimingContext(rawText: String = "", playbackSpeed: Float = 1.0f): com.nuvio.tv.core.tts.SubtitleCuePlaybackContext? {
+        if (!initialized) return null
+        return runCatching {
+            val subStart = mpv.getPropertyDouble("sub-start")
+            val subEnd = mpv.getPropertyDouble("sub-end")
+            val subDelay = mpv.getPropertyDouble("sub-delay") ?: 0.0
+            val speed = mpv.getPropertyDouble("speed") ?: playbackSpeed.toDouble()
+            val timePos = mpv.getPropertyDouble("time-pos")
+            com.nuvio.tv.core.tts.SubtitleTimelineTimingHelper.fromMpvProperties(
+                rawText = rawText,
+                subStartSec = subStart,
+                subEndSec = subEnd,
+                subDelaySec = subDelay,
+                speed = speed,
+                positionSec = timePos
+            )
+        }.getOrNull()
     }
 
     fun applyAudioLanguagePreferences(languages: List<String>) {

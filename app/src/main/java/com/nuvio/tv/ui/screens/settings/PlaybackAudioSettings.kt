@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.R
+import com.nuvio.tv.core.tts.GoogleTtsVoiceInfo
 import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.AudioOutputChannels
@@ -94,6 +95,157 @@ internal fun PlaybackAudioSection(
         onToggle = { onUpdate { setRememberAudioDelayPerDevice(!settings.rememberAudioDelayPerDevice) } },
         enabled = enabled
     )
+
+    SettingsSectionLabel(text = stringResource(R.string.tts_settings_header))
+    SettingsToggleRow(
+        title = stringResource(R.string.tts_enable_title),
+        subtitle = stringResource(R.string.tts_enable_subtitle),
+        checked = settings.ttsEnabled,
+        onToggle = { onUpdate { setTtsEnabled(!settings.ttsEnabled) } },
+        enabled = enabled
+    )
+
+    if (settings.ttsEnabled) {
+        val selectedVoiceLabel = settings.ttsVoiceName?.takeIf { it.isNotBlank() }
+            ?: stringResource(R.string.tts_voice_default)
+
+        SettingsActionRow(
+            title = stringResource(R.string.tts_voice_title),
+            subtitle = stringResource(R.string.tts_voice_subtitle),
+            value = selectedVoiceLabel,
+            enabled = enabled,
+            onClick = { onOpenDialog(PlaybackDialog.TTS_VOICE) }
+        )
+
+        SettingsToggleRow(
+            title = stringResource(R.string.tts_allow_network_fallback_title),
+            subtitle = stringResource(R.string.tts_allow_network_fallback_subtitle),
+            checked = settings.ttsAllowNetworkVoiceFallback,
+            onToggle = { onUpdate { setTtsAllowNetworkVoiceFallback(!settings.ttsAllowNetworkVoiceFallback) } },
+            enabled = enabled
+        )
+
+        SettingsActionRow(
+            title = stringResource(R.string.tts_movie_volume_title),
+            subtitle = stringResource(R.string.tts_movie_volume_subtitle),
+            value = "${(settings.ttsMovieVolume * 100).toInt()}%",
+            enabled = enabled,
+            onClick = {
+                val next = com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.nextSteppedOption(
+                    com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.MOVIE_VOLUME_STEPS,
+                    settings.ttsMovieVolume
+                )
+                onUpdate { setTtsMovieVolume(next) }
+            }
+        )
+
+        SettingsActionRow(
+            title = stringResource(R.string.tts_voice_volume_title),
+            subtitle = stringResource(R.string.tts_voice_volume_subtitle),
+            value = "${(settings.ttsVoiceVolume * 100).toInt()}%",
+            enabled = enabled,
+            onClick = {
+                val next = com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.nextSteppedOption(
+                    com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.VOICE_VOLUME_STEPS,
+                    settings.ttsVoiceVolume
+                )
+                onUpdate { setTtsVoiceVolume(next) }
+            }
+        )
+
+        SettingsActionRow(
+            title = stringResource(R.string.tts_base_speed_title),
+            subtitle = null,
+            value = String.format(java.util.Locale.US, "%.2fx", settings.ttsBaseSpeed),
+            enabled = enabled,
+            onClick = {
+                val next = com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.nextSteppedOption(
+                    com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.BASE_SPEED_STEPS,
+                    settings.ttsBaseSpeed
+                )
+                onUpdate { setTtsBaseSpeed(next) }
+            }
+        )
+
+        SettingsActionRow(
+            title = stringResource(R.string.tts_pitch_title),
+            subtitle = null,
+            value = String.format(java.util.Locale.US, "%.2f", settings.ttsPitch),
+            enabled = enabled,
+            onClick = {
+                val next = com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.nextSteppedOption(
+                    com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.PITCH_STEPS,
+                    settings.ttsPitch
+                )
+                onUpdate { setTtsPitch(next) }
+            }
+        )
+
+        SettingsToggleRow(
+            title = stringResource(R.string.tts_auto_speed_title),
+            subtitle = stringResource(R.string.tts_auto_speed_subtitle),
+            checked = settings.ttsAutoSpeedEnabled,
+            onToggle = { onUpdate { setTtsAutoSpeedEnabled(!settings.ttsAutoSpeedEnabled) } },
+            enabled = enabled
+        )
+
+        if (settings.ttsAutoSpeedEnabled) {
+            SettingsActionRow(
+                title = stringResource(R.string.tts_max_auto_speed_title),
+                subtitle = null,
+                value = String.format(java.util.Locale.US, "%.2fx", settings.ttsMaxAutoSpeed),
+                enabled = enabled,
+                onClick = {
+                    val next = com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.nextSteppedOption(
+                        com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator.MAX_AUTO_SPEED_STEPS,
+                        settings.ttsMaxAutoSpeed
+                    )
+                    onUpdate { setTtsMaxAutoSpeed(next) }
+                }
+            )
+        }
+
+        SettingsToggleRow(
+            title = stringResource(R.string.tts_wait_for_cue_title),
+            subtitle = stringResource(R.string.tts_wait_for_cue_subtitle),
+            checked = settings.ttsWaitForCueCompletion,
+            onToggle = { onUpdate { setTtsWaitForCueCompletion(!settings.ttsWaitForCueCompletion) } },
+            enabled = enabled
+        )
+
+        SettingsToggleRow(
+            title = stringResource(R.string.tts_hide_subtitles_title),
+            subtitle = stringResource(R.string.tts_hide_subtitles_subtitle),
+            checked = settings.ttsHideSubtitlesWhenEnabled,
+            onToggle = { onUpdate { setTtsHideSubtitlesWhenEnabled(!settings.ttsHideSubtitlesWhenEnabled) } },
+            enabled = enabled
+        )
+
+        val context = LocalContext.current
+        SettingsActionRow(
+            title = stringResource(R.string.tts_preview_button),
+            subtitle = null,
+            enabled = enabled,
+            onClick = {
+                onUpdate { previewTtsVoice() }
+                Toast.makeText(context, context.getString(R.string.tts_preview_toast), Toast.LENGTH_SHORT).show()
+            }
+        )
+
+        SettingsActionRow(
+            title = stringResource(R.string.tts_install_voice_title),
+            subtitle = stringResource(R.string.tts_install_voice_subtitle),
+            enabled = enabled,
+            onClick = {
+                onUpdate {
+                    val success = openOfflineVoiceDataInstaller()
+                    if (!success) {
+                        Toast.makeText(context, context.getString(R.string.tts_install_voice_error), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
 
     if (!isExoEngine) return
 
@@ -349,9 +501,35 @@ internal fun AudioSettingsDialogs(
     dialog: PlaybackDialog?,
     settings: PlayerSettings,
     onUpdate: PlaybackSettingsUpdate,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    ttsVoices: List<GoogleTtsVoiceInfo> = emptyList()
 ) {
     when (dialog) {
+        PlaybackDialog.TTS_VOICE -> {
+            val defaultOption = SettingsPickerOption<String?>(
+                value = null,
+                title = stringResource(R.string.tts_voice_default)
+            )
+            val voiceOptions = listOf(defaultOption) + ttsVoices.map { voice ->
+                SettingsPickerOption<String?>(
+                    value = voice.name,
+                    title = voice.displayName
+                )
+            }
+            SettingsSingleChoiceDialog(
+                title = stringResource(R.string.tts_voice_title),
+                subtitle = stringResource(R.string.tts_voice_subtitle),
+                options = voiceOptions,
+                selectedValue = settings.ttsVoiceName,
+                onOptionSelected = { voiceName ->
+                    onUpdate { setTtsVoiceName(voiceName) }
+                    onDismiss()
+                },
+                onDismiss = onDismiss,
+                width = 460.dp,
+                maxHeight = 400.dp
+            )
+        }
         PlaybackDialog.AUDIO_LANGUAGE -> AudioLanguageSelectionDialog(
             selectedLanguage = settings.preferredAudioLanguage,
             onLanguageSelected = { language ->
@@ -617,3 +795,4 @@ internal fun DecoderPriorityDialog(
         maxHeight = 320.dp
     )
 }
+

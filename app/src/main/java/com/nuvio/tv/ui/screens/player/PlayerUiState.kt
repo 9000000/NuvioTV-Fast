@@ -1,6 +1,9 @@
 package com.nuvio.tv.ui.screens.player
 
 import androidx.media3.ui.AspectRatioFrameLayout
+import com.nuvio.tv.core.tts.GoogleTtsAvailability
+import com.nuvio.tv.core.tts.GoogleTtsVoiceInfo
+import com.nuvio.tv.core.tts.SubtitleTtsConfig
 import com.nuvio.tv.core.streams.CompiledStreamBadgeFilter
 import com.nuvio.tv.core.streams.StreamBadgePlacement
 import com.nuvio.tv.data.local.FrameRateMatchingMode
@@ -119,6 +122,11 @@ data class PlayerUiState(
     val nightMode: NightMode = NightMode.OFF,
     val isNightModeAvailable: Boolean = false,
     val showAudioOverlay: Boolean = false,
+    val showTtsOverlay: Boolean = false,
+    val ttsConfig: SubtitleTtsConfig = SubtitleTtsConfig(),
+    val ttsAvailability: GoogleTtsAvailability = GoogleTtsAvailability.INITIALIZING,
+    val ttsVoices: List<GoogleTtsVoiceInfo> = emptyList(),
+    val isDirectPassthroughActive: Boolean = false,
     val showSubtitleOverlay: Boolean = false,
     val showSubtitleStylePanel: Boolean = false,
     val showSubtitleTimingDialog: Boolean = false,
@@ -282,6 +290,9 @@ data class PlayerUiState(
     /** Brightness factor for the player controls and menus drawn over the video (1 = undimmed). */
     val playerControlsBrightness: Float
         get() = subtitleStyle.playerControlsBrightness(isHdrVideo)
+
+    val shouldHideVisualSubtitles: Boolean
+        get() = ttsConfig.shouldHideVisualSubtitles
 }
 
 internal fun PlayerUiState.clearFrameRateDetection(): PlayerUiState = copy(
@@ -440,6 +451,23 @@ sealed class PlayerEvent {
     data object OnDismissStreamInfo : PlayerEvent()
     data object OnTogglePlayerStatsHud : PlayerEvent()
     data object OnToggleTorrentStats : PlayerEvent()
+
+    // Subtitle TTS events
+    data object OnShowTtsOverlay : PlayerEvent()
+    data object OnDismissTtsOverlay : PlayerEvent()
+    data class OnSetTtsEnabled(val enabled: Boolean) : PlayerEvent()
+    data class OnSetTtsVoiceName(val voiceName: String?) : PlayerEvent()
+    data class OnSetTtsAllowNetworkVoiceFallback(val allowed: Boolean) : PlayerEvent()
+    data class OnSetTtsMovieVolume(val volume: Float) : PlayerEvent()
+    data class OnSetTtsVoiceVolume(val volume: Float) : PlayerEvent()
+    data class OnSetTtsBaseSpeed(val speed: Float) : PlayerEvent()
+    data class OnSetTtsPitch(val pitch: Float) : PlayerEvent()
+    data class OnSetTtsAutoSpeedEnabled(val enabled: Boolean) : PlayerEvent()
+    data class OnSetTtsMaxAutoSpeed(val maxSpeed: Float) : PlayerEvent()
+    data class OnSetTtsWaitForCueCompletion(val waitForCue: Boolean) : PlayerEvent()
+    data class OnSetTtsHideSubtitlesWhenEnabled(val hideSubtitles: Boolean) : PlayerEvent()
+    data class OnPreviewTtsVoice(val sampleText: String? = null) : PlayerEvent()
+    data object OnOpenTtsVoiceInstaller : PlayerEvent()
 }
 
 data class ParentalWarning(

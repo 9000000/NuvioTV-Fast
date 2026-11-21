@@ -165,6 +165,9 @@ internal fun PlayerRuntimeController.initializePlayer(
     }
     mpvMediaLoadPrepared = false
     styledSubtitles.clear()
+    if (ttsSessionToken == null) {
+        ttsSessionToken = subtitleTtsCoordinator.startSession()
+    }
     val afrPreflightToken = afrPreflightGate.token()
 
     scope.launch {

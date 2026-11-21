@@ -1,3 +1,79 @@
+# Danh Sách Task - Tích Hợp Chức Năng Đọc Phụ Đề Bằng Google TTS Offline
+
+> **Kế hoạch tương ứng**: [PLAN-subtitle-google-tts-offline.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-subtitle-google-tts-offline.md)
+> **Tham khảo**: `NuvioMobile-Fast` (đã đối chiếu tới commit `802080dd2`) · **Phạm vi**: Chỉ Google TTS Offline (không Online TTS, không Piper ONNX)
+
+---
+
+## 📋 Task Breakdown
+
+### Phase 1: Quyền Hệ Thống, Profile DataStore & Google TTS Offline + Bộ Căn Nhịp
+- [x] **TTS-01**: Khai báo `<queries>` `TTS_SERVICE` trong `AndroidManifest.xml` & mở rộng `PlayerSettings` / `PlayerSettingsDataStore`
+  - **Vai trò**: Core / Storage Engineer
+  - **Mô tả**:
+    1. Thêm `<intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>` vào `<queries>` trong `AndroidManifest.xml` cho Android 11+.
+    2. Bổ sung 11 trường cấu hình TTS (`ttsEnabled`, `ttsVoiceName`, `ttsAllowNetworkVoiceFallback`, `ttsMovieVolume`, `ttsVoiceVolume`, `ttsBaseSpeed` [mặc định `1.0f`, dải `0.8f..2.0f`], `ttsPitch`, `ttsAutoSpeedEnabled`, `ttsMaxAutoSpeed` [mặc định `2.1f`, dải `1.4f..3.0f`], `ttsWaitForCueCompletion`, `ttsHideSubtitlesWhenEnabled`) cùng Preferences keys & setters theo Profile vào `PlayerSettingsDataStore.kt`.
+  - **File**: [AndroidManifest.xml](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/AndroidManifest.xml), [PlayerSettingsDataStore.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/data/local/PlayerSettingsDataStore.kt)
+  - **Trạng thái**: Completed
+
+- [x] **TTS-02**: Xây dựng Core TTS (`SubtitleTtsModels`, `SubtitleTtsTextCleaner`, `SubtitleTtsTimingCalculator`, `GoogleOfflineTtsVoiceSelector`, `GoogleOfflineTtsEngine`, `SubtitleTtsCueQueueState`, `SubtitleTtsCoordinator`)
+  - **Vai trò**: Audio / TTS Core Engineer
+  - **Mô tả**:
+    1. Port `SubtitleTtsTextCleaner` (lọc ASS/HTML/SDH/nhạc + `ensureSentenceEndingPunctuation`) và `SubtitleTtsTimingCalculator` (tính `budgetMs`, ước lượng tốc độ theo từ/dấu câu, dải `maxAutoSpeed` tới `3.0f`).
+    2. Xây dựng `GoogleOfflineTtsVoiceSelector` lọc giọng Offline (`!isNetworkConnectionRequired`), ưu tiên `vi-VN`/`vi`.
+    3. Xây dựng `GoogleOfflineTtsEngine` (`@Singleton`) dùng `TextToSpeech(..., "com.google.android.tts")`, `AudioAttributes(USAGE_MEDIA, CONTENT_TYPE_SPEECH)`, `UtteranceProgressListener` theo `utteranceId` (phân biệt `onDone` vs `onStop`), hỗ trợ tốc độ tới `3.0f`, mở cài đặt tải giọng Offline (`ACTION_INSTALL_TTS_DATA` / `TTS_SETTINGS`).
+    4. Xây dựng `SubtitleTtsCueQueueState` & `SubtitleTtsCoordinator` (`@Singleton`) hỗ trợ `waitForCueCompletion` (carry-over `1500ms`, stale `2500ms`), lọc trùng `(cleanText, cueStartMs)`, `previewVoice`, `onPlaybackPaused`, `onSeek`, `stopSession`.
+  - **File**: `app/src/main/java/com/nuvio/tv/core/tts/SubtitleTtsModels.kt`, `SubtitleTtsTextCleaner.kt`, `SubtitleTtsTimingCalculator.kt`, `GoogleOfflineTtsVoiceSelector.kt`, `GoogleOfflineTtsEngine.kt`, `SubtitleTtsCueQueueState.kt`, `SubtitleTtsCoordinator.kt`
+  - **Trạng thái**: Completed
+
+### Phase 2: Tích Hợp PlayerRuntimeController (ExoPlayer, Libass, MPV, Timeline & Ducking)
+- [x] **TTS-03**: Mở rộng `PlayerUiState` / `PlayerEvent` & cơ chế Ducking âm lượng 2 kênh (tương thích `audioAmplificationDb`)
+  - **Vai trò**: Player Engine Engineer
+  - **Mô tả**:
+    1. Thêm `ttsConfig`, `ttsAvailability`, `ttsVoices`, `showTtsOverlay`, `isDirectPassthroughActive`, `shouldHideVisualSubtitles` và đầy đủ `PlayerEvent.On...Tts...` (gồm `ttsMaxAutoSpeed`, `ttsWaitForCueCompletion`, `ttsAllowNetworkFallback`) vào `PlayerUiState.kt`.
+    2. Nâng cấp `NuvioMpvSurfaceView.applyAudioOutputLevel(amplificationDb, volumeScale)` và tạo `PlayerRuntimeController.applyEffectiveMovieVolume()` để kết hợp `movieVolume` với `audioAmplificationDb` trên cả ExoPlayer và MPV, đồng thời phát hiện trạng thái HDMI Passthrough.
+  - **File**: [PlayerUiState.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerUiState.kt), [NuvioMpvSurfaceView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/NuvioMpvSurfaceView.kt), [PlayerRuntimeControllerObservers.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerObservers.kt), [PlayerRuntimeControllerPlaybackEvents.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerPlaybackEvents.kt)
+  - **Trạng thái**: Completed
+
+- [x] **TTS-04**: Trích xuất Timeline Phụ đề cho `SubtitleCueTracker` & ẩn phụ đề hiển thị trên cả ExoPlayer, StyledOverlay, Libass, MPV
+  - **Vai trò**: Subtitle & Rendering Engineer
+  - **Mô tả**:
+    1. Mở rộng `SubtitleCueState` mang thêm `SubtitleCuePlaybackContext?` từ: Sidecar (`PlayerSidecarSubtitles.kt`), Embedded/ASS timeline (`EmbeddedSubtitleTimelineLoader` / `PlayerSubtitleCueParser`), và MPV (`sub-start`, `sub-end`, `time-pos`, `sub-delay`, `speed`) ngay trong `syncMpvStyledSubtitles()`.
+    2. Quan sát `subtitleCueTracker.state` trong `PlayerRuntimeController` để đẩy cue + timingContext sang `SubtitleTtsCoordinator`.
+    3. Ẩn hiển thị phụ đề (`SubtitleView`, `StyledSubtitleOverlay`, `AssSubtitleSurfaceView` / `AssVideoEffectAsync`, `mpv sub-visibility`) khi `shouldHideVisualSubtitles == true` mà vẫn giữ nguyên luồng text cho TTS.
+    4. Gắn hook dừng TTS khi Pause, Seek, đổi phụ đề và `releasePlayer()`.
+  - **File**: [SubtitleCueTracker.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/SubtitleCueTracker.kt), [PlayerSidecarSubtitles.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerSidecarSubtitles.kt), [PlayerRuntimeControllerStyledSubtitles.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerStyledSubtitles.kt), [PlayerRuntimeControllerInitialization.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerInitialization.kt), [PlayerRuntimeControllerMpv.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerMpv.kt), [PlayerRuntimeControllerLifecycle.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerLifecycle.kt), [PlayerScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerScreen.kt)
+  - **Trạng thái**: Completed
+
+### Phase 3: Giao Diện Android TV (Player Overlay & Cài Đặt Âm Thanh)
+- [x] **TTS-05**: Tạo `SubtitleTtsOverlay.kt` (D-Pad 2 cột) & thêm nút Thuyết minh trên `PlayerControlsOverlay`
+  - **Vai trò**: Compose TV / Focus Engineer
+  - **Mô tả**:
+    1. Thêm `ControlButton` **Thuyết minh** (`RecordVoiceOver`) trên thanh điều khiển `PlayerScreen.kt` cạnh nút Phụ đề/Âm thanh, đổi màu nhấn mạnh khi đang bật.
+    2. Xây dựng `SubtitleTtsOverlay.kt` dùng `PlayerOverlayScaffold`: cột trái (Bật/Tắt, Nghe thử, Banner trạng thái + nút tải giọng, Danh sách giọng Offline) và cột phải (các stepper `- / +` D-Pad cho Âm lượng phim, Âm lượng giọng đọc, Tốc độ `0.8x–2.0x`, Cao độ `0.6x–1.5x`, Tự động căn nhịp, Tốc độ tối đa `1.4x–3.0x`, Chờ đọc hết câu, Ẩn phụ đề), thiết lập `focusProperties` rõ ràng giữa 2 cột.
+  - **File**: `app/src/main/java/com/nuvio/tv/ui/screens/player/SubtitleTtsOverlay.kt`, [PlayerScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerScreen.kt)
+  - **Trạng thái**: Completed
+
+- [x] **TTS-06**: Tích hợp cấu hình TTS vào `Cài đặt ➔ Phát lại ➔ Âm thanh` (`PlaybackAudioSettings`) & Đa ngôn ngữ (`strings.xml`)
+  - **Vai trò**: Settings UI & Localization Engineer
+  - **Mô tả**:
+    1. Đặt mục **Thuyết minh phụ đề (Google TTS Offline)** TRƯỚC dòng `if (!isExoEngine) return` trong `PlaybackAudioSettings.kt` (giữ nguyên `PlaybackSection` để pass `SettingsStructureTest`).
+    2. Dùng `SettingsSectionLabel`, `SettingsToggleRow`, `SettingsActionRow`, `SliderSettingsItem` và `SettingsSingleChoiceDialog` (`PlaybackDialog.TTS_VOICE`) cho toàn bộ 11 cài đặt mới khớp với Mobile.
+    3. Bổ sung đầy đủ chuỗi tài nguyên ở `res/values/strings.xml` và `res/values-vi/strings.xml`.
+  - **File**: [PlaybackSettingsModel.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsModel.kt), [PlaybackSettingsViewModel.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsViewModel.kt), [PlaybackAudioSettings.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackAudioSettings.kt), [PlaybackSettingsScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsScreen.kt), [PlaybackSettingsSections.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsSections.kt), `res/values/strings.xml`, `res/values-vi/strings.xml`
+  - **Trạng thái**: Completed
+
+### Phase 4: Kiểm Chứng Tự Động & Thủ Công
+- [x] **TTS-07**: Viết Unit Tests (`SubtitleTtsTextCleanerTest`, `SubtitleTtsTimingCalculatorTest`, `SubtitleTtsCueQueueStateTest`, `GoogleOfflineTtsVoiceSelectorTest`, `PlayerTtsVolumeDuckingPolicyTest`) & kiểm tra build/test toàn dự án
+  - **Vai trò**: QA / Verification Engineer
+  - **Mô tả**:
+    1. Viết unit tests cho bộ lọc + dấu câu kết thúc, bộ tính ngân sách thời gian, hàng đợi `waitForCueCompletion`, bộ chọn giọng Google Offline (`vi-VN` priority), và công thức âm lượng kết hợp `audioAmplificationDb`.
+    2. Chạy `.\gradlew :app:compileFullDebugKotlin :app:testFullDebugUnitTest` và thực hiện checklist test thủ công trên Android TV (ExoPlayer + MPV + Libass + chế độ Offline không Wi-Fi).
+  - **File**: `app/src/test/java/com/nuvio/tv/core/tts/SubtitleTtsTextCleanerTest.kt`, `SubtitleTtsTimingCalculatorTest.kt`, `SubtitleTtsCueQueueStateTest.kt`, `GoogleOfflineTtsVoiceSelectorTest.kt`, `app/src/test/java/com/nuvio/tv/ui/screens/player/PlayerTtsVolumeDuckingPolicyTest.kt`
+  - **Trạng thái**: Completed
+
+---
+
 # Danh Sách Task - Tối Ưu Cơ Chế Tải Catalog & Prefetch Poster Màn Hình Home
 
 > **Kế hoạch tương ứng**: [PLAN-poster-loading-optimization.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-poster-loading-optimization.md)

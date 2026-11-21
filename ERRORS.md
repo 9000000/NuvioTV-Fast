@@ -1,5 +1,39 @@
 # Error Log
 
+## [2026-11-21 09:02] - Đọc Trễ Câu Tiếp Theo Khi Bật "Chờ Đọc Xong Câu" (`waitForCueCompletion`) Trên Google TTS Offline
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/core/tts/GoogleOfflineTtsEngine.kt:438`, `app/src/main/java/com/nuvio/tv/core/tts/SubtitleTtsCoordinator.kt:185`, `app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerSidecarSubtitles.kt:272`, `app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerStyledSubtitles.kt:17`
+- **Agent**: mon
+- **Root Cause**: (1) `GoogleOfflineTtsEngine.speakInternal()` gọi đồng bộ Binder IPC `currentTts.voices` và `currentTts.voice = ...` trên Main Thread cho MỖI câu phụ đề dù giọng không đổi, gây trễ 200–500ms mỗi lượt và làm tăng độ trễ dây chuyền. (2) `UtteranceProgressListener.onDone` trên Google TTS Offline có khoảng lặng cuối câu dài (400–900ms) hoặc có thể bị chậm/rớt, khiến `isSpeechActive` giữ `true` lâu hơn thực tế và ép câu sau phải đợi tới `MAX_CARRY_OVER_MS` (`1500ms`), đồng thời `onStop` của câu cũ dập nhầm `_isSpeaking` của câu mới. (3) Sidecar chưa truyền `nextCueStartMs` & `positionMs` thực tế; MPV chỉ cập nhật `subtitleCueTracker` trong vòng lặp `500ms` và không truyền `timingContext`.
+- **Error Message**:
+  ```
+  User report: Bật chờ đọc xong câu thì bắt đầu đọc câu tiếp theo ở những câu ít bị ngắt vẫn bị đọc trễ lâu.
+  ```
+- **Fix Applied**: (1) Cache `cachedSystemVoices` & `appliedVoiceName`/`appliedLanguageTag`, chỉ đổi `currentTts.voice` khi giọng thật sự thay đổi, đẩy IPC sang `ttsExecutor` nền đơn luồng, sửa race `utteranceId` trong `UtteranceProgressListener` và expose `hasActiveUtteranceStarted()` + `isEngineSpeakingNow()`. (2) Thêm Speech Completion Watchdog + Dynamic Carry-Over (`computeDynamicCarryOverMs`) trong `SubtitleTtsCoordinator` & `SubtitleTtsTimingCalculator` để phát hiện ngay khi Google TTS đã dứt tiếng (`!isEngineSpeakingNow()`) hoặc câu cũ đã vượt quá thời lượng ước lượng (chỉ chờ đuôi tối đa `220ms` thay vì `1500ms`). (3) Truyền đầy đủ `nextCueStartMs` + `positionMs` trên Sidecar và đẩy `timingContext` tức thì trong `syncMpvStyledSubtitles()`.
+- **Prevention**: Không gọi `TextToSpeech.voices` / `setVoice` lặp lại trên mỗi utterance; luôn có watchdog + dynamic carry-over cho `UtteranceProgressListener` trên Android TV và giữ unit test `dynamicCarryOverAvoidsLongDelayAfterEstimatedSpeechEnds`.
+- **Status**: Fixed
+
+---
+
+## [2026-11-21 08:30] - Kẹt Giá Trị Cài Đặt TTS (`maxAutoSpeed`, `voiceVolume`) & Tự Động Mất Focus Trong `SubtitleTtsOverlay` Trên Player
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackAudioSettings.kt:185`, `app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerScreen.kt:578`, `app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerPlaybackEvents.kt:1321`, `app/src/main/java/com/nuvio/tv/ui/screens/player/SubtitleTtsOverlay.kt:94`
+- **Agent**: mon
+- **Root Cause**: (1) Danh sách bước nhảy ở Settings dùng mốc ngoài dải clamp (`1.25f` cho `maxAutoSpeed` có `min = 1.4f`; `1.25f/1.50f` cho `voiceVolume` có `max = 1.0f`) kết hợp `cycleNextFloat` tìm exact-match, dẫn đến vòng lặp bị clamp cố định ở `1.40x` / `100%`. (2) `showTtsOverlay` chưa được thêm vào các điều kiện loại trừ tương đương `showAudioOverlay` trong `PlayerScreen` (`LaunchedEffect` focus, `playerControlsVisible`, `panelOrDialogOpen`, `handleBackPress`) và `PlayerRuntimeControllerPlaybackEvents` (`scheduleHideControls`, `schedulePauseOverlay`, `OnShowTtsOverlay`, `OnDismissTransientOverlay`), khiến timer 3s ẩn controls cướp focus về `containerFocusRequester` và root `.onKeyEvent` nuốt phím D-Pad.
+- **Error Message**:
+  ```
+  User report: Cài đặt tốc độ tăng tối đa không chỉnh được; các cài đặt TTS ở player không chỉnh được và tự động bị mất focus.
+  ```
+- **Fix Applied**: Chuẩn hóa 5 danh sách bước nhảy TTS và hàm `nextSteppedOption` (luôn tiến tới mốc lớn hơn kế tiếp trong dải clamp) làm Single Source of Truth trong `SubtitleTtsTimingCalculator`; thêm `showTtsOverlay` vào toàn bộ điểm kiểm tra focus/key/auto-hide/dismiss trong `PlayerScreen` và các `PlayerRuntimeController*`; nâng cấp `SubtitleTtsOverlay` đầy đủ 12 mục cài đặt cột phải bằng `LazyColumn` giữ focus ổn định và thêm unit test `steppedOptionsStayWithinClampBoundsAndCycleWithoutGettingStuck`.
+- **Prevention**: Mọi danh sách option bước nhảy kết hợp DataStore clamp phải có unit test duyệt vòng khép kín qua hàm clamp tương ứng; mọi overlay mới của Player phải được kiểm tra đối chiếu 1-1 với tất cả vị trí xuất hiện `showAudioOverlay`.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-20 17:23] - Lỗi Cú Pháp (`Syntax error: Expecting a top level declaration`) Khi Thêm Dialog Cài Đặt EPG trong `LiveTvSettingsScreen.kt`
 
 - **Type**: Syntax

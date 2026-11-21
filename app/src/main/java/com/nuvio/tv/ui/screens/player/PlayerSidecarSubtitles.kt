@@ -269,6 +269,38 @@ internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
     val sanitized = active.map { SubtitleMojibakeSanitizer.sanitizeCue(it) }
     val filtered = if (stripSdh) SubtitleSdhFilter.filterCues(sanitized) else sanitized
     val merged = PlayerSubtitleUtils.mergeOverlappingCues(filtered)
+    val activeTimed = collectActiveSidecarTimedCues(cues, positionUs)
+    val timingContext = if (activeTimed.isNotEmpty()) {
+        val earliestStartUs = activeTimed.minOf { it.startTimeUs }
+        val earliestStartMs = earliestStartUs / 1_000L
+        val latestEndUs = activeTimed.maxOf {
+            if (it.durationUs != androidx.media3.common.C.TIME_UNSET) {
+                it.startTimeUs + it.durationUs
+            } else {
+                it.startTimeUs + 2_000_000L
+            }
+        }
+        val latestEndMs = latestEndUs / 1_000L
+        val nextCueStartMs = cues.asSequence()
+            .filter { candidate ->
+                candidate.startTimeUs > earliestStartUs &&
+                    candidate.startTimeUs >= positionUs &&
+                    candidate.cues.any { !it.text.isNullOrBlank() }
+            }
+            .minOfOrNull { it.startTimeUs }
+            ?.div(1_000L)
+        val text = merged.mapNotNull { it.text?.toString()?.takeIf(String::isNotBlank) }.joinToString("\n")
+        val speed = player.playbackParameters.speed
+        com.nuvio.tv.core.tts.SubtitleTimelineTimingHelper.createTimingContext(
+            rawText = text,
+            startMs = earliestStartMs,
+            endMs = latestEndMs,
+            playbackSpeed = speed,
+            nextCueStartMs = nextCueStartMs,
+            positionMs = positionUs / 1_000L
+        )
+    } else null
+
     val currentKey = activeSidecarSubtitleKey ?: return
     val currentGeneration = activeSidecarGeneration.takeIf { it != 0L } ?: return
     postToSubtitleView { view ->
@@ -277,14 +309,18 @@ internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
             activeSidecarGeneration == currentGeneration &&
             view.getTag(R.id.player_view_sidecar_generation_tag) == currentKey
         ) {
-            showSidecarCues(view, merged)
+            showSidecarCues(view, merged, timingContext)
         }
     }
 }
 
-private fun PlayerRuntimeController.showSidecarCues(view: SubtitleView, cues: List<Cue>) {
+private fun PlayerRuntimeController.showSidecarCues(
+    view: SubtitleView,
+    cues: List<Cue>,
+    timingContext: com.nuvio.tv.core.tts.SubtitleCuePlaybackContext? = null
+) {
     view.setCues(presentExoCues(cues))
-    subtitleCueTracker.update(cues)
+    subtitleCueTracker.updateWithTiming(cues, timingContext)
 }
 
 private fun PlayerRuntimeController.postToSubtitleView(block: (SubtitleView) -> Unit) {
@@ -402,6 +438,26 @@ internal fun parseSidecarTimedCuesLenient(rawText: String, sourceUrl: String): L
     // collectActiveSidecarCues stops at the first cue starting after the playhead, so the list
     // has to be ordered. PlayerSubtitleCueParser emits cues in file order.
     out.sortBy { it.startTimeUs }
+    return out
+}
+
+/** [cues] must be ordered by [CuesWithTiming.startTimeUs]; the scan stops at the first later cue. */
+internal fun collectActiveSidecarTimedCues(
+    cues: List<CuesWithTiming>,
+    positionUs: Long
+): List<CuesWithTiming> {
+    val out = ArrayList<CuesWithTiming>()
+    for (entry in cues) {
+        if (entry.startTimeUs > positionUs) break
+        val endUs = when {
+            entry.durationUs != androidx.media3.common.C.TIME_UNSET -> entry.startTimeUs + entry.durationUs
+            entry.endTimeUs != androidx.media3.common.C.TIME_UNSET -> entry.endTimeUs
+            else -> entry.startTimeUs + 2_000_000L
+        }
+        if (positionUs < endUs) {
+            out.add(entry)
+        }
+    }
     return out
 }
 

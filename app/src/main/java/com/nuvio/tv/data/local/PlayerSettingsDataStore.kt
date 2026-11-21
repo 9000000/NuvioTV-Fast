@@ -15,6 +15,7 @@ import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.player.LastPlaybackDiagnostics
 import com.nuvio.tv.core.player.SubtitleFonts
+import com.nuvio.tv.core.tts.SubtitleTtsTimingCalculator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -440,7 +441,19 @@ data class PlayerSettings(
     val enableBufferLogs: Boolean = false,
     val resizeMode: Int = 0,
     // Nuvio ExoPlayer Performance Mode
-    val nuvioPerformanceModeEnabled: Boolean = DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED
+    val nuvioPerformanceModeEnabled: Boolean = DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED,
+    // Subtitle TTS (Google TTS Offline)
+    val ttsEnabled: Boolean = false,
+    val ttsVoiceName: String? = null,
+    val ttsAllowNetworkVoiceFallback: Boolean = false,
+    val ttsMovieVolume: Float = SubtitleTtsTimingCalculator.DEFAULT_MOVIE_VOLUME,
+    val ttsVoiceVolume: Float = SubtitleTtsTimingCalculator.DEFAULT_VOICE_VOLUME,
+    val ttsBaseSpeed: Float = SubtitleTtsTimingCalculator.DEFAULT_BASE_SPEED,
+    val ttsPitch: Float = SubtitleTtsTimingCalculator.DEFAULT_PITCH,
+    val ttsAutoSpeedEnabled: Boolean = true,
+    val ttsMaxAutoSpeed: Float = SubtitleTtsTimingCalculator.DEFAULT_MAX_AUTO_SPEED,
+    val ttsWaitForCueCompletion: Boolean = false,
+    val ttsHideSubtitlesWhenEnabled: Boolean = false
 ) {
     /** Prefer FFmpeg/extension audio decoder (EXTENSION_RENDERER_MODE_PREFER). */
     val isPreferAppDecoder: Boolean
@@ -944,6 +957,19 @@ class PlayerSettingsDataStore @Inject constructor(
     private val retainBackBufferFromKeyframeKey = booleanPreferencesKey("retain_back_buffer_from_keyframe")
     private val nuvioPerformanceModeEnabledKey = booleanPreferencesKey("nuvio_performance_mode_enabled")
 
+    // Subtitle TTS keys
+    private val ttsEnabledKey = booleanPreferencesKey("tts_enabled")
+    private val ttsVoiceNameKey = stringPreferencesKey("tts_voice_name")
+    private val ttsAllowNetworkVoiceFallbackKey = booleanPreferencesKey("tts_allow_network_voice_fallback")
+    private val ttsMovieVolumeKey = floatPreferencesKey("tts_movie_volume")
+    private val ttsVoiceVolumeKey = floatPreferencesKey("tts_voice_volume")
+    private val ttsBaseSpeedKey = floatPreferencesKey("tts_base_speed")
+    private val ttsPitchKey = floatPreferencesKey("tts_pitch")
+    private val ttsAutoSpeedEnabledKey = booleanPreferencesKey("tts_auto_speed_enabled")
+    private val ttsMaxAutoSpeedKey = floatPreferencesKey("tts_max_auto_speed")
+    private val ttsWaitForCueCompletionKey = booleanPreferencesKey("tts_wait_for_cue_completion")
+    private val ttsHideSubtitlesWhenEnabledKey = booleanPreferencesKey("tts_hide_subtitles_when_enabled")
+
     private val migrationLoadControlDefaultsAlignedDoneKey = booleanPreferencesKey("migration_load_control_defaults_aligned_done")
     private val migrationLoadControlDefaultsRetunedDoneKey = booleanPreferencesKey("migration_load_control_defaults_retuned_done")
     private val migrationLoadControlMinBufferRetunedDoneKey = booleanPreferencesKey("migration_load_control_min_buffer_retuned_done")
@@ -1441,7 +1467,30 @@ class PlayerSettingsDataStore @Inject constructor(
                     targetBufferSizeMb = prefs[targetBufferSizeMbKey]?.coerceAtLeast(0) ?: BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB,
                     backBufferDurationMs = prefs[backBufferDurationMsKey] ?: BufferSettings.DEFAULT_BACK_BUFFER_DURATION_MS,
                     retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false
-                )
+                ),
+                ttsEnabled = prefs[ttsEnabledKey] ?: false,
+                ttsVoiceName = prefs[ttsVoiceNameKey]?.takeIf { it.isNotBlank() },
+                ttsAllowNetworkVoiceFallback = prefs[ttsAllowNetworkVoiceFallbackKey] ?: false,
+                ttsMovieVolume = SubtitleTtsTimingCalculator.clampVolume(
+                    value = prefs[ttsMovieVolumeKey] ?: SubtitleTtsTimingCalculator.DEFAULT_MOVIE_VOLUME,
+                    fallback = SubtitleTtsTimingCalculator.DEFAULT_MOVIE_VOLUME
+                ),
+                ttsVoiceVolume = SubtitleTtsTimingCalculator.clampVolume(
+                    value = prefs[ttsVoiceVolumeKey] ?: SubtitleTtsTimingCalculator.DEFAULT_VOICE_VOLUME,
+                    fallback = SubtitleTtsTimingCalculator.DEFAULT_VOICE_VOLUME
+                ),
+                ttsBaseSpeed = SubtitleTtsTimingCalculator.clampBaseSpeed(
+                    prefs[ttsBaseSpeedKey] ?: SubtitleTtsTimingCalculator.DEFAULT_BASE_SPEED
+                ),
+                ttsPitch = SubtitleTtsTimingCalculator.clampPitch(
+                    prefs[ttsPitchKey] ?: SubtitleTtsTimingCalculator.DEFAULT_PITCH
+                ),
+                ttsAutoSpeedEnabled = prefs[ttsAutoSpeedEnabledKey] ?: true,
+                ttsMaxAutoSpeed = SubtitleTtsTimingCalculator.clampMaxAutoSpeed(
+                    prefs[ttsMaxAutoSpeedKey] ?: SubtitleTtsTimingCalculator.DEFAULT_MAX_AUTO_SPEED
+                ),
+                ttsWaitForCueCompletion = prefs[ttsWaitForCueCompletionKey] ?: false,
+                ttsHideSubtitlesWhenEnabled = prefs[ttsHideSubtitlesWhenEnabledKey] ?: false
             )
         } catch (e: ClassCastException) {
             Log.w("PlayerSettingsDataStore", "Corrupt preference value, using defaults", e)
@@ -1786,6 +1835,82 @@ class PlayerSettingsDataStore @Inject constructor(
             val normalizedLanguage = language?.takeIf { it.isNotBlank() }?.let(::normalizeSecondaryAudioLanguageCode)
             if (normalizedLanguage != null) prefs[secondaryPreferredAudioLanguageKey] = normalizedLanguage
             else prefs.remove(secondaryPreferredAudioLanguageKey)
+        }
+    }
+
+    // Subtitle TTS setters
+
+    suspend fun setTtsEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[ttsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setTtsVoiceName(voiceName: String?) {
+        store().edit { prefs ->
+            val normalized = voiceName?.trim()?.takeIf { it.isNotEmpty() }
+            if (normalized != null) prefs[ttsVoiceNameKey] = normalized
+            else prefs.remove(ttsVoiceNameKey)
+        }
+    }
+
+    suspend fun setTtsAllowNetworkVoiceFallback(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[ttsAllowNetworkVoiceFallbackKey] = enabled
+        }
+    }
+
+    suspend fun setTtsMovieVolume(volume: Float) {
+        store().edit { prefs ->
+            prefs[ttsMovieVolumeKey] = SubtitleTtsTimingCalculator.clampVolume(
+                value = volume,
+                fallback = SubtitleTtsTimingCalculator.DEFAULT_MOVIE_VOLUME
+            )
+        }
+    }
+
+    suspend fun setTtsVoiceVolume(volume: Float) {
+        store().edit { prefs ->
+            prefs[ttsVoiceVolumeKey] = SubtitleTtsTimingCalculator.clampVolume(
+                value = volume,
+                fallback = SubtitleTtsTimingCalculator.DEFAULT_VOICE_VOLUME
+            )
+        }
+    }
+
+    suspend fun setTtsBaseSpeed(speed: Float) {
+        store().edit { prefs ->
+            prefs[ttsBaseSpeedKey] = SubtitleTtsTimingCalculator.clampBaseSpeed(speed)
+        }
+    }
+
+    suspend fun setTtsPitch(pitch: Float) {
+        store().edit { prefs ->
+            prefs[ttsPitchKey] = SubtitleTtsTimingCalculator.clampPitch(pitch)
+        }
+    }
+
+    suspend fun setTtsAutoSpeedEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[ttsAutoSpeedEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setTtsMaxAutoSpeed(speed: Float) {
+        store().edit { prefs ->
+            prefs[ttsMaxAutoSpeedKey] = SubtitleTtsTimingCalculator.clampMaxAutoSpeed(speed)
+        }
+    }
+
+    suspend fun setTtsWaitForCueCompletion(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[ttsWaitForCueCompletionKey] = enabled
+        }
+    }
+
+    suspend fun setTtsHideSubtitlesWhenEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[ttsHideSubtitlesWhenEnabledKey] = enabled
         }
     }
 

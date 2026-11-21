@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.util.Log
+import com.nuvio.tv.core.tts.toSubtitleTtsConfig
 import com.nuvio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -19,6 +20,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.yield
 
 internal data class SubtitleFetchRequest(
@@ -1424,5 +1426,54 @@ internal fun PlayerRuntimeController.observeDeviceLocalReleaseDecoderOnBackgroun
         deviceLocalPlayerPreferences.releaseDecoderOnBackground
             .distinctUntilChanged()
             .collect { enabled -> releaseDecoderOnBackground = enabled }
+    }
+}
+
+internal fun PlayerRuntimeController.observeSubtitleTts() {
+    scope.launch {
+        playerSettingsDataStore.playerSettings.collect { settings ->
+            val config = settings.toSubtitleTtsConfig()
+            _uiState.update { it.copy(ttsConfig = config) }
+        }
+    }
+
+    scope.launch {
+        subtitleTtsCoordinator.availability.collect { availability ->
+            _uiState.update { it.copy(ttsAvailability = availability) }
+        }
+    }
+
+    scope.launch {
+        subtitleTtsCoordinator.voices.collect { voices ->
+            _uiState.update { it.copy(ttsVoices = voices) }
+        }
+    }
+
+    scope.launch {
+        subtitleCueTracker.state.collect { cueState ->
+            val text = if (cueState.visible) cueState.text else ""
+            subtitleTtsCoordinator.onSubtitleCueChanged(text, cueState.timingContext)
+        }
+    }
+
+    scope.launch {
+        subtitleTtsCoordinator.isSpeaking.collect { isSpeaking ->
+            val ttsConfig = _uiState.value.ttsConfig
+            val isPassthrough = _uiState.value.isDirectPassthroughActive
+            val duckingScale = PlayerTtsVolumeDuckingPolicy.resolveDuckingVolumeScale(
+                isSpeaking = isSpeaking,
+                isDirectPassthroughActive = isPassthrough,
+                configuredMovieVolume = ttsConfig.movieVolume
+            )
+            _exoPlayer?.volume = duckingScale
+            mpvView?.applyAudioOutputLevel(duckingVolumeScale = duckingScale)
+        }
+    }
+
+    scope.launch {
+        _uiState.map { it.shouldHideVisualSubtitles }.distinctUntilChanged().collect { shouldHide ->
+            exoSubtitleViewRef?.get()?.visibility = if (shouldHide) android.view.View.GONE else android.view.View.VISIBLE
+            mpvView?.setTtsHideSubtitles(shouldHide)
+        }
     }
 }

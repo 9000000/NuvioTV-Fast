@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.player
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.text.TextOutput
+import com.nuvio.tv.core.tts.SubtitleCuePlaybackContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,7 +12,8 @@ internal data class SubtitleCueState(
     val version: Long = 0L,
     val visible: Boolean = false,
     val text: String = "",
-    val hasBitmap: Boolean = false
+    val hasBitmap: Boolean = false,
+    val timingContext: SubtitleCuePlaybackContext? = null
 )
 
 internal class SubtitleCueTracker {
@@ -24,6 +26,10 @@ internal class SubtitleCueTracker {
     private var lastKey: String? = null
 
     fun update(cues: List<Cue>) {
+        updateWithTiming(cues, null)
+    }
+
+    fun updateWithTiming(cues: List<Cue>, timingContext: SubtitleCuePlaybackContext? = null) {
         val hasBitmap = cues.any { it.bitmap != null }
         publish(
             key = cues.joinToString("\u0000") { cue ->
@@ -31,13 +37,24 @@ internal class SubtitleCueTracker {
             },
             visible = cues.any { !it.text.isNullOrBlank() || it.bitmap != null },
             text = cues.mapNotNull { it.text?.toString()?.takeIf(String::isNotBlank) }.joinToString("\n"),
-            hasBitmap = hasBitmap
+            hasBitmap = hasBitmap,
+            timingContext = timingContext
         )
     }
 
     fun updateText(text: String?) {
+        updateTextWithTiming(text, null)
+    }
+
+    fun updateTextWithTiming(text: String?, timingContext: SubtitleCuePlaybackContext? = null) {
         val key = text.orEmpty()
-        publish(key = key, visible = key.isNotBlank(), text = key, hasBitmap = false)
+        publish(
+            key = key,
+            visible = key.isNotBlank(),
+            text = key,
+            hasBitmap = false,
+            timingContext = timingContext
+        )
     }
 
     fun setPrescannedTexts(texts: List<String>) {
@@ -45,10 +62,22 @@ internal class SubtitleCueTracker {
     }
 
     @Synchronized
-    private fun publish(key: String, visible: Boolean, text: String, hasBitmap: Boolean) {
+    private fun publish(
+        key: String,
+        visible: Boolean,
+        text: String,
+        hasBitmap: Boolean,
+        timingContext: SubtitleCuePlaybackContext? = null
+    ) {
         if (key == lastKey) return
         lastKey = key
-        mutableState.value = SubtitleCueState(mutableState.value.version + 1, visible, text, hasBitmap)
+        mutableState.value = SubtitleCueState(
+            version = mutableState.value.version + 1,
+            visible = visible,
+            text = text,
+            hasBitmap = hasBitmap,
+            timingContext = timingContext
+        )
     }
 }
 

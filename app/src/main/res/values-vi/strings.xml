@@ -3679,4 +3679,43 @@
     <string name="player_error_startup_no_stream_data">Không thể phát - luồng phát không truyền dữ liệu kịp thời. Nguồn phát có thể bị chậm hoặc không khả dụng. Vui lòng thử lại hoặc chọn luồng khác.</string>
 <string name="stream_resume_from_time">Xem tiếp từ %1$s</string>
     <string name="stream_resume_from_percent">Xem tiếp từ %1$d%%</string>
+
+    <!-- Subtitle TTS (Google Offline Text-to-Speech) -->
+    <string name="tts_settings_header">Thuyết minh phụ đề (Google TTS)</string>
+    <string name="tts_enable_title">Đọc phụ đề thành tiếng</string>
+    <string name="tts_enable_subtitle">Sử dụng Google Text-to-Speech để đọc phụ đề thành tiếng</string>
+    <string name="tts_voice_title">Giọng đọc</string>
+    <string name="tts_voice_subtitle">Chọn giọng Google TTS (ưu tiên ngoại tuyến)</string>
+    <string name="tts_voice_default">Mặc định hệ thống</string>
+    <string name="tts_voice_not_available">Không có giọng đọc khả dụng</string>
+    <string name="tts_voice_offline_tag">Ngoại tuyến</string>
+    <string name="tts_voice_online_tag">Trực tuyến</string>
+    <string name="tts_allow_network_fallback_title">Cho phép dùng giọng trực tuyến dự phòng</string>
+    <string name="tts_allow_network_fallback_subtitle">Sử dụng giọng online nếu thiết bị chưa tải giọng offline</string>
+    <string name="tts_movie_volume_title">Âm lượng phim khi thuyết minh</string>
+    <string name="tts_movie_volume_subtitle">Giảm âm lượng phim nền để nghe rõ giọng đọc</string>
+    <string name="tts_voice_volume_title">Âm lượng giọng đọc</string>
+    <string name="tts_voice_volume_subtitle">Điều chỉnh mức âm lượng của lời thuyết minh</string>
+    <string name="tts_base_speed_title">Tốc độ đọc cơ bản</string>
+    <string name="tts_pitch_title">Cao độ giọng đọc</string>
+    <string name="tts_auto_speed_title">Tự động tăng tốc theo thời lượng phụ đề</string>
+    <string name="tts_auto_speed_subtitle">Tự động tăng tốc để đọc xong trước khi phụ đề biến mất</string>
+    <string name="tts_max_auto_speed_title">Tốc độ tăng tối đa</string>
+    <string name="tts_wait_for_cue_title">Chờ đọc xong câu</string>
+    <string name="tts_wait_for_cue_subtitle">Giữ hoặc chờ đọc xong câu trước khi đọc phụ đề kế tiếp</string>
+    <string name="tts_hide_subtitles_title">Ẩn chữ phụ đề trên màn hình</string>
+    <string name="tts_hide_subtitles_subtitle">Chỉ nghe thuyết minh, không hiện chữ phụ đề trên màn hình</string>
+    <string name="tts_install_voice_title">Cài đặt dữ liệu giọng đọc ngoại tuyến</string>
+    <string name="tts_install_voice_subtitle">Mở cài đặt hệ thống để tải gói giọng đọc ngoại tuyến</string>
+    <string name="tts_preview_button">Nghe thử giọng đọc</string>
+    <string name="tts_preview_toast">Đang phát câu nói mẫu...</string>
+    <string name="tts_install_voice_error">Không thể mở cài đặt giọng đọc của hệ thống</string>
+    <string name="player_tts_dialog_title">Thuyết minh phụ đề</string>
+    <string name="player_tts_not_installed">Google Speech Services chưa được cài đặt hoặc không khả dụng</string>
+    <string name="player_tts_install_button">Cài đặt giọng đọc</string>
+    <string name="player_tts_button_desc">Thuyết minh phụ đề</string>
+    <string name="player_tts_status_ready">Sẵn sàng</string>
+    <string name="player_tts_status_not_ready">Chưa khả dụng</string>
+    <string name="player_tts_speed_format">%1$.2fx</string>
+    <string name="player_tts_percent_format">%1$d%%</string>
 </resources>

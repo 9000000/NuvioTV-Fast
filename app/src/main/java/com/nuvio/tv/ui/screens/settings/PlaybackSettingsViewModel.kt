@@ -9,6 +9,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import com.nuvio.tv.core.tts.GoogleTtsAvailability
+import com.nuvio.tv.core.tts.GoogleTtsVoiceInfo
+import com.nuvio.tv.core.tts.SubtitleTtsCoordinator
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.data.local.DeviceLocalPlayerPreferences
 import com.nuvio.tv.data.local.LibassRenderScale
@@ -67,6 +70,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val torrentSettings: TorrentSettings,
     private val torrentService: TorrentService,
     private val torrentModeCoordinator: TorrentModeCoordinator,
+    private val subtitleTtsCoordinator: SubtitleTtsCoordinator,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -77,6 +81,8 @@ class PlaybackSettingsViewModel @Inject constructor(
     val torrentSettingsFlow: Flow<TorrentSettingsData> = torrentSettings.settings
     val torrentCacheState: StateFlow<TorrentCacheState> = torrentService.cacheState
     val torrentState: StateFlow<TorrentState> = torrentService.state
+    val ttsVoices: StateFlow<List<GoogleTtsVoiceInfo>> = subtitleTtsCoordinator.voices
+    val ttsAvailability: StateFlow<GoogleTtsAvailability> = subtitleTtsCoordinator.availability
 
     fun setP2pEnabled(enabled: Boolean) {
         if (enabled) {
@@ -801,6 +807,30 @@ suspend fun setSubtitleFontId(fontId: String) {
     suspend fun clearCustomSubtitleFont() = withContext(Dispatchers.IO) {
         playerSettingsDataStore.clearCustomSubtitleFont()
         playerSettingsDataStore.setSubtitleFont(com.nuvio.tv.data.local.SubtitleFontOption.DEFAULT)
+    }
+
+    suspend fun setTtsEnabled(enabled: Boolean) = playerSettingsDataStore.setTtsEnabled(enabled)
+    suspend fun setTtsVoiceName(voiceName: String?) = playerSettingsDataStore.setTtsVoiceName(voiceName)
+    suspend fun setTtsAllowNetworkVoiceFallback(allowed: Boolean) = playerSettingsDataStore.setTtsAllowNetworkVoiceFallback(allowed)
+    suspend fun setTtsMovieVolume(volume: Float) = playerSettingsDataStore.setTtsMovieVolume(volume)
+    suspend fun setTtsVoiceVolume(volume: Float) = playerSettingsDataStore.setTtsVoiceVolume(volume)
+    suspend fun setTtsBaseSpeed(speed: Float) = playerSettingsDataStore.setTtsBaseSpeed(speed)
+    suspend fun setTtsPitch(pitch: Float) = playerSettingsDataStore.setTtsPitch(pitch)
+    suspend fun setTtsAutoSpeedEnabled(enabled: Boolean) = playerSettingsDataStore.setTtsAutoSpeedEnabled(enabled)
+    suspend fun setTtsMaxAutoSpeed(maxSpeed: Float) = playerSettingsDataStore.setTtsMaxAutoSpeed(maxSpeed)
+    suspend fun setTtsWaitForCueCompletion(waitForCue: Boolean) = playerSettingsDataStore.setTtsWaitForCueCompletion(waitForCue)
+    suspend fun setTtsHideSubtitlesWhenEnabled(hideSubtitles: Boolean) = playerSettingsDataStore.setTtsHideSubtitlesWhenEnabled(hideSubtitles)
+
+    fun previewTtsVoice(sampleText: String? = null) {
+        if (sampleText != null) {
+            subtitleTtsCoordinator.previewVoice(sampleText = sampleText)
+        } else {
+            subtitleTtsCoordinator.previewVoice()
+        }
+    }
+
+    fun openOfflineVoiceDataInstaller(): Boolean {
+        return subtitleTtsCoordinator.openOfflineVoiceDataInstaller(context)
     }
 }
 
