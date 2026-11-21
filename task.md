@@ -1,3 +1,67 @@
+# Danh Sách Task - Đồng Bộ Commit Mới Từ Nhánh `dev` Sang `tet2` (19/11/2026 – 21/11/2026)
+
+> **Kế hoạch tương ứng**: [PLAN-sync-dev-2026-11-21.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-sync-dev-2026-11-21.md)
+> **Phạm vi**: 155 commits (22 PR/Merge từ `15286b68c..d2eeb3d0e`) · **Xung đột trực tiếp**: 22 files · **Bảo toàn 100% tùy chỉnh `tet2`**
+
+---
+
+## 📋 Task Breakdown
+
+### Phase 1: Sao Lưu & Khởi Chạy Merge An Toàn
+- [x] **SYNC21-01**: Tạo nhánh sao lưu `backup-tet2-before-merge-20261121`, cập nhật local `dev` lên `d2eeb3d0e` và khởi chạy `git merge --no-ff origin/dev`
+  - **Vai trò**: Git / Release Engineer
+  - **Mô tả**: Kiểm tra working tree sạch, tạo backup branch, fast-forward local `dev`, chạy merge để liệt kê đúng 22 tệp xung đột.
+
+### Phase 2: Giải Quyết Xung Đột Build, Image Performance, Home & Player Networking
+- [x] **SYNC21-02**: Hòa giải `app/build.gradle.kts`, `NuvioApplication.kt`, `AdvancedSettingsViewModel.kt` và xử lý modify/delete `ContentCard.kt`
+  - **Vai trò**: Core / Build & Performance Engineer
+  - **Mô tả**:
+    1. Giữ nguyên toàn bộ official URLs, APK naming, applicationId, version, dependencies của `tet2` trong `build.gradle.kts`; bổ sung `downloadAudioSyncRuntime` (`sherpa-onnx-1.13.8.aar`), `jniLibs.excludes` và `kotlin("test")` từ `dev`.
+    2. Gắn `HardwareBitmapSettingInterceptor` từ `dev` vào `NuvioApplication.kt` trong khi giữ trọn kiến trúc `HomeImageLoadingProfile`, `ArtworkMemoryCache`, `sizedHomeArtworkUrl`, `ArcDns`, `LiveTvStorage` của `tet2`.
+    3. Gộp `hardwareBitmapsEnabled` với `animationsEnabled` & `gpuOffscreenCompositingEnabled` trong `AdvancedSettingsViewModel.kt`.
+    4. Xác nhận xóa `ContentCard.kt` (`git rm`).
+  - **File**: [build.gradle.kts](file:///f:/MyGithub/NuvioTV-Fast/app/build.gradle.kts), [NuvioApplication.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/NuvioApplication.kt), [AdvancedSettingsViewModel.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/AdvancedSettingsViewModel.kt)
+
+- [x] **SYNC21-03**: Hòa giải `ModernHomeRows.kt` & `ModernHomeRowsList.kt`
+  - **Vai trò**: Home Leanback UI Engineer
+  - **Mô tả**: Giữ trọn kiến trúc Leanback (`LeanbackModernRow`, `ModernInteropHorizontalGridView`, `HomeImageLoadingProfile`, throttle lazy catalog) của `tet2`; đồng bộ chữ ký `resolveCatalogCardMetrics` và `cardImageMemoryCacheKey` với `ModernHomeModels.kt` từ `dev`.
+  - **File**: [ModernHomeRows.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRows.kt), [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt)
+
+- [x] **SYNC21-04**: Hòa giải `TrailerPlayer.kt` & `PlayerPlaybackNetworking.kt`
+  - **Vai trò**: Player & Networking Engineer
+  - **Mô tả**:
+    1. Tích hợp Trailer Subtitles (`buildTrailerMediaItem`, `subtitleTrack`, `subtitleStyle`, `SubtitleView`) từ `dev` vào `TrailerPlayer.kt`, giữ nguyên tối ưu bỏ `AnimatedVisibility` và dùng `playerAlpha` trực tiếp của `tet2`.
+    2. Tích hợp `http2Hosts` + `Http2On403Interceptor` từ `dev` vào `PlayerPlaybackNetworking.kt`, giữ nguyên `IptvHeaderProvider`, tối ưu header interceptor, tham số `streamUrl` và `canReusePrewarmFor` của `tet2`.
+  - **File**: [TrailerPlayer.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/components/TrailerPlayer.kt), [PlayerPlaybackNetworking.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerPlaybackNetworking.kt)
+
+### Phase 3: Giải Quyết Xung Đột TV Drag Reorder, Cast/Folder Leanback & Đa Ngôn Ngữ
+- [x] **SYNC21-05**: Tiếp nhận `TvReorderList` từ `origin/dev` cho 9 tệp không có logic custom (`CatalogOrderScreen`, `MDBListSettingsScreen`, 7 tệp `CollectionManagement/Editor*`) & hòa giải `AddonManagerScreen`, `SettingsScrollIndicators`
+  - **Vai trò**: Compose TV UI Engineer
+  - **Mô tả**:
+    1. Tiếp nhận bản `origin/dev` cho 9 tệp chỉ xóa unused imports trên `tet2`.
+    2. Hòa giải `AddonManagerScreen.kt`: nhận `TvReorderList` + ẩn URL + focus restore từ `dev`, giữ nguyên animation xoay icon `RefreshAddonsEntryCard` của `tet2`.
+    3. Hòa giải `SettingsScrollIndicators.kt`: nhận 4 tham số `suppress/force` từ `dev`, giữ bỏ `AnimatedVisibility` của `tet2`.
+  - **File**: [AddonManagerScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/addon/AddonManagerScreen.kt), [CatalogOrderScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/addon/CatalogOrderScreen.kt), [MDBListSettingsScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/MDBListSettingsScreen.kt), [SettingsScrollIndicators.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/SettingsScrollIndicators.kt) và 7 tệp `ui/screens/collection/Collection*.kt`
+
+- [x] **SYNC21-06**: Hòa giải `CastDetailScreen.kt` & `FolderDetailScreen.kt`
+  - **Vai trò**: Detail & Leanback Navigation Engineer
+  - **Mô tả**:
+    1. Trong `CastDetailScreen.kt`: tích hợp `FilmographyFilterTabs` (Tất cả / Phim lẻ / Phim bộ) từ `dev`, giữ `LeanbackNativeRow` + điều hướng D-Pad mượt giữa Hero, Filter Tabs và Filmography của `tet2`.
+    2. Trong `FolderDetailScreen.kt`: tích hợp trailer handoff và `tabFocusState`/`onSaveTabFocusState` từ `dev`, giữ `LeanbackNativeGrid` của `tet2`.
+  - **File**: [CastDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/cast/CastDetailScreen.kt), [FolderDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailScreen.kt)
+
+- [x] **SYNC21-07**: Hòa giải `values/strings.xml` & đồng bộ bản dịch `values-vi/strings.xml`
+  - **Vai trò**: Localization Engineer
+  - **Mô tả**: Gộp 100% keys của `tet2` (TTS, Live TV, TorrServer, Fonts...) và `dev` (Reorder, Audio Sync, Hardware Bitmaps, Trailer Subtitles, Cast Filter, Plugin Delete Confirm), dịch bổ sung đầy đủ tiếng Việt trong `values-vi/strings.xml` và `values-vi/audio_sync_strings.xml`.
+  - **File**: [strings.xml](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values/strings.xml), [strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/strings.xml), [audio_sync_strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/audio_sync_strings.xml)
+
+### Phase 4: Rà Soát Semantic Conflicts, Biên Dịch & Kiểm Thử Toàn Diện
+- [x] **SYNC21-08**: Rà soát các tệp auto-merged nhạy cảm, chạy `compileFullDebugKotlin` + toàn bộ Unit Tests (TTS, AudioSync, ProxyHeaders, Reorder, Settings, Trailers, RouteState) và tạo Merge Commit kèm báo cáo chi tiết
+  - **Vai trò**: QA / Verification Engineer
+  - **Mô tả**: Xác minh tương tác AudioSync vs Google TTS, `AndroidManifest.xml`, `NuvioMpvSurfaceView.kt`, `HomeViewModelCatalogPipeline.kt`; đảm bảo 100% compile & tests pass trước khi hoàn tất commit merge.
+
+---
+
 # Danh Sách Task - Tích Hợp Chức Năng Đọc Phụ Đề Bằng Google TTS Offline
 
 > **Kế hoạch tương ứng**: [PLAN-subtitle-google-tts-offline.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-subtitle-google-tts-offline.md)
