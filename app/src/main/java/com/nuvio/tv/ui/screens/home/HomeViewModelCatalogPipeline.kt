@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
@@ -154,6 +155,12 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     ) {
         return
     }
+
+    // The layout preference flow is debounced, so on a cold start the saved hero
+    // sources are still unknown when the first catalogs publish, and the hero
+    // falls back to whichever catalog answered first. Read them before loading
+    // so the hero only ever renders its own sources.
+    currentHeroCatalogKeys = layoutPreferenceDataStore.heroCatalogSelections.firstOrNull() ?: emptyList()
 
     activeCatalogLoadSignature = signature
     catalogsLoadInProgress = true

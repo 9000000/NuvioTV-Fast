@@ -25,9 +25,13 @@ private val IndicatorEdgeInset = NuvioTheme.spacing.xxs
 @Composable
 internal fun BoxScope.SettingsVerticalScrollIndicators(
     state: ScrollableState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    suppressBackward: Boolean = false,
+    suppressForward: Boolean = false,
+    forceBackward: Boolean = false,
+    forceForward: Boolean = false
 ) {
-    if (state.canScrollBackward) {
+    if ((state.canScrollBackward || forceBackward) && !suppressBackward) {
         Icon(
             imageVector = Icons.Default.KeyboardArrowUp,
             contentDescription = null,
@@ -38,7 +42,7 @@ internal fun BoxScope.SettingsVerticalScrollIndicators(
                 .size(IndicatorIconSize)
         )
     }
-    if (state.canScrollForward) {
+    if ((state.canScrollForward || forceForward) && !suppressForward) {
         Icon(
             imageVector = Icons.Default.KeyboardArrowDown,
             contentDescription = null,

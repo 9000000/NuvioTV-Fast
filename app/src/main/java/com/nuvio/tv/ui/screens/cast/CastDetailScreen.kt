@@ -39,6 +39,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +49,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
@@ -77,6 +80,8 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Tab
+import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -182,6 +187,29 @@ private fun CastDetailContent(
             .distinctBy { it.id }
             .sortedByDescending { releaseYearSortKey(it.releaseInfo) }
     }
+    val movieCredits = remember(person.movieCredits) {
+        person.movieCredits.sortedByDescending { releaseYearSortKey(it.releaseInfo) }
+    }
+    val seriesCredits = remember(person.tvCredits) {
+        person.tvCredits.sortedByDescending { releaseYearSortKey(it.releaseInfo) }
+    }
+    val showFilmographyFilter = movieCredits.isNotEmpty() && seriesCredits.isNotEmpty()
+    var filmographyFilter by rememberSaveable(person.tmdbId) { mutableStateOf(FilmographyFilter.ALL) }
+    val filterTabFocusRequesters = remember { FilmographyFilter.entries.associateWith { FocusRequester() } }
+    // Posters sit under the portrait, so geometric focus search would skip the tabs on D-pad up.
+    val filmographyUpFocusRequester = if (showFilmographyFilter) {
+        filterTabFocusRequesters.getValue(filmographyFilter)
+    } else {
+        FocusRequester.Default
+    }
+    val visibleCredits = when {
+        !showFilmographyFilter -> allCredits
+        filmographyFilter == FilmographyFilter.MOVIES -> movieCredits
+        filmographyFilter == FilmographyFilter.SERIES -> seriesCredits
+        else -> allCredits
+    }
+    // Initial focus goes to the first poster once per screen visit, not on every filter change.
+    val hasRequestedInitialFocus = remember { mutableStateOf(false) }
 
     val globalLandscape = LocalLandscapePosterMode.current
     val filmographyPosterStyle = remember(posterCardCornerRadiusDp, globalLandscape) {
@@ -284,31 +312,46 @@ private fun CastDetailContent(
                     Column {
                         SectionHeader(
                             title = stringResource(R.string.cast_detail_filmography),
-                            count = allCredits.size
-                        )
-                        FilmographyRow(
-                            credits = allCredits,
-                            posterCardStyle = filmographyPosterStyle,
-                            firstItemFocusRequester = firstPosterFocusRequester,
-                            onNavigateUp = {
-                                if (isBiographyExpanded || isBiographyTruncated) {
-                                    runCatching { portraitFocusRequester.requestFocus(); true }.getOrDefault(false)
-                                } else {
-                                    false
-                                }
-                            },
-                            restoreItemId = pendingRestoreItemId,
-                            restoreFocusToken = restoreFocusToken,
-                            onRestoreFocusHandled = { pendingRestoreItemId = null },
-                            onItemClick = { item ->
-                                pendingRestoreItemId = item.id
-                                onNavigateToDetail(item.id, item.apiType, null)
-                            },
-                            onItemLongPress = { item ->
-                                posterOptions.show(item, null)
-                            },
-                            isItemWatched = isItemWatched
-                        )
+                            count = visibleCredits.size
+                        ) {
+                            if (showFilmographyFilter) {
+                                FilmographyFilterTabs(
+                                    selected = filmographyFilter,
+                                    tabFocusRequesters = filterTabFocusRequesters,
+                                    onSelect = { filmographyFilter = it }
+                                )
+                            }
+                        }
+                        // Recreate the row per filter so it starts scrolled to the beginning.
+                        key(filmographyFilter) {
+                            FilmographyRow(
+                                credits = visibleCredits,
+                                posterCardStyle = filmographyPosterStyle,
+                                firstItemFocusRequester = firstPosterFocusRequester,
+                                hasRequestedInitialFocus = hasRequestedInitialFocus,
+                                upFocusRequester = filmographyUpFocusRequester,
+                                onNavigateUp = {
+                                    if (showFilmographyFilter) {
+                                        runCatching { filmographyUpFocusRequester.requestFocus(); true }.getOrDefault(false)
+                                    } else if (isBiographyExpanded || isBiographyTruncated) {
+                                        runCatching { portraitFocusRequester.requestFocus(); true }.getOrDefault(false)
+                                    } else {
+                                        false
+                                    }
+                                },
+                                restoreItemId = pendingRestoreItemId,
+                                restoreFocusToken = restoreFocusToken,
+                                onRestoreFocusHandled = { pendingRestoreItemId = null },
+                                onItemClick = { item ->
+                                    pendingRestoreItemId = item.id
+                                    onNavigateToDetail(item.id, item.apiType, null)
+                                },
+                                onItemLongPress = { item ->
+                                    posterOptions.show(item, null)
+                                },
+                                isItemWatched = isItemWatched
+                            )
+                        }
                     }
                 }
             }
@@ -556,7 +599,11 @@ private fun HeroSection(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun SectionHeader(title: String, count: Int) {
+private fun SectionHeader(
+    title: String,
+    count: Int,
+    trailingContent: @Composable () -> Unit = {}
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -582,6 +629,46 @@ private fun SectionHeader(title: String, count: Int) {
                 )
                 .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xxs)
         )
+        Spacer(modifier = Modifier.width(NuvioTheme.spacing.lg))
+        trailingContent()
+    }
+}
+
+private enum class FilmographyFilter { ALL, MOVIES, SERIES }
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun FilmographyFilterTabs(
+    selected: FilmographyFilter,
+    tabFocusRequesters: Map<FilmographyFilter, FocusRequester>,
+    onSelect: (FilmographyFilter) -> Unit
+) {
+    val filters = FilmographyFilter.entries
+    TabRow(
+        selectedTabIndex = filters.indexOf(selected),
+        modifier = Modifier.focusRestorer { tabFocusRequesters.getValue(selected) }
+    ) {
+        filters.forEach { filter ->
+            Tab(
+                selected = filter == selected,
+                onFocus = { onSelect(filter) },
+                onClick = { onSelect(filter) },
+                modifier = Modifier.focusRequester(tabFocusRequesters.getValue(filter))
+            ) {
+                Text(
+                    text = when (filter) {
+                        FilmographyFilter.ALL -> stringResource(R.string.cast_detail_filter_all)
+                        FilmographyFilter.MOVIES -> stringResource(R.string.type_movies)
+                        FilmographyFilter.SERIES -> stringResource(R.string.type_series)
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(
+                        horizontal = NuvioTheme.spacing.lg,
+                        vertical = NuvioTheme.spacing.xs
+                    )
+                )
+            }
+        }
     }
 }
 
@@ -590,6 +677,8 @@ private fun FilmographyRow(
     credits: List<MetaPreview>,
     posterCardStyle: PosterCardStyle,
     firstItemFocusRequester: FocusRequester,
+    hasRequestedInitialFocus: androidx.compose.runtime.MutableState<Boolean>? = null,
+    upFocusRequester: FocusRequester = FocusRequester.Default,
     onNavigateUp: () -> Boolean = { false },
     restoreItemId: String? = null,
     restoreFocusToken: Int = 0,

@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.ui.screens.player.audiosync.AudioSyncTaps
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.RectF
@@ -1319,6 +1320,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                                 readyTransition.nextState.shouldEnforceAutoplayOnFirstReady
                             val firstFrameAlreadyRendered = hasRenderedFirstFrame
                             if (readyTransition.nextState.hasRenderedFirstFrame && isTunneledPlayback) {
+                                tunneledFirstFrameAssumed = !hasRenderedFirstFrame
                                 hasRenderedFirstFrame = true
                             }
                             when (val action = readyTransition.action) {
@@ -1474,6 +1476,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     override fun onRenderedFirstFrame() {
                         val isFirstFrame = !hasRenderedFirstFrame  // capture BEFORE flipping
                         hasRenderedFirstFrame = true
+                        tunneledFirstFrameAssumed = false
                         mediaSourceFactory.unlockStartupPrefetch()
                         if (isFirstFrame && _uiState.value.postPlayDismissedForCurrentEpisode) {
                             _uiState.update { it.copy(postPlayDismissedForCurrentEpisode = false) }
@@ -2143,6 +2146,7 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
         progress = null
     )
     hasRenderedFirstFrame = false
+    tunneledFirstFrameAssumed = false
     endDetectionArmed = false
     mpvEofSeenClear = false
     exoEndOverrunHandled = false
@@ -2297,8 +2301,10 @@ private class SubtitleOffsetRenderersFactory(
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessors(arrayOf(gainAudioProcessor, nightModeAudioProcessor))
         val baseAudioSink = builder.build()
+        // Audio sync hook: tap the base sink so the returned sink stays a PlaybackSpeedAwareAudioSink
+        // and buildAudioRenderers keeps installing PlaybackSpeedAwareAudioRenderer.
         val playbackSpeedAwareAudioSink = PlaybackSpeedAwareAudioSink(
-            sink = baseAudioSink,
+            sink = AudioSyncTaps.wrapAudioSink(baseAudioSink),
             initialForcePcm = initialForcePcm,
             forcePcmForBluetooth = bluetoothForcePcm
         )

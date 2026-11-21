@@ -8,6 +8,7 @@ import android.os.Build
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
+import com.nuvio.tv.core.image.HardwareBitmapSettingInterceptor
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.gif.GifDecoder
@@ -167,6 +168,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         return ImageLoader.Builder(this)
             .eventListenerFactory(com.nuvio.tv.core.image.ArtworkDiagnostics.imageEvents)
             .components {
+                add(HardwareBitmapSettingInterceptor { imagePerformancePreferences.hardwareBitmapsEnabled })
                 add(CustomPosterFallbackInterceptor())
                 // Size-aware TMDB downscaler: rewrite multi-MB original/w780/w500 poster URLs to w342/w500 matching target
                 add(coil3.map.Mapper<String, String> { data, options ->

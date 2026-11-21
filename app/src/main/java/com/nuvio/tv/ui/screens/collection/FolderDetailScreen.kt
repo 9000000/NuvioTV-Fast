@@ -121,20 +121,35 @@ fun FolderDetailScreen(
     val trailerPreviewUrls by viewModel.trailerPreviewUrls.collectAsStateWithLifecycle()
     val trailerPreviewAudioUrls by viewModel.trailerPreviewAudioUrls.collectAsStateWithLifecycle()
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsStateWithLifecycle()
+    val onNavigateToDetailWithTrailer = remember(onNavigateToDetail, viewModel) {
+        { itemId: String, itemType: String, addonBaseUrl: String ->
+            viewModel.beginTrailerHandoff(itemId)
+            onNavigateToDetail(itemId, itemType, addonBaseUrl)
+        }
+    }
 
     if (uiState.viewMode == FolderViewMode.FOLLOW_LAYOUT) {
         FollowLayoutContent(
             uiState = uiState,
             focusState = followLayoutFocusState,
+            tabFocusState = tabFocusStates[uiState.selectedTabIndex] ?: FolderDetailGridFocusState(),
             enrichingItemId = enrichingItemId,
             enrichedPreviews = enrichedPreviews,
             failedEnrichmentIds = failedEnrichmentIds,
-            onNavigateToDetail = onNavigateToDetail,
+            onNavigateToDetail = onNavigateToDetailWithTrailer,
             onLoadMoreCatalog = viewModel::loadMoreForCatalog,
             onSelectTab = viewModel::selectTab,
             onLoadMoreForSelectedTab = { viewModel.loadMoreItems(viewModel.uiState.value.selectedTabIndex) },
             onSaveFocusState = { vi, vo, rk, ikm, m, ma, ri, ii ->
                 viewModel.saveFollowLayoutFocusState(vi, vo, rk, ikm, m, ma, ri, ii)
+            },
+            onSaveTabFocusState = { verticalIndex, verticalOffset, focusedItemKey ->
+                viewModel.saveTabFocusState(
+                    tabIndex = uiState.selectedTabIndex,
+                    verticalScrollIndex = verticalIndex,
+                    verticalScrollOffset = verticalOffset,
+                    focusedItemKey = focusedItemKey
+                )
             },
             onItemFocus = viewModel::onItemFocused,
             onPreloadAdjacentItem = viewModel::preloadAdjacentItem,
@@ -415,8 +430,7 @@ private fun TabbedGridContent(
                 mutableIntStateOf(initial)
             }
 
-            DisposableEffect(Unit) {
-                onDispose {
+            DisposableEffect(uiState.selectedTabIndex) {                onDispose {
                     val key = items.getOrNull(focusedIndex)?.id
                     onSaveFocusState(
                         focusedIndex,
@@ -790,6 +804,7 @@ private fun RowsContent(
 private fun FollowLayoutContent(
     uiState: FolderDetailUiState,
     focusState: HomeScreenFocusState,
+    tabFocusState: FolderDetailGridFocusState = FolderDetailGridFocusState(),
     enrichingItemId: State<String?>,
     enrichedPreviews: State<Map<String, MetaPreview>>,
     failedEnrichmentIds: State<Set<String>>,
@@ -798,6 +813,7 @@ private fun FollowLayoutContent(
     onSelectTab: (Int) -> Unit = {},
     onLoadMoreForSelectedTab: () -> Unit = {},
     onSaveFocusState: (Int, Int, String?, Map<String, String>, Map<String, Int>, Map<String, String>, Int, Int) -> Unit,
+    onSaveTabFocusState: (Int, Int, String?) -> Unit = { _, _, _ -> },
     onItemFocus: (MetaPreview) -> Unit = {},
     onPreloadAdjacentItem: (MetaPreview) -> Unit = {},
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
@@ -889,12 +905,12 @@ private fun FollowLayoutContent(
                 TabbedGridContent(
                     uiState = uiState,
                     folder = uiState.folder ?: return,
-                    tabFocusState = FolderDetailGridFocusState(),
+                    tabFocusState = tabFocusState,
                     onSelectTab = onSelectTab,
                     onNavigateToDetail = onNavigateToDetail,
                     isItemWatched = isItemWatched,
                     onLoadMore = onLoadMoreForSelectedTab,
-                    onSaveFocusState = { _, _, _ -> },
+                    onSaveFocusState = onSaveTabFocusState,
                     onItemLongPress = onCatalogItemLongPress
                 )
             }

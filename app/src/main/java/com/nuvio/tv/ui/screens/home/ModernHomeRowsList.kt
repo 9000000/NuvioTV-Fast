@@ -76,8 +76,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.compose.ui.ExperimentalComposeUiApi
 import coil3.imageLoader
-import coil3.memory.MemoryCache
-import coil3.request.ImageRequest
 import com.nuvio.tv.core.image.HomeImageLoadingProfile
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.LocalSidebarExpanded

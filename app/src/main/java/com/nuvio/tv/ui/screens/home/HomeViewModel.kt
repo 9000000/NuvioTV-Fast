@@ -109,7 +109,7 @@ class HomeViewModel @Inject constructor(
         private const val HOME_CATALOG_REFRESH_TTL_MS = 15L * 60L * 1000L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 350L
         internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 500L
-        internal const val DETAIL_META_PREFETCH_DEBOUNCE_MS = 1200L
+        internal const val DETAIL_META_PREFETCH_DEBOUNCE_MS = 300L
         private const val MAX_ENRICHMENT_CACHE_SIZE = 64
         private const val MAX_PREFETCH_CACHE_SIZE = 64
         private const val MAX_CW_CACHE_SIZE = 64
