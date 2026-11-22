@@ -99,7 +99,7 @@ private fun LiveTvContent(
     fun resolveDefaultFilter(): FilterType {
         val hasFavorites = state.channels.any { it.id in state.favoriteChannelIds }
         val recentSet = state.recentChannelIds.toSet()
-        val hasRecent = state.channels.any { it.id in recentSet }
+        val hasRecent = state.settings.showRecentGroup && state.channels.any { it.id in recentSet }
         return when {
             hasFavorites -> FilterType.FAVORITES
             hasRecent -> FilterType.RECENT
@@ -131,7 +131,7 @@ private fun LiveTvContent(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(state.channels, state.lastWatchedChannelId, state.favoriteChannelIds, state.recentChannelIds) {
+    LaunchedEffect(state.channels, state.lastWatchedChannelId, state.favoriteChannelIds, state.recentChannelIds, state.settings.showRecentGroup) {
         if (!hasSynchronizedInitialState && state.channels.isNotEmpty()) {
             val targetChannel = state.channels.firstOrNull { it.id == state.lastWatchedChannelId }
             val resolvedPlaylistId = state.lastWatchedPlaylistId ?: targetChannel?.playlistId
@@ -150,7 +150,7 @@ private fun LiveTvContent(
     val resetTrigger by LiveTvRepository.navigationResetEvent.collectAsState()
     var lastHandledResetTrigger by rememberSaveable { mutableStateOf(0L) }
 
-    LaunchedEffect(resetTrigger, state.channels, state.favoriteChannelIds, state.recentChannelIds) {
+    LaunchedEffect(resetTrigger, state.channels, state.favoriteChannelIds, state.recentChannelIds, state.settings.showRecentGroup) {
         if (resetTrigger != 0L && resetTrigger != lastHandledResetTrigger && state.channels.isNotEmpty()) {
             lastHandledResetTrigger = resetTrigger
             showPlaylistDropdown = false
@@ -217,19 +217,25 @@ private fun LiveTvContent(
 
     val filteredChannels = remember(
         state.channels, activeFilter, selectedGroup, selectedPlaylistId,
-        state.favoriteChannelIds, state.recentChannelIds, playlistScopedChannels
+        state.favoriteChannelIds, state.recentChannelIds, playlistScopedChannels,
+        state.settings.showRecentGroup
     ) {
+        val showRecent = state.settings.showRecentGroup
         if (selectedPlaylistId == null) {
             // Khi chưa chọn danh sách phát: CHỈ hiển thị Gần đây hoặc Yêu thích
             when (activeFilter) {
                 FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
                 FilterType.RECENT -> {
-                    val recentSet = state.recentChannelIds.toSet()
-                    val channelMap = state.channels.filter { it.id in recentSet }.associateBy { it.id }
-                    state.recentChannelIds.mapNotNull { channelMap[it] }
+                    if (showRecent) {
+                        val recentSet = state.recentChannelIds.toSet()
+                        val channelMap = state.channels.filter { it.id in recentSet }.associateBy { it.id }
+                        state.recentChannelIds.mapNotNull { channelMap[it] }
+                    } else {
+                        state.channels.filter { it.id in state.favoriteChannelIds }
+                    }
                 }
                 else -> {
-                    if (state.recentChannelIds.isNotEmpty()) {
+                    if (showRecent && state.recentChannelIds.isNotEmpty()) {
                         val recentSet = state.recentChannelIds.toSet()
                         val channelMap = state.channels.filter { it.id in recentSet }.associateBy { it.id }
                         state.recentChannelIds.mapNotNull { channelMap[it] }
@@ -247,9 +253,13 @@ private fun LiveTvContent(
                 }
                 FilterType.FAVORITES -> state.channels.filter { it.id in state.favoriteChannelIds }
                 FilterType.RECENT -> {
-                    val recentSet = state.recentChannelIds.toSet()
-                    val channelMap = state.channels.filter { it.id in recentSet }.associateBy { it.id }
-                    state.recentChannelIds.mapNotNull { channelMap[it] }
+                    if (showRecent) {
+                        val recentSet = state.recentChannelIds.toSet()
+                        val channelMap = state.channels.filter { it.id in recentSet }.associateBy { it.id }
+                        state.recentChannelIds.mapNotNull { channelMap[it] }
+                    } else {
+                        state.channels.filter { it.id in state.favoriteChannelIds }
+                    }
                 }
             }
         }
@@ -286,22 +296,22 @@ private fun LiveTvContent(
     val searchButtonFocusRequester = remember { FocusRequester() }
 
     fun getActiveChipIndex(): Int {
+        val showRecent = state.settings.showRecentGroup
         return if (selectedPlaylistId == null) {
             when (activeFilter) {
-                FilterType.RECENT -> 1
-                FilterType.FAVORITES -> 2
+                FilterType.RECENT -> if (showRecent) 1 else 0
+                FilterType.FAVORITES -> if (showRecent) 2 else 1
                 else -> 0
             }
         } else {
             val isAllSelected = (activeFilter == FilterType.ALL || activeFilter == FilterType.PLAYLIST) && selectedGroup == null
             when {
                 isAllSelected -> 1
-                activeFilter == FilterType.RECENT -> 2
-                activeFilter == FilterType.FAVORITES -> 3
+                activeFilter == FilterType.RECENT -> if (showRecent) 2 else 1
+                activeFilter == FilterType.FAVORITES -> if (showRecent) 3 else 2
                 activeFilter == FilterType.GROUP -> {
                     val groupIdx = selectedGroup?.let { allGroups.indexOf(it) } ?: -1
-                    // 1 (dropdown) + 1 (all channels) + 1 (recent) + 1 (favorites) = 4
-                    val baseIndex = 4
+                    val baseIndex = if (showRecent) 4 else 3
                     if (groupIdx >= 0) baseIndex + groupIdx else 1
                 }
                 else -> 0
@@ -502,23 +512,25 @@ private fun LiveTvContent(
                     }
                 }
 
-                // 3. RECENT - Xem gần đây
-                item(key = "recent") {
-                    FilterChipItem(
-                        label = stringResource(R.string.livetv_group_recent),
-                        isSelected = activeFilter == FilterType.RECENT,
-                        onClick = {
-                            activeFilter = FilterType.RECENT
-                            selectedGroup = null
-                            showPlaylistDropdown = false
-                            pendingFocusRestore = false
-                            LiveTvStorage.saveLastWatchedFilterType(FilterType.RECENT.name)
-                            LiveTvStorage.saveLastWatchedGroup(null)
-                        },
-                        focusRequester = recentChipFocusRequester,
-                        onNavigateDown = { navigateToChannelGrid() },
-                        onNavigateUp = onChipNavigateUp
-                    )
+                // 3. RECENT - Xem gần đây (chỉ hiển thị khi cài đặt cho phép)
+                if (state.settings.showRecentGroup) {
+                    item(key = "recent") {
+                        FilterChipItem(
+                            label = stringResource(R.string.livetv_group_recent),
+                            isSelected = activeFilter == FilterType.RECENT,
+                            onClick = {
+                                activeFilter = FilterType.RECENT
+                                selectedGroup = null
+                                showPlaylistDropdown = false
+                                pendingFocusRestore = false
+                                LiveTvStorage.saveLastWatchedFilterType(FilterType.RECENT.name)
+                                LiveTvStorage.saveLastWatchedGroup(null)
+                            },
+                            focusRequester = recentChipFocusRequester,
+                            onNavigateDown = { navigateToChannelGrid() },
+                            onNavigateUp = onChipNavigateUp
+                        )
+                    }
                 }
 
                 // 4. FAVORITES - Kênh yêu thích

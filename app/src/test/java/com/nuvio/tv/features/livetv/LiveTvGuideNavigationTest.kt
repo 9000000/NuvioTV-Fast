@@ -104,6 +104,56 @@ class LiveTvGuideNavigationTest {
     }
 
     @Test
+    fun `showRecentGroup setting controls whether recent channels group is present and selectable`() {
+        val channels = listOf(channel("1"), channel("2"))
+
+        // Default setting must be true
+        val defaultSettings = LiveTvSettings()
+        assertEquals(true, defaultSettings.showRecentGroup)
+
+        // When showRecent = false, buildLiveTvChannelGroups must exclude ChannelGroup.RECENT
+        val groupsWithoutRecent = buildLiveTvChannelGroups(
+            scopedChannels = channels,
+            favoriteIds = emptySet(),
+            recentIds = listOf("2"),
+            favoritesLabel = "Favorites",
+            recentLabel = "Recent",
+            allLabel = "All",
+            showRecent = false
+        )
+        assertEquals(false, groupsWithoutRecent.any { it.id == ChannelGroup.RECENT })
+        assertEquals(listOf(ChannelGroup.FAVORITES, "custom:Sports", ChannelGroup.ALL), groupsWithoutRecent.map { it.id })
+
+        // When showRecent = false and no favorites exist, fallback directly to ChannelGroup.ALL
+        assertEquals(
+            ChannelGroup.ALL,
+            resolveInitialGroupId(groupsWithoutRecent, favoriteCount = 0, recentCount = 1, showRecent = false)
+        )
+        assertEquals(
+            ChannelGroup.ALL to 3,
+            resolveDefaultGuideGroupSelection(
+                groups = groupsWithoutRecent,
+                allChannels = channels,
+                favoriteIds = emptySet(),
+                recentIds = listOf("2"),
+                showRecent = false
+            )
+        )
+
+        // When showRecent = false but favorites exist, favorites is still selected
+        assertEquals(
+            ChannelGroup.FAVORITES to 1,
+            resolveDefaultGuideGroupSelection(
+                groups = groupsWithoutRecent,
+                allChannels = channels,
+                favoriteIds = setOf("1"),
+                recentIds = listOf("2"),
+                showRecent = false
+            )
+        )
+    }
+
+    @Test
     fun `resolveValidGroupId falls back to all when previous group absent after playlist change`() {
         val groups = buildLiveTvChannelGroups(
             scopedChannels = listOf(channel("1", group = "News")),

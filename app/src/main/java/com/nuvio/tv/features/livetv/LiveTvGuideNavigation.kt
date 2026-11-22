@@ -125,7 +125,8 @@ internal fun buildLiveTvChannelGroups(
     favoritesLabel: String,
     recentLabel: String,
     allLabel: String,
-    allChannels: List<LiveTvChannel> = scopedChannels
+    allChannels: List<LiveTvChannel> = scopedChannels,
+    showRecent: Boolean = true
 ): List<ChannelGroup> {
     val list = mutableListOf<ChannelGroup>()
 
@@ -133,9 +134,11 @@ internal fun buildLiveTvChannelGroups(
     val favCount = allChannels.count { it.id in favoriteIds }
     list.add(ChannelGroup(ChannelGroup.FAVORITES, favoritesLabel, channelCount = favCount))
 
-    val recentSet = recentIds.toSet()
-    val recentCount = allChannels.count { it.id in recentSet }
-    list.add(ChannelGroup(ChannelGroup.RECENT, recentLabel, channelCount = recentCount))
+    if (showRecent) {
+        val recentSet = recentIds.toSet()
+        val recentCount = allChannels.count { it.id in recentSet }
+        list.add(ChannelGroup(ChannelGroup.RECENT, recentLabel, channelCount = recentCount))
+    }
 
     val groupCounts = scopedChannels.groupBy { it.group?.trim().orEmpty() }
     groupCounts.forEach { (grpName, chList) ->
@@ -174,11 +177,12 @@ internal fun filterChannelsForGroup(
 internal fun resolveInitialGroupId(
     groups: List<ChannelGroup>,
     favoriteCount: Int,
-    recentCount: Int
+    recentCount: Int,
+    showRecent: Boolean = true
 ): String {
     return when {
         favoriteCount > 0 && groups.any { it.id == ChannelGroup.FAVORITES } -> ChannelGroup.FAVORITES
-        recentCount > 0 && groups.any { it.id == ChannelGroup.RECENT } -> ChannelGroup.RECENT
+        showRecent && recentCount > 0 && groups.any { it.id == ChannelGroup.RECENT } -> ChannelGroup.RECENT
         else -> ChannelGroup.ALL
     }
 }
@@ -187,19 +191,20 @@ internal fun resolveInitialGroupId(
  * Resolves the default category [ChannelGroup.id] and its 1-based category drawer index
  * (`1`..`groups.size`, since `0` is the playlist filter row) when entering Live TV:
  * 1. [ChannelGroup.FAVORITES] if the user has any favorite channels present in [allChannels].
- * 2. [ChannelGroup.RECENT] if the user has any recent channels present in [allChannels].
+ * 2. [ChannelGroup.RECENT] if [showRecent] is enabled and the user has any recent channels present in [allChannels].
  * 3. [ChannelGroup.ALL] otherwise.
  */
 internal fun resolveDefaultGuideGroupSelection(
     groups: List<ChannelGroup>,
     allChannels: List<LiveTvChannel>,
     favoriteIds: Set<String>,
-    recentIds: List<String>
+    recentIds: List<String>,
+    showRecent: Boolean = true
 ): Pair<String, Int> {
     val favCount = allChannels.count { it.id in favoriteIds }
     val recentSet = recentIds.toSet()
     val recentCount = allChannels.count { it.id in recentSet }
-    val groupId = resolveInitialGroupId(groups, favCount, recentCount)
+    val groupId = resolveInitialGroupId(groups, favCount, recentCount, showRecent)
     val groupPos = groups.indexOfFirst { it.id == groupId }
     val drawerIdx = if (groupPos >= 0) groupPos + 1 else 1
     return groupId to drawerIdx

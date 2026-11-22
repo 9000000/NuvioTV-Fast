@@ -2578,6 +2578,8 @@
     <string name="settings_livetv_title">Live TV</string>
     <string name="settings_livetv_subtitle">Quản lý danh sách phát M3U, tài khoản Xtream Codes và cổng Stalker Portal</string>
     <string name="livetv_section_playlists">Danh sách phát (M3U)</string>
+    <string name="livetv_show_recent_group_title">Danh mục Xem gần đây</string>
+    <string name="livetv_show_recent_group_desc">Hiển thị danh mục các kênh vừa xem gần đây trong Live TV (Mặc định: Bật)</string>
     <string name="livetv_add_playlist">Thêm Playlist M3U</string>
     <string name="livetv_add_playlist_desc">Thêm link URL danh sách phát M3U hoặc M3U8</string>
     <string name="livetv_import_file">Nhập tệp M3U từ bộ nhớ</string>

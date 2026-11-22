@@ -221,6 +221,19 @@ fun LiveTvSettingsContent(
                         )
                     }
 
+                    // Recent category toggle
+                    item(key = "livetv_show_recent_group_toggle") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.livetv_show_recent_group_title),
+                            subtitle = stringResource(R.string.livetv_show_recent_group_desc),
+                            checked = uiState.settings.showRecentGroup,
+                            onToggle = {
+                                val updated = uiState.settings.copy(showRecentGroup = !uiState.settings.showRecentGroup)
+                                LiveTvRepository.updateLiveTvSettings(updated)
+                            }
+                        )
+                    }
+
                     // --- SECTION 1: PLAYLISTS ---
                     item(key = "section_playlists_header") {
                         Text(

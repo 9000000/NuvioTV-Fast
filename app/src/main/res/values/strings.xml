@@ -2642,6 +2642,8 @@
     <string name="settings_livetv_title">Live TV</string>
     <string name="settings_livetv_subtitle">Manage M3U playlists, Xtream Codes, and Stalker portals</string>
     <string name="livetv_section_playlists">Playlists (M3U)</string>
+    <string name="livetv_show_recent_group_title">Recent Channels Category</string>
+    <string name="livetv_show_recent_group_desc">Show the recently watched channels category in Live TV (Default: On)</string>
     <string name="livetv_add_playlist">Add M3U Playlist</string>
     <string name="livetv_add_playlist_desc">Add a remote M3U/M3U8 playlist URL</string>
     <string name="livetv_import_file">Import M3U from Storage</string>
