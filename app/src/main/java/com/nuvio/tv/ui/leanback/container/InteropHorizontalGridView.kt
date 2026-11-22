@@ -7,11 +7,17 @@ import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.OnChildViewHolderSelectedListener
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
+import com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition
+
+private const val HORIZONTAL_REPEAT_INTERVAL_MS = 85L
+private const val HORIZONTAL_HOLD_SCROLL_DURATION_MS = 105
+private val HORIZONTAL_HOLD_LINEAR_INTERPOLATOR = LinearInterpolator()
 
 /**
  * Android Leanback HorizontalGridView customized for Jetpack Compose interop.
@@ -77,8 +83,12 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var restoredPosition: Int = 0
 
     fun prepareForRowChange() {
+        val wasHolding = isHoldingHorizontalKey
         isHoldingHorizontalKey = false
         pendingTargetPosition = RecyclerView.NO_POSITION
+        if (wasHolding) {
+            universalAdapter?.flushPendingFocusedItem()
+        }
     }
 
     private val universalAdapter: LeanbackUniversalAdapter?
@@ -96,6 +106,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
+                    universalAdapter?.flushPendingFocusedItem()
                     universalAdapter?.onScrollSettled()
                 }
             }
@@ -108,7 +119,8 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 position: Int,
                 subposition: Int
             ) {
-                val isPendingTarget = (position == pendingTargetPosition) || (pendingTargetPosition != RecyclerView.NO_POSITION)
+                val hasPending = pendingTargetPosition != RecyclerView.NO_POSITION
+                val isIntermediateWhilePending = hasPending && position != pendingTargetPosition
                 // Keep pendingTargetPosition intact until the target ViewHolder is actually laid out
                 if (position == pendingTargetPosition && child != null) {
                     pendingTargetPosition = RecyclerView.NO_POSITION
@@ -123,9 +135,9 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 restoredPosition = position
 
                 val hasGridFocus = (hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
-                    isHoldingHorizontalKey || isPendingTarget) && mayTakeFocus()
+                    isHoldingHorizontalKey || hasPending) && mayTakeFocus()
                 if (child != null && hasGridFocus) {
-                    if (!child.itemView.hasFocus()) {
+                    if (!isIntermediateWhilePending && !child.itemView.hasFocus()) {
                         child.itemView.requestFocus()
                     }
                     (child as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
@@ -324,11 +336,23 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         return super.requestChildRectangleOnScreen(child, rect, immediate)
     }
 
+    override fun smoothScrollBy(dx: Int, dy: Int) {
+        if (isHoldingHorizontalKey && dx != 0 && dy == 0) {
+            super.smoothScrollBy(dx, dy, HORIZONTAL_HOLD_LINEAR_INTERPOLATOR, HORIZONTAL_HOLD_SCROLL_DURATION_MS)
+        } else {
+            super.smoothScrollBy(dx, dy)
+        }
+    }
+
     override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
         if (!gainFocus) {
+            val wasHolding = isHoldingHorizontalKey
             isHoldingHorizontalKey = false
             pendingTargetPosition = RecyclerView.NO_POSITION
+            if (wasHolding) {
+                universalAdapter?.flushPendingFocusedItem()
+            }
         } else {
             if (selectedPosition <= 0) {
                 hasReleasedKeyAfterArrivingAt0 = true
@@ -371,6 +395,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         return true
                     }
                     if (!canReclaimFocus()) {
+                        universalAdapter?.flushPendingFocusedItem()
                         return true
                     }
                     val total = universalAdapter?.itemCount ?: 0
@@ -388,10 +413,12 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     }
 
                     // Never call stopScroll() — let Leanback settle smoothly onto the keyline
-                    if (animationsEnabled) {
-                        setSelectedPositionSmooth(target)
-                    } else {
-                        setSelectedPosition(target)
+                    if (selectedPosition != target && total > 0) {
+                        if (animationsEnabled) {
+                            setSelectedPositionSmooth(target)
+                        } else {
+                            setSelectedPosition(target)
+                        }
                     }
 
                     val vh = findViewHolderForAdapterPosition(target)
@@ -400,11 +427,15 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                             vh.itemView.requestFocus()
                         }
                         (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
-                    } else {
+                    } else if (scrollState == RecyclerView.SCROLL_STATE_IDLE) {
                         ensureTargetChildFocused(
                             target,
                             if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) View.FOCUS_LEFT else View.FOCUS_RIGHT
                         )
+                    }
+                    universalAdapter?.flushPendingFocusedItem()
+                    if (scrollState == RecyclerView.SCROLL_STATE_IDLE) {
+                        universalAdapter?.onScrollSettled()
                     }
                     return true
                 }
@@ -417,10 +448,15 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
             val resolvedHolderPos = holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
             val resolvedSelectedPos = selectedPosition.takeIf { it != RecyclerView.NO_POSITION }
-            val actualPos = when {
-                pendingTargetPosition != RecyclerView.NO_POSITION -> pendingTargetPosition
-                scrollState == RecyclerView.SCROLL_STATE_IDLE -> resolvedHolderPos ?: resolvedSelectedPos ?: 0
-                else -> resolvedSelectedPos ?: resolvedHolderPos ?: 0
+            val anchorPos = if (scrollState == RecyclerView.SCROLL_STATE_IDLE) {
+                resolvedHolderPos ?: resolvedSelectedPos ?: 0
+            } else {
+                resolvedSelectedPos ?: resolvedHolderPos ?: 0
+            }
+            val actualPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+                pendingTargetPosition
+            } else {
+                anchorPos
             }
             val total = universalAdapter?.itemCount ?: 0
 
@@ -428,12 +464,15 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 towardStartKey -> {
                     if (actualPos <= 0 || total <= 0) {
                         pendingTargetPosition = 0
-                        if (selectedPosition != 0) {
+                        if (selectedPosition != 0 && total > 0) {
                             if (animationsEnabled) {
                                 setSelectedPositionSmooth(0)
                             } else {
                                 setSelectedPosition(0)
                             }
+                        }
+                        if (isHoldingHorizontalKey) {
+                            universalAdapter?.flushPendingFocusedItem()
                         }
                         val arrivedRecently = arrivedAt0FromEnd && (now - arrivalAt0Time < 300L)
                         if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
@@ -451,16 +490,28 @@ class InteropHorizontalGridView @JvmOverloads constructor(
 
                     if (event.repeatCount > 0) {
                         isHoldingHorizontalKey = true
-                        if (now - lastHorizontalKeyTime < 55L) {
+                        if (now - lastHorizontalKeyTime < HORIZONTAL_REPEAT_INTERVAL_MS) {
                             return true
                         }
+                    } else {
+                        isHoldingHorizontalKey = false
                     }
                     lastHorizontalKeyTime = now
 
-                    val target = (actualPos - 1).coerceAtLeast(0)
+                    val isScrolling = scrollState != RecyclerView.SCROLL_STATE_IDLE
+                    val target = computeNextHorizontalTargetPosition(
+                        anchorPos = anchorPos,
+                        pendingTargetPos = pendingTargetPosition,
+                        step = -1,
+                        totalCount = total,
+                        isScrolling = isScrolling
+                    )
+                    if (isScrolling && target == pendingTargetPosition) {
+                        return true
+                    }
                     pendingTargetPosition = target
-                    val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
+                        val nextVh = findViewHolderForAdapterPosition(target)
                         setSelectedPosition(target)
                         if (nextVh != null) {
                             nextVh.itemView.requestFocus(towardStartFocusDir)
@@ -470,11 +521,6 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         return true
                     }
                     setSelectedPositionSmooth(target)
-                    if (nextVh != null) {
-                        nextVh.itemView.requestFocus(towardStartFocusDir)
-                    } else {
-                        ensureTargetChildFocused(target, towardStartFocusDir)
-                    }
                     return true
                 }
                 towardEndKey -> {
@@ -488,21 +534,36 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                                 setSelectedPosition(lastIdx)
                             }
                         }
+                        if (isHoldingHorizontalKey) {
+                            universalAdapter?.flushPendingFocusedItem()
+                        }
                         return true
                     }
 
                     if (event.repeatCount > 0) {
                         isHoldingHorizontalKey = true
-                        if (now - lastHorizontalKeyTime < 55L) {
+                        if (now - lastHorizontalKeyTime < HORIZONTAL_REPEAT_INTERVAL_MS) {
                             return true
                         }
+                    } else {
+                        isHoldingHorizontalKey = false
                     }
                     lastHorizontalKeyTime = now
 
-                    val target = (actualPos + 1).coerceAtMost((total - 1).coerceAtLeast(0))
+                    val isScrolling = scrollState != RecyclerView.SCROLL_STATE_IDLE
+                    val target = computeNextHorizontalTargetPosition(
+                        anchorPos = anchorPos,
+                        pendingTargetPos = pendingTargetPosition,
+                        step = 1,
+                        totalCount = total,
+                        isScrolling = isScrolling
+                    )
+                    if (isScrolling && target == pendingTargetPosition) {
+                        return true
+                    }
                     pendingTargetPosition = target
-                    val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
+                        val nextVh = findViewHolderForAdapterPosition(target)
                         setSelectedPosition(target)
                         if (nextVh != null) {
                             nextVh.itemView.requestFocus(towardEndFocusDir)
@@ -512,16 +573,15 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         return true
                     }
                     setSelectedPositionSmooth(target)
-                    if (nextVh != null) {
-                        nextVh.itemView.requestFocus(towardEndFocusDir)
-                    } else {
-                        ensureTargetChildFocused(target, towardEndFocusDir)
-                    }
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    val wasHolding = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
+                    if (wasHolding) {
+                        universalAdapter?.flushPendingFocusedItem()
+                    }
                     if (event.repeatCount > 0 && now - lastVerticalKeyTime < 115L) {
                         return true
                     }
@@ -529,8 +589,12 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     if (onNavigateDown?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
+                    val wasHolding = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
+                    if (wasHolding) {
+                        universalAdapter?.flushPendingFocusedItem()
+                    }
                     if (event.repeatCount > 0 && now - lastVerticalKeyTime < 115L) {
                         return true
                     }
@@ -538,9 +602,23 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     if (onNavigateUp?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_BACK -> {
+                    val wasHolding = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
+                    if (wasHolding) {
+                        universalAdapter?.flushPendingFocusedItem()
+                    }
                     if (onNavigateBack?.invoke() == true) return true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER,
+                KeyEvent.KEYCODE_MENU -> {
+                    if (isHoldingHorizontalKey) {
+                        isHoldingHorizontalKey = false
+                        pendingTargetPosition = RecyclerView.NO_POSITION
+                        universalAdapter?.flushPendingFocusedItem()
+                    }
                 }
             }
         }

@@ -132,7 +132,7 @@ class LeanbackCardViewHolder(
                 val pos = bindingAdapterPosition
                 val item = currentItem
                 if (pos != RecyclerView.NO_POSITION && item != null) {
-                    adapter.onItemFocused(pos, item)
+                    adapter.dispatchItemFocused(pos, item)
                 }
             }
         }
@@ -163,6 +163,8 @@ class LeanbackCardViewHolder(
         if (root.scaleX != 1.0f) root.scaleX = 1.0f
         if (root.scaleY != 1.0f) root.scaleY = 1.0f
 
+        val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
+        val isHoldingHorizontal = gridView?.isHoldingHorizontalKey == true
         val item = currentItem
         if (hasFocus && item != null) {
             val loadableUrl = (item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop)
@@ -172,7 +174,7 @@ class LeanbackCardViewHolder(
             if (cachedColor != null) {
                 currentDominantColor = cachedColor
                 lastLoadedColorKey = colorCacheKey
-            } else if (loadableUrl != null && lastLoadedColorKey != colorCacheKey) {
+            } else if (!isHoldingHorizontal && loadableUrl != null && lastLoadedColorKey != colorCacheKey) {
                 val bmp = (posterImage.drawable as? BitmapDrawable)?.bitmap
                 if (bmp != null && !bmp.isRecycled) {
                     lastLoadedColorKey = colorCacheKey
@@ -191,8 +193,9 @@ class LeanbackCardViewHolder(
         }
 
         titleText?.let { tv ->
-            if (tv.isSelected != hasFocus) {
-                tv.isSelected = hasFocus
+            val shouldMarquee = hasFocus && !isHoldingHorizontal
+            if (tv.isSelected != shouldMarquee) {
+                tv.isSelected = shouldMarquee
             }
         }
 
@@ -202,7 +205,6 @@ class LeanbackCardViewHolder(
         if (cardContainer.translationZ != 0f) cardContainer.translationZ = 0f
         if (cardContainer.foreground != null) cardContainer.foreground = null
 
-        val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
         if (hasFocus) {
             gridView?.notifyCardFocused(cardContainer, currentDominantColor)
         }
@@ -214,15 +216,20 @@ class LeanbackCardViewHolder(
         boundColorKey: String,
         notifyIfCachedAndFocused: Boolean
     ) {
-        lastLoadedColorKey = boundColorKey
         val existingColor = LeanbackColorEngine.getCachedColor(boundColorKey)
         if (existingColor != null) {
+            lastLoadedColorKey = boundColorKey
             currentDominantColor = existingColor
             if (notifyIfCachedAndFocused && root.hasFocus()) {
                 updateFocusVisual(true)
             }
             return
         }
+        val isHoldingHorizontal = (adapter.attachedRecyclerView as? ModernInteropHorizontalGridView)?.isHoldingHorizontalKey == true
+        if (isHoldingHorizontal) {
+            return
+        }
+        lastLoadedColorKey = boundColorKey
         val bmp = (result as? BitmapImage)?.bitmap
         if (bmp != null && !bmp.isRecycled) {
             LeanbackColorEngine.extractDominantColorAsync(boundColorKey, bmp) { extracted ->
@@ -426,10 +433,12 @@ class LeanbackCardViewHolder(
         val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
         val mayTakeFocus = gridView?.mayTakeFocus() != false
         val isRowFocused = mayTakeFocus && gridView?.hasFocus() == true
+        val isScrollingOrHolding = gridView?.isHoldingHorizontalKey == true ||
+            (gridView != null && gridView.scrollState != RecyclerView.SCROLL_STATE_IDLE)
         val targetPos = gridView?.selectedPosition?.coerceAtLeast(0) ?: 0
         val isCurrentSelectedPos = isRowFocused && bindingAdapterPosition != RecyclerView.NO_POSITION && bindingAdapterPosition == targetPos
 
-        if (mayTakeFocus && (root.hasFocus() || isCurrentSelectedPos)) {
+        if (mayTakeFocus && (root.hasFocus() || (isCurrentSelectedPos && !isScrollingOrHolding))) {
             if (!root.hasFocus()) {
                 root.requestFocus()
             }
@@ -525,10 +534,68 @@ class LeanbackRowAdapter(
     internal var lastWatchedMaskHash: Int = 0
     private var pendingItems: List<ModernCarouselItem>? = null
     private var pendingApplyPosted: Boolean = false
+    private var pendingFocusedPosition: Int = RecyclerView.NO_POSITION
+    private var pendingFocusedItem: ModernCarouselItem? = null
+    private var lastDispatchedFocusedPosition: Int = RecyclerView.NO_POSITION
+    private var lastDispatchedFocusedKey: String? = null
+    private var lastHorizontalPrefetchPosition: Int = RecyclerView.NO_POSITION
     var isSubmittingItems: Boolean = false
         private set
 
     fun getItem(position: Int): ModernCarouselItem? = items.getOrNull(position)
+
+    fun dispatchItemFocused(position: Int, item: ModernCarouselItem) {
+        if (position !in items.indices) return
+        val gridView = attachedRecyclerView as? ModernInteropHorizontalGridView
+        if (gridView?.isHoldingHorizontalKey == true) {
+            pendingFocusedPosition = position
+            pendingFocusedItem = item
+            return
+        }
+        pendingFocusedPosition = RecyclerView.NO_POSITION
+        pendingFocusedItem = null
+        lastDispatchedFocusedPosition = position
+        lastDispatchedFocusedKey = item.key
+        onItemFocused(position, item)
+    }
+
+    fun flushPendingFocusedItem() {
+        val pos = pendingFocusedPosition
+        val pending = pendingFocusedItem
+        pendingFocusedPosition = RecyclerView.NO_POSITION
+        pendingFocusedItem = null
+        if (pos in items.indices) {
+            val resolvedItem = items[pos]
+            if (pos != lastDispatchedFocusedPosition || resolvedItem.key != lastDispatchedFocusedKey) {
+                lastDispatchedFocusedPosition = pos
+                lastDispatchedFocusedKey = resolvedItem.key
+                onItemFocused(pos, resolvedItem)
+            }
+            return
+        }
+        if (pending != null) {
+            val relocatedPos = items.indexOfFirst { it.key == pending.key }
+            if (relocatedPos >= 0) {
+                val resolvedItem = items[relocatedPos]
+                if (relocatedPos != lastDispatchedFocusedPosition || resolvedItem.key != lastDispatchedFocusedKey) {
+                    lastDispatchedFocusedPosition = relocatedPos
+                    lastDispatchedFocusedKey = resolvedItem.key
+                    onItemFocused(relocatedPos, resolvedItem)
+                }
+                return
+            }
+        }
+        val gridView = attachedRecyclerView as? ModernInteropHorizontalGridView
+        val selectedPos = gridView?.selectedPosition ?: RecyclerView.NO_POSITION
+        if (selectedPos in items.indices && gridView?.hasFocus() == true && gridView.mayTakeFocus()) {
+            val selectedItem = items[selectedPos]
+            if (selectedPos != lastDispatchedFocusedPosition || selectedItem.key != lastDispatchedFocusedKey) {
+                lastDispatchedFocusedPosition = selectedPos
+                lastDispatchedFocusedKey = selectedItem.key
+                onItemFocused(selectedPos, selectedItem)
+            }
+        }
+    }
 
     private fun resolveItemWatchedState(item: ModernCarouselItem): Boolean {
         val isPlaceholderItem = item.imageUrl?.trim()?.isPlaceholder() == true ||
@@ -674,6 +741,8 @@ class LeanbackRowAdapter(
     }
 
     fun onScrollSettled() {
+        flushPendingFocusedItem()
+        lastHorizontalPrefetchPosition = RecyclerView.NO_POSITION
         val rv = attachedRecyclerView
         if (rv != null) {
             val mayTakeFocus = (rv as? ModernInteropHorizontalGridView)?.mayTakeFocus() != false
@@ -1114,6 +1183,14 @@ class LeanbackRowAdapter(
     ) {
         val count = items.size
         if (count <= 1) return
+        val isHoldingHorizontal = (attachedRecyclerView as? ModernInteropHorizontalGridView)?.isHoldingHorizontalKey == true
+        if (isHoldingHorizontal &&
+            lastHorizontalPrefetchPosition != RecyclerView.NO_POSITION &&
+            kotlin.math.abs(position - lastHorizontalPrefetchPosition) < HORIZONTAL_HOLD_PREFETCH_STRIDE
+        ) {
+            return
+        }
+        lastHorizontalPrefetchPosition = position
         val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(attachedRecyclerView)
         prefetchRowIndices(
             context = context,
@@ -1127,6 +1204,10 @@ class LeanbackRowAdapter(
 
     override fun onViewRecycled(holder: LeanbackCardViewHolder) {
         holder.unbind()
+    }
+
+    companion object {
+        internal const val HORIZONTAL_HOLD_PREFETCH_STRIDE = 3
     }
 }
 

@@ -182,7 +182,12 @@ private fun LiveTvGuideContent(
     val context = LocalContext.current
     val openSidebar = LocalOpenSidebar.current
     val rawChannels = ui.channels
-    val favoriteSet = remember(user.favorites) { user.favorites.toSet() }
+    val favoriteSet = remember(ui.favoriteChannelIds, user.favorites) {
+        if (ui.favoriteChannelIds.isNotEmpty()) ui.favoriteChannelIds else user.favorites.toSet()
+    }
+    val recentIds = remember(ui.recentChannelIds, user.recent) {
+        if (ui.recentChannelIds.isNotEmpty()) ui.recentChannelIds else user.recent
+    }
 
     val allPlaylistsLabel = stringResource(R.string.livetv_playlist_all)
     val favLabel = stringResource(R.string.livetv_group_favorites)
@@ -193,9 +198,9 @@ private fun LiveTvGuideContent(
         buildLiveTvPlaylistOptions(ui, allPlaylistsLabel)
     }
 
-    // Restore the last selected playlist filter & category across app restarts.
+    // Restore the last selected playlist filter; default category on entry follows FAVORITES -> RECENT -> ALL.
     var selectedPlaylistId by rememberSaveable { mutableStateOf(LiveTvStorage.loadGuidePlaylistId()) }
-    var selectedGroupId by rememberSaveable { mutableStateOf(LiveTvStorage.loadGuideGroupId()) }
+    var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Only clear a persisted playlist selection once channels are loaded and it truly no longer exists.
     LaunchedEffect(rawChannels.isNotEmpty(), ui.isLoading, playlistOptions, selectedPlaylistId) {
@@ -212,11 +217,11 @@ private fun LiveTvGuideContent(
         scopeChannelsByPlaylist(rawChannels, selectedPlaylistId)
     }
 
-    val groups = remember(scopedChannels, rawChannels, favoriteSet, user.recent, favLabel, recentLabel, allChannelsLabel) {
+    val groups = remember(scopedChannels, rawChannels, favoriteSet, recentIds, favLabel, recentLabel, allChannelsLabel) {
         buildLiveTvChannelGroups(
             scopedChannels = scopedChannels,
             favoriteIds = favoriteSet,
-            recentIds = user.recent,
+            recentIds = recentIds,
             favoritesLabel = favLabel,
             recentLabel = recentLabel,
             allLabel = allChannelsLabel,
@@ -224,37 +229,32 @@ private fun LiveTvGuideContent(
         )
     }
 
-    val effectiveGroupId = remember(groups, selectedGroupId, favoriteSet, user.recent, rawChannels) {
+    val effectiveGroupId = remember(groups, selectedGroupId, favoriteSet, recentIds, rawChannels) {
         if (selectedGroupId != null) {
             resolveValidGroupId(groups, selectedGroupId)
         } else {
-            val favCount = rawChannels.count { it.id in favoriteSet }
-            val recentSet = user.recent.toSet()
-            val recentCount = rawChannels.count { it.id in recentSet }
-            resolveInitialGroupId(groups, favCount, recentCount)
+            resolveDefaultGuideGroupSelection(
+                groups = groups,
+                allChannels = rawChannels,
+                favoriteIds = favoriteSet,
+                recentIds = recentIds
+            ).first
         }
     }
 
-    LaunchedEffect(rawChannels.isNotEmpty(), effectiveGroupId) {
-        if (rawChannels.isNotEmpty() && selectedGroupId == null) {
-            selectedGroupId = effectiveGroupId
-            LiveTvStorage.saveGuideGroupId(effectiveGroupId)
-        }
-    }
-
-    val channels = remember(scopedChannels, rawChannels, effectiveGroupId, favoriteSet, user.recent) {
+    val channels = remember(scopedChannels, rawChannels, effectiveGroupId, favoriteSet, recentIds) {
         filterChannelsForGroup(
             scopedChannels = scopedChannels,
             groupId = effectiveGroupId,
             favoriteIds = favoriteSet,
-            recentIds = user.recent,
+            recentIds = recentIds,
             allChannels = rawChannels
         )
     }
 
     fun findTargetChannelIndex(targetChannels: List<LiveTvChannel>): Int {
         if (targetChannels.isEmpty()) return 0
-        val lastWatchedId = playback.channelKey ?: user.lastChannelKey
+        val lastWatchedId = playback.channelKey ?: ui.lastWatchedChannelId ?: user.lastChannelKey
         if (lastWatchedId != null) {
             val idx = targetChannels.indexOfFirst { it.id == lastWatchedId || it.key == lastWatchedId }
             if (idx >= 0) return idx
@@ -267,14 +267,7 @@ private fun LiveTvGuideContent(
     var drawerIndex by remember {
         mutableIntStateOf((groups.indexOfFirst { it.id == effectiveGroupId }.coerceAtLeast(0)) + 1)
     }
-    var hasSyncedInitialGroupDrawer by remember { mutableStateOf(false) }
-    LaunchedEffect(rawChannels.isNotEmpty(), effectiveGroupId) {
-        if (rawChannels.isNotEmpty() && !hasSyncedInitialGroupDrawer) {
-            val groupPos = groups.indexOfFirst { it.id == effectiveGroupId }
-            drawerIndex = if (groupPos >= 0) groupPos + 1 else 1
-            hasSyncedInitialGroupDrawer = true
-        }
-    }
+    var hasSyncedInitialGroupDrawer by rememberSaveable { mutableStateOf(false) }
     var channelIndex by remember(rawChannels) {
         mutableIntStateOf(findTargetChannelIndex(channels))
     }
@@ -286,6 +279,66 @@ private fun LiveTvGuideContent(
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var showOsd by remember { mutableStateOf(true) }
     var showQuickChannels by remember { mutableStateOf(false) }
+
+    LaunchedEffect(rawChannels.isNotEmpty(), groups, favoriteSet, recentIds) {
+        if (rawChannels.isNotEmpty() && (!hasSyncedInitialGroupDrawer || selectedGroupId == null)) {
+            val (defaultGroupId, defaultDrawerIdx) = resolveDefaultGuideGroupSelection(
+                groups = groups,
+                allChannels = rawChannels,
+                favoriteIds = favoriteSet,
+                recentIds = recentIds
+            )
+            selectedGroupId = defaultGroupId
+            LiveTvStorage.saveGuideGroupId(defaultGroupId)
+            drawerIndex = defaultDrawerIdx
+            focusArea = GuideFocusArea.CATEGORY
+            val targetChannels = filterChannelsForGroup(
+                scopedChannels = scopedChannels,
+                groupId = defaultGroupId,
+                favoriteIds = favoriteSet,
+                recentIds = recentIds,
+                allChannels = rawChannels
+            )
+            channelIndex = findTargetChannelIndex(targetChannels)
+            hasSyncedInitialGroupDrawer = true
+        }
+    }
+
+    val resetTrigger by LiveTvRepository.navigationResetEvent.collectAsStateWithLifecycle()
+    var lastHandledResetTrigger by rememberSaveable { mutableLongStateOf(0L) }
+
+    LaunchedEffect(resetTrigger, rawChannels.isNotEmpty(), groups, favoriteSet, recentIds) {
+        if (resetTrigger != 0L && resetTrigger != lastHandledResetTrigger) {
+            if (rawChannels.isNotEmpty()) {
+                lastHandledResetTrigger = resetTrigger
+                val (defaultGroupId, defaultDrawerIdx) = resolveDefaultGuideGroupSelection(
+                    groups = groups,
+                    allChannels = rawChannels,
+                    favoriteIds = favoriteSet,
+                    recentIds = recentIds
+                )
+                selectedGroupId = defaultGroupId
+                LiveTvStorage.saveGuideGroupId(defaultGroupId)
+                drawerIndex = defaultDrawerIdx
+                focusArea = GuideFocusArea.CATEGORY
+                showPlaylistPicker = false
+                showQuickChannels = false
+                isFullscreen = false
+                val targetChannels = filterChannelsForGroup(
+                    scopedChannels = scopedChannels,
+                    groupId = defaultGroupId,
+                    favoriteIds = favoriteSet,
+                    recentIds = recentIds,
+                    allChannels = rawChannels
+                )
+                channelIndex = findTargetChannelIndex(targetChannels)
+                hasSyncedInitialGroupDrawer = true
+            } else {
+                selectedGroupId = null
+                hasSyncedInitialGroupDrawer = false
+            }
+        }
+    }
 
     val guideFocusRequester = remember { FocusRequester() }
     val fullscreenFocusRequester = remember { FocusRequester() }
@@ -355,7 +408,7 @@ private fun LiveTvGuideContent(
     }
 
     // Keep Category list scrolled comfortably around focused group.
-    LaunchedEffect(drawerIndex) {
+    LaunchedEffect(drawerIndex, groups.size) {
         if (drawerIndex <= 1 || groups.isEmpty()) {
             drawerListState.scrollToItem(0)
         } else {
@@ -472,7 +525,7 @@ private fun LiveTvGuideContent(
             scopedChannels = scopedChannels,
             groupId = grp.id,
             favoriteIds = favoriteSet,
-            recentIds = user.recent,
+            recentIds = recentIds,
             allChannels = rawChannels
         )
         channelIndex = findTargetChannelIndex(nextChannels)
@@ -488,7 +541,7 @@ private fun LiveTvGuideContent(
         val nextGroups = buildLiveTvChannelGroups(
             scopedChannels = nextScoped,
             favoriteIds = favoriteSet,
-            recentIds = user.recent,
+            recentIds = recentIds,
             favoritesLabel = favLabel,
             recentLabel = recentLabel,
             allLabel = allChannelsLabel,
@@ -501,7 +554,7 @@ private fun LiveTvGuideContent(
             scopedChannels = nextScoped,
             groupId = nextGroupId,
             favoriteIds = favoriteSet,
-            recentIds = user.recent,
+            recentIds = recentIds,
             allChannels = rawChannels
         )
         channelIndex = findTargetChannelIndex(nextChannels)

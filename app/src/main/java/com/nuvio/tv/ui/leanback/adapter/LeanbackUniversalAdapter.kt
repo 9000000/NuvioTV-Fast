@@ -43,9 +43,67 @@ class LeanbackUniversalAdapter(
     private var pendingNotifyOnAttach: Boolean = false
     private var lastLoadMoreTimestampMs: Long = 0L
     private var lastLoadMoreItemCount: Int = -1
+    private var pendingFocusedPosition: Int = RecyclerView.NO_POSITION
+    private var pendingFocusedItem: LeanbackCardItem? = null
+    private var lastDispatchedFocusedPosition: Int = RecyclerView.NO_POSITION
+    private var lastDispatchedFocusedKey: String? = null
+    private var lastHorizontalPrefetchPosition: Int = RecyclerView.NO_POSITION
     var attachedRecyclerView: RecyclerView? = null
     var isSubmittingItems: Boolean = false
         private set
+
+    fun dispatchItemFocused(position: Int, item: LeanbackCardItem) {
+        if (position !in items.indices) return
+        val gridView = attachedRecyclerView as? InteropHorizontalGridView
+        if (gridView?.isHoldingHorizontalKey == true) {
+            pendingFocusedPosition = position
+            pendingFocusedItem = item
+            return
+        }
+        pendingFocusedPosition = RecyclerView.NO_POSITION
+        pendingFocusedItem = null
+        lastDispatchedFocusedPosition = position
+        lastDispatchedFocusedKey = item.key
+        onItemFocused(position, item)
+    }
+
+    fun flushPendingFocusedItem() {
+        val pos = pendingFocusedPosition
+        val pending = pendingFocusedItem
+        pendingFocusedPosition = RecyclerView.NO_POSITION
+        pendingFocusedItem = null
+        if (pos in items.indices) {
+            val resolvedItem = items[pos]
+            if (pos != lastDispatchedFocusedPosition || resolvedItem.key != lastDispatchedFocusedKey) {
+                lastDispatchedFocusedPosition = pos
+                lastDispatchedFocusedKey = resolvedItem.key
+                onItemFocused(pos, resolvedItem)
+            }
+            return
+        }
+        if (pending != null) {
+            val relocatedPos = items.indexOfFirst { it.key == pending.key }
+            if (relocatedPos >= 0) {
+                val resolvedItem = items[relocatedPos]
+                if (relocatedPos != lastDispatchedFocusedPosition || resolvedItem.key != lastDispatchedFocusedKey) {
+                    lastDispatchedFocusedPosition = relocatedPos
+                    lastDispatchedFocusedKey = resolvedItem.key
+                    onItemFocused(relocatedPos, resolvedItem)
+                }
+                return
+            }
+        }
+        val gridView = attachedRecyclerView as? InteropHorizontalGridView
+        val selectedPos = gridView?.selectedPosition ?: RecyclerView.NO_POSITION
+        if (selectedPos in items.indices && gridView?.hasFocus() == true && gridView.mayTakeFocus()) {
+            val selectedItem = items[selectedPos]
+            if (selectedPos != lastDispatchedFocusedPosition || selectedItem.key != lastDispatchedFocusedKey) {
+                lastDispatchedFocusedPosition = selectedPos
+                lastDispatchedFocusedKey = selectedItem.key
+                onItemFocused(selectedPos, selectedItem)
+            }
+        }
+    }
 
     fun requestLoadMore() {
         val currentCount = items.size
@@ -375,6 +433,8 @@ class LeanbackUniversalAdapter(
     }
 
     fun onScrollSettled() {
+        flushPendingFocusedItem()
+        lastHorizontalPrefetchPosition = RecyclerView.NO_POSITION
         val pending = pendingItems
         if (pending != null) {
             pendingItems = null
@@ -599,6 +659,14 @@ class LeanbackUniversalAdapter(
     ) {
         val count = items.size
         if (count <= 1) return
+        val isHoldingHorizontal = (attachedRecyclerView as? InteropHorizontalGridView)?.isHoldingHorizontalKey == true
+        if (isHoldingHorizontal &&
+            lastHorizontalPrefetchPosition != RecyclerView.NO_POSITION &&
+            kotlin.math.abs(position - lastHorizontalPrefetchPosition) < HORIZONTAL_HOLD_PREFETCH_STRIDE
+        ) {
+            return
+        }
+        lastHorizontalPrefetchPosition = position
         val (firstVisible, lastVisible) = LeanbackArtworkLoader.resolveVisibleBounds(attachedRecyclerView)
         prefetchRowIndices(
             context = context,
@@ -633,5 +701,6 @@ class LeanbackUniversalAdapter(
 
     companion object {
         private const val LOAD_MORE_DEBOUNCE_MS = 250L
+        internal const val HORIZONTAL_HOLD_PREFETCH_STRIDE = 3
     }
 }

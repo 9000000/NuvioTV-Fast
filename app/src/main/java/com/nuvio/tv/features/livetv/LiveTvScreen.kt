@@ -96,9 +96,19 @@ private fun LiveTvContent(
         state.channels.firstOrNull { it.id == state.lastWatchedChannelId }
     }
     val initialPlaylistId = state.lastWatchedPlaylistId ?: lastWatchedChannel?.playlistId
-    val initialFilter = FilterType.RECENT
+    fun resolveDefaultFilter(): FilterType {
+        val hasFavorites = state.channels.any { it.id in state.favoriteChannelIds }
+        val recentSet = state.recentChannelIds.toSet()
+        val hasRecent = state.channels.any { it.id in recentSet }
+        return when {
+            hasFavorites -> FilterType.FAVORITES
+            hasRecent -> FilterType.RECENT
+            else -> FilterType.ALL
+        }
+    }
+    val initialFilter = resolveDefaultFilter()
 
-    // Dùng rememberSaveable để nhớ filter đã chọn giữa các lần navigation, mặc định trỏ vào mục Xem gần đây
+    // Dùng rememberSaveable để nhớ filter đã chọn giữa các lần navigation, mặc định Yêu thích -> Xem gần đây -> Tất cả kênh
     var activeFilter by rememberSaveable { mutableStateOf(initialFilter) }
     var selectedGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(initialPlaylistId) }
@@ -121,7 +131,7 @@ private fun LiveTvContent(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(state.channels, state.lastWatchedChannelId) {
+    LaunchedEffect(state.channels, state.lastWatchedChannelId, state.favoriteChannelIds, state.recentChannelIds) {
         if (!hasSynchronizedInitialState && state.channels.isNotEmpty()) {
             val targetChannel = state.channels.firstOrNull { it.id == state.lastWatchedChannelId }
             val resolvedPlaylistId = state.lastWatchedPlaylistId ?: targetChannel?.playlistId
@@ -129,22 +139,22 @@ private fun LiveTvContent(
             if (resolvedPlaylistId != null) {
                 selectedPlaylistId = resolvedPlaylistId
             }
-            activeFilter = FilterType.RECENT
+            activeFilter = resolveDefaultFilter()
             selectedGroup = null
             hasSynchronizedInitialState = true
             pendingFocusRestore = true
         }
     }
 
-    // Lắng nghe tín hiệu điều hướng từ Sidebar để trỏ về mục Xem gần đây
+    // Lắng nghe tín hiệu điều hướng từ Sidebar để trỏ về mục mặc định (Yêu thích -> Xem gần đây -> Tất cả kênh)
     val resetTrigger by LiveTvRepository.navigationResetEvent.collectAsState()
     var lastHandledResetTrigger by rememberSaveable { mutableStateOf(0L) }
 
-    LaunchedEffect(resetTrigger) {
-        if (resetTrigger != 0L && resetTrigger != lastHandledResetTrigger) {
+    LaunchedEffect(resetTrigger, state.channels, state.favoriteChannelIds, state.recentChannelIds) {
+        if (resetTrigger != 0L && resetTrigger != lastHandledResetTrigger && state.channels.isNotEmpty()) {
             lastHandledResetTrigger = resetTrigger
             showPlaylistDropdown = false
-            activeFilter = FilterType.RECENT
+            activeFilter = resolveDefaultFilter()
             selectedGroup = null
             pendingFocusRestore = true
         }

@@ -128,6 +128,10 @@ abstract class LeanbackBaseViewHolder(
             }
             return
         }
+        val isHoldingHorizontal = (adapter.attachedRecyclerView as? InteropHorizontalGridView)?.isHoldingHorizontalKey == true
+        if (isHoldingHorizontal) {
+            return
+        }
         val bmp = (result as? BitmapImage)?.bitmap
         if (bmp != null && !bmp.isRecycled) {
             LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
@@ -143,8 +147,11 @@ abstract class LeanbackBaseViewHolder(
         }
     }
 
-    // Defer software layer glow by 55ms during rapid navigation
+    // Defer software layer glow during rapid navigation
     val deferredGlowRunnable = Runnable {
+        val isFastScrollingHorizontal = (adapter.attachedRecyclerView as? InteropHorizontalGridView)?.isHoldingHorizontalKey == true
+        val isFastScrollingVertical = (adapter.attachedRecyclerView as? InteropVerticalGridView)?.isHoldingVerticalKey == true
+        if (isFastScrollingHorizontal || isFastScrollingVertical) return@Runnable
         val style = adapter.themeStyle
         if (root.hasFocus() && adapter.animationsEnabled() && !style.hideFocusBorder) {
             glowView.glowColor = style.resolveGlowColor(currentDominantColor)
@@ -163,7 +170,7 @@ abstract class LeanbackBaseViewHolder(
                 val pos = bindingAdapterPosition
                 val item = currentItem
                 if (pos != RecyclerView.NO_POSITION && item != null) {
-                    adapter.onItemFocused(pos, item)
+                    adapter.dispatchItemFocused(pos, item)
                 }
             }
         }
@@ -252,7 +259,7 @@ abstract class LeanbackBaseViewHolder(
                     val isFastScrollingVertical = (adapter.attachedRecyclerView as? InteropVerticalGridView)?.isHoldingVerticalKey == true
                     if (isFastScrollingHorizontal || isFastScrollingVertical) {
                         glowView.visibility = View.GONE
-                        root.postDelayed(deferredGlowRunnable, 55L)
+                        root.postDelayed(deferredGlowRunnable, 120L)
                     } else {
                         glowView.glowColor = style.resolveGlowColor(currentDominantColor)
                         glowView.visibility = View.VISIBLE

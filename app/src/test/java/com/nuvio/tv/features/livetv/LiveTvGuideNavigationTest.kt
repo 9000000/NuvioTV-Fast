@@ -60,8 +60,9 @@ class LiveTvGuideNavigationTest {
 
     @Test
     fun `resolveInitialGroupId falls back to recent or all when favorites empty`() {
+        val channels = listOf(channel("1"), channel("2"))
         val groups = buildLiveTvChannelGroups(
-            scopedChannels = listOf(channel("1"), channel("2")),
+            scopedChannels = channels,
             favoriteIds = emptySet(),
             recentIds = listOf("2"),
             favoritesLabel = "Favorites",
@@ -71,6 +72,35 @@ class LiveTvGuideNavigationTest {
         assertEquals(ChannelGroup.RECENT, resolveInitialGroupId(groups, favoriteCount = 0, recentCount = 1))
         assertEquals(ChannelGroup.ALL, resolveInitialGroupId(groups, favoriteCount = 0, recentCount = 0))
         assertEquals(ChannelGroup.FAVORITES, resolveInitialGroupId(groups, favoriteCount = 2, recentCount = 1))
+
+        // Verify resolveDefaultGuideGroupSelection returns both the expected groupId and 1-based drawerIndex
+        assertEquals(
+            ChannelGroup.FAVORITES to 1,
+            resolveDefaultGuideGroupSelection(
+                groups = groups,
+                allChannels = channels,
+                favoriteIds = setOf("1"),
+                recentIds = listOf("2")
+            )
+        )
+        assertEquals(
+            ChannelGroup.RECENT to 2,
+            resolveDefaultGuideGroupSelection(
+                groups = groups,
+                allChannels = channels,
+                favoriteIds = emptySet(),
+                recentIds = listOf("2")
+            )
+        )
+        assertEquals(
+            ChannelGroup.ALL to groups.size,
+            resolveDefaultGuideGroupSelection(
+                groups = groups,
+                allChannels = channels,
+                favoriteIds = emptySet(),
+                recentIds = emptyList()
+            )
+        )
     }
 
     @Test

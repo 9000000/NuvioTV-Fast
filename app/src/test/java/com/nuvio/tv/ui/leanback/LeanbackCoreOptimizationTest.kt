@@ -959,6 +959,235 @@ class LeanbackCoreOptimizationTest {
         )
     }
 
+    @Test
+    fun `computeNextHorizontalTargetPosition clamps lookahead while scrolling and steps normally when idle`() {
+        // When idle (not scrolling), steps freely +1 / -1 and clamps to 0..lastIdx
+        assertEquals(
+            1,
+            com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition(
+                anchorPos = 0,
+                pendingTargetPos = RecyclerView.NO_POSITION,
+                step = 1,
+                totalCount = 20,
+                isScrolling = false
+            )
+        )
+        assertEquals(
+            5,
+            com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition(
+                anchorPos = 2,
+                pendingTargetPos = 4,
+                step = 1,
+                totalCount = 20,
+                isScrolling = false
+            )
+        )
+
+        // When scrolling forward, target cannot drift more than MAX_HORIZONTAL_LOOKAHEAD (2) ahead of anchorPos
+        assertEquals(
+            4,
+            com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition(
+                anchorPos = 2,
+                pendingTargetPos = 4,
+                step = 1,
+                totalCount = 20,
+                isScrolling = true
+            )
+        )
+        // Once anchorPos advances to 3, target can advance to 5
+        assertEquals(
+            5,
+            com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition(
+                anchorPos = 3,
+                pendingTargetPos = 4,
+                step = 1,
+                totalCount = 20,
+                isScrolling = true
+            )
+        )
+
+        // When scrolling backward, target cannot drift more than MAX_HORIZONTAL_LOOKAHEAD (2) behind anchorPos
+        assertEquals(
+            6,
+            com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition(
+                anchorPos = 8,
+                pendingTargetPos = 6,
+                step = -1,
+                totalCount = 20,
+                isScrolling = true
+            )
+        )
+        assertEquals(
+            5,
+            com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition(
+                anchorPos = 7,
+                pendingTargetPos = 6,
+                step = -1,
+                totalCount = 20,
+                isScrolling = true
+            )
+        )
+    }
+
+    @Test
+    fun `modern and universal adapters coalesce onItemFocused during horizontal hold and flush once on settle`() {
+        val modernFocusedEvents = mutableListOf<Pair<Int, String>>()
+        val modernItems = (0 until 10).map { idx ->
+            val url = "https://example.com/m_$idx.jpg"
+            ModernCarouselItem(
+                key = "m_$idx",
+                title = "M $idx",
+                subtitle = null,
+                imageUrl = url,
+                heroPreview = HeroPreview(
+                    title = "M $idx",
+                    logo = null,
+                    description = null,
+                    contentTypeText = null,
+                    yearText = null,
+                    imdbText = null,
+                    genres = StableList(),
+                    poster = url,
+                    backdrop = null,
+                    imageUrl = url
+                ),
+                payload = ModernPayload.Catalog(
+                    focusKey = "f_$idx",
+                    itemId = "id_$idx",
+                    itemType = "movie",
+                    addonBaseUrl = "https://addon.example",
+                    trailerTitle = "M $idx",
+                    trailerReleaseInfo = null,
+                    trailerApiType = "movie"
+                )
+            )
+        }
+        val rowAdapter = LeanbackRowAdapter(
+            cardWidthPx = 240,
+            cardHeightPx = 360,
+            cornerRadiusPx = 12f,
+            showLabels = true,
+            animationsEnabled = { true },
+            onItemFocused = { pos, item -> modernFocusedEvents.add(pos to item.key) },
+            onItemClick = {},
+            onItemLongClick = {},
+            onLoadMore = {}
+        ).withTestObservable()
+        rowAdapter.submitItems(modernItems)
+
+        val modernGrid = mockk<com.nuvio.tv.ui.screens.home.ModernInteropHorizontalGridView>(relaxed = true)
+        rowAdapter.attachedRecyclerView = modernGrid
+
+        // Single tap (isHoldingHorizontalKey = false) -> dispatches immediately
+        every { modernGrid.isHoldingHorizontalKey } returns false
+        rowAdapter.dispatchItemFocused(0, modernItems[0])
+        assertEquals(listOf(0 to "m_0"), modernFocusedEvents)
+
+        // Holding horizontal key -> intermediate cards 1, 2, 3, 4 are coalesced without firing Compose callback
+        modernFocusedEvents.clear()
+        every { modernGrid.isHoldingHorizontalKey } returns true
+        rowAdapter.dispatchItemFocused(1, modernItems[1])
+        rowAdapter.dispatchItemFocused(2, modernItems[2])
+        rowAdapter.dispatchItemFocused(3, modernItems[3])
+        rowAdapter.dispatchItemFocused(4, modernItems[4])
+        assertTrue("Intermediate focus events must be suppressed during horizontal key hold", modernFocusedEvents.isEmpty())
+
+        // Key release / settle -> flushes only the final settled card (4, m_4) once
+        every { modernGrid.isHoldingHorizontalKey } returns false
+        rowAdapter.flushPendingFocusedItem()
+        assertEquals(listOf(4 to "m_4"), modernFocusedEvents)
+
+        // Redundant flush is a no-op
+        rowAdapter.flushPendingFocusedItem()
+        assertEquals(listOf(4 to "m_4"), modernFocusedEvents)
+
+        // Same verification for LeanbackUniversalAdapter
+        val universalFocusedEvents = mutableListOf<Pair<Int, String>>()
+        val universalItems = (0 until 10).map { idx ->
+            LeanbackCardItem.Poster(key = "u_$idx", title = "U $idx", imageUrl = "https://example.com/u_$idx.jpg")
+        }
+        val universalAdapter = LeanbackUniversalAdapter(
+            cardWidthPx = 240,
+            cardHeightPx = 360,
+            cornerRadiusPx = 12f,
+            showLabels = true,
+            animationsEnabled = { true },
+            onItemFocused = { pos, item -> universalFocusedEvents.add(pos to item.key) },
+            onItemClick = {},
+            onItemLongClick = {},
+            onLoadMore = {}
+        ).withTestObservable()
+        universalAdapter.submitItems(universalItems)
+
+        val interopGrid = mockk<com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView>(relaxed = true)
+        universalAdapter.attachedRecyclerView = interopGrid
+
+        every { interopGrid.isHoldingHorizontalKey } returns true
+        universalAdapter.dispatchItemFocused(1, universalItems[1])
+        universalAdapter.dispatchItemFocused(2, universalItems[2])
+        universalAdapter.dispatchItemFocused(5, universalItems[5])
+        assertTrue(universalFocusedEvents.isEmpty())
+
+        every { interopGrid.isHoldingHorizontalKey } returns false
+        universalAdapter.flushPendingFocusedItem()
+        assertEquals(listOf(5 to "u_5"), universalFocusedEvents)
+    }
+
+    @Test
+    fun `modern and universal adapters stride-throttle horizontal prefetch while holding horizontal key`() {
+        val (standardContext, _) = mockDeviceContext(totalRamBytes = 4L * 1024L * 1024L * 1024L)
+        val universalItems = (0 until 30).map { idx ->
+            LeanbackCardItem.Poster(
+                key = "p_$idx",
+                title = "P $idx",
+                imageUrl = "https://example.com/p_$idx.jpg"
+            )
+        }
+
+        val imageLoader = mockk<ImageLoader>(relaxed = true)
+        val enqueuedRequests = mutableListOf<ImageRequest>()
+        every { imageLoader.memoryCache } returns null
+        every { imageLoader.enqueue(capture(enqueuedRequests)) } returns mockk(relaxed = true)
+
+        mockkObject(SingletonImageLoader)
+        try {
+            every { SingletonImageLoader.get(any()) } returns imageLoader
+
+            val interopGrid = mockk<com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView>(relaxed = true)
+            every { interopGrid.context } returns standardContext
+            every { interopGrid.isAttachedToWindow } returns true
+            every { interopGrid.childCount } returns 0
+            every { interopGrid.isHoldingHorizontalKey } returns true
+
+            val adapter = createUniversalAdapter().apply {
+                submitItems(universalItems)
+                attachedRecyclerView = interopGrid
+            }
+
+            // Position 0 triggers initial prefetch window
+            adapter.onFocusedPositionChanged(standardContext, 0, aheadCount = 2, behindCount = 0)
+            assertEquals(
+                listOf("https://example.com/p_1.jpg", "https://example.com/p_2.jpg"),
+                enqueuedRequests.map { it.data.toString() }
+            )
+
+            // Positions 1 and 2 (< stride 3 from 0) are skipped while holding horizontal key
+            enqueuedRequests.clear()
+            adapter.onFocusedPositionChanged(standardContext, 1, aheadCount = 2, behindCount = 0)
+            adapter.onFocusedPositionChanged(standardContext, 2, aheadCount = 2, behindCount = 0)
+            assertTrue("Prefetch must be throttled for steps smaller than stride 3 while holding key", enqueuedRequests.isEmpty())
+
+            // Position 3 (distance 3 from 0) runs prefetch
+            adapter.onFocusedPositionChanged(standardContext, 3, aheadCount = 2, behindCount = 0)
+            assertEquals(
+                listOf("https://example.com/p_4.jpg", "https://example.com/p_5.jpg"),
+                enqueuedRequests.map { it.data.toString() }
+            )
+        } finally {
+            unmockkObject(SingletonImageLoader)
+        }
+    }
+
     private fun createUniversalAdapter(): LeanbackUniversalAdapter = LeanbackUniversalAdapter(
         cardWidthPx = 240,
         cardHeightPx = 360,

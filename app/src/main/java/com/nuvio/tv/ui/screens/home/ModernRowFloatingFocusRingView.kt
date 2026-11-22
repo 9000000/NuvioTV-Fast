@@ -251,16 +251,35 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         }
     }
 
-    fun moveToTarget(target: View, dominantColor: Int, animated: Boolean) {
+    fun moveToTarget(
+        target: View,
+        dominantColor: Int,
+        animated: Boolean,
+        keepColorIfVisible: Boolean = false
+    ) {
         currentTargetView = target
         val parent = parent as? ViewGroup ?: return
 
         if (!target.isAttachedToWindow || !parent.isAttachedToWindow || target.width <= 0 || target.height <= 0 || parent.width <= 0) {
             target.post {
                 if (currentTargetView === target && isAttachedToWindow) {
-                    moveToTarget(target, dominantColor, animated)
+                    moveToTarget(target, dominantColor, animated, keepColorIfVisible)
                 }
             }
+            return
+        }
+
+        val targetWidth = target.width + (glowMarginPx * 2).toInt()
+        val targetHeight = target.height + (glowMarginPx * 2).toInt()
+
+        // While holding horizontal D-pad, keep the anchored ring steady without re-rasterizing
+        // LAYER_TYPE_SOFTWARE blur filters on every passing card.
+        if (keepColorIfVisible &&
+            visibility == VISIBLE &&
+            alpha >= 1f &&
+            width == targetWidth &&
+            height == targetHeight
+        ) {
             return
         }
 
@@ -283,8 +302,6 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             target.getLocationInWindow(tempTargetLoc)
             (tempTargetLoc[1] - tempParentLoc[1]).toFloat() - glowMarginPx
         }
-        val targetWidth = target.width + (glowMarginPx * 2).toInt()
-        val targetHeight = target.height + (glowMarginPx * 2).toInt()
 
         applyThemeColors(dominantColor)
 
@@ -315,14 +332,20 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         if (visibility != VISIBLE) return
         val parent = parent as? ViewGroup ?: return
         val cardW = (width - (glowMarginPx * 2).toInt()).coerceAtLeast(0)
-        translationX = computeAnchoredRingX(parent, cardW)
+        val targetX = computeAnchoredRingX(parent, cardW)
+        if (kotlin.math.abs(translationX - targetX) >= 0.5f) {
+            translationX = targetX
+        }
     }
 
     fun onScrollSettled() {
         if (visibility != VISIBLE) return
         val parent = parent as? ViewGroup ?: return
         val cardW = (width - (glowMarginPx * 2).toInt()).coerceAtLeast(0)
-        translationX = computeAnchoredRingX(parent, cardW)
+        val targetX = computeAnchoredRingX(parent, cardW)
+        if (kotlin.math.abs(translationX - targetX) >= 0.5f) {
+            translationX = targetX
+        }
     }
 
     fun showFixedOverlayAt(

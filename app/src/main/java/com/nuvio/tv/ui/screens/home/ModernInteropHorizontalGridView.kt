@@ -7,9 +7,42 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
+import android.view.animation.LinearInterpolator
 import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.OnChildViewHolderSelectedListener
 import androidx.recyclerview.widget.RecyclerView
+
+internal const val MAX_HORIZONTAL_LOOKAHEAD = 2
+private const val HORIZONTAL_REPEAT_INTERVAL_MS = 85L
+private const val HORIZONTAL_HOLD_SCROLL_DURATION_MS = 105
+private val HORIZONTAL_HOLD_LINEAR_INTERPOLATOR = LinearInterpolator()
+
+internal fun computeNextHorizontalTargetPosition(
+    anchorPos: Int,
+    pendingTargetPos: Int,
+    step: Int,
+    totalCount: Int,
+    isScrolling: Boolean,
+    maxLookahead: Int = MAX_HORIZONTAL_LOOKAHEAD
+): Int {
+    if (totalCount <= 0) return 0
+    val lastIdx = totalCount - 1
+    val safeAnchor = anchorPos.coerceIn(0, lastIdx)
+    val basePos = if (pendingTargetPos != RecyclerView.NO_POSITION) {
+        pendingTargetPos.coerceIn(0, lastIdx)
+    } else {
+        safeAnchor
+    }
+    val rawTarget = (basePos + step).coerceIn(0, lastIdx)
+    if (!isScrolling || maxLookahead <= 0) return rawTarget
+    return if (step > 0) {
+        val maxAllowed = (safeAnchor + maxLookahead).coerceAtMost(lastIdx)
+        rawTarget.coerceAtMost(maxAllowed)
+    } else {
+        val minAllowed = (safeAnchor - maxLookahead).coerceAtLeast(0)
+        rawTarget.coerceAtLeast(minAllowed)
+    }
+}
 
 /**
  * Specialized [HorizontalGridView] for Modern Home rows with anchored floating focus ring,
@@ -53,9 +86,13 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         val hasRowFocus = (currentlyHasFocus || (newFocus != null && isDescendant(newFocus))) && mayTakeFocus()
         hadRowFocus = hasRowFocus
         if (!hasRowFocus) {
+            val wasHolding = isHoldingHorizontalKey
             isHoldingHorizontalKey = false
             isHoldingVerticalKey = false
             pendingTargetPosition = RecyclerView.NO_POSITION
+            if (wasHolding) {
+                rowAdapter?.flushPendingFocusedItem()
+            }
             floatingRingView?.hideRing(false)
         } else {
             val focusedChild = newFocus ?: findFocus()
@@ -64,7 +101,12 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 if (holder != null) {
                     if (floatingRingView?.currentTargetView !== holder.cardContainer) {
                         holder.updateFocusVisual(true)
-                        floatingRingView?.moveToTarget(holder.cardContainer, holder.currentDominantColor, false)
+                        floatingRingView?.moveToTarget(
+                            target = holder.cardContainer,
+                            dominantColor = holder.currentDominantColor,
+                            animated = false,
+                            keepColorIfVisible = isHoldingHorizontalKey
+                        )
                     }
                 } else {
                     ensureChildFocusAndRing(animated = false)
@@ -175,14 +217,23 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             floatingRingView?.hideRing(true)
             return
         }
-        floatingRingView?.moveToTarget(cardContainer, dominantColor, animationsEnabled)
+        floatingRingView?.moveToTarget(
+            target = cardContainer,
+            dominantColor = dominantColor,
+            animated = animationsEnabled,
+            keepColorIfVisible = isHoldingHorizontalKey
+        )
     }
 
     fun prepareForRowChange() {
+        val wasHolding = isHoldingHorizontalKey
         isHoldingHorizontalKey = false
         isHoldingVerticalKey = false
         pendingIncomingFocus = false
         pendingTargetPosition = RecyclerView.NO_POSITION
+        if (wasHolding) {
+            rowAdapter?.flushPendingFocusedItem()
+        }
         if (canTakeFocus?.invoke() == false) {
             descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
         }
@@ -210,10 +261,15 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 vh.itemView.requestFocus()
             }
             vh.updateFocusVisual(true)
-            floatingRingView?.moveToTarget(vh.cardContainer, vh.currentDominantColor, animated)
-        } else if (retryCount < 8) {
+            floatingRingView?.moveToTarget(
+                target = vh.cardContainer,
+                dominantColor = vh.currentDominantColor,
+                animated = animated,
+                keepColorIfVisible = isHoldingHorizontalKey
+            )
+        } else if (retryCount < 8 && !isHoldingHorizontalKey) {
             post {
-                if (isAttachedToWindow && mayTakeFocus() && !isOverlayRingActive) {
+                if (isAttachedToWindow && mayTakeFocus() && !isOverlayRingActive && !isHoldingHorizontalKey) {
                     ensureChildFocusAndRing(targetPos, animated, retryCount + 1)
                 }
             }
@@ -235,7 +291,12 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 vh.itemView.requestFocus(direction)
             }
             vh.updateFocusVisual(true)
-            floatingRingView?.moveToTarget(vh.cardContainer, vh.currentDominantColor, animationsEnabled)
+            floatingRingView?.moveToTarget(
+                target = vh.cardContainer,
+                dominantColor = vh.currentDominantColor,
+                animated = animationsEnabled,
+                keepColorIfVisible = isHoldingHorizontalKey
+            )
         } else if (retryCount < 10) {
             post {
                 if (isAttachedToWindow && mayTakeFocus() && !isOverlayRingActive) {
@@ -256,6 +317,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
+                    rowAdapter?.flushPendingFocusedItem()
                     post {
                         if (!isComputingLayout) {
                             ensureChildFocusAndRing(animated = false)
@@ -278,7 +340,8 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 position: Int,
                 subposition: Int
             ) {
-                val isPendingTarget = (position == pendingTargetPosition) || (pendingTargetPosition != RecyclerView.NO_POSITION)
+                val hasPending = pendingTargetPosition != RecyclerView.NO_POSITION
+                val isIntermediateWhilePending = hasPending && position != pendingTargetPosition
                 if (position == pendingTargetPosition && child != null) {
                     pendingTargetPosition = RecyclerView.NO_POSITION
                 }
@@ -292,22 +355,29 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 restoredPosition = position
 
                 val hasGridFocus = (hasFocus() || isFocused || (parent as? View)?.hasFocus() == true ||
-                    isHoldingHorizontalKey || isPendingTarget) && mayTakeFocus()
+                    isHoldingHorizontalKey || hasPending) && mayTakeFocus()
                 if (child != null && hasGridFocus) {
-                    if (!child.itemView.hasFocus()) {
+                    if (!isIntermediateWhilePending && !child.itemView.hasFocus()) {
                         child.itemView.requestFocus()
                     }
                     (child as? LeanbackCardViewHolder)?.let { vh ->
                         vh.updateFocusVisual(true)
                         if (!isOverlayRingActive) {
-                            floatingRingView?.moveToTarget(vh.cardContainer, vh.currentDominantColor, animationsEnabled)
+                            floatingRingView?.moveToTarget(
+                                target = vh.cardContainer,
+                                dominantColor = vh.currentDominantColor,
+                                animated = animationsEnabled,
+                                keepColorIfVisible = isHoldingHorizontalKey
+                            )
                         } else {
                             floatingRingView?.hideRing(true)
                         }
                     }
                     rowAdapter?.onFocusedPositionChanged(context, position)
                 } else if (hasGridFocus) {
-                    ensureChildFocusAndRing(targetPos = position, animated = animationsEnabled)
+                    if (!isHoldingHorizontalKey && !isIntermediateWhilePending) {
+                        ensureChildFocusAndRing(targetPos = position, animated = animationsEnabled)
+                    }
                     rowAdapter?.onFocusedPositionChanged(context, position)
                 }
 
@@ -349,7 +419,12 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             if (granted) {
                 vh.updateFocusVisual(true)
                 if (!isOverlayRingActive) {
-                    floatingRingView?.moveToTarget(vh.cardContainer, vh.currentDominantColor, false)
+                    floatingRingView?.moveToTarget(
+                        target = vh.cardContainer,
+                        dominantColor = vh.currentDominantColor,
+                        animated = false,
+                        keepColorIfVisible = isHoldingHorizontalKey
+                    )
                 } else {
                     floatingRingView?.hideRing(true)
                 }
@@ -393,7 +468,12 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             if (holder != null) {
                 holder.updateFocusVisual(true)
                 if (!isOverlayRingActive) {
-                    floatingRingView?.moveToTarget(holder.cardContainer, holder.currentDominantColor, false)
+                    floatingRingView?.moveToTarget(
+                        target = holder.cardContainer,
+                        dominantColor = holder.currentDominantColor,
+                        animated = false,
+                        keepColorIfVisible = isHoldingHorizontalKey
+                    )
                 } else {
                     floatingRingView?.hideRing(true)
                 }
@@ -466,12 +546,24 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         return true
     }
 
+    override fun smoothScrollBy(dx: Int, dy: Int) {
+        if (isHoldingHorizontalKey && dx != 0 && dy == 0) {
+            super.smoothScrollBy(dx, dy, HORIZONTAL_HOLD_LINEAR_INTERPOLATOR, HORIZONTAL_HOLD_SCROLL_DURATION_MS)
+        } else {
+            super.smoothScrollBy(dx, dy)
+        }
+    }
+
     override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
         if (!gainFocus && !hasFocus()) {
+            val wasHolding = isHoldingHorizontalKey
             isHoldingHorizontalKey = false
             isHoldingVerticalKey = false
             pendingTargetPosition = RecyclerView.NO_POSITION
+            if (wasHolding) {
+                rowAdapter?.flushPendingFocusedItem()
+            }
             floatingRingView?.hideRing(isOverlayRingActive)
         } else if (gainFocus || hasFocus()) {
             if (selectedPosition <= 0) {
@@ -506,10 +598,26 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     } else {
                         currentSelected
                     }
+                    pendingTargetPosition = RecyclerView.NO_POSITION
 
                     if (event.keyCode == towardStartKey && target <= 0) {
                         hasReleasedKeyAfterArrivingAt0 = true
                         arrivedAt0FromEnd = false
+                    }
+
+                    if (selectedPosition != target && total > 0) {
+                        if (animationsEnabled) {
+                            setSelectedPositionSmooth(target)
+                        } else {
+                            setSelectedPosition(target)
+                        }
+                    }
+
+                    rowAdapter?.flushPendingFocusedItem()
+                    if (scrollState == RecyclerView.SCROLL_STATE_IDLE) {
+                        ensureChildFocusAndRing(targetPos = target, animated = false)
+                        rowAdapter?.onScrollSettled()
+                        floatingRingView?.onScrollSettled()
                     }
                     return true
                 }
@@ -530,11 +638,15 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
             val resolvedHolderPos = holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
             val resolvedSelectedPos = selectedPosition.takeIf { it != RecyclerView.NO_POSITION }
-            val currentPos = when {
-                pendingTargetPosition != RecyclerView.NO_POSITION -> pendingTargetPosition
-                resolvedHolderPos != null -> resolvedHolderPos
-                resolvedSelectedPos != null -> resolvedSelectedPos
-                else -> 0
+            val anchorPos = if (scrollState == RecyclerView.SCROLL_STATE_IDLE) {
+                resolvedHolderPos ?: resolvedSelectedPos ?: 0
+            } else {
+                resolvedSelectedPos ?: resolvedHolderPos ?: 0
+            }
+            val currentPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
+                pendingTargetPosition
+            } else {
+                anchorPos
             }
             when (event.keyCode) {
                 towardStartKey -> {
@@ -544,12 +656,15 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     }
                     if (currentPos <= 0 || total <= 0) {
                         pendingTargetPosition = 0
-                        if (selectedPosition != 0) {
+                        if (selectedPosition != 0 && total > 0) {
                             if (animationsEnabled) {
                                 setSelectedPositionSmooth(0)
                             } else {
                                 setSelectedPosition(0)
                             }
+                        }
+                        if (isHoldingHorizontalKey) {
+                            rowAdapter?.flushPendingFocusedItem()
                         }
                         val arrivedRecently = arrivedAt0FromEnd && (now - arrivalAt0Time < 300L)
                         if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
@@ -568,18 +683,29 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
 
                     if (event.repeatCount > 0) {
                         isHoldingHorizontalKey = true
-                        if (now - lastHorizontalRepeatDispatchMs < 55L) {
+                        if (now - lastHorizontalRepeatDispatchMs < HORIZONTAL_REPEAT_INTERVAL_MS) {
                             return true
                         }
                         lastHorizontalRepeatDispatchMs = now
                     } else {
+                        isHoldingHorizontalKey = false
                         lastHorizontalRepeatDispatchMs = now
                     }
 
-                    val target = (currentPos - 1).coerceAtLeast(0)
+                    val isScrolling = scrollState != RecyclerView.SCROLL_STATE_IDLE
+                    val target = computeNextHorizontalTargetPosition(
+                        anchorPos = anchorPos,
+                        pendingTargetPos = pendingTargetPosition,
+                        step = -1,
+                        totalCount = total,
+                        isScrolling = isScrolling
+                    )
+                    if (isScrolling && target == pendingTargetPosition) {
+                        return true
+                    }
                     pendingTargetPosition = target
-                    val nextVh = findViewHolderForAdapterPosition(target)
                     if (!animationsEnabled) {
+                        val nextVh = findViewHolderForAdapterPosition(target)
                         setSelectedPosition(target)
                         if (nextVh != null) {
                             nextVh.itemView.requestFocus(towardStartFocusDir)
@@ -590,11 +716,6 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     }
 
                     setSelectedPositionSmooth(target)
-                    if (nextVh != null) {
-                        nextVh.itemView.requestFocus(towardStartFocusDir)
-                    } else {
-                        ensureTargetChildFocused(target, towardStartFocusDir)
-                    }
                     return true
                 }
                 towardEndKey -> {
@@ -605,32 +726,47 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     if (total <= 0 || currentPos >= total - 1) {
                         val lastIdx = (total - 1).coerceAtLeast(0)
                         pendingTargetPosition = lastIdx
-                        if (animationsEnabled) {
-                            setSelectedPositionSmooth(lastIdx)
-                        } else {
-                            setSelectedPosition(lastIdx)
+                        if (selectedPosition != lastIdx && total > 0) {
+                            if (animationsEnabled) {
+                                setSelectedPositionSmooth(lastIdx)
+                            } else {
+                                setSelectedPosition(lastIdx)
+                            }
+                        }
+                        if (isHoldingHorizontalKey) {
+                            rowAdapter?.flushPendingFocusedItem()
                         }
                         return true
                     }
 
                     if (event.repeatCount > 0) {
                         isHoldingHorizontalKey = true
-                        if (now - lastHorizontalRepeatDispatchMs < 55L) {
+                        if (now - lastHorizontalRepeatDispatchMs < HORIZONTAL_REPEAT_INTERVAL_MS) {
                             return true
                         }
                         lastHorizontalRepeatDispatchMs = now
                     } else {
+                        isHoldingHorizontalKey = false
                         lastHorizontalRepeatDispatchMs = now
                     }
 
-                    val target = (currentPos + 1).coerceAtMost((total - 1).coerceAtLeast(0))
-                    pendingTargetPosition = target
+                    val isScrolling = scrollState != RecyclerView.SCROLL_STATE_IDLE
+                    val target = computeNextHorizontalTargetPosition(
+                        anchorPos = anchorPos,
+                        pendingTargetPos = pendingTargetPosition,
+                        step = 1,
+                        totalCount = total,
+                        isScrolling = isScrolling
+                    )
                     if (target >= (total - 12).coerceAtLeast(0) && total > 0) {
                         rowAdapter?.onLoadMore?.invoke()
                     }
-                    rowAdapter?.onFocusedPositionChanged(context, target)
-                    val nextVh = findViewHolderForAdapterPosition(target)
+                    if (isScrolling && target == pendingTargetPosition) {
+                        return true
+                    }
+                    pendingTargetPosition = target
                     if (!animationsEnabled) {
+                        val nextVh = findViewHolderForAdapterPosition(target)
                         setSelectedPosition(target)
                         if (nextVh != null) {
                             nextVh.itemView.requestFocus(towardEndFocusDir)
@@ -641,16 +777,15 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     }
 
                     setSelectedPositionSmooth(target)
-                    if (nextVh != null) {
-                        nextVh.itemView.requestFocus(towardEndFocusDir)
-                    } else {
-                        ensureTargetChildFocused(target, towardEndFocusDir)
-                    }
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    val wasHoldingHorizontal = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
+                    if (wasHoldingHorizontal) {
+                        rowAdapter?.flushPendingFocusedItem()
+                    }
                     if (event.repeatCount > 0) {
                         isHoldingVerticalKey = true
                         if (onVerticalHoldScroll?.invoke(1) == true) return true
@@ -666,8 +801,12 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     if (onNavigateDown?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
+                    val wasHoldingHorizontal = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
+                    if (wasHoldingHorizontal) {
+                        rowAdapter?.flushPendingFocusedItem()
+                    }
                     if (event.repeatCount > 0) {
                         isHoldingVerticalKey = true
                         if (onVerticalHoldScroll?.invoke(-1) == true) return true
@@ -683,10 +822,24 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     if (onNavigateUp?.invoke() == true) return true
                 }
                 KeyEvent.KEYCODE_BACK -> {
+                    val wasHoldingHorizontal = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     isHoldingVerticalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
+                    if (wasHoldingHorizontal) {
+                        rowAdapter?.flushPendingFocusedItem()
+                    }
                     if (onNavigateBack?.invoke() == true) return true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER,
+                KeyEvent.KEYCODE_MENU -> {
+                    if (isHoldingHorizontalKey) {
+                        isHoldingHorizontalKey = false
+                        pendingTargetPosition = RecyclerView.NO_POSITION
+                        rowAdapter?.flushPendingFocusedItem()
+                    }
                 }
             }
         }

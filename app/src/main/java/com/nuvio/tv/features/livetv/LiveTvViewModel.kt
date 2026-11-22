@@ -73,7 +73,15 @@ class LiveTvViewModel @Inject constructor(
     private val _programs = MutableStateFlow<Map<String, List<EpgProgram>>>(emptyMap())
     val programs: StateFlow<Map<String, List<EpgProgram>>> = _programs.asStateFlow()
 
-    private val _userState = MutableStateFlow(LiveUserState())
+    private val _userState = MutableStateFlow(
+        uiState.value.let { state ->
+            LiveUserState(
+                favorites = state.favoriteChannelIds.toList(),
+                recent = state.recentChannelIds,
+                lastChannelKey = state.lastWatchedChannelId
+            )
+        }
+    )
     val userState: StateFlow<LiveUserState> = _userState.asStateFlow()
 
     private val _catchup = MutableStateFlow<CatchupSession?>(null)

@@ -1,3 +1,38 @@
+# Danh Sách Task - Tối Ưu Độ Mượt Khi Bấm Giữ Di Chuyển Trái / Phải (Phạm Vi Thuần Leanback) (`home-horizontal-hold-smoothness`)
+
+> **Kế hoạch tương ứng**: [PLAN-home-horizontal-hold-smoothness.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-home-horizontal-hold-smoothness.md)
+> **Phạm vi**: **100% chỉ sửa trong tầng Android Leanback** (7 tệp Leanback + 1 tệp Unit Test). Không can thiệp các file Compose Screen hay ViewModel.
+
+---
+
+## 📋 Task Breakdown (`HSCROLL`)
+
+### Phase 1: Chuẩn Hóa Động Cơ Cuộn Ngang Leanback (Core GridView)
+- [x] **HSCROLL-01**: Loại bỏ xung đột `setSelectedPositionSmooth` vs `requestFocus`, kẹp `MAX_HORIZONTAL_LOOKAHEAD = 2`, áp dụng `LinearInterpolator` (65ms) khi giữ phím ngang và chặn giật ngược thẻ trung gian trong `ModernInteropHorizontalGridView` & `InteropHorizontalGridView`
+  - **Vai trò**: Android TV Focus & Leanback Scroller Engineer
+  - **Mô tả**: Khi `animationsEnabled == true`, chỉ gọi `setSelectedPositionSmooth(target)` mà không gọi đè `itemView.requestFocus()` ngay trong `ACTION_DOWN`; override `smoothScrollBy` dùng `LinearInterpolator` (65ms) khi `isHoldingHorizontalKey == true` để loại bỏ hiện tượng giật vận tốc `QuinticInterpolator` mỗi 55ms; kẹp khoảng cách dẫn trước `pendingTargetPosition` tối đa 2 thẻ khi đang cuộn; bỏ `requestFocus()` trên các thẻ trung gian trong `onChildViewHolderSelected`; flush trạng thái settled ngay khi nhận `ACTION_UP` hoặc khi đổi phím sang trục khác (`UP`/`DOWN`/`CENTER`/`ENTER`/`MENU`/`BACK`).
+  - **File**: [ModernInteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt), [InteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt)
+
+### Phase 2: Đóng Băng Software Glow (`LAYER_TYPE_SOFTWARE`), GPU Readback & Marquee Khi Hold Ngang
+- [x] **HSCROLL-02**: Chặn vẽ lại `BlurMaskFilter` trên `ModernRowFloatingFocusRingView`, chặn copy `Hardware Bitmap` trích màu và hoãn Marquee khi `isHoldingHorizontalKey == true`
+  - **Vai trò**: TV Rendering & Graphics Performance Engineer
+  - **Mô tả**: Giữ nguyên màu hào quang hiện tại của `ModernRowFloatingFocusRingView` trong suốt lúc `isHoldingHorizontalKey == true` (tránh `invalidate()` software layer 18 lần/giây) và chỉ gán `translationX` trong `onParentScrolled(dx)` khi lệch `>= 0.5f`; không gọi `extractDominantColorAsync` (tránh copy Hardware Bitmap) và không bật `titleText.isSelected = true` trên thẻ trung gian; cập nhật đầy đủ màu hào quang & Marquee ngay khi dừng/nhả phím.
+  - **File**: [ModernRowFloatingFocusRingView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernRowFloatingFocusRingView.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt), [LeanbackBaseViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackBaseViewHolder.kt), [LeanbackPosterViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackPosterViewHolder.kt), [LeanbackEpisodeViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackEpisodeViewHolder.kt)
+
+### Phase 3: Coalesce `onItemFocused` & Stride-Throttle Prefetch Ngay Trong Leanback Adapter
+- [x] **HSCROLL-03**: Gom (coalesce) callback `onItemFocused` và áp dụng Stride Prefetch bên trong `LeanbackRowAdapter` & `LeanbackUniversalAdapter` khi `isHoldingHorizontalKey == true`
+  - **Vai trò**: Leanback Adapter & Bridge Engineer
+  - **Mô tả**: Khi `isHoldingHorizontalKey == true`, lưu `pendingFocusedPosition` bên trong Adapter thay vì bắn `onItemFocused` lên Compose 18 lần/giây, sau đó flush 1 lần duy nhất khi nhả phím / chuyển phím / `onScrollSettled()`; xóa lệnh gọi đôi `onFocusedPositionChanged` trong `ModernInteropHorizontalGridView` và áp dụng stride throttle (chỉ prefetch mỗi 3 thẻ khi đang giữ phím ngang).
+  - **File**: [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt), [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt), [LeanbackBaseViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackBaseViewHolder.kt)
+
+### Phase 4: Kiểm Thử Tự Động & Nghiệm Thu
+- [x] **HSCROLL-04**: Viết Unit Tests kiểm chứng Horizontal Hold Smoothness thuần Leanback & chạy bộ test
+  - **Vai trò**: QA / Verification Engineer
+  - **Mô tả**: Bổ sung unit tests cho lookahead clamp, focus coalescing trong Adapter khi giữ phím ngang, chặn redraw floating ring & stride prefetch; chạy `compileFullDebugKotlin` và `testFullDebugUnitTest`.
+  - **File**: [LeanbackCoreOptimizationTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt)
+
+---
+
 # Danh Sách Task - Rà Soát Sâu Vòng 3 — Chốt Hạ Lỗi Tầng Sâu Android Leanback (`tet2`)
 
 > **Kế hoạch tương ứng**: [PLAN-leanback-deep-review-r3.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-leanback-deep-review-r3.md)

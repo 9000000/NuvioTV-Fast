@@ -87,6 +87,7 @@ class LeanbackPosterViewHolder(
     }
 
     override fun updateFocusVisual(hasFocus: Boolean) {
+        val isHoldingHorizontal = (adapter.attachedRecyclerView as? com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView)?.isHoldingHorizontalKey == true
         val item = currentItem
         if (hasFocus && item != null) {
             val loadableUrl = item.imageUrl?.takeIf { it.isNotBlank() && !it.trim().isPlaceholder() }
@@ -95,7 +96,7 @@ class LeanbackPosterViewHolder(
             if (cachedColor != null) {
                 currentDominantColor = cachedColor
                 lastLoadedColorKey = colorCacheKey
-            } else if (loadableUrl != null && lastLoadedColorKey != colorCacheKey) {
+            } else if (!isHoldingHorizontal && loadableUrl != null && lastLoadedColorKey != colorCacheKey) {
                 val bmp = (posterImage.drawable as? BitmapDrawable)?.bitmap
                 if (bmp != null && !bmp.isRecycled) {
                     lastLoadedColorKey = colorCacheKey
@@ -113,7 +114,10 @@ class LeanbackPosterViewHolder(
             }
         }
         super.updateFocusVisual(hasFocus)
-        titleText?.isSelected = hasFocus
+        val shouldMarquee = hasFocus && !isHoldingHorizontal
+        if (titleText?.isSelected != shouldMarquee) {
+            titleText?.isSelected = shouldMarquee
+        }
     }
 
     override fun needsImageRebind(): Boolean {

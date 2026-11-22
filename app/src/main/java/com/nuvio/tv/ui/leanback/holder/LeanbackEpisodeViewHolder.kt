@@ -303,8 +303,35 @@ class LeanbackEpisodeViewHolder(
     }
 
     override fun updateFocusVisual(hasFocus: Boolean) {
+        val isHoldingHorizontal = (adapter.attachedRecyclerView as? com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView)?.isHoldingHorizontalKey == true
+        val item = currentItem
+        if (hasFocus && !isHoldingHorizontal && item != null) {
+            val loadableUrl = item.imageUrl?.takeIf { it.isNotBlank() && !it.trim().isPlaceholder() }
+            val colorCacheKey = loadableUrl ?: item.key
+            val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
+            if (cachedColor != null) {
+                currentDominantColor = cachedColor
+            } else if (loadableUrl != null) {
+                val bmp = (thumbnailImage.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                if (bmp != null && !bmp.isRecycled) {
+                    val boundKey = item.key
+                    LeanbackColorEngine.extractDominantColorAsync(colorCacheKey, bmp) { extracted ->
+                        if (currentItem?.key == boundKey) {
+                            val changed = currentDominantColor != extracted
+                            currentDominantColor = extracted
+                            if (root.hasFocus() && changed) {
+                                super.updateFocusVisual(true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         super.updateFocusVisual(hasFocus)
-        titleText.isSelected = hasFocus
+        val shouldMarquee = hasFocus && !isHoldingHorizontal
+        if (titleText.isSelected != shouldMarquee) {
+            titleText.isSelected = shouldMarquee
+        }
     }
 
     override fun unbind() {
