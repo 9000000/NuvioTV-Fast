@@ -3529,4 +3529,47 @@
     <string name="autosync_status_failed">Failed</string>
     <string name="stream_resume_from_time">Resume from %1$s</string>
     <string name="stream_resume_from_percent">Resume from %1$d%%</string>
+
+    <!-- TorrServer Integration -->
+    <string name="settings_torrserver_title">TorrServer</string>
+    <string name="settings_torrserver_subtitle">Configure remote TorrServer URL and streaming options</string>
+    <string name="torrserver_enable_title">Enable TorrServer</string>
+    <string name="torrserver_enable_subtitle">Stream torrents via remote TorrServer</string>
+    <string name="torrserver_server_url_title">TorrServer URL</string>
+    <string name="torrserver_server_url_hint">http://192.168.1.100:8090</string>
+    <string name="torrserver_server_url_dialog_subtitle">Enter your TorrServer URL (e.g. http://192.168.1.100:8090 or http://127.0.0.1:8090)</string>
+    <string name="torrserver_test_connection">Test Connection</string>
+    <string name="torrserver_test_connection_idle">Check GET /echo connectivity to the TorrServer instance</string>
+    <string name="torrserver_test_connection_testing">Testing connection…</string>
+    <string name="torrserver_test_connection_success">Connected: %1$s</string>
+    <string name="torrserver_test_connection_error">Error: %1$s</string>
+    <string name="torrserver_test_connection_failed">Failed</string>
+    <string name="torrserver_auth_title">HTTP Basic Auth (Optional)</string>
+    <string name="torrserver_auth_dialog_subtitle">Basic Auth credentials for your TorrServer instance (if configured)</string>
+    <string name="torrserver_auth_user_value">User: %1$s</string>
+    <string name="torrserver_auth_none">No authentication</string>
+    <string name="torrserver_username_hint">Username</string>
+    <string name="torrserver_password_hint">Password</string>
+    <string name="torrserver_error_not_configured">TorrServer is not configured. Please enable and set Server URL in Settings &gt; Content Discovery &gt; Media Servers &gt; TorrServer.</string>
+    <string name="torrserver_status_enabled">Enabled</string>
+    <string name="torrserver_preload_title">Preload buffer</string>
+    <string name="torrserver_preload_subtitle">Pre-buffer torrent stream data before playback starts</string>
+    <string name="torrserver_save_title">Save torrent to server</string>
+    <string name="torrserver_save_subtitle">Save downloaded torrents to TorrServer database</string>
+    <string name="torrserver_gst_title">GStreamer transcoding (GST)</string>
+    <string name="torrserver_gst_subtitle">Stream via GStreamer HLS transcoding (requires -gst TorrServer build)</string>
+    <string name="torrserver_gst_checking">Checking GStreamer support on server…</string>
+
+    <!-- Torrent File Picker Dialog -->
+    <string name="torrent_file_picker_title">Select Torrent File</string>
+    <string name="torrent_file_picker_loading">Loading files from TorrServer…</string>
+    <string name="torrent_file_picker_empty">No playable files found in torrent</string>
+    <string name="torrent_file_picker_hint">%1$d files found. Select a file to play:</string>
+    <string name="torrent_file_matched_badge">Matched</string>
+
+    <!-- TorrServer Enable Prompt Dialog -->
+    <string name="torrserver_prompt_title">Enable TorrServer for Torrent Playback</string>
+    <string name="torrserver_prompt_message">This stream is a torrent and requires TorrServer for playback. Would you like to enable TorrServer now?</string>
+    <string name="torrserver_prompt_enable">Enable TorrServer</string>
+    <string name="torrserver_prompt_cancel">Cancel</string>
 </resources>

@@ -313,6 +313,9 @@ class StreamRepositoryPluginIsolationTest {
             firstArg<List<AddonStreams>>()
         }
 
+        val torrServerStreamProvider = mockk<com.nuvio.tv.core.torrent.TorrServerStreamProvider>(relaxed = true)
+        coEvery { torrServerStreamProvider.isEnabled() } returns false
+
         return Harness(
             repository = StreamRepositoryImpl(
                 context = mockk<Context>(relaxed = true),
@@ -324,6 +327,7 @@ class StreamRepositoryPluginIsolationTest {
                 tmdbService = tmdbService,
                 debridStreamPresentation = presentation,
                 localDebridAvailabilityService = availability,
+                torrServerStreamProvider = torrServerStreamProvider,
                 serverStreams = mockk {
                     every { isNativeRequest(any()) } returns false
                     every { revision } returns 0

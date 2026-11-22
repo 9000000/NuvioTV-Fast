@@ -148,6 +148,7 @@ sealed class Screen(val route: String) {
         fun createRoute(code: String = ""): String = "watch_party?code=$code"
     }
     data object TmdbSettings : Screen("tmdb_settings")
+    data object TorrServerSettings : Screen("torrserver_settings")
     data object ThemeSettings : Screen("theme_settings")
     data object PlaybackSettings : Screen("playback_settings")
     data object About : Screen("about")

@@ -29,6 +29,7 @@ import com.nuvio.tv.domain.model.ScraperInfo
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBehaviorHints
 import com.nuvio.tv.core.streams.supportsStreamResource
+import com.nuvio.tv.core.torrent.TorrServerStreamProvider
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
@@ -60,6 +61,7 @@ class StreamRepositoryImpl @Inject constructor(
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
     private val localDebridAvailabilityService: LocalDebridAvailabilityService,
+    private val torrServerStreamProvider: TorrServerStreamProvider,
     private val serverStreams: ServerStreams
 ) : StreamRepository {
     private val streamSearchSessions = StreamSearchSessionCache()
@@ -87,7 +89,8 @@ class StreamRepositoryImpl @Inject constructor(
         val enabledScrapers: List<ScraperInfo>,
         val groupPluginsByRepository: Boolean,
         val pluginRepositories: List<PluginRepository>,
-        val debridSettings: DebridSettings
+        val debridSettings: DebridSettings,
+        val torrServerEnabled: Boolean
     )
 
     override fun getStreamsFromAllAddons(
@@ -128,6 +131,7 @@ class StreamRepositoryImpl @Inject constructor(
                     hasCompatiblePlugins = !isNativeServerRequest &&
                         sourceConfiguration.pluginsEnabled &&
                         sourceConfiguration.enabledScrapers.any { scraper -> scraper.supportsType(type) },
+                    torrServerEnabled = sourceConfiguration.torrServerEnabled,
                     serverSources = if (continuePluginOnly) {
                         emptyList()
                     } else {
@@ -171,6 +175,7 @@ class StreamRepositoryImpl @Inject constructor(
             enabledScrapers = sourceConfiguration.enabledScrapers,
             groupPluginsByRepository = sourceConfiguration.groupPluginsByRepository,
             pluginRepositories = sourceConfiguration.pluginRepositories,
+            torrServerEnabled = sourceConfiguration.torrServerEnabled,
             debridPresentationConfiguration = sourceConfiguration.debridSettings
                 .withoutRawCredentials()
                 .toString(),
@@ -200,6 +205,7 @@ class StreamRepositoryImpl @Inject constructor(
             val groupPluginsByRepository = pluginsEnabled && pluginManager.groupStreamsByRepository.first()
             val pluginRepositories = if (groupPluginsByRepository) pluginManager.repositories.first() else emptyList()
             val debridSettings = debridSettingsDataStore.settings.first()
+            val torrServerEnabled = torrServerStreamProvider.isEnabled()
 
             if (profileManager.activeProfileId.value != profileId) continue
 
@@ -210,7 +216,8 @@ class StreamRepositoryImpl @Inject constructor(
                 enabledScrapers = enabledScrapers,
                 groupPluginsByRepository = groupPluginsByRepository,
                 pluginRepositories = pluginRepositories,
-                debridSettings = debridSettings
+                debridSettings = debridSettings,
+                torrServerEnabled = torrServerEnabled
             )
         }
     }
@@ -224,6 +231,7 @@ class StreamRepositoryImpl @Inject constructor(
         addons: List<Addon>,
         debridSettings: DebridSettings,
         hasCompatiblePlugins: Boolean,
+        torrServerEnabled: Boolean,
         serverSources: List<ServerStreamSource>,
         priorityBingeGroup: String?,
         preferredPluginOnly: Boolean,
@@ -255,7 +263,7 @@ class StreamRepositoryImpl @Inject constructor(
                 val resultChannel = Channel<AddonStreams>(Channel.UNLIMITED)
                 
                 // Track number of pending jobs
-                val totalJobs = streamAddons.size + 1 + serverSources.size
+                val totalJobs = streamAddons.size + 1 + (if (torrServerEnabled) 1 else 0) + serverSources.size
                 val completedJobs = java.util.concurrent.atomic.AtomicInteger(0)
 
                 // Launch addon jobs
@@ -393,6 +401,29 @@ class StreamRepositoryImpl @Inject constructor(
                     }
                 }
 
+                if (torrServerEnabled) {
+                    launch {
+                        try {
+                            val torrStreams = torrServerStreamProvider.getStreams(type, videoId)
+                            if (torrStreams != null && torrStreams.streams.isNotEmpty()) {
+                                resultChannel.send(torrStreams)
+                            }
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            Log.e(TAG, "TorrServer stream provider failed: ${e.message}")
+                            attemptedFailures += StreamAttemptFailure(
+                                addonName = TorrServerStreamProvider.PROVIDER_NAME,
+                                kind = StreamFailureKind.REQUEST_FAILED,
+                                detail = e.message ?: context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_request_failed)
+                            )
+                        } finally {
+                            if (completedJobs.incrementAndGet() >= totalJobs) {
+                                resultChannel.close()
+                            }
+                        }
+                    }
+                }
+
                 // Emit results as they arrive
                 for (result in resultChannel) {
                     val checkingResult = localDebridAvailabilityService.markChecking(listOf(result)).firstOrNull() ?: result
@@ -430,6 +461,7 @@ class StreamRepositoryImpl @Inject constructor(
         enabledScrapers: List<ScraperInfo>,
         groupPluginsByRepository: Boolean,
         pluginRepositories: List<PluginRepository>,
+        torrServerEnabled: Boolean,
         debridPresentationConfiguration: String,
         serverRevision: Int
     ): String = buildString {
@@ -447,6 +479,7 @@ class StreamRepositoryImpl @Inject constructor(
                 append("|repo:").append(repository)
             }
         }
+        append("|torrServer:").append(torrServerEnabled)
         append("|debrid:").append(debridPresentationConfiguration)
         append("|servers:").append(serverRevision)
     }.sha256()

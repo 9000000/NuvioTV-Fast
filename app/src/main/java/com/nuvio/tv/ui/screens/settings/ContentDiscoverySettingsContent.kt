@@ -73,7 +73,11 @@ internal fun ContentDiscoverySettingsContent(
         )
         SERVERS_PAGE -> MediaServersSettingsContent(
             initialFocusRequester = serversRequester,
-            onOpenServer = { serverPage = it }
+            onOpenServer = { serverPage = it },
+            onOpenTorrServer = { serverPage = TORRSERVER_PAGE }
+        )
+        TORRSERVER_PAGE -> TorrServerSettingsContent(
+            initialFocusRequester = serverRequester
         )
         else -> MediaServerSettingsContent(
             connectionId = page,
@@ -139,3 +143,4 @@ private fun ContentDiscoveryHub(
 }
 
 private const val SERVERS_PAGE = "servers"
+private const val TORRSERVER_PAGE = "torrserver"

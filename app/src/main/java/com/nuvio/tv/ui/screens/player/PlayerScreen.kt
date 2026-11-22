@@ -163,6 +163,7 @@ import com.nuvio.tv.domain.model.StreamBadge
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.TorrentFilePickerDialog
 import android.text.format.DateFormat
 import com.nuvio.tv.ui.util.rememberRawSvgPainter
 import java.util.Date
@@ -384,6 +385,8 @@ fun PlayerScreen(
             viewModel.onEvent(PlayerEvent.OnHideSubtitleDelayOverlay)
         } else if (uiState.showSubtitleStylePanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSubtitleStylePanel)
+        } else if (uiState.showTorrentFilePicker) {
+            viewModel.onEvent(PlayerEvent.OnDismissTorrentFilePicker)
         } else if (uiState.showPartyPanel) {
             viewModel.onEvent(PlayerEvent.OnDismissPartyPanel)
         } else if (uiState.showSourcesPanel) {
@@ -1468,6 +1471,24 @@ fun PlayerScreen(
                 reportError = uiState.playbackIssueReportError,
                 onReport = { viewModel.onEvent(PlayerEvent.OnReportPlaybackIssue) },
                 onBack = exitPlayerFromError
+            )
+        }
+
+        if (uiState.showTorrentFilePicker) {
+            TorrentFilePickerDialog(
+                title = uiState.torrentFilePickerTitle,
+                isLoading = uiState.torrentFilePickerLoading,
+                error = uiState.torrentFilePickerError,
+                files = uiState.torrentFilePickerFiles,
+                targetSeason = uiState.torrentFilePickerTargetSeason ?: uiState.episodesSelectedSeason ?: uiState.currentSeason,
+                targetEpisode = uiState.torrentFilePickerTargetEpisode ?: uiState.currentEpisode,
+                contentType = uiState.contentType,
+                onFileSelected = { fileId ->
+                    viewModel.onEvent(PlayerEvent.OnTorrentFileSelected(fileId))
+                },
+                onDismiss = {
+                    viewModel.onEvent(PlayerEvent.OnDismissTorrentFilePicker)
+                }
             )
         }
 

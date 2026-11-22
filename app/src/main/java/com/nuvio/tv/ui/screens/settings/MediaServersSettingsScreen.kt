@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,9 +42,12 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 internal fun MediaServersSettingsContent(
     initialFocusRequester: FocusRequester?,
     onOpenServer: (String) -> Unit,
-    viewModel: MediaServersViewModel = hiltViewModel()
+    onOpenTorrServer: () -> Unit = {},
+    viewModel: MediaServersViewModel = hiltViewModel(),
+    torrServerViewModel: TorrServerSettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val torrServerState by torrServerViewModel.uiState.collectAsStateWithLifecycle()
     var signIn by remember { mutableStateOf<ServerSignInRequest?>(null) }
     val connections = uiState.connections
     val focusModifier = initialFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier
@@ -101,6 +105,24 @@ internal fun MediaServersSettingsContent(
                             onClick = { signIn = ServerSignInRequest(provider) },
                             leadingRawIconRes = serverLogoRes(provider.id),
                             modifier = if (connections.isEmpty() && provider == viewModel.providers.first()) focusModifier else Modifier
+                        )
+                    }
+                    item(key = "torrserver_entry") {
+                        val torrSubtitle = if (torrServerState.enabled && torrServerState.serverUrl.isNotBlank()) {
+                            torrServerState.serverUrl
+                        } else {
+                            stringResource(R.string.settings_torrserver_subtitle)
+                        }
+                        SettingsActionRow(
+                            title = stringResource(R.string.settings_torrserver_title),
+                            subtitle = torrSubtitle,
+                            value = if (torrServerState.enabled) {
+                                stringResource(R.string.torrserver_status_enabled)
+                            } else {
+                                stringResource(R.string.servers_status_disabled)
+                            },
+                            onClick = onOpenTorrServer,
+                            leadingIcon = Icons.Default.CloudDownload
                         )
                     }
                 }

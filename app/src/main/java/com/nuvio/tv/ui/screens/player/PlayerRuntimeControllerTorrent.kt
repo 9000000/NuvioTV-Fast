@@ -6,9 +6,12 @@ import com.nuvio.tv.core.torrent.TorrentState
 import com.nuvio.tv.core.torrent.torrentInitialLoadingProgress
 import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val TAG = "PlayerTorrent"
 
@@ -47,10 +50,19 @@ internal fun PlayerRuntimeController.stopTorrentStream() {
     torrentStateObserverJob = null
 
     if (isTorrentStream) {
-        torrentService.stopStream()
+        if (isTorrServerStream) {
+            currentInfoHash?.let { hash ->
+                scope.launch(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
+                    torrServerRemoteApi.dropTorrent(hash)
+                }
+            }
+        } else {
+            torrentService.stopStream()
+        }
     }
 
     isTorrentStream = false
+    isTorrServerStream = false
     currentInfoHash = null
     currentFileIdx = null
 }
@@ -235,3 +247,330 @@ private fun formatSpeed(context: android.content.Context, bytesPerSec: Long): St
 
 private fun formatMB(context: android.content.Context, bytes: Long): String =
     context.getString(R.string.unit_size_mb, String.format("%.1f", bytes / 1_048_576.0))
+
+/**
+ * Starts remote TorrServer stats polling.
+ * Reuses the existing loading overlay and buffering indicator logic.
+ */
+internal fun PlayerRuntimeController.startRemoteTorrServerStatsPolling(
+    hash: String,
+    streamUrl: String
+) {
+    torrentStateObserverJob?.cancel()
+    isTorrentStream = true
+    isTorrServerStream = true
+    currentInfoHash = hash
+
+    val serverUrl = runCatching {
+        val uri = android.net.Uri.parse(streamUrl)
+        "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}"
+    }.getOrNull()
+
+    _uiState.update {
+        it.copy(
+            isTorrentStream = true,
+            isTorrServerStream = true,
+            showLoadingOverlay = true
+        )
+    }
+
+    torrentStateObserverJob = scope.launch {
+        var lastLoadingMessage: String? = null
+        var lastLoadingProgress: Float? = -1f
+        var lastDownloadSpeed = Long.MIN_VALUE
+        var lastLoadedSize = Long.MIN_VALUE
+        var lastBufferingMessage: String? = null
+        var lastActivePeers = -1
+        var lastConnectedSeeders = -1
+        val hasPreloadParam = runCatching {
+            val uri = android.net.Uri.parse(streamUrl)
+            uri.queryParameterNames.any { it.equals("preload", ignoreCase = true) }
+        }.getOrDefault(false)
+
+        while (isActive) {
+            try {
+                val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
+                if (stats != null) {
+                    val statsHidden = _uiState.value.hideTorrentStats
+                    val speed = formatSpeed(context, stats.downloadSpeed)
+                    val peerInfo = context.getString(
+                        R.string.player_torrent_peer_info,
+                        stats.connectedSeeders,
+                        stats.activePeers
+                    )
+                    val (message, progress) = formatTorrentLoadingDisplay(
+                        context = context,
+                        isPreloadActive = hasPreloadParam,
+                        isPreloadReady = stats.isPreloadReady,
+                        preloadProgress = stats.preloadProgress,
+                        stat = stats.stat,
+                        statString = stats.statString,
+                        downloadSpeed = stats.downloadSpeed,
+                        loadedSize = stats.loadedSize,
+                        seeds = stats.connectedSeeders,
+                        peers = stats.activePeers,
+                        statsHidden = statsHidden
+                    )
+
+                    if (!hasRenderedFirstFrame) {
+                        recordLoadingDiagnosticEvent(
+                            phase = if (progress != null) "torrent_preloading" else "torrent_buffering",
+                            message = message,
+                            progress = progress ?: 0f
+                        )
+                        val changed = message != lastLoadingMessage ||
+                            progress != lastLoadingProgress ||
+                            stats.downloadSpeed != lastDownloadSpeed ||
+                            stats.loadedSize != lastLoadedSize ||
+                            stats.activePeers != lastActivePeers ||
+                            stats.connectedSeeders != lastConnectedSeeders
+                        if (changed) {
+                            _uiState.update {
+                                it.copy(
+                                    isTorrentStream = true,
+                                    isTorrServerStream = true,
+                                    showLoadingOverlay = true,
+                                    loadingMessage = message,
+                                    loadingProgress = progress,
+                                    torrentDownloadSpeed = stats.downloadSpeed,
+                                    torrentUploadSpeed = stats.uploadSpeed,
+                                    torrentPeers = stats.activePeers,
+                                    torrentSeeds = stats.connectedSeeders,
+                                    torrentBufferProgress = progress ?: 0f,
+                                    torrentTotalProgress = progress ?: 0f,
+                                    torrentBufferingMessage = null
+                                )
+                            }
+                            lastLoadingMessage = message
+                            lastLoadingProgress = progress
+                            lastDownloadSpeed = stats.downloadSpeed
+                            lastLoadedSize = stats.loadedSize
+                            lastActivePeers = stats.activePeers
+                            lastConnectedSeeders = stats.connectedSeeders
+                        }
+                    } else {
+                        val isBuffering = _uiState.value.isBuffering
+                        val statsOverlayVisible = _uiState.value.showTorrentStats && !statsHidden
+                        val rebufferingMessage = if (isBuffering && !statsHidden) {
+                            context.getString(R.string.player_torrent_status, peerInfo, speed)
+                        } else {
+                            null
+                        }
+
+                        if (isBuffering || statsOverlayVisible || _uiState.value.torrentBufferingMessage != null) {
+                            val changed = rebufferingMessage != lastBufferingMessage ||
+                                stats.downloadSpeed != lastDownloadSpeed ||
+                                stats.activePeers != lastActivePeers ||
+                                stats.connectedSeeders != lastConnectedSeeders
+                            if (changed) {
+                                _uiState.update {
+                                    it.copy(
+                                        isTorrentStream = true,
+                                        isTorrServerStream = true,
+                                        loadingProgress = null,
+                                        torrentDownloadSpeed = stats.downloadSpeed,
+                                        torrentUploadSpeed = stats.uploadSpeed,
+                                        torrentPeers = stats.activePeers,
+                                        torrentSeeds = stats.connectedSeeders,
+                                        torrentBufferProgress = 0f,
+                                        torrentTotalProgress = if (stats.torrentSize > 0L) {
+                                            (stats.loadedSize.toFloat() / stats.torrentSize.toFloat()).coerceIn(0f, 1f)
+                                        } else {
+                                            0f
+                                        },
+                                        torrentBufferingMessage = rebufferingMessage,
+                                        torrentBufferingProgress = 0f
+                                    )
+                                }
+                                lastBufferingMessage = rebufferingMessage
+                                lastDownloadSpeed = stats.downloadSpeed
+                                lastActivePeers = stats.activePeers
+                                lastConnectedSeeders = stats.connectedSeeders
+                            }
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Remote TorrServer stats polling error: ${e.message}")
+            }
+            val pollDelay = if (!hasRenderedFirstFrame || _uiState.value.isBuffering) {
+                1000L
+            } else {
+                3000L
+            }
+            delay(pollDelay)
+        }
+    }
+}
+
+internal suspend fun PlayerRuntimeController.awaitRemoteTorrServerPreload(
+    hash: String,
+    streamUrl: String
+): String {
+    val uri = runCatching { android.net.Uri.parse(streamUrl) }.getOrNull()
+        ?: return streamUrl
+    if (!uri.queryParameterNames.any { it.equals("preload", ignoreCase = true) }) {
+        return streamUrl
+    }
+
+    val serverUrl = "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}"
+    var preloadHttpCompleted = false
+    var preloadHttpBytesRead = 0L
+    val preloadCall = torrServerRemoteApi.newStreamCall(streamUrl)
+    val preloadJob = scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            preloadCall.execute().use { response ->
+                if (response.isSuccessful) {
+                    val byteStream = response.body.byteStream()
+                    val buffer = ByteArray(16384)
+                    while (isActive) {
+                        val read = byteStream.read(buffer)
+                        if (read == -1) break
+                        preloadHttpBytesRead += read
+                    }
+                    preloadHttpCompleted = true
+                    Log.d(TAG, "Remote TorrServer preload HTTP completed (bytesRead=$preloadHttpBytesRead)")
+                } else {
+                    Log.w(TAG, "Remote TorrServer preload request failed: ${response.code}")
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Remote TorrServer preload request ended: ${e.message}")
+        }
+    }
+
+    val startTime = System.currentTimeMillis()
+    var pollCount = 0
+
+    return try {
+        val playbackUrl = withTimeoutOrNull(60_000L) {
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                pollCount++
+                val playbackTargetUrl = uri.toTorrServerPlaybackUrl()
+
+                if (hasRenderedFirstFrame) {
+                    Log.d(TAG, "Player already rendered first frame; ending preload wait")
+                    return@withTimeoutOrNull playbackTargetUrl
+                }
+
+                if (preloadHttpCompleted) {
+                    Log.d(TAG, "Remote TorrServer preload HTTP stream finished; handing stream to player")
+                    return@withTimeoutOrNull playbackTargetUrl
+                }
+
+                val stats = torrServerRemoteApi.getTorrentDetails(hash, serverUrlOverride = serverUrl)
+                if (stats != null && stats.isPreloadReady) {
+                    val elapsedMs = System.currentTimeMillis() - startTime
+                    val hasSufficientBuffer = stats.loadedSize >= 10_485_760L ||
+                        stats.preloadedBytes >= 10_485_760L ||
+                        (stats.preloadSize > 0 && stats.preloadedBytes >= stats.preloadSize * 95 / 100)
+                    if (hasSufficientBuffer || elapsedMs >= 2000L || pollCount > 4) {
+                        Log.d(
+                            TAG,
+                            "Remote TorrServer preload ready (95%): preloaded=${stats.preloadedBytes}, " +
+                                "preloadSize=${stats.preloadSize}, loaded=${stats.loadedSize}, stat=${stats.statString}"
+                        )
+                        return@withTimeoutOrNull playbackTargetUrl
+                    }
+                }
+                delay(500L)
+            }
+            null
+        }
+
+        if (playbackUrl == null) {
+            Log.w(TAG, "Remote TorrServer preload status timeout; handing stream to player anyway")
+        }
+        playbackUrl ?: uri.toTorrServerPlaybackUrl()
+    } finally {
+        preloadCall.cancel()
+        preloadJob.cancel()
+    }
+}
+
+private fun formatTorrentLoadingDisplay(
+    context: android.content.Context,
+    isPreloadActive: Boolean,
+    isPreloadReady: Boolean,
+    preloadProgress: Float,
+    stat: Int,
+    statString: String?,
+    downloadSpeed: Long,
+    loadedSize: Long,
+    seeds: Int,
+    peers: Int,
+    statsHidden: Boolean
+): Pair<String?, Float?> {
+    if (statsHidden) return Pair(null, null)
+    val speed = formatSpeed(context, downloadSpeed)
+    val peerInfo = context.getString(R.string.player_torrent_peer_info, seeds, peers)
+
+    if (isPreloadActive && !isPreloadReady) {
+        val percentStr = when {
+            preloadProgress > 0f -> "${(preloadProgress * 100).toInt()}%"
+            stat == 1 || stat == 2 -> cleanTorrServerStatString(statString) ?: "0%"
+            else -> "0%"
+        }
+        val statusParts = listOfNotNull(
+            percentStr,
+            peerInfo,
+            speed
+        )
+        return Pair(statusParts.joinToString(" · "), preloadProgress)
+    }
+
+    val message = if (loadedSize > 0) {
+        context.getString(
+            R.string.player_torrent_loading_status,
+            formatMB(context, loadedSize),
+            peerInfo,
+            speed
+        )
+    } else {
+        context.getString(R.string.player_torrent_status, peerInfo, speed)
+    }
+    return Pair(message, null)
+}
+
+internal fun cleanTorrServerStatString(statString: String?): String? {
+    if (statString.isNullOrBlank()) return null
+    val percentMatch = Regex("""\b(\d{1,3})%""").find(statString)
+    if (percentMatch != null) {
+        return "${percentMatch.groupValues[1]}%"
+    }
+    val stripped = statString
+        .replace(Regex("""(?i)\(?(?:\d+[\s:]*(?:seeds?|peers?|s/p)|(?:seeds?|peers?|s/p)[\s:]*\d+|seeds?|peers?)\)?\s*"""), "")
+        .trim(' ', '·', '-', '(', ')', ',', ':')
+    return stripped.takeIf { it.isNotBlank() && it.any { ch -> ch.isLetterOrDigit() } }
+}
+
+private fun android.net.Uri.toTorrServerPlaybackUrl(): String {
+    val builder = buildUpon().clearQuery()
+    var hasPlay = false
+    queryParameterNames
+        .filterNot { it.equals("preload", ignoreCase = true) }
+        .forEach { name ->
+            if (name.equals("play", ignoreCase = true)) {
+                hasPlay = true
+            }
+            getQueryParameters(name).forEach { value ->
+                if (value.isNullOrEmpty()) {
+                    builder.appendQueryParameter(name, "")
+                } else {
+                    builder.appendQueryParameter(name, value)
+                }
+            }
+        }
+    if (!hasPlay) {
+        builder.appendQueryParameter("play", "")
+    }
+    return builder.build().toString()
+        .replace("play=", "play")
+        .replace("save=", "save")
+        .replace("&&", "&")
+        .trimEnd('&', '?')
+}
