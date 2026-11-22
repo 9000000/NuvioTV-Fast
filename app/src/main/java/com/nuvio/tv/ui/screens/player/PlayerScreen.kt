@@ -1430,9 +1430,10 @@ fun PlayerScreen(
             )
         }
 
-        // Torrent stats overlay (top-right corner) — disabled to hide P2P/seeds/peers/upload
+        // Torrent stats overlay (top-right corner)
         TorrentOverlay(
-            visible = false,
+            visible = uiState.isTorrentStream && uiState.showTorrentStats &&
+                !uiState.hideTorrentStats && uiState.error == null && !postPlayRecommendationState.isVisible,
             downloadSpeed = uiState.torrentDownloadSpeed,
             uploadSpeed = uiState.torrentUploadSpeed,
             peers = uiState.torrentPeers,
