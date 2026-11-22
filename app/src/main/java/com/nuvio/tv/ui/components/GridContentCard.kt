@@ -120,6 +120,17 @@ fun GridContentCard(
         label = "gridCardScale"
     )
     val currentCardScale = if (isScaleAnimNeeded) animatedCardScale else 1f
+    val alwaysBackdropWithLogo = LocalAlwaysBackdropWithLogo.current
+    val effectiveLandscapePoster = if (globalLandscape && alwaysBackdropWithLogo) null else item.landscapePoster
+    val effectiveImageUrl = if (globalLandscape) {
+        effectiveLandscapePoster ?: item.background ?: item.poster
+    } else {
+        item.poster
+    }
+    val posterFocusRing = com.nuvio.tv.ui.theme.rememberPosterFocusRingStyle(
+        imageUrl = effectiveImageUrl,
+        isFocused = isFocused
+    )
 
     Column(
         modifier = modifier
@@ -206,7 +217,7 @@ fun GridContentCard(
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = NuvioTheme.posterFocusRing.border(posterCardStyle.focusedBorderWidth),
+                    border = posterFocusRing.border(posterCardStyle.focusedBorderWidth),
                     shape = cardShape
                 )
             ),
@@ -225,13 +236,6 @@ fun GridContentCard(
                 val context = LocalContext.current
                 val bgCardColor = NuvioTheme.colors.BackgroundCard
                 val bgPainter = remember(bgCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(bgCardColor) }
-                val alwaysBackdropWithLogo = LocalAlwaysBackdropWithLogo.current
-                val effectiveLandscapePoster = if (globalLandscape && alwaysBackdropWithLogo) null else item.landscapePoster
-                val effectiveImageUrl = if (globalLandscape) {
-                    effectiveLandscapePoster ?: item.background ?: item.poster
-                } else {
-                    item.poster
-                }
                 val revalidationKey = com.nuvio.tv.core.image.rememberImageRevalidationKey(effectiveImageUrl)
                 val imageModel = remember(effectiveImageUrl, requestWidthPx, requestHeightPx, revalidationKey) {
                     val builder = ImageRequest.Builder(context)

@@ -4,6 +4,7 @@ package com.nuvio.tv.domain.model
  * Controls the visual style of the focused poster border / focus ring.
  *
  * [THEME]        – Follows the active app theme accent gradient (default, like the original dev branch).
+ * [POSTER_COLOR] – Dynamically matches each poster's dominant color, completely independent of the app theme.
  * [RAINBOW]      – Multi-color rainbow gradient.
  * [SOLID_WHITE]  – Plain white solid border.
  * [SOLID_RED]    – Vibrant red solid border.
@@ -13,6 +14,7 @@ package com.nuvio.tv.domain.model
  */
 enum class PosterBorderStyle {
     THEME,
+    POSTER_COLOR,
     RAINBOW,
     SOLID_WHITE,
     SOLID_RED,

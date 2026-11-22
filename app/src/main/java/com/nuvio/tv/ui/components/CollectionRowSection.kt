@@ -259,6 +259,11 @@ private fun FolderCard(
 
     val shape = RoundedCornerShape(posterCardStyle.cornerRadius)
     val cardDepthStyle = LocalCardDepthStyle.current
+    val activeImageUrl = collectionFolderCardImageUrl(folder, isFocused)
+    val posterFocusRing = com.nuvio.tv.ui.theme.rememberPosterFocusRingStyle(
+        imageUrl = activeImageUrl ?: folder.coverImageUrl,
+        isFocused = isFocused
+    )
     val cardGlow = rememberArtworkBackedCardGlow(
         imageUrl = folder.coverImageUrl,
         fallbackSeed = "${collection.title}:${folder.title}:${folder.coverEmoji.orEmpty()}",
@@ -282,7 +287,7 @@ private fun FolderCard(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = NuvioTheme.posterFocusRing.border(posterCardStyle.focusedBorderWidth),
+                border = posterFocusRing.border(posterCardStyle.focusedBorderWidth),
                 shape = shape
             )
         ),
@@ -299,7 +304,6 @@ private fun FolderCard(
                     style = cardDepthStyle
                 )
         ) {
-            val activeImageUrl = collectionFolderCardImageUrl(folder, isFocused)
             if (!activeImageUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = activeImageUrl,

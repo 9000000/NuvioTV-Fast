@@ -1123,16 +1123,10 @@ fun PlayerScreen(
             !postPlayRecommendationState.isTrailerPlaying &&
             (!postPlayRecommendationState.isVisible || !postPlayRecommendationState.hasAutoPlayedTrailer)
         ) {
-            LaunchedEffect(postPlayRecommendationState.isVisible, uiState.shouldHideVisualSubtitles) {
-                val playerView = viewModel.controller.exoPlayerView
-                val vis = if (postPlayRecommendationState.isVisible || uiState.shouldHideVisualSubtitles) {
-                    android.view.View.GONE
-                } else {
-                    android.view.View.VISIBLE
-                }
-                playerView?.subtitleView?.visibility = vis
-                playerView?.setAssOverlayVisibility(vis)
-            }
+            val hideVisualSubtitles = PlayerSubtitleVisibilityPolicy.shouldHideVisualSubtitles(
+                ttsHideVisualSubtitles = uiState.shouldHideVisualSubtitles,
+                postPlayRecommendationVisible = postPlayRecommendationState.isVisible
+            )
 
             Box(modifier = playerSurfaceModifier) {
                 val previewConfiguredSubtitlePosition = uiState.showSubtitleOverlay || uiState.showSubtitleStylePanel
@@ -1251,6 +1245,7 @@ fun PlayerScreen(
                         subtitleStyle = uiState.effectiveSubtitleStyle,
                         subtitleLiftPx = subtitleLiftPx,
                         subtitleTrackKey = subtitleWidthKey.take(2),
+                        hideVisualSubtitles = hideVisualSubtitles,
                         onSubtitleTextMetricsChanged = { subtitleTextMetrics = it },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -1269,6 +1264,7 @@ fun PlayerScreen(
                             letterboxMaskEnabled = !(transparentLetterbox && playerSurfaceIsFullscreen),
                             subtitleStyle = uiState.effectiveSubtitleStyle,
                             subtitleLiftPx = subtitleLiftPx,
+                            hideVisualSubtitles = hideVisualSubtitles,
                             onBindSubtitleView = viewModel::bindExoSubtitleView,
                             onSubtitleTextMetricsChanged = { subtitleTextMetrics = it },
                             modifier = Modifier.fillMaxSize()
@@ -1276,7 +1272,7 @@ fun PlayerScreen(
                     }
                 }
 
-                if (!postPlayRecommendationState.isVisible && !uiState.shouldHideVisualSubtitles) {
+                if (!hideVisualSubtitles) {
                     val styledSubtitleCues by viewModel.controller.styledSubtitles.cues.collectAsState()
                     val fallbackSubtitleTextSizePx = with(LocalDensity.current) {
                         (SUBTITLE_BASE_TEXT_SP * renderedSubtitleStyle.size / 100f).sp.toPx()
@@ -2255,17 +2251,20 @@ private fun MpvPlayerSurface(
     subtitleStyle: SubtitleStyleSettings,
     subtitleLiftPx: Float,
     subtitleTrackKey: Any?,
+    hideVisualSubtitles: Boolean,
     onSubtitleTextMetricsChanged: (SubtitleTextMetrics?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val latestAspectMode by rememberUpdatedState(aspectMode)
     val latestSubtitleStyle by rememberUpdatedState(subtitleStyle)
+    val latestHideVisualSubtitles by rememberUpdatedState(hideVisualSubtitles)
     val latestMetricsCallback by rememberUpdatedState(onSubtitleTextMetricsChanged)
     val mpvView = remember(context) {
         NuvioMpvSurfaceView(context).apply {
             isFocusable = false
             isFocusableInTouchMode = false
+            setTtsHideSubtitles(latestHideVisualSubtitles)
         }
     }
 
@@ -2303,6 +2302,10 @@ private fun MpvPlayerSurface(
         mpvView.applyAspectMode(aspectMode)
     }
 
+    LaunchedEffect(mpvView, hideVisualSubtitles) {
+        mpvView.setTtsHideSubtitles(hideVisualSubtitles)
+    }
+
     LaunchedEffect(mpvView, subtitleStyle, subtitleLiftPx) {
         val height = mpvView.height
         mpvView.subtitleLiftFraction = if (subtitleLiftPx > 0f && height > 0) {
@@ -2332,6 +2335,7 @@ private fun ExoPlayerSurface(
     letterboxMaskEnabled: Boolean,
     subtitleStyle: SubtitleStyleSettings,
     subtitleLiftPx: Float,
+    hideVisualSubtitles: Boolean,
     onBindSubtitleView: (androidx.media3.ui.SubtitleView?) -> Unit = {},
     onSubtitleTextMetricsChanged: (SubtitleTextMetrics?) -> Unit = {},
     modifier: Modifier = Modifier
@@ -2343,6 +2347,7 @@ private fun ExoPlayerSurface(
     val latestBindSubtitleView by rememberUpdatedState(onBindSubtitleView)
     val latestSubtitleStyle by rememberUpdatedState(subtitleStyle)
     val latestSubtitleLiftPx by rememberUpdatedState(subtitleLiftPx)
+    val latestHideVisualSubtitles by rememberUpdatedState(hideVisualSubtitles)
     val latestMetricsCallback by rememberUpdatedState(onSubtitleTextMetricsChanged)
     val playerView = remember(context, player) {
         PlayerView(context).apply {
@@ -2354,6 +2359,7 @@ private fun ExoPlayerSurface(
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
             enableComposeSurfaceSyncWorkaroundIfAvailable()
+            subtitleView?.visibility = if (latestHideVisualSubtitles) View.GONE else View.VISIBLE
             this.player = player
         }
     }
@@ -2362,13 +2368,21 @@ private fun ExoPlayerSurface(
         factory = { playerView },
         modifier = modifier.focusProperties { canFocus = false },
         update = {
+            val subtitleVisibility = if (hideVisualSubtitles) View.GONE else View.VISIBLE
+            if (it.subtitleView?.visibility != subtitleVisibility) {
+                it.subtitleView?.visibility = subtitleVisibility
+            }
+            val effectiveUseLibassOverlay = PlayerSubtitleVisibilityPolicy.shouldEnableLibassOverlay(
+                useLibass = useLibass,
+                hideVisualSubtitles = hideVisualSubtitles
+            )
             it.syncLibassOverlay(
                 player = player,
-                enabled = useLibass,
+                enabled = effectiveUseLibassOverlay,
                 renderMode = libassRenderMode
             )
             it.syncLetterboxMask(
-                letterboxMaskEnabled && useLibass && libassRenderMode == LibassRenderMode.OVERLAY
+                letterboxMaskEnabled && effectiveUseLibassOverlay && libassRenderMode == LibassRenderMode.OVERLAY
             )
             latestBindSubtitleView(it.subtitleView)
         }
@@ -2428,6 +2442,10 @@ private fun ExoPlayerSurface(
                 // even when subtitles are enabled after initial player setup.
                 playerView.post {
                     playerView.applySubtitleStyleIfNeeded(latestSubtitleStyle, latestSubtitleLiftPx, force = true)
+                    val subtitleVisibility = if (latestHideVisualSubtitles) View.GONE else View.VISIBLE
+                    if (playerView.subtitleView?.visibility != subtitleVisibility) {
+                        playerView.subtitleView?.visibility = subtitleVisibility
+                    }
                 }
             }
         }
@@ -2475,10 +2493,22 @@ private fun ExoPlayerSurface(
         )
     }
 
-    LaunchedEffect(playerView, player, useLibass, libassRenderMode) {
+    LaunchedEffect(playerView, hideVisualSubtitles) {
+        val subtitleVisibility = if (hideVisualSubtitles) View.GONE else View.VISIBLE
+        playerView.subtitleView?.visibility = subtitleVisibility
+        if (hideVisualSubtitles) {
+            playerView.setAssOverlayVisibility(View.GONE)
+        }
+    }
+
+    LaunchedEffect(playerView, player, useLibass, libassRenderMode, hideVisualSubtitles) {
+        val effectiveUseLibassOverlay = PlayerSubtitleVisibilityPolicy.shouldEnableLibassOverlay(
+            useLibass = useLibass,
+            hideVisualSubtitles = hideVisualSubtitles
+        )
         playerView.syncLibassOverlay(
             player = player,
-            enabled = useLibass,
+            enabled = effectiveUseLibassOverlay,
             renderMode = libassRenderMode
         )
     }

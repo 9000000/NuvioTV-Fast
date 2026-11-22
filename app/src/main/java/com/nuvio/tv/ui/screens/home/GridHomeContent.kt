@@ -1045,6 +1045,11 @@ private fun GridCollectionFolderCard(
     val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
     val cardDepthStyle = LocalCardDepthStyle.current
     var isFocused by remember { mutableStateOf(false) }
+    val activeImageUrl = collectionFolderCardImageUrl(folder, isFocused)
+    val posterFocusRing = com.nuvio.tv.ui.theme.rememberPosterFocusRingStyle(
+        imageUrl = activeImageUrl ?: folder.coverImageUrl,
+        isFocused = isFocused
+    )
     val cardGlow = rememberArtworkBackedCardGlow(
         imageUrl = folder.coverImageUrl,
         fallbackSeed = "$collectionTitle:${folder.title}:${folder.coverEmoji.orEmpty()}",
@@ -1072,7 +1077,7 @@ private fun GridCollectionFolderCard(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = NuvioTheme.posterFocusRing.border(posterCardStyle.focusedBorderWidth),
+                border = posterFocusRing.border(posterCardStyle.focusedBorderWidth),
                 shape = cardShape
             )
         ),
@@ -1089,7 +1094,6 @@ private fun GridCollectionFolderCard(
                     style = cardDepthStyle
                 )
         ) {
-            val activeImageUrl = collectionFolderCardImageUrl(folder, isFocused)
             if (!activeImageUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = activeImageUrl,

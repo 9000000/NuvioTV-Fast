@@ -283,6 +283,8 @@ private fun TabbedGridContent(
     val tabFocusRequesters = remember(uiState.tabs.size) { uiState.tabs.indices.map { FocusRequester() } }
     var gridHasFocus by remember { mutableStateOf(false) }
     var gridScrollToTopTrigger by remember { mutableIntStateOf(0) }
+    var activeGridView by remember { mutableStateOf<com.nuvio.tv.ui.leanback.container.InteropVerticalGridView?>(null) }
+    val animationsEnabled = NuvioTheme.animationsEnabled
 
     LaunchedEffect(uiState.tabs.size, tabFocusState.hasSavedFocus) {
         if (uiState.tabs.size > 1 && !tabFocusState.hasSavedFocus) {
@@ -351,8 +353,11 @@ private fun TabbedGridContent(
                         selected = index == uiState.selectedTabIndex,
                         onFocus = { onSelectTab(index) },
                         onClick = {
+                            val clickedActiveTab = index == uiState.selectedTabIndex
                             onSelectTab(index)
-                            gridScrollToTopTrigger++
+                            if (clickedActiveTab) {
+                                gridScrollToTopTrigger++
+                            }
                         },
                         modifier = if (index < tabFocusRequesters.size) {
                             Modifier.focusRequester(tabFocusRequesters[index])
@@ -446,10 +451,21 @@ private fun TabbedGridContent(
             LaunchedEffect(gridScrollToTopTrigger) {
                 if (gridScrollToTopTrigger > 0) {
                     focusedIndex = 0
+                    activeGridView?.let { grid ->
+                        if (grid.isAttachedToWindow && (grid.adapter?.itemCount ?: 0) > 0) {
+                            if (animationsEnabled) {
+                                grid.setSelectedPositionSmooth(0)
+                            } else {
+                                grid.setSelectedPosition(0)
+                            }
+                        }
+                    }
                 }
             }
 
-            DisposableEffect(uiState.selectedTabIndex) {                onDispose {
+            DisposableEffect(uiState.selectedTabIndex) {
+                onDispose {
+                    activeGridView = null
                     val key = items.getOrNull(focusedIndex)?.id
                     onSaveFocusState(
                         focusedIndex,
@@ -484,8 +500,8 @@ private fun TabbedGridContent(
                     horizontalSpacing = horizontalSpacing,
                     verticalSpacing = NuvioTheme.spacing.lg,
                     initialFocusPosition = focusedIndex,
-                    restoreFocusNonce = gridScrollToTopTrigger,
                     requestInitialFocus = tabFocusState.hasSavedFocus || uiState.tabs.size <= 1,
+                    onGridCreated = { grid -> activeGridView = grid },
                     onItemFocused = { idx, cardItem ->
                         focusedIndex = idx
                         val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid

@@ -648,3 +648,21 @@
 - **Status**: Fixed
 
 ---
+
+## [2026-11-22 13:16] - Thiếu import LeanbackThemeStyle và assertFalse trong LeanbackCoreOptimizationTest
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt:932`
+- **Agent**: mon
+- **Root Cause**: Thêm test case mới trong `LeanbackCoreOptimizationTest.kt` nhưng chưa import hoặc dùng qualified name cho `com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle` và `org.junit.Assert.assertFalse`.
+- **Error Message**: 
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt:932:21 Unresolved reference 'LeanbackThemeStyle'.
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt:939:9 Unresolved reference 'assertFalse'.
+  ```
+- **Fix Applied**: Sử dụng tên đầy đủ `com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle` và `org.junit.Assert.assertFalse`.
+- **Prevention**: Kiểm tra header import của file test hoặc dùng fully-qualified reference khi thêm test ở cuối file.
+- **Status**: Fixed
+
+---

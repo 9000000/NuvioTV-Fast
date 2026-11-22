@@ -54,7 +54,7 @@ class LeanbackCardViewHolder(
     private val progressBarHeightPx: Float = 7f
 ) : RecyclerView.ViewHolder(root) {
 
-    private var lastProgressAccentColor: Int = 0
+    internal var lastProgressAccentColor: Int = 0
 
     private val placeholderBackgroundDrawable = GradientDrawable().apply {
         setColor(adapter.themeStyle.placeholderColor)
@@ -522,6 +522,7 @@ class LeanbackRowAdapter(
 
     private var items: List<ModernCarouselItem> = emptyList()
     private var watchedStates: BooleanArray = BooleanArray(0)
+    internal var lastWatchedMaskHash: Int = 0
     private var pendingItems: List<ModernCarouselItem>? = null
     private var pendingApplyPosted: Boolean = false
     var isSubmittingItems: Boolean = false
@@ -985,7 +986,9 @@ class LeanbackRowAdapter(
             emojiCoverView = emojiCoverView,
             fallbackTitleText = fallbackTitleText,
             progressBarHeightPx = pbHeightPx
-        )
+        ).also {
+            it.lastProgressAccentColor = themeStyle.accentColor
+        }
     }
 
     private val prefetchedKeys = LinkedHashSet<String>()

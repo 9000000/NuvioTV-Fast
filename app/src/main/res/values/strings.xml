@@ -336,6 +336,7 @@
     <string name="appearance_poster_border_row_title">Border style</string>
     <string name="appearance_poster_border_row_subtitle">Change the poster border style when focused</string>
     <string name="poster_border_theme">Theme accent (Default)</string>
+    <string name="poster_border_poster_color">Poster Color (Dynamic)</string>
     <string name="poster_border_rainbow">Rainbow</string>
     <string name="poster_border_white">Solid White</string>
     <string name="poster_border_red">Solid Red</string>

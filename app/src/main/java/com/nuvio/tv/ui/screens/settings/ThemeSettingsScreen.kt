@@ -657,6 +657,7 @@ private fun AppTheme.localizedName(): String = when (this) {
 @Composable
 private fun PosterBorderStyle.localizedName(): String = when (this) {
     PosterBorderStyle.THEME -> stringResource(R.string.poster_border_theme)
+    PosterBorderStyle.POSTER_COLOR -> stringResource(R.string.poster_border_poster_color)
     PosterBorderStyle.RAINBOW -> stringResource(R.string.poster_border_rainbow)
     PosterBorderStyle.SOLID_WHITE -> stringResource(R.string.poster_border_white)
     PosterBorderStyle.SOLID_RED -> stringResource(R.string.poster_border_red)

@@ -160,7 +160,10 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
 
     private fun applyThemeColors(dominantColor: Int) {
         lastDominantColor = dominantColor
-        val resolvedGlowColor = resolveGlowColor(dominantColor)
+        val resolvedGlowColor = themeStyle.resolveGlowColor(
+            dominantColor = dominantColor,
+            fallbackColor = DEFAULT_MODERN_FOCUS_COLOR
+        )
         strokeColor = themeStyle.resolveFocusedBorderColor(
             dominantColor = resolvedGlowColor,
             blendWithDominant = isGlowEnabled
@@ -360,14 +363,6 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             animate().alpha(0f).setDuration(100).withEndAction {
                 visibility = INVISIBLE
             }.start()
-        }
-    }
-
-    private fun resolveGlowColor(dominantColor: Int): Int {
-        return if (dominantColor != 0 && dominantColor != Color.WHITE && dominantColor != Color.BLACK) {
-            dominantColor
-        } else {
-            DEFAULT_MODERN_FOCUS_COLOR
         }
     }
 }

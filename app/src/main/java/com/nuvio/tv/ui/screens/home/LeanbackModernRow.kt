@@ -178,6 +178,15 @@ fun LeanbackModernRow(
         }
     }
 
+    // Read isCatalogItemWatched during composition so Compose registers a snapshot observer
+    // on HomeScreen's latestMovieWatchedStatus without changing the stable lambda identity.
+    var watchedMaskHash = 1
+    for (i in items.indices) {
+        val meta = items[i].metaPreview
+        val isWatched = meta != null && isCatalogItemWatched(meta)
+        watchedMaskHash = 31 * watchedMaskHash + if (isWatched) 1231 else 1237
+    }
+
     AndroidView(
         modifier = modifier
             .height(totalRowHeightDp)
@@ -301,13 +310,6 @@ fun LeanbackModernRow(
                 gridView.configuredSpacingPx = spacingPx
             }
             localGridViewRef = gridView
-            if (initialFocusPosition in items.indices) {
-                gridView.restoredPosition = initialFocusPosition
-                if (initialFocusPosition != lastAppliedInitialPosition && !gridView.hasFocus()) {
-                    gridView.setSelectedPosition(initialFocusPosition)
-                    lastAppliedInitialPosition = initialFocusPosition
-                }
-            }
             gridView.onNavigateDown = onNavigateDown
             gridView.onNavigateUp = onNavigateUp
             gridView.onNavigateBack = onNavigateBack
@@ -328,6 +330,7 @@ fun LeanbackModernRow(
             adapter.onItemLongClick = onItemLongClick
             adapter.onLoadMore = onLoadMore
             adapter.isCatalogItemWatched = isCatalogItemWatched
+            adapter.lastWatchedMaskHash = watchedMaskHash
             if (gridView.adapter !== adapter) {
                 gridView.adapter = adapter
             }
@@ -346,6 +349,17 @@ fun LeanbackModernRow(
             )
             rowGrids?.put(rowKey, gridView)
             adapter.submitItems(items)
+            if (initialFocusPosition in items.indices) {
+                gridView.restoredPosition = initialFocusPosition
+                if (initialFocusPosition != lastAppliedInitialPosition &&
+                    !gridView.hasFocus() &&
+                    initialFocusPosition in 0 until adapter.itemCount
+                ) {
+                    gridView.setSelectedPosition(initialFocusPosition)
+                    lastAppliedInitialPosition = initialFocusPosition
+                    initialScrollApplied = true
+                }
+            }
         },
         onRelease = { container ->
             val gridView = container.gridView

@@ -65,7 +65,9 @@ data class LeanbackThemeStyle(
 ) {
     val isRainbowBorder: Boolean
         get() = !hideFocusBorder &&
-            (posterBorderStyle == PosterBorderStyle.RAINBOW || focusGradientColors.size > 1)
+            posterBorderStyle != PosterBorderStyle.POSTER_COLOR &&
+            (posterBorderStyle == PosterBorderStyle.RAINBOW ||
+                (posterBorderStyle == PosterBorderStyle.THEME && focusGradientColors.size > 1))
 
     /**
      * Resolves the stroke color for a focused card border.
@@ -73,6 +75,7 @@ data class LeanbackThemeStyle(
      * - [PosterBorderStyle.SOLID_WHITE], [PosterBorderStyle.SOLID_RED],
      *   [PosterBorderStyle.SOLID_BLUE], [PosterBorderStyle.SOLID_GOLD]: pure solid color without poster tinting
      * - [PosterBorderStyle.RAINBOW]: primary rainbow color fallback (when shader is not active)
+     * - [PosterBorderStyle.POSTER_COLOR]: pure dominant poster color, completely independent of the active theme
      * - [PosterBorderStyle.THEME]: blends dominant poster color with the theme focus ring when [blendWithDominant] is true
      */
     fun resolveFocusedBorderColor(dominantColor: Int, blendWithDominant: Boolean = true): Int {
@@ -85,6 +88,13 @@ data class LeanbackThemeStyle(
             PosterBorderStyle.SOLID_BLUE,
             PosterBorderStyle.SOLID_GOLD,
             PosterBorderStyle.RAINBOW -> focusRingColor
+            PosterBorderStyle.POSTER_COLOR -> {
+                if (dominantColor != 0 && dominantColor != AndroidColor.WHITE && dominantColor != AndroidColor.BLACK) {
+                    dominantColor
+                } else {
+                    LeanbackColorEngine.defaultFallbackColor
+                }
+            }
             PosterBorderStyle.THEME -> {
                 if (!blendWithDominant) {
                     focusRingColor
@@ -92,6 +102,38 @@ data class LeanbackThemeStyle(
                     ColorUtils.blendARGB(dominantColor, AndroidColor.WHITE, 0.90f)
                 } else {
                     ColorUtils.blendARGB(dominantColor, focusRingColor, 0.72f)
+                }
+            }
+            PosterBorderStyle.NONE -> AndroidColor.TRANSPARENT
+        }
+    }
+
+    /**
+     * Resolves the atmospheric glow color around a focused card.
+     * - [PosterBorderStyle.NONE]: transparent
+     * - [PosterBorderStyle.SOLID_WHITE], [PosterBorderStyle.SOLID_RED],
+     *   [PosterBorderStyle.SOLID_BLUE], [PosterBorderStyle.SOLID_GOLD]: harmonizes glow with the solid border color
+     * - [PosterBorderStyle.POSTER_COLOR], [PosterBorderStyle.THEME], [PosterBorderStyle.RAINBOW]: uses the poster's vibrant dominant color
+     */
+    fun resolveGlowColor(
+        dominantColor: Int,
+        fallbackColor: Int = LeanbackColorEngine.defaultFallbackColor
+    ): Int {
+        if (hideFocusBorder || posterBorderStyle == PosterBorderStyle.NONE) {
+            return AndroidColor.TRANSPARENT
+        }
+        return when (posterBorderStyle) {
+            PosterBorderStyle.SOLID_WHITE,
+            PosterBorderStyle.SOLID_RED,
+            PosterBorderStyle.SOLID_BLUE,
+            PosterBorderStyle.SOLID_GOLD -> focusRingColor
+            PosterBorderStyle.POSTER_COLOR,
+            PosterBorderStyle.THEME,
+            PosterBorderStyle.RAINBOW -> {
+                if (dominantColor != 0 && dominantColor != AndroidColor.WHITE && dominantColor != AndroidColor.BLACK) {
+                    dominantColor
+                } else {
+                    fallbackColor
                 }
             }
             PosterBorderStyle.NONE -> AndroidColor.TRANSPARENT

@@ -1,3 +1,45 @@
+# Danh Sách Task - Rà Soát Sâu Vòng 3 — Chốt Hạ Lỗi Tầng Sâu Android Leanback (`tet2`)
+
+> **Kế hoạch tương ứng**: [PLAN-leanback-deep-review-r3.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-leanback-deep-review-r3.md)
+> **Phạm vi**: Khắc phục dứt điểm 5 lỗi tầng sâu P1 (`R3-BUG-01`..`05`) và 2 tinh chỉnh P2 (`R3-BUG-06`..`07`) phát hiện sau Vòng 2.
+
+---
+
+## 📋 Task Breakdown (Vòng 3)
+
+### Phase 1: Khóa Chặt 5 Lỗi P1 Tầng Sâu
+- [x] **LBR3-01**: Khắc phục skip recomposition badge Watched trên Modern Home & sửa thứ tự `setSelectedPosition` sau `submitItems` (`R3-BUG-01`, `R3-BUG-02`)
+  - **Vai trò**: Compose-Leanback Lifecycle Engineer
+  - **Mô tả**: Đọc `watchedMaskHash` (0 cấp phát) trong thân Composable `LeanbackModernRow` để Compose Snapshot Observer tự kích hoạt `AndroidView.update` → `syncWatchedStateChanges` khi `movieWatchedStatus` đổi; chuyển khối `setSelectedPosition(initialFocusPosition)` xuống sau `adapter.submitItems(items)` ở cả `LeanbackNativeRow` và `LeanbackModernRow`.
+  - **File**: [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt), [LeanbackNativeRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeRow.kt)
+
+- [x] **LBR3-02**: Sửa race condition & cướp focus của `gridScrollToTopTrigger` trong `FolderDetailScreen` (`R3-BUG-03`)
+  - **Vai trò**: Folder Screen Focus Engineer
+  - **Mô tả**: Bỏ gán `restoreFocusNonce = gridScrollToTopTrigger`; giữ ref `activeGridView` qua `onGridCreated` của `LeanbackNativeGrid` và chỉ cuộn mượt về 0 (`setSelectedPositionSmooth(0)`) khi click lại đúng Tab đang chọn mà không giật focus khỏi Tab.
+  - **File**: [FolderDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailScreen.kt)
+
+- [x] **LBR3-03**: Hoàn thiện Focus/Crash Guards trên 3 GridView, siết `InteropHorizontalGridView.mayTakeFocus` & sửa deep-item restore của `LeanbackNativeGrid` (`R3-BUG-04`, `R3-BUG-05`)
+  - **Vai trò**: Android TV Focus Engine Engineer
+  - **Mô tả**: Thêm `clearFocusDepth` guard & fix `focusSearch` khi `isBusyLayout` trong `InteropVerticalGridView`; bảo vệ `post { super.requestChildFocus }` bằng kiểm tra `isAttachedToWindow && isDescendant(child)` ở cả 3 GridView; siết điều kiện reclaim focus khi `canTakeFocus == null` trong `InteropHorizontalGridView` & `LeanbackUniversalAdapter`; chuyển `executeAttachedGridFocus` trong `LeanbackNativeGrid` sang `setSelectedPosition` + retry tối đa 8 frame.
+  - **File**: [InteropVerticalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt), [InteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt), [ModernInteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt), [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt), [LeanbackNativeGrid.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeGrid.kt)
+
+### Phase 2: Tinh Chỉnh P2, Changelog Rollback & Verification Cuối
+- [x] **LBR3-04**: Khởi tạo `lastProgressAccentColor`, gỡ khóa sàn `borderWidthDp` & đồng tông hào quang cho `SOLID_*` (`R3-BUG-06`, `R3-BUG-07`)
+  - **Vai trò**: TV Rendering & Design System Engineer
+  - **Mô tả**: Gán `lastProgressAccentColor = themeStyle.accentColor` trong `LeanbackRowAdapter.onCreateViewHolder()`; đổi `.coerceAtLeast(2f)` cho `resolvedBorderWidthPx` ở `LeanbackBaseViewHolder`; bổ sung `LeanbackThemeStyle.resolveGlowColor(dominantColor)` áp dụng đồng tông hào quang cho `SOLID_*` ở cả `LeanbackBaseViewHolder` và `ModernRowFloatingFocusRingView`.
+  - **File**: [LeanbackThemeStyle.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackThemeStyle.kt), [LeanbackBaseViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackBaseViewHolder.kt), [ModernRowFloatingFocusRingView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernRowFloatingFocusRingView.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt)
+
+- [x] **LBR3-05**: Cập nhật mục Vòng 3 (`R3-BUG-01`..`R3-BUG-07`) vào [LEANBACK_FIX_CHANGELOG.md](file:///f:/MyGithub/NuvioTV-Fast/LEANBACK_FIX_CHANGELOG.md)
+  - **Vai trò**: Documentation & Rollback Maintainer
+  - **Mô tả**: Ghi rõ từng mã sửa Vòng 3 kèm file/dòng và hướng dẫn khôi phục riêng lẻ.
+
+- [x] **LBR3-06**: Bổ sung Unit Tests Vòng 3, chạy `testFullDebugUnitTest` & `assembleFullRelease` + xác minh trên MuMu Android TV
+  - **Vai trò**: QA / Verification Engineer
+  - **Mô tả**: Thêm test cho `resolveGlowColor`, chạy toàn bộ `LeanbackCoreOptimizationTest`, đóng gói Release APK và kiểm tra thực tế trên emulator MuMu (`0` crash).
+  - **File**: [LeanbackCoreOptimizationTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt)
+
+---
+
 # Danh Sách Task - Rà Soát Sâu Vòng 2 & Hoàn Thiện Android Leanback (`tet2`)
 
 > **Kế hoạch tương ứng**: [PLAN-leanback-deep-review-r2.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-leanback-deep-review-r2.md)

@@ -1,13 +1,29 @@
 package com.nuvio.tv.ui.theme
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import coil3.BitmapImage
+import coil3.imageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.size.Size
 import com.nuvio.tv.domain.model.PosterBorderStyle
+import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Immutable
 class NuvioFocusRingStyle internal constructor(
@@ -66,6 +82,13 @@ val PosterFocusRingStyle: NuvioFocusRingStyle = NuvioFocusRingStyle(
     gradientColors = PosterRainbowColors
 )
 
+val DefaultPosterDynamicColor: Color = Color(LeanbackColorEngine.defaultFallbackColor)
+
+val PosterDynamicFallbackFocusRingStyle: NuvioFocusRingStyle = NuvioFocusRingStyle(
+    solidColor = DefaultPosterDynamicColor,
+    gradientColors = listOf(DefaultPosterDynamicColor)
+)
+
 /** A transparent, zero-width style used when the user selects [PosterBorderStyle.NONE]. */
 private val NoBorderStyle: NuvioFocusRingStyle = NuvioFocusRingStyle(
     solidColor = Color.Transparent,
@@ -86,6 +109,7 @@ fun createPosterFocusRingStyle(
     palette: ThemeColorPalette
 ): NuvioFocusRingStyle = when (style) {
     PosterBorderStyle.THEME -> createFocusRingStyle(palette) // follows theme accent (dev branch default)
+    PosterBorderStyle.POSTER_COLOR -> PosterDynamicFallbackFocusRingStyle
     PosterBorderStyle.RAINBOW -> PosterFocusRingStyle
     PosterBorderStyle.SOLID_WHITE -> NuvioFocusRingStyle(
         solidColor = Color.White,
@@ -104,4 +128,61 @@ fun createPosterFocusRingStyle(
         gradientColors = listOf(Color(0xFFFFD000))
     )
     PosterBorderStyle.NONE -> NoBorderStyle
+}
+
+/**
+ * Resolves the focus ring style for a Compose poster card.
+ * When [PosterBorderStyle.POSTER_COLOR] is active, extracts the poster's dominant color
+ * from [imageUrl] via [LeanbackColorEngine] so the border changes purely with the poster
+ * artwork and ignores the active app theme.
+ */
+@Composable
+fun rememberPosterFocusRingStyle(
+    imageUrl: String?,
+    extractWhenUnfocused: Boolean = false,
+    isFocused: Boolean = true
+): NuvioFocusRingStyle {
+    val borderStyle = LocalPosterBorderStyle.current
+    val defaultRing = LocalPosterFocusRingStyle.current
+    if (borderStyle != PosterBorderStyle.POSTER_COLOR) {
+        return defaultRing
+    }
+    val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return defaultRing
+    var dominantArgb by remember(cleanUrl) {
+        mutableIntStateOf(
+            LeanbackColorEngine.getCachedColor(cleanUrl) ?: LeanbackColorEngine.defaultFallbackColor
+        )
+    }
+    val context = LocalContext.current
+    val shouldExtract = isFocused || extractWhenUnfocused
+    LaunchedEffect(cleanUrl, shouldExtract) {
+        val cached = LeanbackColorEngine.getCachedColor(cleanUrl)
+        if (cached != null) {
+            dominantArgb = cached
+            return@LaunchedEffect
+        }
+        if (!shouldExtract) return@LaunchedEffect
+        val extracted = withContext(Dispatchers.IO) {
+            LeanbackColorEngine.getCachedColor(cleanUrl)?.let { return@withContext it }
+            val request = ImageRequest.Builder(context)
+                .data(cleanUrl)
+                .allowHardware(false)
+                .size(Size(64, 64))
+                .build()
+            val result = runCatching { context.imageLoader.execute(request) }.getOrNull()
+            val bitmap = ((result as? SuccessResult)?.image as? BitmapImage)?.bitmap
+                ?: return@withContext LeanbackColorEngine.defaultFallbackColor
+            val color = LeanbackColorEngine.extractDominantColor(bitmap)
+            LeanbackColorEngine.putCachedColor(cleanUrl, color)
+            color
+        }
+        dominantArgb = extracted
+    }
+    return remember(dominantArgb) {
+        val color = Color(dominantArgb)
+        NuvioFocusRingStyle(
+            solidColor = color,
+            gradientColors = listOf(color)
+        )
+    }
 }

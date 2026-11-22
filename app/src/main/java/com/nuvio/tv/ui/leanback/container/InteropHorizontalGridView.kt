@@ -41,7 +41,24 @@ class InteropHorizontalGridView @JvmOverloads constructor(
 
     private var isNavigatingToSidebar: Boolean = false
 
-    fun mayTakeFocus(): Boolean = hasFocus() || canTakeFocus?.invoke() != false
+    fun mayTakeFocus(): Boolean = isFocusable &&
+        descendantFocusability != ViewGroup.FOCUS_BLOCK_DESCENDANTS &&
+        !isNavigatingToSidebar &&
+        (canTakeFocus?.invoke() != false)
+
+    /**
+     * Stricter check used by deferred focus-guard callbacks and ACTION_UP:
+     * when [canTakeFocus] is unset, only reclaim focus if this row still owns focus
+     * or no sibling view in the parent hierarchy currently holds focus.
+     */
+    fun canReclaimFocus(): Boolean {
+        if (!mayTakeFocus()) return false
+        if (canTakeFocus != null) return true
+        if (hasFocus() || isFocused) return true
+        val hostParent = parent as? ViewGroup
+        val siblingFocus = hostParent?.findFocus()
+        return siblingFocus == null || siblingFocus === this || isChildOfThis(siblingFocus)
+    }
 
     var isHoldingHorizontalKey: Boolean = false
         private set
@@ -210,7 +227,11 @@ class InteropHorizontalGridView @JvmOverloads constructor(
 
     override fun requestChildFocus(child: View?, focused: View?) {
         if (isBusyLayout) {
-            post { super.requestChildFocus(child, focused) }
+            post {
+                if (isAttachedToWindow && child != null && isChildOfThis(child)) {
+                    super.requestChildFocus(child, focused)
+                }
+            }
             return
         }
         super.requestChildFocus(child, focused)
@@ -349,7 +370,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                         return true
                     }
-                    if (!mayTakeFocus()) {
+                    if (!canReclaimFocus()) {
                         return true
                     }
                     val total = universalAdapter?.itemCount ?: 0

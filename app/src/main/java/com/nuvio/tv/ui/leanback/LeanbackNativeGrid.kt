@@ -99,28 +99,34 @@ fun LeanbackNativeGrid(
 
     var gridViewRef by remember(gridKey) { mutableStateOf<InteropVerticalGridView?>(null) }
 
+    fun focusTargetCardWithRetry(
+        grid: InteropVerticalGridView,
+        targetIdx: Int,
+        retryCount: Int = 0
+    ) {
+        if (!grid.isAttachedToWindow) return
+        val vh = grid.findViewHolderForAdapterPosition(targetIdx)
+        if (vh != null) {
+            if (!vh.itemView.hasFocus()) {
+                vh.itemView.requestFocus()
+            }
+            (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
+        } else if (retryCount < 8) {
+            grid.post {
+                if (grid.isAttachedToWindow && (grid.hasFocus() || grid.findFocus() == null)) {
+                    focusTargetCardWithRetry(grid, targetIdx, retryCount + 1)
+                }
+            }
+        }
+    }
+
     fun executeAttachedGridFocus(grid: InteropVerticalGridView, targetIdx: Int) {
         grid.post {
             if (!grid.isAttachedToWindow) return@post
-            if (animationsEnabled) {
-                grid.setSelectedPositionSmooth(targetIdx)
-            } else {
-                grid.setSelectedPosition(targetIdx)
-            }
+            // Jump immediately so deep-row focus restore (e.g. item #40) lays out in 1-2 frames
+            grid.setSelectedPosition(targetIdx)
             grid.requestFocus()
-            val vh = grid.findViewHolderForAdapterPosition(targetIdx)
-            if (vh != null) {
-                vh.itemView.requestFocus()
-                (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
-            } else {
-                grid.post {
-                    if (grid.isAttachedToWindow) {
-                        val deferredVh = grid.findViewHolderForAdapterPosition(targetIdx)
-                        deferredVh?.itemView?.requestFocus()
-                        (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
-                    }
-                }
-            }
+            focusTargetCardWithRetry(grid, targetIdx, retryCount = 0)
         }
     }
 

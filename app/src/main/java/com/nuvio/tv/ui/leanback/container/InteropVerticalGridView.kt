@@ -95,14 +95,30 @@ class InteropVerticalGridView @JvmOverloads constructor(
         })
     }
 
+    private var clearFocusDepth: Int = 0
+
     override fun getRootView(): View = this
+
+    override fun clearFocus() {
+        clearFocusDepth++
+        try {
+            super.clearFocus()
+        } finally {
+            clearFocusDepth--
+        }
+    }
 
     private val isBusyLayout: Boolean
         get() = isComputingLayout || isInLayout || !isAttachedToWindow
 
     override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
+        if (clearFocusDepth > 0) return false
         if (isBusyLayout) {
-            post { requestFocus(direction, previouslyFocusedRect) }
+            post {
+                if (isAttachedToWindow && !isNavigatingOutOfGrid) {
+                    requestFocus(direction, previouslyFocusedRect)
+                }
+            }
             return false
         }
         if (previouslyFocusedRect != null) {
@@ -144,7 +160,11 @@ class InteropVerticalGridView @JvmOverloads constructor(
 
     override fun requestChildFocus(child: View?, focused: View?) {
         if (isBusyLayout) {
-            post { super.requestChildFocus(child, focused) }
+            post {
+                if (isAttachedToWindow && child != null && isChildOfThis(child)) {
+                    super.requestChildFocus(child, focused)
+                }
+            }
             return
         }
         super.requestChildFocus(child, focused)
@@ -152,7 +172,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
 
     override fun focusSearch(focused: View?, direction: Int): View? {
         if (isBusyLayout) {
-            return null
+            return focused ?: findFocus() ?: this
         }
         val currentFocused = focused ?: findFocus()
         val holder = if (currentFocused != null) findContainingViewHolder(currentFocused) else null

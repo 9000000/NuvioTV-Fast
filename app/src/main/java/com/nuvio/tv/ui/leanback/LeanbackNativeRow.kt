@@ -302,13 +302,6 @@ fun LeanbackNativeRow(
         },
         update = { gridView ->
             localGridViewRef = gridView
-            if (initialFocusPosition in items.indices) {
-                gridView.restoredPosition = initialFocusPosition
-                if (initialFocusPosition != lastAppliedInitialPosition && !gridView.hasFocus()) {
-                    gridView.setSelectedPosition(initialFocusPosition)
-                    lastAppliedInitialPosition = initialFocusPosition
-                }
-            }
             if (gridView.configuredFocusEnabled != isFocusEnabled) {
                 if (!isFocusEnabled) {
                     gridView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -368,6 +361,17 @@ fun LeanbackNativeRow(
             adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels, themeStyle)
             rowGrids?.put(rowKey, gridView)
             adapter.submitItems(items)
+            if (initialFocusPosition in items.indices) {
+                gridView.restoredPosition = initialFocusPosition
+                if (initialFocusPosition != lastAppliedInitialPosition &&
+                    !gridView.hasFocus() &&
+                    initialFocusPosition in 0 until adapter.itemCount
+                ) {
+                    gridView.setSelectedPosition(initialFocusPosition)
+                    lastAppliedInitialPosition = initialFocusPosition
+                    initialScrollApplied = true
+                }
+            }
         },
         onRelease = { gridView ->
             if (localGridViewRef === gridView) {

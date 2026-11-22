@@ -379,7 +379,11 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             return
         }
         if (isBusyLayout) {
-            post { if (mayTakeFocus()) super.requestChildFocus(child, focused) }
+            post {
+                if (isAttachedToWindow && mayTakeFocus() && child != null && isDescendant(child)) {
+                    super.requestChildFocus(child, focused)
+                }
+            }
             return
         }
         super.requestChildFocus(child, focused)

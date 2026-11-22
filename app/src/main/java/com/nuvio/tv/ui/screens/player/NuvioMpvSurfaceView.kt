@@ -177,7 +177,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             // Let mpv choose the default streams for every new media load.
             mpv.setPropertyString("aid", "auto")
             mpv.setPropertyString("sid", "auto")
-            mpv.setPropertyBoolean("sub-visibility", !styledSubtitlesEnabled)
+            mpv.setPropertyBoolean("sub-visibility", resolveMpvSubVisibility())
         }.onFailure {
             Log.w(TAG, "Failed to reset default A/V track selection: ${it.message}")
         }
@@ -270,11 +270,12 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         styledSubtitlesEnabled = enabled
         if (!initialized) return null
         return runCatching {
-            val codec = mpv.getPropertyString("current-tracks/sub/codec")?.lowercase(Locale.US)
-            val styled = enabled && codec != null && codec in MPV_STYLED_SUBTITLE_CODECS
-            val sid = mpv.getPropertyString(MPV_SID_PROPERTY)
-            if (sid != null && sid != "no" && sid != "false") {
-                mpv.setPropertyBoolean("sub-visibility", !styled)
+            val styled = isStyledSubtitleCodecSelectedNow()
+            if (isSubtitleTrackSelectedNow()) {
+                mpv.setPropertyBoolean(
+                    "sub-visibility",
+                    resolveMpvSubVisibility(styledSubtitlesActive = styled)
+                )
             }
             if (styled) mpv.getPropertyString("sub-text/ass") ?: mpv.getPropertyString(MPV_SUB_TEXT_PROPERTY) else null
         }.getOrNull()
@@ -342,15 +343,40 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         applyAudioOutputLevel(db = db, duckingVolumeScale = lastDuckingVolumeScale)
     }
 
+    private fun isSubtitleTrackSelectedNow(): Boolean {
+        if (!initialized) return false
+        val sid = mpv.getPropertyString(MPV_SID_PROPERTY)
+        return sid != null && sid != "no" && sid != "false"
+    }
+
+    private fun isStyledSubtitleCodecSelectedNow(): Boolean {
+        if (!initialized || !styledSubtitlesEnabled) return false
+        val codec = mpv.getPropertyString("current-tracks/sub/codec")?.lowercase(Locale.US)
+        return codec != null && codec in MPV_STYLED_SUBTITLE_CODECS
+    }
+
+    private fun resolveMpvSubVisibility(
+        styledSubtitlesActive: Boolean = styledSubtitlesEnabled,
+        hasSelectedSubtitleTrack: Boolean = true
+    ): Boolean = PlayerSubtitleVisibilityPolicy.shouldShowMpvNativeSubtitles(
+        styledSubtitlesActive = styledSubtitlesActive,
+        ttsHideSubtitles = ttsHideSubtitles,
+        hasSelectedSubtitleTrack = hasSelectedSubtitleTrack
+    )
+
     fun setTtsHideSubtitles(hidden: Boolean) {
         ttsHideSubtitles = hidden
         if (!initialized) return
         runCatching {
-            if (hidden) {
-                mpv.setPropertyBoolean("sub-visibility", false)
+            val visible = if (hidden) {
+                false
             } else {
-                mpv.setPropertyBoolean("sub-visibility", !styledSubtitlesEnabled)
+                resolveMpvSubVisibility(
+                    styledSubtitlesActive = isStyledSubtitleCodecSelectedNow(),
+                    hasSelectedSubtitleTrack = isSubtitleTrackSelectedNow()
+                )
             }
+            mpv.setPropertyBoolean("sub-visibility", visible)
         }.onFailure {
             Log.w(TAG, "Failed to set sub-visibility for TTS: ${it.message}")
         }
@@ -671,7 +697,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
     fun selectSubtitleTrackById(trackId: Int): Boolean {
         if (!initialized) return false
         return runCatching {
-            mpv.setPropertyBoolean("sub-visibility", !styledSubtitlesEnabled)
+            mpv.setPropertyBoolean("sub-visibility", resolveMpvSubVisibility())
             mpv.setPropertyInt("sid", trackId)
             true
         }.getOrElse {
@@ -711,7 +737,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                 else ->
                     mpv.command("sub-add", url, "cached")
             }
-            mpv.setPropertyBoolean("sub-visibility", !styledSubtitlesEnabled)
+            mpv.setPropertyBoolean("sub-visibility", resolveMpvSubVisibility())
             true
         }.getOrElse {
             Log.w(TAG, "Failed to add external subtitle: ${it.message}")
@@ -740,7 +766,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                 safeTitle != null -> mpv.command("sub-add", path, "select", safeTitle)
                 else -> mpv.command("sub-add", path, "select")
             }
-            mpv.setPropertyBoolean("sub-visibility", !styledSubtitlesEnabled && !ttsHideSubtitles)
+            mpv.setPropertyBoolean("sub-visibility", resolveMpvSubVisibility())
             val added = mpv.getPropertyString("sid")?.toIntOrNull()
             if (replaceTrackId != null && replaceTrackId != added) removeSubtitleTrack(replaceTrackId)
             added
@@ -924,6 +950,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         mpv.setOptionString("sub-font", "Roboto")
         mpv.setOptionString("sub-use-margins", "yes")
         mpv.setOptionString("sub-ass-force-margins", "yes")
+        mpv.setOptionString("sub-visibility", if (resolveMpvSubVisibility()) "yes" else "no")
         mpv.setOptionString(
             "hwdec",
             if (hi10pGnextSoftwareFallbackActive) MPV_HWDEC_DISABLED else hardwareDecodeMode.toMpvHwdecValue()

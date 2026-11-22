@@ -336,6 +336,7 @@
     <string name="appearance_poster_border_row_title">Kiểu viền</string>
     <string name="appearance_poster_border_row_subtitle">Thay đổi kiểu viền của poster khi focus</string>
     <string name="poster_border_theme">Theo chủ đề (Mặc định)</string>
+    <string name="poster_border_poster_color">Theo màu poster</string>
     <string name="poster_border_rainbow">Cầu vồng</string>
     <string name="poster_border_white">Trắng trơn</string>
     <string name="poster_border_red">Đỏ trơn</string>

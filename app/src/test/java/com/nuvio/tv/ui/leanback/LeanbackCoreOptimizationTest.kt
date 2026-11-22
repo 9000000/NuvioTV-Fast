@@ -771,6 +771,13 @@ class LeanbackCoreOptimizationTest {
             focusRingColor = themeRing
         )
         assertEquals(themeRing, themeStyle.resolveFocusedBorderColor(dominantNeon, blendWithDominant = false))
+
+        // 5. Glow color resolution: SOLID_* harmonizes with border color, THEME/RAINBOW use dominant poster color, NONE is transparent
+        assertEquals(0, noneStyle.resolveGlowColor(dominantNeon))
+        assertEquals(solidGold, goldStyle.resolveGlowColor(dominantNeon))
+        assertEquals(dominantNeon, rainbowStyle.resolveGlowColor(dominantNeon))
+        assertEquals(dominantNeon, themeStyle.resolveGlowColor(dominantNeon))
+        assertEquals(0xFFF59E0B.toInt(), themeStyle.resolveGlowColor(0, fallbackColor = 0xFFF59E0B.toInt()))
     }
 
     @Test
@@ -916,6 +923,40 @@ class LeanbackCoreOptimizationTest {
         } finally {
             unmockkObject(SingletonImageLoader)
         }
+    }
+
+    @Test
+    fun `poster border style POSTER_COLOR uses pure poster dominant color independent of theme`() {
+        val themeColor = 0xFFFFD000.toInt() // Gold theme
+        val dominantPosterColor = 0xFF00E5FF.toInt() // Neon Cyan poster
+        val style = com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle(
+            focusRingColor = themeColor,
+            focusGradientColors = listOf(themeColor, 0xFFFF7E1D.toInt()),
+            posterBorderStyle = com.nuvio.tv.domain.model.PosterBorderStyle.POSTER_COLOR
+        )
+
+        // POSTER_COLOR must never activate theme gradient shaders
+        org.junit.Assert.assertFalse(style.isRainbowBorder)
+
+        // Border color must strictly match the poster dominant color regardless of theme or animation setting
+        assertEquals(
+            dominantPosterColor,
+            style.resolveFocusedBorderColor(dominantColor = dominantPosterColor, blendWithDominant = true)
+        )
+        assertEquals(
+            dominantPosterColor,
+            style.resolveFocusedBorderColor(dominantColor = dominantPosterColor, blendWithDominant = false)
+        )
+        assertEquals(
+            dominantPosterColor,
+            style.resolveGlowColor(dominantColor = dominantPosterColor)
+        )
+
+        // Falls back to neutral defaultFallbackColor when poster has no valid extracted color
+        assertEquals(
+            LeanbackColorEngine.defaultFallbackColor,
+            style.resolveFocusedBorderColor(dominantColor = 0, blendWithDominant = true)
+        )
     }
 
     private fun createUniversalAdapter(): LeanbackUniversalAdapter = LeanbackUniversalAdapter(

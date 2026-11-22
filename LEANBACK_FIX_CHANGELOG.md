@@ -378,3 +378,54 @@
   - [CastDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/cast/CastDetailScreen.kt): Xóa `hasRequestedInitialFocus` và `upFocusRequester` thừa trong `FilmographyRow`, đặt `rowKey = "cast_filmography_${filmographyFilter.name}"`.
 - **Cách khôi phục riêng mục này**:
   - Hoàn tác các tham số tương ứng nếu cần.
+
+
+---
+
+## 🔄 Vòng 3 — Chốt Hạ Lỗi Tầng Sâu Snapshot, Thứ Tự Update & Focus Guards (`PLAN-leanback-deep-review-r3.md`)
+
+### `R3-BUG-01` — Khắc phục Compose skip recomposition cho badge Watched trên Modern Home (`LBR3-01`)
+- **Mức độ**: 🔴 P1 (High)
+- **File & Dòng đã sửa**:
+  - [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt) & [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt): Tính `watchedMaskHash` (0 cấp phát) ngay trong thân Composable `LeanbackModernRow` để Compose tự đăng ký snapshot observer trên `latestMovieWatchedStatus` của `HomeScreen`, kích hoạt `AndroidView.update` → `syncWatchedStateChanges(items)` ngay lập tức khi trạng thái Đã xem thay đổi.
+- **Cách khôi phục riêng mục này**:
+  - Xóa vòng tính `watchedMaskHash` trong `LeanbackModernRow.kt` và field `lastWatchedMaskHash` trong `LeanbackModernRowAdapter.kt`.
+
+---
+
+### `R3-BUG-02` — Đảo thứ tự `setSelectedPosition(initialFocusPosition)` xuống sau `adapter.submitItems(items)` (`LBR3-01`)
+- **Mức độ**: 🔴 P1 (High)
+- **File & Dòng đã sửa**:
+  - [LeanbackNativeRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeRow.kt) & [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt): Chuyển khối đồng bộ `initialFocusPosition` xuống sau `adapter.submitItems(items)` và kiểm tra `initialFocusPosition in 0 until adapter.itemCount` để không bị mất khôi phục vị trí cuộn ngang khi dữ liệu tải async.
+- **Cách khôi phục riêng mục này**:
+  - Đưa khối `if (initialFocusPosition in items.indices)` trở lại đầu `update` như Vòng 2.
+
+---
+
+### `R3-BUG-03` — Sửa race condition & cướp focus từ `gridScrollToTopTrigger` trong `FolderDetailScreen` (`LBR3-02`)
+- **Mức độ**: 🔴 P1 (High)
+- **File & Dòng đã sửa**:
+  - [FolderDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailScreen.kt): Gỡ `restoreFocusNonce = gridScrollToTopTrigger`, giữ tham chiếu `activeGridView` qua `onGridCreated` của `LeanbackNativeGrid`, chỉ tăng `gridScrollToTopTrigger` khi click lại đúng Tab đang chọn (`index == uiState.selectedTabIndex`) và cuộn mượt `setSelectedPositionSmooth(0)` mà không giật focus khỏi Tab.
+- **Cách khôi phục riêng mục này**:
+  - Gỡ `activeGridView` và `onGridCreated`, đặt lại `restoreFocusNonce = gridScrollToTopTrigger`.
+
+---
+
+### `R3-BUG-04` & `R3-BUG-05` — Focus/Crash Guards trên 3 GridView, `canReclaimFocus()` & Deep-Item Restore trên `LeanbackNativeGrid` (`LBR3-03`)
+- **Mức độ**: 🔴 P1 (High)
+- **File & Dòng đã sửa**:
+  - [InteropVerticalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt): Thêm `clearFocusDepth` guard cho `clearFocus()`/`requestFocus()`; trả `focused ?: findFocus() ?: this` khi `isBusyLayout` trong `focusSearch()`; bọc `post { super.requestChildFocus }` bằng `isAttachedToWindow && isChildOfThis(child)`.
+  - [InteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt), [ModernInteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt) & [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt): Bảo vệ `post { super.requestChildFocus }`; bổ sung `canReclaimFocus()` chặt hơn khi `canTakeFocus == null` cho `ACTION_UP` và Placeholder-to-Data Focus Guard.
+  - [LeanbackNativeGrid.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeGrid.kt): Dùng `setSelectedPosition(targetIdx)` + `focusTargetCardWithRetry` (tối đa 8 frame) khi khôi phục focus về thẻ sâu.
+- **Cách khôi phục riêng mục này**:
+  - Hoàn tác từng đoạn guard/retry tương ứng ở 5 file trên.
+
+---
+
+### `R3-BUG-06` & `R3-BUG-07` — Tránh cấp phát trùng `PillProgressBarDrawable`, gỡ khóa sàn `borderWidthDp` & đồng tông hào quang `SOLID_*` (`LBR3-04`)
+- **Mức độ**: 🟡 P2 (Medium)
+- **File & Dòng đã sửa**:
+  - [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt): Gán `lastProgressAccentColor = themeStyle.accentColor` ngay trong `onCreateViewHolder()`.
+  - [LeanbackThemeStyle.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackThemeStyle.kt), [LeanbackBaseViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackBaseViewHolder.kt) & [ModernRowFloatingFocusRingView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernRowFloatingFocusRingView.kt): Thêm `resolveGlowColor()` đồng tông màu hào quang theo viền khi người dùng chọn `SOLID_WHITE`/`SOLID_RED`/`SOLID_BLUE`/`SOLID_GOLD` (giữ hào quang động theo poster cho `THEME` và `RAINBOW`); đổi `.coerceAtLeast(2f)` cho `resolvedBorderWidthPx`.
+- **Cách khôi phục riêng mục này**:
+  - Đổi `glowView.glowColor` về `currentDominantColor` và giữ `resolveGlowColor` cũ trong `ModernRowFloatingFocusRingView.kt`.

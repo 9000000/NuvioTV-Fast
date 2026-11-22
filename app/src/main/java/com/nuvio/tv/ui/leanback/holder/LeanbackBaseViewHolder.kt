@@ -145,8 +145,9 @@ abstract class LeanbackBaseViewHolder(
 
     // Defer software layer glow by 55ms during rapid navigation
     val deferredGlowRunnable = Runnable {
-        if (root.hasFocus() && adapter.animationsEnabled() && !adapter.themeStyle.hideFocusBorder) {
-            glowView.glowColor = currentDominantColor
+        val style = adapter.themeStyle
+        if (root.hasFocus() && adapter.animationsEnabled() && !style.hideFocusBorder) {
+            glowView.glowColor = style.resolveGlowColor(currentDominantColor)
             glowView.visibility = View.VISIBLE
         }
     }
@@ -238,7 +239,7 @@ abstract class LeanbackBaseViewHolder(
                     TypedValue.COMPLEX_UNIT_DIP,
                     style.borderWidthDp,
                     root.resources.displayMetrics
-                ).coerceAtLeast(borderWidthPx.toFloat())
+                ).coerceAtLeast(2f)
                 focusBorderDrawable.configure(
                     widthPx = resolvedBorderWidthPx,
                     color = borderColor,
@@ -253,7 +254,7 @@ abstract class LeanbackBaseViewHolder(
                         glowView.visibility = View.GONE
                         root.postDelayed(deferredGlowRunnable, 55L)
                     } else {
-                        glowView.glowColor = currentDominantColor
+                        glowView.glowColor = style.resolveGlowColor(currentDominantColor)
                         glowView.visibility = View.VISIBLE
                     }
                 } else {

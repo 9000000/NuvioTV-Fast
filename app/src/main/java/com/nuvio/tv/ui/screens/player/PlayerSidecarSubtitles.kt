@@ -85,6 +85,9 @@ internal fun PlayerRuntimeController.isSidecarAddonSubtitleActive(): Boolean {
 
 internal fun PlayerRuntimeController.bindExoSubtitleView(subtitleView: SubtitleView?) {
     exoSubtitleViewRef = subtitleView?.let { WeakReference(it) }
+    if (subtitleView != null && _uiState.value.shouldHideVisualSubtitles) {
+        subtitleView.visibility = android.view.View.GONE
+    }
     if (subtitleView == null && activeSidecarSubtitleKey != null) {
         // View unbound while sidecar still active; ticker will no-op until rebound.
         return

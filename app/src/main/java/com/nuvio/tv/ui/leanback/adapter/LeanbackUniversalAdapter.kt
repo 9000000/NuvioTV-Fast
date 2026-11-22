@@ -304,7 +304,7 @@ class LeanbackUniversalAdapter(
                 val focusedChild = rv.findFocus()
                 val cardStillHasFocus = focusedChild != null && focusedChild !== rv
                 val mayTake = when (rv) {
-                    is InteropHorizontalGridView -> rv.mayTakeFocus()
+                    is InteropHorizontalGridView -> rv.canReclaimFocus()
                     else -> rv.hasFocus()
                 }
                 if (rv.isAttachedToWindow && !cardStillHasFocus && mayTake) {
@@ -320,7 +320,7 @@ class LeanbackUniversalAdapter(
                             val deferredFocusedChild = rv.findFocus()
                             val deferredCardHasFocus = deferredFocusedChild != null && deferredFocusedChild !== rv
                             val deferredMayTake = when (rv) {
-                                is InteropHorizontalGridView -> rv.mayTakeFocus()
+                                is InteropHorizontalGridView -> rv.canReclaimFocus()
                                 else -> rv.hasFocus()
                             }
                             if (rv.isAttachedToWindow && !deferredCardHasFocus && deferredMayTake) {
