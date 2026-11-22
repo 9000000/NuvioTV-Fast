@@ -1,5 +1,8 @@
 package com.nuvio.tv.features.livetv
 
+import androidx.annotation.Keep
+
+@Keep
 data class CatchupInfo(
     val type: String = "default",
     val source: String? = null,
@@ -7,6 +10,7 @@ data class CatchupInfo(
     val correctionHours: Double = 0.0
 )
 
+@Keep
 data class DrmInfo(
     val scheme: String,
     val license: String,
@@ -48,12 +52,14 @@ data class ChannelGroup(
     }
 }
 
+@Keep
 data class EpgAssignment(
     val sourceId: String,
     val xmltvId: String,
     val shiftMinutes: Int = 0
 )
 
+@Keep
 data class LiveTvChannel(
     val id: String,
     val name: String,
@@ -81,6 +87,7 @@ data class LiveTvChannel(
     val url: String get() = streamUrl
 }
 
+@Keep
 data class LiveTvStalkerSettings(
     val portalUrl: String = "",
     val macAddress: String = "",
@@ -91,6 +98,7 @@ data class LiveTvStalkerSettings(
     val isConfigured: Boolean get() = portalUrl.isNotBlank() && macAddress.isNotBlank()
 }
 
+@Keep
 data class LiveTvXtreamSettings(
     val serverUrl: String = "",
     val username: String = "",
@@ -100,11 +108,13 @@ data class LiveTvXtreamSettings(
     val isConfigured: Boolean get() = serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()
 }
 
+@Keep
 enum class LiveTvPlaylistType {
     Url,
     LocalFile,
 }
 
+@Keep
 data class LiveTvPlaylist(
     val id: String,
     val name: String,
@@ -114,6 +124,7 @@ data class LiveTvPlaylist(
     var epgUrl: String? = null,
 )
 
+@Keep
 data class LiveTvSettings(
     val showInSidebar: Boolean = true,
     val showChannelNames: Boolean = true,

@@ -1,19 +1,20 @@
 package com.nuvio.tv.ui.screens.home
 
 import android.content.Context
-import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
-import android.util.LruCache
+import android.graphics.Shader
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.graphics.ColorUtils
-import kotlin.math.roundToInt
+import com.nuvio.tv.ui.leanback.core.LeanbackBlurFilterCache
+import com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle
 
 internal val DEFAULT_MODERN_FOCUS_COLOR: Int = Color.parseColor("#F59E0B")
 
@@ -31,9 +32,28 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             }
         }
 
-    val borderWidthPx: Float = TypedValue.applyDimension(
+    var borderWidthPx: Float = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, 2.5f, context.resources.displayMetrics
     )
+        private set
+
+    var themeStyle: LeanbackThemeStyle = LeanbackThemeStyle.Default
+        set(value) {
+            if (field != value) {
+                field = value
+                borderWidthPx = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    value.borderWidthDp,
+                    context.resources.displayMetrics
+                )
+                borderPaint.strokeWidth = borderWidthPx
+                applyThemeColors(lastDominantColor)
+                syncSoftwareLayer()
+                invalidate()
+            }
+        }
+
+    private var lastDominantColor: Int = DEFAULT_MODERN_FOCUS_COLOR
 
     var strokeColor: Int = DEFAULT_MODERN_FOCUS_COLOR
         set(value) {
@@ -57,6 +77,7 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         set(value) {
             if (field != value) {
                 field = value
+                applyThemeColors(lastDominantColor)
                 syncSoftwareLayer()
                 invalidate()
             }
@@ -85,6 +106,10 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     private val tempRect = Rect()
     private val tempParentLoc = IntArray(2)
     private val tempTargetLoc = IntArray(2)
+    private var cachedRainbowShader: LinearGradient? = null
+    private var cachedShaderWidth: Int = -1
+    private var cachedShaderHeight: Int = -1
+    private var cachedShaderColors: List<Int> = emptyList()
 
     val glowSpreadPx: Float = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics
@@ -95,9 +120,8 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         private set
 
     init {
-        val filters = obtainRingFilters(glowSpreadPx)
-        midPaint.maskFilter = filters.first
-        auraPaint.maskFilter = filters.second
+        midPaint.maskFilter = LeanbackBlurFilterCache.get((glowSpreadPx * 0.35f).coerceAtLeast(1f))
+        auraPaint.maskFilter = LeanbackBlurFilterCache.get((glowSpreadPx * 0.65f).coerceAtLeast(1f))
         midPaint.strokeWidth = (glowSpreadPx * 0.40f).coerceAtLeast(2f)
         auraPaint.strokeWidth = (glowSpreadPx * 0.75f).coerceAtLeast(4f)
         updateGlowPaints()
@@ -124,11 +148,61 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     }
 
     private fun syncSoftwareLayer() {
-        val needsSoftware = isAttachedToWindow && visibility == VISIBLE && isGlowEnabled
+        val needsSoftware = isAttachedToWindow &&
+            visibility == VISIBLE &&
+            isGlowEnabled &&
+            !themeStyle.hideFocusBorder
         val desiredLayer = if (needsSoftware) LAYER_TYPE_SOFTWARE else LAYER_TYPE_NONE
         if (layerType != desiredLayer) {
             setLayerType(desiredLayer, null)
         }
+    }
+
+    private fun applyThemeColors(dominantColor: Int) {
+        lastDominantColor = dominantColor
+        val resolvedGlowColor = resolveGlowColor(dominantColor)
+        strokeColor = themeStyle.resolveFocusedBorderColor(
+            dominantColor = resolvedGlowColor,
+            blendWithDominant = isGlowEnabled
+        )
+        glowColor = resolvedGlowColor
+        syncRainbowShader()
+    }
+
+    private fun syncRainbowShader() {
+        if (!themeStyle.isRainbowBorder) {
+            borderPaint.shader = null
+            cachedRainbowShader = null
+            return
+        }
+        val colors = themeStyle.focusGradientColors
+        if (colors.size <= 1 || width <= 0 || height <= 0) {
+            borderPaint.shader = null
+            return
+        }
+        if (cachedRainbowShader != null &&
+            cachedShaderWidth == width &&
+            cachedShaderHeight == height &&
+            cachedShaderColors == colors
+        ) {
+            borderPaint.shader = cachedRainbowShader
+            return
+        }
+        val pad = glowMarginPx
+        val shader = LinearGradient(
+            pad,
+            pad,
+            (width - pad).coerceAtLeast(pad + 1f),
+            (height - pad).coerceAtLeast(pad + 1f),
+            colors.toIntArray(),
+            null,
+            Shader.TileMode.CLAMP
+        )
+        cachedRainbowShader = shader
+        cachedShaderWidth = width
+        cachedShaderHeight = height
+        cachedShaderColors = colors
+        borderPaint.shader = shader
     }
 
     private fun updateGlowPaints() {
@@ -137,6 +211,7 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
+        if (themeStyle.hideFocusBorder) return
         val pad = glowMarginPx
         val w = width - (pad * 2)
         val h = height - (pad * 2)
@@ -154,8 +229,11 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             canvas.drawPath(ringPath, midPaint)
         }
 
-        borderPaint.strokeWidth = borderWidthPx
-        canvas.drawPath(ringPath, borderPaint)
+        if (strokeColor != Color.TRANSPARENT || themeStyle.isRainbowBorder) {
+            syncRainbowShader()
+            borderPaint.strokeWidth = borderWidthPx
+            canvas.drawPath(ringPath, borderPaint)
+        }
     }
 
     private fun computeAnchoredRingX(parent: ViewGroup, cardWidthPx: Int): Float {
@@ -170,14 +248,14 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         }
     }
 
-    fun moveToTarget(target: View, isLandscape: Boolean, dominantColor: Int, animated: Boolean) {
+    fun moveToTarget(target: View, dominantColor: Int, animated: Boolean) {
         currentTargetView = target
         val parent = parent as? ViewGroup ?: return
 
         if (!target.isAttachedToWindow || !parent.isAttachedToWindow || target.width <= 0 || target.height <= 0 || parent.width <= 0) {
             target.post {
                 if (currentTargetView === target && isAttachedToWindow) {
-                    moveToTarget(target, isLandscape, dominantColor, animated)
+                    moveToTarget(target, dominantColor, animated)
                 }
             }
             return
@@ -205,11 +283,7 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         val targetWidth = target.width + (glowMarginPx * 2).toInt()
         val targetHeight = target.height + (glowMarginPx * 2).toInt()
 
-        val resolvedGlowColor = resolveGlowColor(dominantColor)
-
-        strokeColor = resolvedGlowColor
-        glowColor = resolvedGlowColor
-        isGlowEnabled = true
+        applyThemeColors(dominantColor)
 
         val lp = layoutParams
         if (lp != null && (lp.width != targetWidth || lp.height != targetHeight)) {
@@ -267,10 +341,7 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             layoutParams = lp
         }
         this.cornerRadiusPx = cornerRadiusPx
-        val resolvedGlowColor = resolveGlowColor(dominantColor)
-        strokeColor = resolvedGlowColor
-        glowColor = resolvedGlowColor
-        isGlowEnabled = true
+        applyThemeColors(dominantColor)
         translationX = xPx - glowMarginPx
         translationY = yPx - glowMarginPx
         if (visibility != VISIBLE || alpha < 1f) {
@@ -297,25 +368,6 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             dominantColor
         } else {
             DEFAULT_MODERN_FOCUS_COLOR
-        }
-    }
-
-    companion object {
-        private val ringFilterCache = LruCache<Int, Pair<BlurMaskFilter, BlurMaskFilter>>(8)
-
-        private fun obtainRingFilters(spreadPx: Float): Pair<BlurMaskFilter, BlurMaskFilter> {
-            val key = (spreadPx * 10f).roundToInt().coerceAtLeast(1)
-            synchronized(ringFilterCache) {
-                ringFilterCache.get(key)?.let { return it }
-            }
-            val pair = Pair(
-                BlurMaskFilter((spreadPx * 0.35f).coerceAtLeast(1f), BlurMaskFilter.Blur.NORMAL),
-                BlurMaskFilter((spreadPx * 0.65f).coerceAtLeast(1f), BlurMaskFilter.Blur.NORMAL)
-            )
-            synchronized(ringFilterCache) {
-                ringFilterCache.put(key, pair)
-            }
-            return pair
         }
     }
 }

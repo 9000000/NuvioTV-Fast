@@ -3,12 +3,14 @@
 package com.nuvio.tv.ui.screens
 
 import com.nuvio.tv.ui.leanback.LeanbackNativeGrid
+import com.nuvio.tv.ui.leanback.computeAdaptiveGridColumns
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.domain.model.catalogRowLegacyKey
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -171,16 +173,24 @@ fun CatalogSeeAllScreen(
 
         if (hasItems && catalogRow != null) {
             val isLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
-            val numCols = if (isLandscape) 4 else 6
             val effectiveWidth = if (isLandscape) 260.dp else posterCardStyle.width
             val effectiveHeight = if (isLandscape) 146.dp else posterCardStyle.height
+            val watchedSeriesIds = searchWatchedSeriesIds?.value
+            val watchedMovieIds = searchWatchedMovieIds?.value
 
-            val leanbackItems = remember(catalogRow.items, isSearchMode, isLandscape, uiState.movieWatchedStatus) {
+            val leanbackItems = remember(
+                catalogRow.items,
+                isSearchMode,
+                isLandscape,
+                uiState.movieWatchedStatus,
+                watchedSeriesIds,
+                watchedMovieIds
+            ) {
                 catalogRow.items.mapIndexed { index, item ->
                     val isWatched = if (isSearchMode) {
                         val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
-                        if (isSeries) item.id in (searchWatchedSeriesIds?.value ?: emptySet())
-                        else item.id in (searchWatchedMovieIds?.value ?: emptySet())
+                        if (isSeries) item.id in (watchedSeriesIds ?: emptySet())
+                        else item.id in (watchedMovieIds ?: emptySet())
                     } else {
                         uiState.movieWatchedStatus[com.nuvio.tv.ui.screens.home.homeItemStatusKey(item.id, item.apiType)] == true
                     }
@@ -196,7 +206,14 @@ fun CatalogSeeAllScreen(
                 }
             }
 
-            Box(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val horizontalPadding = NuvioTheme.spacing.xxxl + NuvioTheme.spacing.xl
+                val horizontalSpacing = NuvioTheme.spacing.md
+                val numCols = computeAdaptiveGridColumns(
+                    availableWidth = maxWidth - horizontalPadding,
+                    cardWidth = effectiveWidth,
+                    horizontalSpacing = horizontalSpacing
+                )
                 LeanbackNativeGrid(
                     gridKey = "see_all_${catalogRow.stableKey()}",
                     items = leanbackItems,
@@ -212,7 +229,7 @@ fun CatalogSeeAllScreen(
                         top = NuvioTheme.spacing.md,
                         bottom = NuvioTheme.spacing.xxl
                     ),
-                    horizontalSpacing = NuvioTheme.spacing.md,
+                    horizontalSpacing = horizontalSpacing,
                     verticalSpacing = NuvioTheme.spacing.lg,
                     onItemFocused = { _, cardItem ->
                         val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid

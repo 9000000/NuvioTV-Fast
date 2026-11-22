@@ -12,7 +12,7 @@ import com.nuvio.tv.domain.model.PosterBorderStyle
 @Immutable
 class NuvioFocusRingStyle internal constructor(
     val solidColor: Color,
-    private val gradientColors: List<Color>
+    val gradientColors: List<Color>
 ) {
     private val fullBrush = createThemeBrush(gradientColors)
 

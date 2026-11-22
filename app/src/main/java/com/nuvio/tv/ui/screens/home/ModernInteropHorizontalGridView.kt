@@ -64,8 +64,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 if (holder != null) {
                     if (floatingRingView?.currentTargetView !== holder.cardContainer) {
                         holder.updateFocusVisual(true)
-                        val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-                        floatingRingView?.moveToTarget(holder.cardContainer, isLandscape, holder.currentDominantColor, false)
+                        floatingRingView?.moveToTarget(holder.cardContainer, holder.currentDominantColor, false)
                     }
                 } else {
                     ensureChildFocusAndRing(animated = false)
@@ -107,20 +106,6 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
     private var pendingIncomingFocus: Boolean = false
 
     var canTakeFocus: (() -> Boolean)? = null
-        set(value) {
-            field = value
-            val allowed = value?.invoke() != false
-            if (allowed) {
-                pendingIncomingFocus = false
-                descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-            } else if (!pendingIncomingFocus) {
-                descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                floatingRingView?.hideRing(true)
-                if (hasFocus()) {
-                    clearFocus()
-                }
-            }
-        }
 
     private var isNavigatingToSidebar: Boolean = false
     @Volatile
@@ -185,12 +170,12 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
     private val rowAdapter: LeanbackRowAdapter?
         get() = adapter as? LeanbackRowAdapter
 
-    fun notifyCardFocused(cardContainer: View, isLandscape: Boolean, dominantColor: Int) {
+    fun notifyCardFocused(cardContainer: View, dominantColor: Int) {
         if (isOverlayRingActive || !mayTakeFocus()) {
             floatingRingView?.hideRing(true)
             return
         }
-        floatingRingView?.moveToTarget(cardContainer, isLandscape, dominantColor, animationsEnabled)
+        floatingRingView?.moveToTarget(cardContainer, dominantColor, animationsEnabled)
     }
 
     fun prepareForRowChange() {
@@ -225,8 +210,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 vh.itemView.requestFocus()
             }
             vh.updateFocusVisual(true)
-            val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-            floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animated)
+            floatingRingView?.moveToTarget(vh.cardContainer, vh.currentDominantColor, animated)
         } else if (retryCount < 8) {
             post {
                 if (isAttachedToWindow && mayTakeFocus() && !isOverlayRingActive) {
@@ -251,8 +235,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 vh.itemView.requestFocus(direction)
             }
             vh.updateFocusVisual(true)
-            val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-            floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animationsEnabled)
+            floatingRingView?.moveToTarget(vh.cardContainer, vh.currentDominantColor, animationsEnabled)
         } else if (retryCount < 10) {
             post {
                 if (isAttachedToWindow && mayTakeFocus() && !isOverlayRingActive) {
@@ -267,7 +250,6 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         itemAnimator = null
         layoutManager?.isItemPrefetchEnabled = true
         setHasFixedSize(true)
-        setItemViewCacheSize(10)
 
         addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -318,8 +300,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     (child as? LeanbackCardViewHolder)?.let { vh ->
                         vh.updateFocusVisual(true)
                         if (!isOverlayRingActive) {
-                            val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-                            floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, animationsEnabled)
+                            floatingRingView?.moveToTarget(vh.cardContainer, vh.currentDominantColor, animationsEnabled)
                         } else {
                             floatingRingView?.hideRing(true)
                         }
@@ -368,8 +349,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             if (granted) {
                 vh.updateFocusVisual(true)
                 if (!isOverlayRingActive) {
-                    val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-                    floatingRingView?.moveToTarget(vh.cardContainer, isLandscape, vh.currentDominantColor, false)
+                    floatingRingView?.moveToTarget(vh.cardContainer, vh.currentDominantColor, false)
                 } else {
                     floatingRingView?.hideRing(true)
                 }
@@ -409,8 +389,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             if (holder != null) {
                 holder.updateFocusVisual(true)
                 if (!isOverlayRingActive) {
-                    val isLandscape = rowAdapter?.let { it.cardWidthPx > it.cardHeightPx } ?: false
-                    floatingRingView?.moveToTarget(holder.cardContainer, isLandscape, holder.currentDominantColor, false)
+                    floatingRingView?.moveToTarget(holder.cardContainer, holder.currentDominantColor, false)
                 } else {
                     floatingRingView?.hideRing(true)
                 }

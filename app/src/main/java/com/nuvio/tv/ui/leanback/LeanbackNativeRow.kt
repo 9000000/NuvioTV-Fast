@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,6 +31,7 @@ import androidx.leanback.widget.HorizontalGridView
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
+import com.nuvio.tv.ui.leanback.core.rememberLeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.leanback.pool.LocalLeanbackRecycledViewPool
@@ -88,12 +90,18 @@ fun LeanbackNativeRow(
     val endPaddingPx = with(density) { effectiveEndPadding.roundToPx() }
     val spacingPx = with(density) { effectiveSpacing.roundToPx() }
     val verticalPaddingPx = with(density) { verticalPadding.roundToPx() }
-    val labelHeightDp = if (showLabels) 44.dp else 0.dp
+    val hasEpisodeItems = items.firstOrNull() is LeanbackCardItem.Episode
+    val labelHeightDp = if (showLabels && !hasEpisodeItems) {
+        44.dp * density.fontScale.coerceIn(1f, 1.4f)
+    } else {
+        0.dp
+    }
     val labelHeightPx = with(density) { labelHeightDp.roundToPx() }
     val totalRowHeightPx = cardHeightPx + labelHeightPx + (verticalPaddingPx * 2)
     val totalRowHeightDp = cardHeight + labelHeightDp + (verticalPadding * 2)
 
     val effectivePool = recycledViewPool ?: LocalLeanbackRecycledViewPool.current
+    val themeStyle = rememberLeanbackThemeStyle()
 
     val adapter = remember(rowKey) {
         LeanbackUniversalAdapter(
@@ -106,10 +114,7 @@ fun LeanbackNativeRow(
             onItemClick = onItemClick,
             onItemLongClick = onItemLongClick,
             onLoadMore = onLoadMore,
-            onNavigateDown = onNavigateDown,
-            onNavigateUp = onNavigateUp,
-            onNavigateLeft = onNavigateLeftOnFirstItem,
-            onNavigateBack = onNavigateBack
+            themeStyle = themeStyle
         )
     }
 
@@ -146,6 +151,7 @@ fun LeanbackNativeRow(
 
     var localGridViewRef by remember(rowKey) { mutableStateOf<InteropHorizontalGridView?>(null) }
     var initialScrollApplied by remember(rowKey) { mutableStateOf(false) }
+    var lastAppliedInitialPosition by remember(rowKey) { mutableIntStateOf(-1) }
 
     LaunchedEffect(isPendingFocus, pendingFocusNonce, items.isNotEmpty(), localGridViewRef) {
         if (!isPendingFocus || items.isEmpty()) return@LaunchedEffect
@@ -174,12 +180,32 @@ fun LeanbackNativeRow(
 
     LaunchedEffect(initialFocusPosition, items.isNotEmpty(), localGridViewRef) {
         if (!initialScrollApplied && !isPendingFocus && items.isNotEmpty() && initialFocusPosition in items.indices) {
-            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView)
-            if (gridView != null && gridView.isAttachedToWindow && !gridView.hasFocus()) {
-                if (initialFocusPosition > 0) {
-                    gridView.setSelectedPosition(initialFocusPosition)
+            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? InteropHorizontalGridView) ?: return@LaunchedEffect
+            fun applyInitialPosition() {
+                if (!gridView.hasFocus() && initialFocusPosition in items.indices) {
+                    if (initialFocusPosition > 0) {
+                        gridView.setSelectedPosition(initialFocusPosition)
+                    }
+                    lastAppliedInitialPosition = initialFocusPosition
+                    initialScrollApplied = true
                 }
-                initialScrollApplied = true
+            }
+            if (gridView.isAttachedToWindow) {
+                applyInitialPosition()
+            } else {
+                val attachListener = object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: View) {
+                        v.removeOnAttachStateChangeListener(this)
+                        applyInitialPosition()
+                    }
+                    override fun onViewDetachedFromWindow(v: View) {}
+                }
+                gridView.addOnAttachStateChangeListener(attachListener)
+                try {
+                    awaitCancellation()
+                } finally {
+                    gridView.removeOnAttachStateChangeListener(attachListener)
+                }
             }
         }
     }
@@ -245,7 +271,6 @@ fun LeanbackNativeRow(
                 setAnimateChildLayout(animationsEnabled)
                 configuredAnimationsEnabled = animationsEnabled
                 setHasFixedSize(true)
-                setItemViewCacheSize(8)
                 effectivePool?.let { setRecycledViewPool(it) }
                 if (!isFocusEnabled) {
                     descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -266,8 +291,11 @@ fun LeanbackNativeRow(
                     override fun onViewDetachedFromWindow(v: View) {}
                 })
                 restoredPosition = initialFocusPosition
-                if (!isPendingFocus && initialFocusPosition in items.indices && initialFocusPosition > 0) {
-                    setSelectedPosition(initialFocusPosition)
+                if (!isPendingFocus && initialFocusPosition in items.indices) {
+                    if (initialFocusPosition > 0) {
+                        setSelectedPosition(initialFocusPosition)
+                    }
+                    lastAppliedInitialPosition = initialFocusPosition
                     initialScrollApplied = true
                 }
             }
@@ -276,8 +304,9 @@ fun LeanbackNativeRow(
             localGridViewRef = gridView
             if (initialFocusPosition in items.indices) {
                 gridView.restoredPosition = initialFocusPosition
-                if (initialFocusPosition > 0 && !gridView.hasFocus() && gridView.selectedPosition != initialFocusPosition) {
+                if (initialFocusPosition != lastAppliedInitialPosition && !gridView.hasFocus()) {
                     gridView.setSelectedPosition(initialFocusPosition)
+                    lastAppliedInitialPosition = initialFocusPosition
                 }
             }
             if (gridView.configuredFocusEnabled != isFocusEnabled) {
@@ -328,10 +357,6 @@ fun LeanbackNativeRow(
             adapter.onItemClick = onItemClick
             adapter.onItemLongClick = onItemLongClick
             adapter.onLoadMore = onLoadMore
-            adapter.onNavigateDown = onNavigateDown
-            adapter.onNavigateUp = onNavigateUp
-            adapter.onNavigateLeft = onNavigateLeftOnFirstItem
-            adapter.onNavigateBack = onNavigateBack
             if (gridView.adapter !== adapter) {
                 gridView.adapter = adapter
             }
@@ -340,7 +365,7 @@ fun LeanbackNativeRow(
                     gridView.setRecycledViewPool(it)
                 }
             }
-            adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
+            adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels, themeStyle)
             rowGrids?.put(rowKey, gridView)
             adapter.submitItems(items)
         },

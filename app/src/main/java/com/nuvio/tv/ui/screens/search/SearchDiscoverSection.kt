@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.search
 
 import com.nuvio.tv.ui.leanback.LeanbackNativeGrid
+import com.nuvio.tv.ui.leanback.computeAdaptiveGridColumns
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.screens.home.HeroBackdropState
@@ -10,6 +11,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -542,7 +544,6 @@ internal fun DiscoverGrid(
 ) {
     val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     val globalLandscape = com.nuvio.tv.ui.components.LocalLandscapePosterMode.current
-    val numCols = if (globalLandscape) 4 else 6
     val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
     val effectiveHeight = if (globalLandscape) 146.dp else (posterCardStyle.width * 1.5f)
 
@@ -574,8 +575,15 @@ internal fun DiscoverGrid(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val horizontalSpacing = 10.dp
+        val numCols = computeAdaptiveGridColumns(
+            availableWidth = maxWidth - (NuvioTheme.spacing.xxxl * 2),
+            cardWidth = effectiveWidth,
+            horizontalSpacing = horizontalSpacing
+        )
         LeanbackNativeGrid(
+            modifier = Modifier.focusRequester(firstItemFocusRequester),
             gridKey = "discover_grid_$filterKey",
             items = leanbackItems,
             numColumns = numCols,
@@ -590,9 +598,10 @@ internal fun DiscoverGrid(
                 top = NuvioTheme.spacing.md,
                 bottom = NuvioTheme.spacing.xxl
             ),
-            horizontalSpacing = 10.dp,
+            horizontalSpacing = horizontalSpacing,
             verticalSpacing = NuvioTheme.spacing.lg,
             initialFocusPosition = initialPos,
+            requestInitialFocus = focusResults || shouldRestoreFocusedItem,
             onItemFocused = { _, cardItem ->
                 val pair = cardItem.payload as? Pair<*, *> ?: return@LeanbackNativeGrid
                 val index = pair.first as? Int ?: return@LeanbackNativeGrid

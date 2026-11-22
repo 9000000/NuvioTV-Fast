@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.leanback.adapter
 
 import android.content.Context
+import android.os.SystemClock
 import android.view.ViewGroup
 import androidx.leanback.widget.BaseGridView
 import androidx.recyclerview.widget.DiffUtil
@@ -11,6 +12,7 @@ import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
 import com.nuvio.tv.ui.leanback.core.HorizontalPrefetchProfileCache
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
+import com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.holder.LeanbackAvatarViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackEpisodeViewHolder
@@ -33,19 +35,29 @@ class LeanbackUniversalAdapter(
     var onItemClick: (LeanbackCardItem) -> Unit,
     var onItemLongClick: (LeanbackCardItem) -> Unit,
     var onLoadMore: () -> Unit,
-    var onNavigateDown: () -> Boolean = { false },
-    var onNavigateUp: () -> Boolean = { false },
-    var onNavigateLeft: () -> Boolean = { false },
-    var onNavigateRight: () -> Boolean = { false },
-    var onNavigateBack: () -> Boolean = { false }
+    var themeStyle: LeanbackThemeStyle = LeanbackThemeStyle.Default
 ) : RecyclerView.Adapter<LeanbackBaseViewHolder>() {
 
     private var items: List<LeanbackCardItem> = emptyList()
     private var pendingItems: List<LeanbackCardItem>? = null
     private var pendingNotifyOnAttach: Boolean = false
+    private var lastLoadMoreTimestampMs: Long = 0L
+    private var lastLoadMoreItemCount: Int = -1
     var attachedRecyclerView: RecyclerView? = null
     var isSubmittingItems: Boolean = false
         private set
+
+    fun requestLoadMore() {
+        val currentCount = items.size
+        if (currentCount <= 0) return
+        val now = SystemClock.uptimeMillis()
+        if (currentCount == lastLoadMoreItemCount && now - lastLoadMoreTimestampMs < LOAD_MORE_DEBOUNCE_MS) {
+            return
+        }
+        lastLoadMoreTimestampMs = now
+        lastLoadMoreItemCount = currentCount
+        onLoadMore()
+    }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
@@ -107,19 +119,31 @@ class LeanbackUniversalAdapter(
         newWidthPx: Int,
         newHeightPx: Int,
         newRadiusPx: Float,
-        newShowLabels: Boolean
+        newShowLabels: Boolean,
+        newThemeStyle: LeanbackThemeStyle = themeStyle
     ) {
         val changed = cardWidthPx != newWidthPx ||
             cardHeightPx != newHeightPx ||
             cornerRadiusPx != newRadiusPx ||
-            showLabels != newShowLabels
+            showLabels != newShowLabels ||
+            themeStyle != newThemeStyle
         if (changed) {
             cardWidthPx = newWidthPx
             cardHeightPx = newHeightPx
             cornerRadiusPx = newRadiusPx
             showLabels = newShowLabels
+            themeStyle = newThemeStyle
             if (items.isNotEmpty()) {
-                notifyItemRangeChanged(0, items.size)
+                val rv = attachedRecyclerView
+                if (rv != null && (rv.isComputingLayout || rv.isInLayout)) {
+                    rv.post {
+                        if (attachedRecyclerView === rv && items.isNotEmpty()) {
+                            notifyItemRangeChanged(0, items.size)
+                        }
+                    }
+                } else {
+                    notifyItemRangeChanged(0, items.size)
+                }
             }
         }
     }
@@ -134,7 +158,8 @@ class LeanbackUniversalAdapter(
                     a.isLandscape == b.isLandscape &&
                     a.progressPercent == b.progressPercent &&
                     a.badgeText == b.badgeText &&
-                    a.isWatched == b.isWatched
+                    a.isWatched == b.isWatched &&
+                    a.isSeeAll == b.isSeeAll
             a is LeanbackCardItem.Episode && b is LeanbackCardItem.Episode ->
                 a.description == b.description &&
                     a.episodeNumber == b.episodeNumber &&
@@ -294,7 +319,11 @@ class LeanbackUniversalAdapter(
                         rv.post {
                             val deferredFocusedChild = rv.findFocus()
                             val deferredCardHasFocus = deferredFocusedChild != null && deferredFocusedChild !== rv
-                            if (rv.isAttachedToWindow && !deferredCardHasFocus) {
+                            val deferredMayTake = when (rv) {
+                                is InteropHorizontalGridView -> rv.mayTakeFocus()
+                                else -> rv.hasFocus()
+                            }
+                            if (rv.isAttachedToWindow && !deferredCardHasFocus && deferredMayTake) {
                                 val deferredVh = rv.findViewHolderForAdapterPosition(safePos)
                                 deferredVh?.itemView?.requestFocus()
                                 (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
@@ -352,6 +381,7 @@ class LeanbackUniversalAdapter(
             applyItemsUpdate(pending)
         }
         val rv = attachedRecyclerView ?: return
+        rebindMissingImages(rv)
         val count = rv.childCount
         for (i in 0 until count) {
             val child = rv.getChildAt(i)
@@ -362,6 +392,19 @@ class LeanbackUniversalAdapter(
         }
         if (rv.isAttachedToWindow && hasRealItems(items)) {
             prefetchFromVisibleRange(rv.context)
+        }
+    }
+
+    private fun rebindMissingImages(rv: RecyclerView) {
+        if (rv.isComputingLayout || rv.isInLayout) return
+        val count = rv.childCount
+        for (i in 0 until count) {
+            val child = rv.getChildAt(i) ?: continue
+            val vh = rv.getChildViewHolder(child) as? LeanbackBaseViewHolder ?: continue
+            val pos = vh.bindingAdapterPosition
+            if (pos in items.indices && vh.needsImageRebind()) {
+                onBindViewHolder(vh, pos)
+            }
         }
     }
 
@@ -586,5 +629,9 @@ class LeanbackUniversalAdapter(
 
     override fun onViewRecycled(holder: LeanbackBaseViewHolder) {
         holder.unbind()
+    }
+
+    companion object {
+        private const val LOAD_MORE_DEBOUNCE_MS = 250L
     }
 }

@@ -1,3 +1,142 @@
+# Danh Sách Task - Rà Soát Sâu Vòng 2 & Hoàn Thiện Android Leanback (`tet2`)
+
+> **Kế hoạch tương ứng**: [PLAN-leanback-deep-review-r2.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-leanback-deep-review-r2.md)
+> **Phạm vi**: Khắc phục 6 lỗi/regression P1 (`R2-BUG-01`..`06`), 3 tinh chỉnh P2 (`R2-BUG-07`..`09`), và 3 hạng mục dọn dẹp dead code / đồng bộ `AppFont` (`R2-CLEAN-01`..`03`) sau Đợt 1.
+
+---
+
+## 📋 Task Breakdown (Vòng 2)
+
+### Phase 1: Sửa Regression & Lỗi P1 (Watched, Scroll Restore, Focus Grid/Consumer)
+- [x] **LBR2-01**: Khôi phục reactivity Watched trên Modern Home & `FolderDetailScreen`, đồng bộ `blurred` prefetch & màu ProgressBar (`R2-BUG-02`)
+  - **Vai trò**: Modern Home & State Sync Engineer
+  - **Mô tả**: Thêm cơ chế phát hiện đổi trạng thái `isCatalogItemWatched` trong `LeanbackRowAdapter` để rebind đúng thẻ thay đổi; bổ sung chữ ký watched vào `remember` của `FolderDetailScreen`; truyền `blurred` trong prefetch `ContinueWatchingItem.NextUp` ở `LeanbackRowAdapter` & `ModernHomeRowsList`; đồng bộ `themeStyle.accentColor` cho `progressBar` Modern Home.
+  - **File**: [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt), [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt), [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt), [FolderDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailScreen.kt)
+
+- [x] **LBR2-02**: Sửa lỗi mất khôi phục `initialFocusPosition` khi `items` nạp chậm async (`R2-BUG-03`)
+  - **Vai trò**: Compose-Leanback Lifecycle Engineer
+  - **Mô tả**: Khởi tạo `lastAppliedInitialPosition = -1` trong `LeanbackNativeRow` và `LeanbackModernRow`; chỉ cập nhật sau khi áp dụng `setSelectedPosition` thành công trên danh sách không rỗng kèm xử lý attach an toàn.
+  - **File**: [LeanbackNativeRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeRow.kt), [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt)
+
+- [x] **LBR2-03**: Chuẩn hóa `InteropVerticalGridView` (`focusSearch` & biên), Focus Guard và `unbind()` nhánh Universal (`R2-BUG-04`, `R2-BUG-06`)
+  - **Vai trò**: Android TV Focus & Recycling Engineer
+  - **Mô tả**: Thêm `.coerceAtMost(totalItems - 1)` vào `focusSearch(FOCUS_DOWN)` và tái sử dụng `isVerticalGridLastRow`; chuẩn hóa `handleBoundaryNavigation` + expose `onNavigateRightOnLastColumn`; thêm check `mayTake` ở `rv.post` thứ 2 của `LeanbackUniversalAdapter`; reset sạch marquee/badge/progress trong `unbind()` của `LeanbackPosterViewHolder` & `LeanbackEpisodeViewHolder` và lọc `isPlaceholder()` ở `LeanbackEpisodeViewHolder`.
+  - **File**: [InteropVerticalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt), [LeanbackNativeGrid.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeGrid.kt), [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt), [LeanbackPosterViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackPosterViewHolder.kt), [LeanbackEpisodeViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackEpisodeViewHolder.kt)
+
+- [x] **LBR2-04**: Sửa 3 điểm rớt Focus ở `SearchDiscoverSection`, `FolderDetailScreen` và `CollectionSection` (`R2-BUG-05`)
+  - **Vai trò**: Screen Focus Integration Engineer
+  - **Mô tả**: Gắn `firstItemFocusRequester` vào `LeanbackNativeGrid` trong `DiscoverGrid`; thêm auto-focus Tab đầu khi mở `FolderDetailScreen` nhiều tab lần đầu và nối `gridScrollToTopTrigger`; nối `isFocusEnabled = !blockDefaultRestore` và `focusProperties { canFocus = false }` trong `CollectionSection`.
+  - **File**: [SearchDiscoverSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/search/SearchDiscoverSection.kt), [FolderDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailScreen.kt), [CollectionSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/CollectionSection.kt)
+
+### Phase 2: Hoàn Thiện Viền `RAINBOW`, Theme, `AppFont` & Modern UX Polish
+- [x] **LBR2-05**: Khôi phục `PosterBorderStyle.RAINBOW`, tách chuẩn màu `SOLID_*`/`THEME`/`NONE`, áp dụng `borderWidthDp` & đồng bộ `AppFont` (`R2-BUG-01`, `R2-CLEAN-03`)
+  - **Vai trò**: TV Design System & Canvas Graphics Engineer
+  - **Mô tả**: Expose `LocalAppFont` từ `Theme.kt`; mở rộng `LeanbackThemeStyle` với `borderStyle`, `gradientColors`, `typeface` (cached); tạo `LeanbackFocusBorderDrawable` vẽ cả solid lẫn `LinearGradient` cầu vồng theo `borderWidthDp` cho `LeanbackBaseViewHolder` và tắt `glowView` khi `NONE`; nâng cấp `ModernRowFloatingFocusRingView` vẽ `LinearGradient` cho `RAINBOW`; gán `typeface` vào các `TextView` của 4 ViewHolder.
+  - **File**: [Theme.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/theme/Theme.kt), [FocusRingStyle.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/theme/FocusRingStyle.kt), [LeanbackThemeStyle.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackThemeStyle.kt), [LeanbackBaseViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackBaseViewHolder.kt), [ModernRowFloatingFocusRingView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernRowFloatingFocusRingView.kt), [LeanbackPosterViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackPosterViewHolder.kt), [LeanbackEpisodeViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackEpisodeViewHolder.kt), [LeanbackAvatarViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackAvatarViewHolder.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt)
+
+- [x] **LBR2-06**: Hoàn thiện RTL `progressBar`, Fallback Title, A11y Modern Home, tối ưu `watchedSignature` & chặn copy Hardware Bitmap lúc hold-scroll (`R2-BUG-07`, `R2-BUG-08`, `R2-BUG-09`)
+  - **Vai trò**: Native View Polish & Performance Engineer
+  - **Mô tả**: Đổi `marginStart`/`marginEnd` cho `progressBar` Modern Home, bổ sung `fallbackTitleText` khi ảnh lỗi & `showLabels == false`, thêm `", Watched"` vào `contentDescription`; tối ưu `watchedSignature` trong `CatalogRowSection` tránh cấp phát List mỗi recomposition; bỏ qua trích màu trên Hardware Bitmap khi `isHoldScrolling == true` ở `LeanbackColorEngine`.
+  - **File**: [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt), [CatalogRowSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/components/CatalogRowSection.kt), [LeanbackColorEngine.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackColorEngine.kt)
+
+### Phase 3: Dọn Dead Code Còn Sót, Changelog Rollback & Kiểm Thử
+- [x] **LBR2-07**: Dọn sạch 4 callback chết trên 2 Adapter, bỏ `setItemViewCacheSize(12)` trùng, bỏ cấp phát thừa `listState` ở 4 Detail Sections & dọn `FilmographyRow` (`R2-CLEAN-01`, `R2-CLEAN-02`)
+  - **Vai trò**: Refactoring & Code Hygiene Engineer
+  - **Mô tả**: Xóa `onNavigateDown/Up/Left/Back` không còn dùng khỏi `LeanbackUniversalAdapter` và `LeanbackRowAdapter` (cập nhật các file gọi + unit test); xóa `setItemViewCacheSize(12)` thừa ở `LeanbackNativeGrid`; đổi `listState: LazyListState? = null` ở `CastSection`, `CollectionSection`, `MoreLikeThisSection`, `TrailerSection`; dọn tham số thừa & `rowKey` trong `CastDetailScreen`.
+  - **File**: [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt), [LeanbackNativeRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeRow.kt), [LeanbackNativeGrid.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeGrid.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt), [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt), [CastSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/CastSection.kt), [CollectionSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/CollectionSection.kt), [MoreLikeThisSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/MoreLikeThisSection.kt), [TrailerSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/TrailerSection.kt), [CastDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/cast/CastDetailScreen.kt)
+
+- [x] **LBR2-08**: Cập nhật bổ sung mục Vòng 2 (`R2-BUG-01`..`R2-CLEAN-03`) vào [LEANBACK_FIX_CHANGELOG.md](file:///f:/MyGithub/NuvioTV-Fast/LEANBACK_FIX_CHANGELOG.md)
+  - **Vai trò**: Documentation & Rollback Maintainer
+  - **Mô tả**: Ghi rõ từng mã sửa Vòng 2 kèm vị trí file/dòng và cách khôi phục độc lập theo yêu cầu người dùng.
+
+- [x] **LBR2-09**: Bổ sung Unit Tests Vòng 2, chạy `testFullDebugUnitTest` & `assembleFullRelease` + xác minh trên MuMu Android TV
+  - **Vai trò**: QA / Verification Engineer
+  - **Mô tả**: Thêm test cho `PosterBorderStyle` (đủ 7 chế độ), Modern Home watched reactivity, blur prefetch parity, partial last-row `focusSearch`; chạy test và kiểm thử thực tế trên emulator.
+  - **File**: [LeanbackCoreOptimizationTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt)
+
+---
+
+# Danh Sách Task - Kiểm Toán & Tối Ưu Toàn Diện UX/UI Android Leanback (`tet2`)
+
+> **Kế hoạch tương ứng**: [PLAN-leanback-ux-ui-audit.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-leanback-ux-ui-audit.md)
+> **Phạm vi**: Khắc phục 17 lỗi (3 P0, 7 P1, 7 P2), dọn 8 hạng mục thừa/dead code, hoàn thiện 8 khoảng trống UX/UI/Theme/Accessibility trên toàn bộ hệ thống Leanback (`ui/leanback/` & `ui/screens/home/`)
+
+---
+
+## 📋 Task Breakdown
+
+### Phase 1: Khắc Phục Lỗi P0 Nghiêm Trọng (Focus & Ảnh Trống)
+- [x] **LB-01**: Sửa triệt để lỗi kẹt `LeanbackArtworkLoader.isHoldScrolling` và ảnh đen trống sau khi dừng cuộn nhanh (`BUG-01`)
+  - **Vai trò**: Leanback Core & Image Loading Engineer
+  - **Mô tả**: Reset `isHoldScrolling = false` trong `finishOverlayRingToCurrentGrid()`, refresh ảnh cho toàn bộ hàng visible khi `endVerticalHoldScroll()` kết thúc, và thêm `rebindMissingImages()` trong `onScrollSettled()` của cả `LeanbackUniversalAdapter` & `LeanbackRowAdapter`.
+  - **File**: [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt), [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt)
+
+- [x] **LB-02**: Sửa công thức `isLastRow` và lỗi `ACTION_UP` giật ngược focus + nuốt phím biên trong `InteropVerticalGridView` (`BUG-02`, `BUG-03`)
+  - **Vai trò**: Android TV Focus Engine Engineer
+  - **Mô tả**: Đổi điều kiện hàng cuối sang `(actualPos / cols) >= (totalItems - 1) / cols`; thêm cờ `isNavigatingOutOfGrid` ngăn `ACTION_UP` giật focus ngược sau khi thoát sang Filter/Tab/Sidebar; xử lý trả về đúng cho callback biên khi trả `false`.
+  - **File**: [InteropVerticalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropVerticalGridView.kt)
+
+- [x] **LB-03**: Loại bỏ double-dispatch callback điều hướng và bảo vệ `updateConfig()` khỏi crash đang layout (`BUG-09`, `BUG-10`)
+  - **Vai trò**: Leanback Adapter Engineer
+  - **Mô tả**: Gỡ gọi trùng `onNavigateUp/Down/Back` ở `root.setOnKeyListener` trong `LeanbackCardViewHolder` & `LeanbackBaseViewHolder`; bọc `notifyItemRangeChanged` trong `updateConfig()` bằng kiểm tra `rv.isComputingLayout || rv.isInLayout`.
+  - **File**: [LeanbackBaseViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackBaseViewHolder.kt), [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt)
+
+### Phase 2: Ổn Định Dữ Liệu, Grid Thích Ứng & Tắt Hiệu Ứng Đúng Cài Đặt
+- [x] **LB-04**: Sửa reactivity trạng thái Watched, debounce `onLoadMore` và chống giật ngược scroll khi recompose (`BUG-04`, `BUG-12`, `BUG-16`)
+  - **Vai trò**: Compose-Leanback Interop Engineer
+  - **Mô tả**: Đưa trạng thái `isWatched` / `searchWatched*` vào key `remember(...)` ở `CatalogRowSection` và `CatalogSeeAllScreen`; thêm debounce `250ms` cho `onLoadMore` ở `LeanbackUniversalAdapter`; chỉ gọi `setSelectedPosition` trong `update` khi `initialFocusPosition` thực sự thay đổi.
+  - **File**: [CatalogRowSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/components/CatalogRowSection.kt), [CatalogSeeAllScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/CatalogSeeAllScreen.kt), [LeanbackNativeRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeRow.kt), [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt), [LeanbackUniversalAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/adapter/LeanbackUniversalAdapter.kt)
+
+- [x] **LB-05**: Kiểm soát auto-focus và tính số cột thích ứng (adaptive columns) cho `LeanbackNativeGrid` (`BUG-06`, `BUG-07`)
+  - **Vai trò**: TV Layout & Focus Engineer
+  - **Mô tả**: Thêm `requestInitialFocus: Boolean` cho `LeanbackNativeGrid` để không giật focus khỏi thanh Filter/Tab; tạo helper `computeAdaptiveGridColumns` áp dụng cho `CatalogSeeAllScreen`, `SearchDiscoverSection`, `FolderDetailScreen`.
+  - **File**: [LeanbackNativeGrid.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeGrid.kt), [CatalogSeeAllScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/CatalogSeeAllScreen.kt), [SearchDiscoverSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/search/SearchDiscoverSection.kt), [FolderDetailScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailScreen.kt)
+
+- [x] **LB-06**: Tắt software blur glow của `ModernRowFloatingFocusRingView` khi `animationsEnabled == false` (`BUG-08`)
+  - **Vai trò**: Rendering & Performance Engineer
+  - **Mô tả**: Truyền `animationsEnabled` xuống `ModernRowFloatingFocusRingView` và `VerticalRingOverlayHost`, vô hiệu hóa `LAYER_TYPE_SOFTWARE` + `BlurMaskFilter` khi người dùng tắt hiệu ứng.
+  - **File**: [ModernRowFloatingFocusRingView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernRowFloatingFocusRingView.kt), [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt), [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt)
+
+### Phase 3: Hoàn Thiện UX/UI, Đồng Bộ `NuvioTheme` & Parity Tính Năng
+- [x] **LB-07**: Đồng bộ `NuvioTheme`, `PosterBorderStyle`, `AppFont` và co giãn vùng nhãn theo `fontScale` (`BUG-14`)
+  - **Vai trò**: TV Design System Engineer
+  - **Mô tả**: Xây dựng `LeanbackThemeStyle` kết nối token màu, `PosterBorderStyle` (`THEME`/`RAINBOW`/`SOLID_*`/`NONE`), font chữ và độ dày viền nhất quán tới toàn bộ ViewHolder & Floating Ring; tính `labelHeightDp` động theo `fontScale` và loại thẻ.
+  - **File**: `app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackThemeStyle.kt` (mới), [LeanbackBaseViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackBaseViewHolder.kt), [LeanbackNativeRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/LeanbackNativeRow.kt), [LeanbackModernRow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRow.kt), [ModernRowFloatingFocusRingView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernRowFloatingFocusRingView.kt)
+
+- [x] **LB-08**: Sửa bo góc Episode gradient, RTL margins, thẻ `See All`, Fallback Avatar/Poster, Marquee, phím `MENU` & `contentDescription` (`BUG-11`, `BUG-13`, `BUG-15`)
+  - **Vai trò**: Native View UX Polish Engineer
+  - **Mô tả**: Bo góc `gradientView` ở `LeanbackEpisodeViewHolder`; chuyển sang `marginStart`/`marginEnd`; bổ sung giao diện thẻ `See All` có icon mũi tên; thêm initials/icon fallback cho Avatar & tiêu đề fallback khi Poster lỗi ảnh; bật marquee khi focus; lắng nghe `KEYCODE_MENU`; gán `contentDescription` cho TalkBack.
+  - **File**: [LeanbackEpisodeViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackEpisodeViewHolder.kt), [LeanbackPosterViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackPosterViewHolder.kt), [LeanbackAvatarViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackAvatarViewHolder.kt), [LeanbackCardItem.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/model/LeanbackCardItem.kt), [CatalogRowSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/components/CatalogRowSection.kt)
+
+- [x] **LB-09**: Khôi phục Parity hiển thị trên Modern Home (`Watched`, `Blur Unwatched CW`, `CoverEmoji`, `IMDb/AirDate Badge`) (`BUG-05`)
+  - **Vai trò**: Modern Home UI Engineer
+  - **Mô tả**: Nối `isCatalogItemWatched`, `blurUnwatchedEpisodes` và `coverEmoji` (CollectionFolder) xuống `LeanbackCardViewHolder`, đồng bộ các badge còn thiếu với trải nghiệm chuẩn của ứng dụng.
+  - **File**: [ModernHomeRowsList.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRowsList.kt), [ModernHomeRows.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRows.kt), [LeanbackModernRowAdapter.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/LeanbackModernRowAdapter.kt)
+
+### Phase 4: Tinh Gọn Kiến Trúc, Dọn Code Thừa & Tối Ưu RAM Ảnh
+- [x] **LB-10**: Hợp nhất tiện ích lõi (`BlurFilterCache`, `PrefetchController`), rút gọn `LeanbackColorEngine` và xóa toàn bộ Dead Code
+  - **Vai trò**: Architecture & Refactoring Engineer
+  - **Mô tả**: Gộp 2 cache `BlurMaskFilter` & logic prefetch giữa Universal và Modern; xóa `dominantColorCache` trùng lặp + unused import `LruCache` trong `LeanbackColorEngine`; dọn `isLandscape` unused, `borderWidthPx`/`glowMarginPx` thừa, `onNavigateRight` chết, `listState` thừa ở 4 Detail Sections, bỏ gọi trùng `setItemViewCacheSize`, sửa side-effect trong setter `canTakeFocus`.
+  - **File**: [LeanbackColorEngine.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackColorEngine.kt), [PlayStoreGlowView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/PlayStoreGlowView.kt), [ModernRowFloatingFocusRingView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernRowFloatingFocusRingView.kt), [ModernInteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/home/ModernInteropHorizontalGridView.kt), [InteropHorizontalGridView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/container/InteropHorizontalGridView.kt), [CastSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/CastSection.kt), [CollectionSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/CollectionSection.kt), [MoreLikeThisSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/MoreLikeThisSection.kt), [TrailerSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/TrailerSection.kt)
+
+- [x] **LB-11**: Hỗ trợ an toàn `Hardware Bitmaps` trong `LeanbackArtworkLoader` & `LeanbackColorEngine` (`BUG-17`)
+  - **Vai trò**: Performance & Graphics Engineer
+  - **Mô tả**: Bảo vệ `LeanbackColorEngine` khỏi `IllegalStateException` khi gặp `Bitmap.Config.HARDWARE`; gỡ ép cứng `.allowHardware(false)` (chỉ giữ khi `blurred == true`) để `HardwareBitmapSettingInterceptor` hoạt động đúng trên toàn bộ poster Leanback.
+  - **File**: [LeanbackArtworkLoader.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackArtworkLoader.kt), [LeanbackColorEngine.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/core/LeanbackColorEngine.kt)
+
+### Phase 5: Mở Rộng Độ Phủ (Tùy Chọn) & Kiểm Thử Toàn Diện
+- [ ] **LB-12**: *(Tùy chọn)* Chuyển lưới poster Tab Saved của `LibraryScreen` sang `LeanbackNativeGrid` với adaptive columns
+  - **Vai trò**: Library Screen Engineer
+  - **Mô tả**: Chỉ triển khai sau khi Phase 1–2 ổn định và được xác nhận phạm vi; đảm bảo giữ trọn điều hướng lên bộ lọc `LibrarySelectorsRow`, mở Sidebar ở cột 0 và khôi phục focus khi quay về từ Detail.
+  - **File**: [LibraryScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/library/LibraryScreen.kt)
+
+- [x] **LB-13**: Bổ sung bộ Unit Tests (`InteropVerticalGridView`, `HoldScrollRecovery`, `AdaptiveColumns`, `HardwareBitmapColor`, `LoadMoreDebounce`) & Nghiệm thu trên Android TV
+  - **Vai trò**: QA / Verification Engineer
+  - **Mô tả**: Viết unit tests khóa chặt toàn bộ lỗi P0/P1 đã sửa, chạy `./gradlew :app:compileFullDebugKotlin :app:testFullDebugUnitTest` và xác minh checklist thủ công trên thiết bị/emulator Android TV.
+  - **File**: [LeanbackCoreOptimizationTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt)
+
+---
+
 # Danh Sách Task - Đồng Bộ Commit Mới Từ Nhánh `dev` Sang `tet2` (19/11/2026 – 21/11/2026)
 
 > **Kế hoạch tương ứng**: [PLAN-sync-dev-2026-11-21.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-sync-dev-2026-11-21.md)

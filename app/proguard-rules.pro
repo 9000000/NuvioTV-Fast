@@ -42,6 +42,22 @@
 -keep class com.nuvio.tv.data.remote.dto.** { *; }
 -keep class com.nuvio.tv.domain.model.** { *; }
 
+# Keep Gson-serialized local disk cache & Live TV models so R8 never renames JSON fields across releases
+-keep @androidx.annotation.Keep class * { *; }
+-keep class com.nuvio.tv.data.local.CachedNextUpItem { *; }
+-keep class com.nuvio.tv.data.local.CachedInProgressItem { *; }
+-keep class com.nuvio.tv.core.sync.PendingProgressUpsert { *; }
+-keep class com.nuvio.tv.core.sync.PendingWatchedUpsert { *; }
+-keep class com.nuvio.tv.features.livetv.CatchupInfo { *; }
+-keep class com.nuvio.tv.features.livetv.DrmInfo { *; }
+-keep class com.nuvio.tv.features.livetv.EpgAssignment { *; }
+-keep class com.nuvio.tv.features.livetv.LiveTvPlaylistType { *; }
+-keep class com.nuvio.tv.features.livetv.LiveTvChannel { *; }
+-keep class com.nuvio.tv.features.livetv.LiveTvPlaylist { *; }
+-keep class com.nuvio.tv.features.livetv.LiveTvStalkerSettings { *; }
+-keep class com.nuvio.tv.features.livetv.LiveTvXtreamSettings { *; }
+-keep class com.nuvio.tv.features.livetv.LiveTvSettings { *; }
+
 # ── Kotlin ─────────────────────────────────────────────────────────────────────
 -keepattributes *Annotation*
 -keepattributes InnerClasses

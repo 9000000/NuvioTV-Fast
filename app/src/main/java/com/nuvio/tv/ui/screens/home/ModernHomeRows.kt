@@ -84,7 +84,9 @@ internal fun ModernRowSection(
     isPendingFocus: Boolean = false,
     pendingFocusIndex: Int = 0,
     pendingFocusNonce: Int = 0,
-    onClearPendingFocus: () -> Unit = {}
+    onClearPendingFocus: () -> Unit = {},
+    isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
+    blurUnwatchedEpisodes: Boolean = false
 ) {
     @Suppress("NAME_SHADOWING") val focusedItemByRow = focusedItemByRow.value
     @Suppress("NAME_SHADOWING") val loadMoreRequestedTotals = loadMoreRequestedTotals.value
@@ -292,6 +294,8 @@ internal fun ModernRowSection(
             pendingFocusNonce = pendingFocusNonce,
             onClearPendingFocus = onClearPendingFocus,
             canTakeFocus = isActiveRow,
+            isCatalogItemWatched = isCatalogItemWatched,
+            blurUnwatchedEpisodes = blurUnwatchedEpisodes,
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(rowFocusRequester)

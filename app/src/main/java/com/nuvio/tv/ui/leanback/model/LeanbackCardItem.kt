@@ -24,7 +24,8 @@ sealed interface LeanbackCardItem {
         val progressPercent: Int? = null,
         val badgeText: String? = null,
         val isWatched: Boolean = false,
-        override val payload: Any? = null
+        override val payload: Any? = null,
+        val isSeeAll: Boolean = false
     ) : LeanbackCardItem
 
     /**

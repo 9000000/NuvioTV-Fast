@@ -326,10 +326,9 @@ private fun CastDetailContent(
                         key(filmographyFilter) {
                             FilmographyRow(
                                 credits = visibleCredits,
+                                filmographyFilter = filmographyFilter,
                                 posterCardStyle = filmographyPosterStyle,
                                 firstItemFocusRequester = firstPosterFocusRequester,
-                                hasRequestedInitialFocus = hasRequestedInitialFocus,
-                                upFocusRequester = filmographyUpFocusRequester,
                                 onNavigateUp = {
                                     if (showFilmographyFilter) {
                                         runCatching { filmographyUpFocusRequester.requestFocus(); true }.getOrDefault(false)
@@ -675,10 +674,9 @@ private fun FilmographyFilterTabs(
 @Composable
 private fun FilmographyRow(
     credits: List<MetaPreview>,
+    filmographyFilter: FilmographyFilter,
     posterCardStyle: PosterCardStyle,
     firstItemFocusRequester: FocusRequester,
-    hasRequestedInitialFocus: androidx.compose.runtime.MutableState<Boolean>? = null,
-    upFocusRequester: FocusRequester = FocusRequester.Default,
     onNavigateUp: () -> Boolean = { false },
     restoreItemId: String? = null,
     restoreFocusToken: Int = 0,
@@ -718,7 +716,7 @@ private fun FilmographyRow(
         (restoreFocusToken > 0 && restoreItemId != null)
 
     LeanbackNativeRow(
-        rowKey = "cast_filmography",
+        rowKey = "cast_filmography_${filmographyFilter.name}",
         items = leanbackItems,
         cardWidth = effectiveWidth,
         cardHeight = effectiveHeight,

@@ -193,7 +193,11 @@ fun CatalogRowSection(
 
         val isLandscape = LocalLandscapePosterMode.current || catalogRow.items.firstOrNull()?.posterShape == PosterShape.LANDSCAPE
         val strSeeAll = seeAllLabel ?: stringResource(R.string.action_see_all)
-        val leanbackItems = remember(catalogRow.items, showSeeAll, isLandscape, strSeeAll, showImdbRatings) {
+        var watchedMaskHash = 1
+        for (i in catalogRow.items.indices) {
+            watchedMaskHash = 31 * watchedMaskHash + if (latestIsItemWatched(catalogRow.items[i])) 1231 else 1237
+        }
+        val leanbackItems = remember(catalogRow.items, showSeeAll, isLandscape, strSeeAll, showImdbRatings, watchedMaskHash) {
             val list = ArrayList<LeanbackCardItem>(catalogRow.items.size + if (showSeeAll) 1 else 0)
             catalogRow.items.forEachIndexed { index, item ->
                 val ratingBadge = if (showImdbRatings && !item.id.startsWith("__placeholder_")) {
@@ -224,7 +228,7 @@ fun CatalogRowSection(
                         title = strSeeAll,
                         imageUrl = null,
                         isLandscape = isLandscape,
-                        badgeText = "ALL",
+                        isSeeAll = true,
                         payload = "SEE_ALL"
                     )
                 )

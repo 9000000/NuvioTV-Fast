@@ -4,11 +4,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -21,7 +21,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 @Composable
 fun CollectionSection(
     items: List<MetaPreview>,
-    listState: LazyListState = rememberLazyListState(),
+    @Suppress("UNUSED_PARAMETER") listState: LazyListState? = null,
     title: String? = null,
     posterCardCornerRadius: Dp = NuvioTheme.spacing.md,
     upFocusRequester: FocusRequester? = null,
@@ -64,6 +64,13 @@ fun CollectionSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (blockDefaultRestore) {
+                    Modifier.focusProperties { canFocus = false }
+                } else {
+                    Modifier
+                }
+            )
             .padding(top = if (title.isNullOrBlank()) NuvioTheme.spacing.sm else 20.dp, bottom = NuvioTheme.spacing.sm)
     ) {
         if (!title.isNullOrBlank()) {
@@ -86,6 +93,7 @@ fun CollectionSection(
             animationsEnabled = NuvioTheme.animationsEnabled,
             startPadding = NuvioTheme.spacing.xxxl,
             spacing = NuvioTheme.spacing.md,
+            isFocusEnabled = !blockDefaultRestore,
             onItemFocused = { _, cardItem ->
                 val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
                 onLastFocusedItemIdChange(item.id)

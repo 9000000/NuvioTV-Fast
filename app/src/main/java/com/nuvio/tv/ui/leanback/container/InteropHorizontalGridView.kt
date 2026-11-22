@@ -72,7 +72,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         itemAnimator = null
         layoutManager?.isItemPrefetchEnabled = true
         setHasFixedSize(true)
-        setItemViewCacheSize(10)
+        setItemViewCacheSize(8)
 
         addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -120,7 +120,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 val totalCount = universalAdapter?.itemCount ?: 0
                 if (position >= totalCount - 5 && totalCount > 0) {
                     post {
-                        universalAdapter?.onLoadMore?.invoke()
+                        universalAdapter?.requestLoadMore()
                     }
                 }
             }

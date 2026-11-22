@@ -243,7 +243,6 @@ object LeanbackArtworkLoader {
             .data(imageUrl)
             .memoryCacheKey(baseMemKey)
             .size(w, h)
-            .allowHardware(false)
             .crossfade(false)
             .apply {
                 if (normalizedFallback != null) {
@@ -252,6 +251,7 @@ object LeanbackArtworkLoader {
                     )
                 }
                 if (blurred) {
+                    allowHardware(false)
                     transformations(BlurTransformation())
                 }
             }
@@ -319,7 +319,6 @@ object LeanbackArtworkLoader {
             .data(url)
             .memoryCacheKey(baseMemKey)
             .size(w, h)
-            .allowHardware(false)
             .crossfade(false)
             .apply {
                 if (normalizedFallback != null) {
@@ -328,6 +327,7 @@ object LeanbackArtworkLoader {
                     )
                 }
                 if (blurred) {
+                    allowHardware(false)
                     transformations(BlurTransformation())
                 }
             }

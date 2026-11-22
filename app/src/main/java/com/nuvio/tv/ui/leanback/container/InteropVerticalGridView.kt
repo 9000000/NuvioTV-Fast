@@ -43,6 +43,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
 
     private var pendingTargetPosition: Int = RecyclerView.NO_POSITION
     private var lastKeyNavigationTime: Long = 0L
+    private var isNavigatingOutOfGrid: Boolean = false
 
     private val universalAdapter: LeanbackUniversalAdapter?
         get() = adapter as? LeanbackUniversalAdapter
@@ -87,7 +88,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
                 val totalCount = universalAdapter?.itemCount ?: 0
                 if (position >= totalCount - (numColumnsCount * 2) && totalCount > 0) {
                     post {
-                        universalAdapter?.onLoadMore?.invoke()
+                        universalAdapter?.requestLoadMore()
                     }
                 }
             }
@@ -160,7 +161,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
         val cols = numColumnsCount.coerceAtLeast(1)
         val isFirstRow = actualPos in 0 until cols
         val totalItems = universalAdapter?.itemCount ?: 0
-        val isLastRow = actualPos >= 0 && actualPos >= (totalItems - cols)
+        val isLastRow = isVerticalGridLastRow(actualPos, totalItems, cols)
 
         val result = super.focusSearch(focused, direction)
 
@@ -187,7 +188,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
             }
             View.FOCUS_DOWN -> {
                 if (!isLastRow) {
-                    val targetPos = actualPos + cols
+                    val targetPos = (actualPos + cols).coerceAtMost(totalItems - 1)
                     if (targetPos < totalItems) {
                         val targetVh = findViewHolderForAdapterPosition(targetPos)
                         if (targetVh != null) {
@@ -207,6 +208,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
     }
 
     private fun moveToPosition(targetPos: Int) {
+        isNavigatingOutOfGrid = false
         pendingTargetPosition = targetPos
         if (animationsEnabled && !isHoldingVerticalKey) {
             setSelectedPositionSmooth(targetPos)
@@ -261,6 +263,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
         if (!gainFocus) {
             isHoldingVerticalKey = false
         } else {
+            isNavigatingOutOfGrid = false
             if (findFocus() === this) {
                 val targetPos = selectedPosition.coerceAtLeast(0)
                 val vh = findViewHolderForAdapterPosition(targetPos)
@@ -289,6 +292,12 @@ class InteropVerticalGridView @JvmOverloads constructor(
         if (event.action == KeyEvent.ACTION_UP) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (!hasFocus() || isNavigatingOutOfGrid) {
+                        isHoldingVerticalKey = false
+                        pendingTargetPosition = RecyclerView.NO_POSITION
+                        isNavigatingOutOfGrid = false
+                        return false
+                    }
                     isHoldingVerticalKey = false
                     val total = universalAdapter?.itemCount ?: 0
                     val currentSelected = selectedPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
@@ -313,7 +322,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
                         (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
                     } else {
                         post {
-                            if (isAttachedToWindow) {
+                            if (isAttachedToWindow && hasFocus() && !isNavigatingOutOfGrid) {
                                 val deferredVh = findViewHolderForAdapterPosition(target)
                                 deferredVh?.itemView?.requestFocus()
                                 (deferredVh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
@@ -339,15 +348,12 @@ class InteropVerticalGridView @JvmOverloads constructor(
             val currentColumn = if (actualPos >= 0) actualPos % cols else 0
             val isFirstRow = actualPos in 0 until cols
             val totalItems = universalAdapter?.itemCount ?: 0
-            val isLastRow = actualPos >= 0 && actualPos >= (totalItems - cols)
+            val isLastRow = isVerticalGridLastRow(actualPos, totalItems, cols)
 
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     if (isFirstRow) {
-                        if (event.repeatCount == 0 && onNavigateUpOnFirstRow?.invoke() == true) {
-                            return true
-                        }
-                        return true
+                        return handleBoundaryNavigation(event.repeatCount, onNavigateUpOnFirstRow)
                     }
                     if (event.repeatCount > 0) {
                         isHoldingVerticalKey = true
@@ -362,10 +368,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     if (isLastRow) {
-                        if (event.repeatCount == 0 && onNavigateDownOnLastRow?.invoke() == true) {
-                            return true
-                        }
-                        return true
+                        return handleBoundaryNavigation(event.repeatCount, onNavigateDownOnLastRow)
                     }
                     if (event.repeatCount > 0) {
                         isHoldingVerticalKey = true
@@ -380,10 +383,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
                 }
                 towardStartColKey -> {
                     if (currentColumn == 0) {
-                        if (event.repeatCount == 0 && onNavigateLeftOnFirstColumn?.invoke() == true) {
-                            return true
-                        }
-                        return true
+                        return handleBoundaryNavigation(event.repeatCount, onNavigateLeftOnFirstColumn)
                     } else {
                         if (event.repeatCount > 0 && now - lastKeyNavigationTime < 60L) {
                             return true
@@ -398,10 +398,7 @@ class InteropVerticalGridView @JvmOverloads constructor(
                 }
                 towardEndColKey -> {
                     if (currentColumn == cols - 1 || actualPos == totalItems - 1) {
-                        if (event.repeatCount == 0 && onNavigateRightOnLastColumn?.invoke() == true) {
-                            return true
-                        }
-                        return true
+                        return handleBoundaryNavigation(event.repeatCount, onNavigateRightOnLastColumn)
                     } else {
                         if (event.repeatCount > 0 && now - lastKeyNavigationTime < 60L) {
                             return true
@@ -425,6 +422,15 @@ class InteropVerticalGridView @JvmOverloads constructor(
         return super.dispatchKeyEvent(event)
     }
 
+    private fun handleBoundaryNavigation(repeatCount: Int, callback: (() -> Boolean)?): Boolean {
+        if (repeatCount > 0) return true
+        if (callback == null) return false
+        if (callback.invoke()) {
+            isNavigatingOutOfGrid = true
+        }
+        return true
+    }
+
     private fun isChildOfThis(target: View): Boolean {
         var p = target.parent
         while (p != null) {
@@ -433,4 +439,9 @@ class InteropVerticalGridView @JvmOverloads constructor(
         }
         return false
     }
+}
+
+internal fun isVerticalGridLastRow(actualPos: Int, totalItems: Int, cols: Int): Boolean {
+    val safeCols = cols.coerceAtLeast(1)
+    return totalItems > 0 && actualPos >= 0 && (actualPos / safeCols) >= (totalItems - 1) / safeCols
 }

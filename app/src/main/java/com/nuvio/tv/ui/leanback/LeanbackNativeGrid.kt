@@ -23,6 +23,7 @@ import androidx.leanback.widget.BaseGridView
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.container.InteropVerticalGridView
+import com.nuvio.tv.ui.leanback.core.rememberLeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
@@ -53,10 +54,12 @@ fun LeanbackNativeGrid(
     onNavigateUpOnFirstRow: () -> Boolean = { false },
     onNavigateDownOnLastRow: () -> Boolean = { false },
     onNavigateLeftOnFirstColumn: () -> Boolean = { false },
+    onNavigateRightOnLastColumn: () -> Boolean = { false },
     onNavigateBack: () -> Boolean = { false },
     recycledViewPool: RecyclerView.RecycledViewPool? = null,
     initialFocusPosition: Int = 0,
     restoreFocusNonce: Int = 0,
+    requestInitialFocus: Boolean = true,
     onGridCreated: ((InteropVerticalGridView) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -78,6 +81,7 @@ fun LeanbackNativeGrid(
         LeanbackPoolManager.createGridPool()
     }
 
+    val themeStyle = rememberLeanbackThemeStyle()
     val adapter = remember(gridKey) {
         LeanbackUniversalAdapter(
             cardWidthPx = cardWidthPx,
@@ -85,14 +89,11 @@ fun LeanbackNativeGrid(
             cornerRadiusPx = cornerRadiusPx,
             showLabels = showLabels,
             animationsEnabled = { animationsEnabled },
+            themeStyle = themeStyle,
             onItemFocused = onItemFocused,
             onItemClick = onItemClick,
             onItemLongClick = onItemLongClick,
-            onLoadMore = onLoadMore,
-            onNavigateDown = onNavigateDownOnLastRow,
-            onNavigateUp = onNavigateUpOnFirstRow,
-            onNavigateLeft = onNavigateLeftOnFirstColumn,
-            onNavigateBack = onNavigateBack
+            onLoadMore = onLoadMore
         )
     }
 
@@ -154,8 +155,8 @@ fun LeanbackNativeGrid(
         }
     }
 
-    LaunchedEffect(gridKey, items.isNotEmpty(), gridViewRef) {
-        if (!initialFocusDone && items.isNotEmpty()) {
+    LaunchedEffect(gridKey, items.isNotEmpty(), gridViewRef, requestInitialFocus) {
+        if (requestInitialFocus && !initialFocusDone && items.isNotEmpty()) {
             val grid = gridViewRef ?: return@LaunchedEffect
             if (initialFocusPosition in items.indices) {
                 initialFocusDone = true
@@ -196,12 +197,12 @@ fun LeanbackNativeGrid(
                 this.onNavigateUpOnFirstRow = onNavigateUpOnFirstRow
                 this.onNavigateDownOnLastRow = onNavigateDownOnLastRow
                 this.onNavigateLeftOnFirstColumn = onNavigateLeftOnFirstColumn
+                this.onNavigateRightOnLastColumn = onNavigateRightOnLastColumn
                 this.onNavigateBack = onNavigateBack
                 this.animationsEnabled = animationsEnabled
                 setAnimateChildLayout(animationsEnabled)
                 configuredAnimationsEnabled = animationsEnabled
                 setHasFixedSize(true)
-                setItemViewCacheSize(12)
                 setRecycledViewPool(effectivePool)
                 addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
                     override fun onViewAttachedToWindow(v: View) {
@@ -250,6 +251,7 @@ fun LeanbackNativeGrid(
             gridView.onNavigateUpOnFirstRow = onNavigateUpOnFirstRow
             gridView.onNavigateDownOnLastRow = onNavigateDownOnLastRow
             gridView.onNavigateLeftOnFirstColumn = onNavigateLeftOnFirstColumn
+            gridView.onNavigateRightOnLastColumn = onNavigateRightOnLastColumn
             gridView.onNavigateBack = onNavigateBack
             if (gridView.configuredAnimationsEnabled != animationsEnabled) {
                 gridView.animationsEnabled = animationsEnabled
@@ -262,10 +264,6 @@ fun LeanbackNativeGrid(
             adapter.onItemClick = onItemClick
             adapter.onItemLongClick = onItemLongClick
             adapter.onLoadMore = onLoadMore
-            adapter.onNavigateDown = onNavigateDownOnLastRow
-            adapter.onNavigateUp = onNavigateUpOnFirstRow
-            adapter.onNavigateLeft = onNavigateLeftOnFirstColumn
-            adapter.onNavigateBack = onNavigateBack
 
             if (gridView.adapter !== adapter) {
                 gridView.adapter = adapter
@@ -273,7 +271,7 @@ fun LeanbackNativeGrid(
             if (gridView.recycledViewPool !== effectivePool) {
                 gridView.setRecycledViewPool(effectivePool)
             }
-            adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
+            adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels, themeStyle)
             adapter.submitItems(items)
         },
         onRelease = { gridView ->
@@ -284,4 +282,24 @@ fun LeanbackNativeGrid(
             gridView.adapter = null
         }
     )
+}
+
+/**
+ * Computes the maximum number of grid columns that fit within [availableWidth]
+ * without overflowing horizontally, clamped to [[minColumns], [maxColumns]].
+ */
+fun computeAdaptiveGridColumns(
+    availableWidth: Dp,
+    cardWidth: Dp,
+    horizontalSpacing: Dp,
+    minColumns: Int = 2,
+    maxColumns: Int = 8
+): Int {
+    val safeMin = minColumns.coerceAtLeast(1)
+    val safeMax = maxColumns.coerceAtLeast(safeMin)
+    if (availableWidth <= 0.dp || cardWidth <= 0.dp) return safeMin
+    val step = (cardWidth + horizontalSpacing).value
+    if (step <= 0f) return safeMin
+    val rawColumns = ((availableWidth + horizontalSpacing).value / step).toInt()
+    return rawColumns.coerceIn(safeMin, safeMax)
 }

@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.util.LruCache
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
@@ -21,7 +20,6 @@ object LeanbackColorEngine {
     const val defaultFallbackColor: Int = 0xFF38BDF8.toInt() // Electric Cyan fallback
 
     private val cacheLock = Any()
-    private val dominantColorCache = HashMap<String, Int>(256)
     private val cacheOrder = LinkedHashMap<String, Int>(256, 0.75f, true)
     private const val MAX_CACHE_ENTRIES = 512
 
@@ -40,19 +38,16 @@ object LeanbackColorEngine {
     }
 
     fun getCachedColor(key: String): Int? = synchronized(cacheLock) {
-        if (!dominantColorCache.containsKey(key)) return@synchronized null
         cacheOrder[key]
     }
 
     fun putCachedColor(key: String, color: Int) {
         synchronized(cacheLock) {
-            dominantColorCache[key] = color
             cacheOrder[key] = color
             if (cacheOrder.size > MAX_CACHE_ENTRIES) {
                 val eldestKey = cacheOrder.entries.firstOrNull()?.key
                 if (eldestKey != null) {
                     cacheOrder.remove(eldestKey)
-                    dominantColorCache.remove(eldestKey)
                 }
             }
         }
@@ -142,13 +137,11 @@ object LeanbackColorEngine {
     ) {
         val listeners: List<(Int) -> Unit>
         synchronized(cacheLock) {
-            dominantColorCache[key] = extractedColor
             cacheOrder[key] = extractedColor
             if (cacheOrder.size > MAX_CACHE_ENTRIES) {
                 val eldestKey = cacheOrder.entries.firstOrNull()?.key
                 if (eldestKey != null) {
                     cacheOrder.remove(eldestKey)
-                    dominantColorCache.remove(eldestKey)
                 }
             }
             listeners = inFlightCallbacks.remove(key).orEmpty()
@@ -170,8 +163,12 @@ object LeanbackColorEngine {
         if (bitmap.isRecycled) return defaultFallbackColor
         return runCatching {
             if (bitmap.isRecycled) return defaultFallbackColor
-            val readableBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bitmap.config == Bitmap.Config.HARDWARE) {
-                bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return defaultFallbackColor
+            val isHardwareBitmap = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bitmap.config == Bitmap.Config.HARDWARE
+            if (isHardwareBitmap && LeanbackArtworkLoader.isHoldScrolling) {
+                return defaultFallbackColor
+            }
+            val readableBitmap = if (isHardwareBitmap) {
+                runCatching { bitmap.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull() ?: return defaultFallbackColor
             } else {
                 bitmap
             }

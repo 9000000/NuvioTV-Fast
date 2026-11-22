@@ -763,84 +763,88 @@ class HomeViewModel @Inject constructor(
     private fun loadContinueWatching() {
         // Immediately restore last known CW from disk cache for instant display.
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val cachedInProgress = runCatching { cwEnrichmentCache.getInProgressSnapshot() }.getOrDefault(emptyList())
-            val cachedNextUp = runCatching { cwEnrichmentCache.getNextUpSnapshot() }.getOrDefault(emptyList())
-            if (cachedInProgress.isEmpty() && cachedNextUp.isEmpty()) return@launch
-            val dismissedNextUp = traktSettingsDataStore.dismissedNextUpKeys.first()
-            // Render cached items immediately — don't wait for Trakt/allProgress.
-            // The pipeline will replace these with live data once it completes.
-            val inProgressItems = cachedInProgress
-                .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
-                .map { cached ->
-                    ContinueWatchingItem.InProgress(
-                        progress = com.nuvio.tv.domain.model.WatchProgress(
-                            contentId = cached.contentId,
-                            contentType = cached.contentType,
-                            name = cached.name,
-                            poster = cached.poster,
-                            backdrop = cached.backdrop,
-                            logo = cached.logo,
-                            videoId = cached.videoId,
-                            season = cached.season,
-                            episode = cached.episode,
-                            episodeTitle = cached.episodeTitle,
-                            position = cached.position,
-                            duration = cached.duration,
-                            lastWatched = cached.lastWatched,
-                            progressPercent = cached.progressPercent
-                        ),
-                        episodeThumbnail = cached.episodeThumbnail,
-                        episodeDescription = cached.episodeDescription,
-                        episodeImdbRating = if (cached.ratingVisible) cached.episodeImdbRating else null,
-                        genres = cached.genres,
-                        releaseInfo = cached.releaseInfo
-                    )
-                }
-            val nextUpItems = cachedNextUp
-                .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
-                .filter { nextUpDismissKey(it.contentId, it.seedSeason, it.seedEpisode) !in dismissedNextUp }
-                .map { cached ->
-                ContinueWatchingItem.NextUp(
-                    info = NextUpInfo(
-                        contentId = cached.contentId,
-                        contentType = cached.contentType,
-                        name = cached.name,
-                        poster = cached.poster,
-                        backdrop = cached.backdrop,
-                        logo = cached.logo,
-                        videoId = cached.videoId,
-                        season = cached.season,
-                        episode = cached.episode,
-                        episodeTitle = cached.episodeTitle,
-                        episodeDescription = cached.episodeDescription,
-                        thumbnail = cached.thumbnail,
-                        released = cached.released,
-                        hasAired = cached.hasAired,
-                        airDateLabel = cached.airDateLabel,
-                        lastWatched = cached.lastWatched,
-                        imdbRating = if (cached.ratingVisible) cached.imdbRating else null,
-                        genres = cached.genres,
-                        releaseInfo = cached.releaseInfo,
-                        sortTimestamp = cached.sortTimestamp,
-                        releaseTimestamp = cached.releaseTimestamp,
-                        isReleaseAlert = cached.isReleaseAlert,
-                        isNewSeasonRelease = cached.isNewSeasonRelease,
-                        seedSeason = cached.seedSeason,
-                        seedEpisode = cached.seedEpisode,
-                        contentLanguage = cached.contentLanguage
-                    )
+            runCatching {
+                val cachedInProgress = runCatching { cwEnrichmentCache.getInProgressSnapshot() }.getOrDefault(emptyList())
+                val cachedNextUp = runCatching { cwEnrichmentCache.getNextUpSnapshot() }.getOrDefault(emptyList())
+                if (cachedInProgress.isEmpty() && cachedNextUp.isEmpty()) return@runCatching
+                val dismissedNextUp = traktSettingsDataStore.dismissedNextUpKeys.first()
+                // Render cached items immediately — don't wait for Trakt/allProgress.
+                // The pipeline will replace these with live data once it completes.
+                val inProgressItems = cachedInProgress
+                    .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
+                    .map { cached ->
+                        ContinueWatchingItem.InProgress(
+                            progress = com.nuvio.tv.domain.model.WatchProgress(
+                                contentId = cached.contentId,
+                                contentType = cached.contentType,
+                                name = cached.name,
+                                poster = cached.poster,
+                                backdrop = cached.backdrop,
+                                logo = cached.logo,
+                                videoId = cached.videoId,
+                                season = cached.season,
+                                episode = cached.episode,
+                                episodeTitle = cached.episodeTitle,
+                                position = cached.position,
+                                duration = cached.duration,
+                                lastWatched = cached.lastWatched,
+                                progressPercent = cached.progressPercent
+                            ),
+                            episodeThumbnail = cached.episodeThumbnail,
+                            episodeDescription = cached.episodeDescription,
+                            episodeImdbRating = if (cached.ratingVisible) cached.episodeImdbRating else null,
+                            genres = cached.genres,
+                            releaseInfo = cached.releaseInfo
+                        )
+                    }
+                val nextUpItems = cachedNextUp
+                    .filter { !watchProgressRepository.isDroppedShow(it.contentId) }
+                    .filter { nextUpDismissKey(it.contentId, it.seedSeason, it.seedEpisode) !in dismissedNextUp }
+                    .map { cached ->
+                        ContinueWatchingItem.NextUp(
+                            info = NextUpInfo(
+                                contentId = cached.contentId,
+                                contentType = cached.contentType,
+                                name = cached.name,
+                                poster = cached.poster,
+                                backdrop = cached.backdrop,
+                                logo = cached.logo,
+                                videoId = cached.videoId,
+                                season = cached.season,
+                                episode = cached.episode,
+                                episodeTitle = cached.episodeTitle,
+                                episodeDescription = cached.episodeDescription,
+                                thumbnail = cached.thumbnail,
+                                released = cached.released,
+                                hasAired = cached.hasAired,
+                                airDateLabel = cached.airDateLabel,
+                                lastWatched = cached.lastWatched,
+                                imdbRating = if (cached.ratingVisible) cached.imdbRating else null,
+                                genres = cached.genres,
+                                releaseInfo = cached.releaseInfo,
+                                sortTimestamp = cached.sortTimestamp,
+                                releaseTimestamp = cached.releaseTimestamp,
+                                isReleaseAlert = cached.isReleaseAlert,
+                                isNewSeasonRelease = cached.isNewSeasonRelease,
+                                seedSeason = cached.seedSeason,
+                                seedEpisode = cached.seedEpisode,
+                                contentLanguage = cached.contentLanguage
+                            )
+                        )
+                    }
+                val sortMode = layoutPreferenceDataStore.continueWatchingSortMode.first()
+                val items = mergeContinueWatchingItems(
+                    inProgressItems = inProgressItems,
+                    nextUpItems = nextUpItems,
+                    mode = sortMode
                 )
-            }
-            val sortMode = layoutPreferenceDataStore.continueWatchingSortMode.first()
-            val items = mergeContinueWatchingItems(
-                inProgressItems = inProgressItems,
-                nextUpItems = nextUpItems,
-                mode = sortMode
-            )
-            if (items.isNotEmpty()) {
-                val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode)
-                _uiState.update { it.copy(continueWatchingItems = mainItems, upcomingItems = upcomingOnly) }
-                _initialCwResolved.value = true
+                if (items.isNotEmpty()) {
+                    val (mainItems, upcomingOnly) = splitUpcomingItems(items, sortMode)
+                    _uiState.update { it.copy(continueWatchingItems = mainItems, upcomingItems = upcomingOnly) }
+                    _initialCwResolved.value = true
+                }
+            }.onFailure { error ->
+                Log.w("HomeViewModel", "Failed to restore Continue Watching disk cache: ${error.message}")
             }
         }
         loadContinueWatchingPipeline()

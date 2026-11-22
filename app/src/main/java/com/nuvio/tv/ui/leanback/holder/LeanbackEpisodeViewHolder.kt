@@ -16,6 +16,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import coil3.request.Disposable
 import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
@@ -40,6 +41,8 @@ class LeanbackEpisodeViewHolder(
     val dateText: TextView?,
     val metaText: TextView?,
     val progressBar: ProgressBar?,
+    private val gradientDrawable: GradientDrawable? = null,
+    private val progressBarHeightPx: Float = 7f,
     cornerRadiusPx: Float,
     borderWidthPx: Int,
     glowMarginPx: Int,
@@ -52,6 +55,7 @@ class LeanbackEpisodeViewHolder(
     private var boundBlurred: Boolean = false
     private var boundWidthPx: Int = 0
     private var boundHeightPx: Int = 0
+    private var lastProgressAccentColor: Int = 0
 
     init {
         thumbnailImage.outlineProvider = object : ViewOutlineProvider() {
@@ -70,14 +74,22 @@ class LeanbackEpisodeViewHolder(
     override fun updateCornerRadius(newRadiusPx: Float) {
         super.updateCornerRadius(newRadiusPx)
         thumbnailImage.invalidateOutline()
+        gradientDrawable?.cornerRadius = newRadiusPx
         val horizMargin = (newRadiusPx * 0.75f).toInt().coerceAtLeast(6)
         (progressBar?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
-            if (lp.leftMargin != horizMargin || lp.rightMargin != horizMargin) {
-                lp.leftMargin = horizMargin
-                lp.rightMargin = horizMargin
+            if (lp.marginStart != horizMargin || lp.marginEnd != horizMargin) {
+                lp.marginStart = horizMargin
+                lp.marginEnd = horizMargin
                 progressBar.layoutParams = lp
             }
         }
+    }
+
+    override fun needsImageRebind(): Boolean {
+        val item = currentItem ?: return false
+        val url = item.imageUrl?.trim()
+        if (url.isNullOrEmpty() || url.isPlaceholder()) return false
+        return thumbnailImage.drawable == null && (imageDisposable == null || imageDisposable?.isDisposed == true)
     }
 
     override fun bind(
@@ -88,7 +100,8 @@ class LeanbackEpisodeViewHolder(
         showLabels: Boolean
     ) {
         val epItem = item as? LeanbackCardItem.Episode
-        val imageUrl = item.imageUrl
+        val rawImageUrl = item.imageUrl
+        val imageUrl = rawImageUrl?.takeIf { it.isNotBlank() && !it.trim().isPlaceholder() }
         val shouldBlurThumbnail = epItem?.blurThumbnail == true
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
@@ -153,7 +166,16 @@ class LeanbackEpisodeViewHolder(
             episodeBadge.visibility = View.GONE
         }
 
-        // Title
+        // Title & typography
+        val style = adapter.themeStyle
+        titleText.setTextColor(style.titleColor)
+        style.typeface?.let { tf ->
+            if (episodeBadge.typeface !== tf) episodeBadge.typeface = tf
+            if (titleText.typeface !== tf) titleText.typeface = tf
+            if (descriptionText != null && descriptionText.typeface !== tf) descriptionText.typeface = tf
+            if (dateText != null && dateText.typeface !== tf) dateText.typeface = tf
+            if (metaText != null && metaText.typeface !== tf) metaText.typeface = tf
+        }
         titleText.text = item.title
         titleText.isSelected = root.hasFocus()
 
@@ -198,6 +220,14 @@ class LeanbackEpisodeViewHolder(
         }
 
         // Progress bar
+        val accentColor = adapter.themeStyle.accentColor
+        if (progressBar != null && lastProgressAccentColor != accentColor) {
+            progressBar.progressDrawable = PillProgressBarDrawable.create(
+                heightPx = progressBarHeightPx,
+                progressColor = accentColor
+            )
+            lastProgressAccentColor = accentColor
+        }
         val progress = epItem?.progressPercent
         if (progress != null && progress > 0 && progressBar != null) {
             progressBar.visibility = View.VISIBLE
@@ -212,6 +242,13 @@ class LeanbackEpisodeViewHolder(
         } else {
             watchedBadgeView?.visibility = View.GONE
         }
+
+        // Accessibility content description
+        val descParts = ArrayList<String>(3)
+        if (!badge.isNullOrBlank()) descParts.add(badge)
+        if (item.title.isNotBlank()) descParts.add(item.title)
+        if (epItem?.isWatched == true) descParts.add("Watched")
+        root.contentDescription = descParts.joinToString(", ").ifEmpty { null }
 
         // Coil image loading with MemoryCache fast-path
         if (!imageUrl.isNullOrBlank()) {
@@ -279,6 +316,12 @@ class LeanbackEpisodeViewHolder(
         boundWidthPx = 0
         boundHeightPx = 0
         thumbnailImage.setImageDrawable(null)
+        titleText.isSelected = false
+        episodeBadge.visibility = View.GONE
+        watchedBadgeView?.visibility = View.GONE
+        progressBar?.visibility = View.GONE
+        dateText?.visibility = View.GONE
+        root.contentDescription = null
     }
 
     companion object {
@@ -332,20 +375,23 @@ class LeanbackEpisodeViewHolder(
             }
             cardContainer.addView(thumbnailImage)
 
+            val gradientDrawable = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(
+                    Color.TRANSPARENT,
+                    Color.parseColor("#10000000"),
+                    Color.parseColor("#90000000"),
+                    Color.parseColor("#E6000000")
+                )
+            ).apply {
+                this.cornerRadius = cornerRadiusPx
+            }
             val gradientView = View(context).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
-                background = GradientDrawable(
-                    GradientDrawable.Orientation.TOP_BOTTOM,
-                    intArrayOf(
-                        Color.TRANSPARENT,
-                        Color.parseColor("#10000000"),
-                        Color.parseColor("#90000000"),
-                        Color.parseColor("#E6000000")
-                    )
-                )
+                background = gradientDrawable
             }
             cardContainer.addView(gradientView)
 
@@ -356,8 +402,8 @@ class LeanbackEpisodeViewHolder(
                     FrameLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
                     gravity = Gravity.BOTTOM or Gravity.START
-                    leftMargin = (10f * dp).toInt()
-                    rightMargin = (10f * dp).toInt()
+                    marginStart = (10f * dp).toInt()
+                    marginEnd = (10f * dp).toInt()
                     bottomMargin = (8f * dp).toInt()
                 }
             }
@@ -425,6 +471,7 @@ class LeanbackEpisodeViewHolder(
 
             cardContainer.addView(textContainer)
 
+            val themeAccentColor = adapter.themeStyle.accentColor
             val pbHeightPx = 3.5f * dp
             val horizMargin = (cornerRadiusPx * 0.75f).toInt().coerceAtLeast(6)
             val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -433,11 +480,14 @@ class LeanbackEpisodeViewHolder(
                     pbHeightPx.toInt().coerceAtLeast(2)
                 ).apply {
                     gravity = Gravity.BOTTOM
-                    leftMargin = horizMargin
-                    rightMargin = horizMargin
+                    marginStart = horizMargin
+                    marginEnd = horizMargin
                     bottomMargin = (2f * dp).toInt()
                 }
-                progressDrawable = PillProgressBarDrawable.create(pbHeightPx)
+                progressDrawable = PillProgressBarDrawable.create(
+                    heightPx = pbHeightPx,
+                    progressColor = themeAccentColor
+                )
                 visibility = View.GONE
             }
             cardContainer.addView(progressBar)
@@ -448,8 +498,8 @@ class LeanbackEpisodeViewHolder(
                     FrameLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
                     gravity = Gravity.TOP or Gravity.START
-                    leftMargin = (8f * dp).toInt()
-                    rightMargin = (38f * dp).toInt()
+                    marginStart = (8f * dp).toInt()
+                    marginEnd = (38f * dp).toInt()
                     topMargin = (8f * dp).toInt()
                 }
                 setPadding((6f * dp).toInt(), (2f * dp).toInt(), (6f * dp).toInt(), (2f * dp).toInt())
@@ -473,7 +523,7 @@ class LeanbackEpisodeViewHolder(
                 ).apply {
                     gravity = Gravity.TOP or Gravity.END
                     topMargin = (8f * dp).toInt()
-                    rightMargin = (8f * dp).toInt()
+                    marginEnd = (8f * dp).toInt()
                 }
                 gravity = Gravity.CENTER
                 background = GradientDrawable().apply {
@@ -501,11 +551,16 @@ class LeanbackEpisodeViewHolder(
                 dateText = dateText,
                 metaText = metaText,
                 progressBar = progressBar,
+                gradientDrawable = gradientDrawable,
+                progressBarHeightPx = pbHeightPx,
                 cornerRadiusPx = cornerRadiusPx,
                 borderWidthPx = chrome.borderWidthPx,
                 glowMarginPx = chrome.glowMarginPx,
                 adapter = adapter
-            ).also { it.ensurePlaceholderBackground() }
+            ).also {
+                it.lastProgressAccentColor = themeAccentColor
+                it.ensurePlaceholderBackground()
+            }
         }
     }
 }

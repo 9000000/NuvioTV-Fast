@@ -1,5 +1,6 @@
 package com.nuvio.tv.core.sync
 
+import androidx.annotation.Keep
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.google.gson.Gson
@@ -13,11 +14,13 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Keep
 private data class PendingProgressUpsert(
     val key: String,
     val progress: WatchProgress
 )
 
+@Keep
 private data class PendingWatchedUpsert(
     val key: WatchedMutationKey,
     val item: WatchedItem
@@ -184,13 +187,21 @@ class WatchStateMutationStore @Inject constructor(
 
     private fun parseProgressUpserts(raw: Set<String>?): Map<String, WatchProgress> {
         return raw.orEmpty().mapNotNull { json ->
-            runCatching { gson.fromJson(json, PendingProgressUpsert::class.java) }.getOrNull()
+            val parsed = runCatching { gson.fromJson(json, PendingProgressUpsert::class.java) }.getOrNull()
+            if (parsed == null) return@mapNotNull null
+            val safeKey = (parsed.key as Any?) as? String
+            val safeProgress = (parsed.progress as Any?) as? WatchProgress
+            if (safeKey.isNullOrBlank() || safeProgress == null) null else parsed
         }.associate { it.key to it.progress }
     }
 
     private fun parseWatchedUpserts(raw: Set<String>?): Map<WatchedMutationKey, WatchedItem> {
         return raw.orEmpty().mapNotNull { json ->
-            runCatching { gson.fromJson(json, PendingWatchedUpsert::class.java) }.getOrNull()
+            val parsed = runCatching { gson.fromJson(json, PendingWatchedUpsert::class.java) }.getOrNull()
+            if (parsed == null) return@mapNotNull null
+            val safeKey = (parsed.key as Any?) as? WatchedMutationKey
+            val safeItem = (parsed.item as Any?) as? WatchedItem
+            if (safeKey == null || safeItem == null) null else parsed
         }.associate { it.key to it.item }
     }
 

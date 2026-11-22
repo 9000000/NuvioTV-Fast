@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.collection
 
 import com.nuvio.tv.ui.leanback.LeanbackNativeGrid
+import com.nuvio.tv.ui.leanback.computeAdaptiveGridColumns
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -10,6 +11,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -282,6 +284,14 @@ private fun TabbedGridContent(
     var gridHasFocus by remember { mutableStateOf(false) }
     var gridScrollToTopTrigger by remember { mutableIntStateOf(0) }
 
+    LaunchedEffect(uiState.tabs.size, tabFocusState.hasSavedFocus) {
+        if (uiState.tabs.size > 1 && !tabFocusState.hasSavedFocus) {
+            repeat(2) { androidx.compose.runtime.withFrameNanos { } }
+            val targetIdx = uiState.selectedTabIndex.coerceIn(0, uiState.tabs.lastIndex)
+            runCatching { tabFocusRequesters.getOrNull(targetIdx)?.requestFocus() }
+        }
+    }
+
     // Grid Back: focus on grid -> move focus to active tab (grid stays scrolled).
     BackHandler(enabled = gridHasFocus && uiState.tabs.size > 1) {
         tabFocusRequesters.getOrNull(uiState.selectedTabIndex)?.let { runCatching { it.requestFocus() } }
@@ -402,11 +412,14 @@ private fun TabbedGridContent(
             )
             val catalogRow = currentTab.catalogRow
             val globalLandscape = LocalLandscapePosterMode.current
-            val numCols = if (globalLandscape) 4 else 6
             val effectiveWidth = if (globalLandscape) 260.dp else posterCardStyle.width
             val effectiveHeight = if (globalLandscape) 146.dp else posterCardStyle.height
 
-            val leanbackItems = remember(items, globalLandscape, uiState.selectedTabIndex) {
+            var watchedMaskHash = 1
+            for (i in items.indices) {
+                watchedMaskHash = 31 * watchedMaskHash + if (isItemWatched(items[i])) 1231 else 1237
+            }
+            val leanbackItems = remember(items, globalLandscape, uiState.selectedTabIndex, watchedMaskHash) {
                 items.mapIndexed { index, item ->
                     LeanbackCardItem.Poster(
                         key = "${item.id}_${uiState.selectedTabIndex}_$index",
@@ -430,6 +443,12 @@ private fun TabbedGridContent(
                 mutableIntStateOf(initial)
             }
 
+            LaunchedEffect(gridScrollToTopTrigger) {
+                if (gridScrollToTopTrigger > 0) {
+                    focusedIndex = 0
+                }
+            }
+
             DisposableEffect(uiState.selectedTabIndex) {                onDispose {
                     val key = items.getOrNull(focusedIndex)?.id
                     onSaveFocusState(
@@ -440,7 +459,13 @@ private fun TabbedGridContent(
                 }
             }
 
-            Box(modifier = Modifier.fillMaxSize().onFocusChanged { gridHasFocus = it.hasFocus }) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize().onFocusChanged { gridHasFocus = it.hasFocus }) {
+                val horizontalSpacing = NuvioTheme.spacing.lg
+                val numCols = computeAdaptiveGridColumns(
+                    availableWidth = maxWidth - (NuvioTheme.spacing.xxxl * 2),
+                    cardWidth = effectiveWidth,
+                    horizontalSpacing = horizontalSpacing
+                )
                 LeanbackNativeGrid(
                     gridKey = "folder_grid_${uiState.selectedTabIndex}",
                     items = leanbackItems,
@@ -456,9 +481,11 @@ private fun TabbedGridContent(
                         top = NuvioTheme.spacing.lg,
                         bottom = NuvioTheme.spacing.xxxl
                     ),
-                    horizontalSpacing = NuvioTheme.spacing.lg,
+                    horizontalSpacing = horizontalSpacing,
                     verticalSpacing = NuvioTheme.spacing.lg,
                     initialFocusPosition = focusedIndex,
+                    restoreFocusNonce = gridScrollToTopTrigger,
+                    requestInitialFocus = tabFocusState.hasSavedFocus || uiState.tabs.size <= 1,
                     onItemFocused = { idx, cardItem ->
                         focusedIndex = idx
                         val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeGrid

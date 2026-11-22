@@ -1,17 +1,14 @@
 package com.nuvio.tv.ui.leanback.core
 
 import android.content.Context
-import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.util.AttributeSet
-import android.util.LruCache
 import android.util.TypedValue
 import android.view.View
 import androidx.core.graphics.ColorUtils
-import kotlin.math.roundToInt
 
 /**
  * High-fidelity 3-tier Skia Gaussian Bloom Glow View for Android TV.
@@ -130,10 +127,12 @@ class PlayStoreGlowView @JvmOverloads constructor(
             auraPaint.maskFilter = null
             return
         }
-        val filters = obtainBlurFilterSet(glowSpreadPx)
-        corePaint.maskFilter = filters.core
-        midPaint.maskFilter = filters.mid
-        auraPaint.maskFilter = filters.aura
+        val rCore = (glowSpreadPx * 0.15f).coerceAtLeast(1f)
+        val rMid = (glowSpreadPx * 0.35f).coerceAtLeast(1f)
+        val rAura = (glowSpreadPx * 0.65f).coerceAtLeast(1f)
+        corePaint.maskFilter = LeanbackBlurFilterCache.get(rCore)
+        midPaint.maskFilter = LeanbackBlurFilterCache.get(rMid)
+        auraPaint.maskFilter = LeanbackBlurFilterCache.get(rAura)
 
         auraPaint.strokeWidth = (glowSpreadPx * 0.75f).coerceAtLeast(4f)
         midPaint.strokeWidth = (glowSpreadPx * 0.40f).coerceAtLeast(2f)
@@ -184,35 +183,6 @@ class PlayStoreGlowView @JvmOverloads constructor(
         }
         if (corePaint.maskFilter != null) {
             canvas.drawPath(cardPath, corePaint)
-        }
-    }
-
-    private data class BlurFilterSet(
-        val core: BlurMaskFilter,
-        val mid: BlurMaskFilter,
-        val aura: BlurMaskFilter
-    )
-
-    companion object {
-        private val filterCache = LruCache<Int, BlurFilterSet>(12)
-
-        private fun obtainBlurFilterSet(spreadPx: Float): BlurFilterSet {
-            val bucketKey = (spreadPx * 10f).roundToInt().coerceAtLeast(1)
-            synchronized(filterCache) {
-                filterCache.get(bucketKey)?.let { return it }
-            }
-            val rCore = (spreadPx * 0.15f).coerceAtLeast(1f)
-            val rMid = (spreadPx * 0.35f).coerceAtLeast(1f)
-            val rAura = (spreadPx * 0.65f).coerceAtLeast(1f)
-            val created = BlurFilterSet(
-                core = BlurMaskFilter(rCore, BlurMaskFilter.Blur.NORMAL),
-                mid = BlurMaskFilter(rMid, BlurMaskFilter.Blur.NORMAL),
-                aura = BlurMaskFilter(rAura, BlurMaskFilter.Blur.NORMAL)
-            )
-            synchronized(filterCache) {
-                filterCache.put(bucketKey, created)
-            }
-            return created
         }
     }
 }

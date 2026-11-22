@@ -10,7 +10,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import androidx.core.graphics.ColorUtils
 import androidx.recyclerview.widget.RecyclerView
 import coil3.BitmapImage
 import coil3.Image
@@ -18,6 +17,7 @@ import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
 import com.nuvio.tv.ui.leanback.container.InteropVerticalGridView
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import com.nuvio.tv.ui.leanback.core.LeanbackFocusBorderDrawable
 import com.nuvio.tv.ui.leanback.core.PlayStoreGlowView
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 
@@ -87,10 +87,7 @@ abstract class LeanbackBaseViewHolder(
     open val isCircle: Boolean get() = false
 
     // Reuse a single focus border drawable to eliminate per-frame allocations
-    val focusBorderDrawable = GradientDrawable().apply {
-        setColor(Color.TRANSPARENT)
-        cornerRadius = cornerRadiusPx
-    }
+    val focusBorderDrawable = LeanbackFocusBorderDrawable(cornerRadiusPx = cornerRadiusPx)
 
     // Reuse a single placeholder background drawable to eliminate GC churn on recycle
     protected val placeholderBackgroundDrawable = GradientDrawable().apply {
@@ -99,12 +96,13 @@ abstract class LeanbackBaseViewHolder(
     }
 
     protected fun applyPlaceholderBackgroundShape() {
+        val style = adapter.themeStyle
         if (isCircle) {
             placeholderBackgroundDrawable.shape = GradientDrawable.OVAL
-            placeholderBackgroundDrawable.setColor(Color.parseColor("#222226"))
+            placeholderBackgroundDrawable.setColor(style.avatarPlaceholderColor)
         } else {
             placeholderBackgroundDrawable.shape = GradientDrawable.RECTANGLE
-            placeholderBackgroundDrawable.setColor(Color.parseColor("#1A1A1A"))
+            placeholderBackgroundDrawable.setColor(style.placeholderColor)
             placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
         }
     }
@@ -147,7 +145,7 @@ abstract class LeanbackBaseViewHolder(
 
     // Defer software layer glow by 55ms during rapid navigation
     val deferredGlowRunnable = Runnable {
-        if (root.hasFocus() && adapter.animationsEnabled()) {
+        if (root.hasFocus() && adapter.animationsEnabled() && !adapter.themeStyle.hideFocusBorder) {
             glowView.glowColor = currentDominantColor
             glowView.visibility = View.VISIBLE
         }
@@ -170,9 +168,12 @@ abstract class LeanbackBaseViewHolder(
         }
 
         root.setOnKeyListener { _, keyCode, event ->
-            if (event.action == KeyEvent.ACTION_DOWN) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 when (keyCode) {
-                    KeyEvent.KEYCODE_BACK -> if (adapter.onNavigateBack()) return@setOnKeyListener true
+                    KeyEvent.KEYCODE_MENU -> {
+                        currentItem?.let { adapter.onItemLongClick(it) }
+                        return@setOnKeyListener true
+                    }
                 }
             }
             false
@@ -197,7 +198,7 @@ abstract class LeanbackBaseViewHolder(
         if (!isCircle) {
             (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
         }
-        focusBorderDrawable.cornerRadius = newRadiusPx
+        focusBorderDrawable.cornerRadiusPx = newRadiusPx
         glowView.cornerRadiusPx = newRadiusPx
 
         if (root.hasFocus()) {
@@ -218,36 +219,54 @@ abstract class LeanbackBaseViewHolder(
         if (cardContainer.elevation != 0f) cardContainer.elevation = 0f
         if (cardContainer.translationZ != 0f) cardContainer.translationZ = 0f
 
-        if (isCircle) {
-            focusBorderDrawable.shape = GradientDrawable.OVAL
-        } else {
-            focusBorderDrawable.shape = GradientDrawable.RECTANGLE
-            focusBorderDrawable.cornerRadius = cornerRadiusPx
+        focusBorderDrawable.isOval = isCircle
+        if (!isCircle) {
+            focusBorderDrawable.cornerRadiusPx = cornerRadiusPx
         }
 
-        if (anim && hasFocus) {
-            val tintedWhite = ColorUtils.blendARGB(currentDominantColor, Color.WHITE, 0.90f)
-            focusBorderDrawable.setStroke(borderWidthPx, tintedWhite)
-            cardContainer.foreground = focusBorderDrawable
-
-            val isFastScrollingHorizontal = (adapter.attachedRecyclerView as? InteropHorizontalGridView)?.isHoldingHorizontalKey == true
-            val isFastScrollingVertical = (adapter.attachedRecyclerView as? InteropVerticalGridView)?.isHoldingVerticalKey == true
-            if (isFastScrollingHorizontal || isFastScrollingVertical) {
+        val style = adapter.themeStyle
+        if (hasFocus) {
+            if (style.hideFocusBorder) {
+                cardContainer.foreground = null
                 glowView.visibility = View.GONE
-                root.postDelayed(deferredGlowRunnable, 55L)
             } else {
-                glowView.glowColor = currentDominantColor
-                glowView.visibility = View.VISIBLE
+                val borderColor = style.resolveFocusedBorderColor(
+                    dominantColor = currentDominantColor,
+                    blendWithDominant = anim
+                )
+                val resolvedBorderWidthPx = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    style.borderWidthDp,
+                    root.resources.displayMetrics
+                ).coerceAtLeast(borderWidthPx.toFloat())
+                focusBorderDrawable.configure(
+                    widthPx = resolvedBorderWidthPx,
+                    color = borderColor,
+                    rainbowColors = if (style.isRainbowBorder) style.focusGradientColors else null
+                )
+                cardContainer.foreground = focusBorderDrawable
+
+                if (anim) {
+                    val isFastScrollingHorizontal = (adapter.attachedRecyclerView as? InteropHorizontalGridView)?.isHoldingHorizontalKey == true
+                    val isFastScrollingVertical = (adapter.attachedRecyclerView as? InteropVerticalGridView)?.isHoldingVerticalKey == true
+                    if (isFastScrollingHorizontal || isFastScrollingVertical) {
+                        glowView.visibility = View.GONE
+                        root.postDelayed(deferredGlowRunnable, 55L)
+                    } else {
+                        glowView.glowColor = currentDominantColor
+                        glowView.visibility = View.VISIBLE
+                    }
+                } else {
+                    glowView.visibility = View.GONE
+                }
             }
-        } else if (hasFocus) {
-            glowView.visibility = View.GONE
-            focusBorderDrawable.setStroke(borderWidthPx, Color.WHITE)
-            cardContainer.foreground = focusBorderDrawable
         } else {
             glowView.visibility = View.GONE
             cardContainer.foreground = null
         }
     }
+
+    open fun needsImageRebind(): Boolean = false
 
     abstract fun bind(
         item: LeanbackCardItem,

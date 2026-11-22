@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -23,7 +22,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 @Composable
 fun CastSection(
     cast: List<MetaCastMember>,
-    listState: LazyListState = rememberLazyListState(),
+    @Suppress("UNUSED_PARAMETER") listState: LazyListState? = null,
     modifier: Modifier = Modifier,
     title: String = "Cast",
     leadingCast: List<MetaCastMember> = emptyList(),

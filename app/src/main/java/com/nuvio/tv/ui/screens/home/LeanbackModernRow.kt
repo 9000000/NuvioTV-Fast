@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -21,6 +22,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.leanback.widget.BaseGridView
 import androidx.leanback.widget.HorizontalGridView
 import androidx.recyclerview.widget.RecyclerView
+import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.ui.leanback.core.rememberLeanbackThemeStyle
 import kotlinx.coroutines.awaitCancellation
 
 @Composable
@@ -54,9 +57,12 @@ fun LeanbackModernRow(
     onClearPendingFocus: () -> Unit = {},
     canTakeFocus: (() -> Boolean)? = null,
     recycledViewPool: RecyclerView.RecycledViewPool? = null,
+    isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
+    blurUnwatchedEpisodes: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
+    val themeStyle = rememberLeanbackThemeStyle(borderWidthDp = 2.0f)
     val cardWidthPx = with(density) { cardWidth.roundToPx() }
     val cardHeightPx = with(density) { cardHeight.roundToPx() }
     val cornerRadiusPx = with(density) { cornerRadius.toPx() }
@@ -64,10 +70,9 @@ fun LeanbackModernRow(
     val spacingPx = with(density) { spacing.roundToPx() }
     val verticalPaddingDp = 6.dp
     val verticalPaddingPx = with(density) { verticalPaddingDp.roundToPx() }
-    val labelHeightPx = if (showLabels) with(density) { 26.dp.roundToPx() } else 0
+    val labelHeightDp = if (showLabels) (26f * density.fontScale.coerceIn(1f, 1.4f)).dp else 0.dp
+    val labelHeightPx = if (showLabels) with(density) { labelHeightDp.roundToPx() } else 0
     val totalRowHeightPx = cardHeightPx + labelHeightPx + (verticalPaddingPx * 2)
-
-    val labelHeightDp = if (showLabels) 26.dp else 0.dp
     val totalRowHeightDp = cardHeight + labelHeightDp + (verticalPaddingDp * 2)
 
     val adapter = remember(rowKey) {
@@ -81,10 +86,9 @@ fun LeanbackModernRow(
             onItemClick = onItemClick,
             onItemLongClick = onItemLongClick,
             onLoadMore = onLoadMore,
-            onNavigateDown = onNavigateDown,
-            onNavigateUp = onNavigateUp,
-            onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem,
-            onNavigateBack = onNavigateBack
+            themeStyle = themeStyle,
+            isCatalogItemWatched = isCatalogItemWatched,
+            blurUnwatchedEpisodes = blurUnwatchedEpisodes
         )
     }
 
@@ -112,6 +116,7 @@ fun LeanbackModernRow(
 
     var localGridViewRef by remember(rowKey) { mutableStateOf<ModernInteropHorizontalGridView?>(null) }
     var initialScrollApplied by remember(rowKey) { mutableStateOf(false) }
+    var lastAppliedInitialPosition by remember(rowKey) { mutableIntStateOf(-1) }
 
     LaunchedEffect(isPendingFocus, pendingFocusNonce, items.isNotEmpty(), localGridViewRef) {
         if (isPendingFocus && items.isNotEmpty()) {
@@ -143,12 +148,32 @@ fun LeanbackModernRow(
 
     LaunchedEffect(initialFocusPosition, items.isNotEmpty(), localGridViewRef) {
         if (!initialScrollApplied && !isPendingFocus && items.isNotEmpty() && initialFocusPosition in items.indices) {
-            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? ModernInteropHorizontalGridView)
-            if (gridView != null && gridView.isAttachedToWindow && !gridView.hasFocus()) {
-                if (initialFocusPosition > 0) {
-                    gridView.setSelectedPosition(initialFocusPosition)
+            val gridView = localGridViewRef ?: (rowGrids?.get(rowKey) as? ModernInteropHorizontalGridView) ?: return@LaunchedEffect
+            fun applyInitialPosition() {
+                if (!gridView.hasFocus() && initialFocusPosition in items.indices) {
+                    if (initialFocusPosition > 0) {
+                        gridView.setSelectedPosition(initialFocusPosition)
+                    }
+                    lastAppliedInitialPosition = initialFocusPosition
+                    initialScrollApplied = true
                 }
-                initialScrollApplied = true
+            }
+            if (gridView.isAttachedToWindow) {
+                applyInitialPosition()
+            } else {
+                val attachListener = object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: View) {
+                        v.removeOnAttachStateChangeListener(this)
+                        applyInitialPosition()
+                    }
+                    override fun onViewDetachedFromWindow(v: View) {}
+                }
+                gridView.addOnAttachStateChangeListener(attachListener)
+                try {
+                    awaitCancellation()
+                } finally {
+                    gridView.removeOnAttachStateChangeListener(attachListener)
+                }
             }
         }
     }
@@ -210,6 +235,8 @@ fun LeanbackModernRow(
             }
             val focusRing = ModernRowFloatingFocusRingView(context).apply {
                 this.cornerRadiusPx = cornerRadiusPx
+                this.isGlowEnabled = animationsEnabled
+                this.themeStyle = themeStyle
                 this.elevation = 30f
                 val totalGlowMargin = (this.glowMarginPx * 2).toInt()
                 this.layoutParams = FrameLayout.LayoutParams(
@@ -224,8 +251,11 @@ fun LeanbackModernRow(
             container.addView(focusRing)
 
             gridView.restoredPosition = initialFocusPosition
-            if (!isPendingFocus && initialFocusPosition in items.indices && initialFocusPosition > 0) {
-                gridView.setSelectedPosition(initialFocusPosition)
+            if (!isPendingFocus && initialFocusPosition in items.indices) {
+                if (initialFocusPosition > 0) {
+                    gridView.setSelectedPosition(initialFocusPosition)
+                }
+                lastAppliedInitialPosition = initialFocusPosition
                 initialScrollApplied = true
             }
             container
@@ -252,6 +282,12 @@ fun LeanbackModernRow(
             if (focusRing.cornerRadiusPx != cornerRadiusPx) {
                 focusRing.cornerRadiusPx = cornerRadiusPx
             }
+            if (focusRing.isGlowEnabled != animationsEnabled) {
+                focusRing.isGlowEnabled = animationsEnabled
+            }
+            if (focusRing.themeStyle != themeStyle) {
+                focusRing.themeStyle = themeStyle
+            }
             if (gridView.configuredStartPaddingPx != startPaddingPx ||
                 gridView.configuredVerticalPaddingPx != verticalPaddingPx
             ) {
@@ -267,8 +303,9 @@ fun LeanbackModernRow(
             localGridViewRef = gridView
             if (initialFocusPosition in items.indices) {
                 gridView.restoredPosition = initialFocusPosition
-                if (initialFocusPosition > 0 && !gridView.hasFocus() && gridView.selectedPosition != initialFocusPosition) {
+                if (initialFocusPosition != lastAppliedInitialPosition && !gridView.hasFocus()) {
                     gridView.setSelectedPosition(initialFocusPosition)
+                    lastAppliedInitialPosition = initialFocusPosition
                 }
             }
             gridView.onNavigateDown = onNavigateDown
@@ -290,10 +327,7 @@ fun LeanbackModernRow(
             adapter.onItemClick = onItemClick
             adapter.onItemLongClick = onItemLongClick
             adapter.onLoadMore = onLoadMore
-            adapter.onNavigateDown = onNavigateDown
-            adapter.onNavigateUp = onNavigateUp
-            adapter.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
-            adapter.onNavigateBack = onNavigateBack
+            adapter.isCatalogItemWatched = isCatalogItemWatched
             if (gridView.adapter !== adapter) {
                 gridView.adapter = adapter
             }
@@ -302,7 +336,14 @@ fun LeanbackModernRow(
                     gridView.setRecycledViewPool(it)
                 }
             }
-            adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels)
+            adapter.updateConfig(
+                newWidthPx = cardWidthPx,
+                newHeightPx = cardHeightPx,
+                newRadiusPx = cornerRadiusPx,
+                newShowLabels = showLabels,
+                newThemeStyle = themeStyle,
+                newBlurUnwatchedEpisodes = blurUnwatchedEpisodes
+            )
             rowGrids?.put(rowKey, gridView)
             adapter.submitItems(items)
         },

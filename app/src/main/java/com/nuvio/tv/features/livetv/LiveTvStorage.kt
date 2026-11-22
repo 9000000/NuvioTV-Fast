@@ -128,7 +128,9 @@ object LiveTvStorage {
     fun loadStalkerSettings(): LiveTvStalkerSettings {
         if (!isReady) return LiveTvStalkerSettings()
         val json = prefs.getString(KEY_STALKER_SETTINGS, null) ?: return LiveTvStalkerSettings()
-        return runCatching { gson.fromJson(json, LiveTvStalkerSettings::class.java) }.getOrDefault(LiveTvStalkerSettings())
+        val parsed = runCatching { gson.fromJson(json, LiveTvStalkerSettings::class.java) }.getOrNull()
+            ?: return LiveTvStalkerSettings()
+        return sanitizeStalkerSettings(parsed)
     }
     fun saveStalkerSettings(settings: LiveTvStalkerSettings) {
         if (isReady) prefs.edit().putString(KEY_STALKER_SETTINGS, gson.toJson(settings)).apply()
@@ -137,7 +139,9 @@ object LiveTvStorage {
     fun loadXtreamSettings(): LiveTvXtreamSettings {
         if (!isReady) return LiveTvXtreamSettings()
         val json = prefs.getString(KEY_XTREAM_SETTINGS, null) ?: return LiveTvXtreamSettings()
-        return runCatching { gson.fromJson(json, LiveTvXtreamSettings::class.java) }.getOrDefault(LiveTvXtreamSettings())
+        val parsed = runCatching { gson.fromJson(json, LiveTvXtreamSettings::class.java) }.getOrNull()
+            ?: return LiveTvXtreamSettings()
+        return sanitizeXtreamSettings(parsed)
     }
     fun saveXtreamSettings(settings: LiveTvXtreamSettings) {
         if (isReady) prefs.edit().putString(KEY_XTREAM_SETTINGS, gson.toJson(settings)).apply()
@@ -146,7 +150,61 @@ object LiveTvStorage {
     fun loadLiveTvSettings(): LiveTvSettings {
         if (!isReady) return LiveTvSettings()
         val json = prefs.getString(KEY_LIVETV_SETTINGS, null) ?: return LiveTvSettings()
-        return runCatching { gson.fromJson(json, LiveTvSettings::class.java) }.getOrDefault(LiveTvSettings())
+        val parsed = runCatching { gson.fromJson(json, LiveTvSettings::class.java) }.getOrNull()
+            ?: return LiveTvSettings()
+        return sanitizeLiveTvSettings(parsed)
+    }
+
+    private fun safeString(value: Any?, fallback: String = ""): String =
+        (value as? String) ?: fallback
+
+    private fun sanitizeStalkerSettings(raw: LiveTvStalkerSettings): LiveTvStalkerSettings {
+        val portal = safeString(raw.portalUrl)
+        val mac = safeString(raw.macAddress)
+        val user = safeString(raw.username)
+        val pass = safeString(raw.password)
+        return if ((raw.portalUrl as Any?) == null ||
+            (raw.macAddress as Any?) == null ||
+            (raw.username as Any?) == null ||
+            (raw.password as Any?) == null
+        ) {
+            raw.copy(portalUrl = portal, macAddress = mac, username = user, password = pass)
+        } else {
+            raw
+        }
+    }
+
+    private fun sanitizeXtreamSettings(raw: LiveTvXtreamSettings): LiveTvXtreamSettings {
+        val server = safeString(raw.serverUrl)
+        val user = safeString(raw.username)
+        val pass = safeString(raw.password)
+        return if ((raw.serverUrl as Any?) == null ||
+            (raw.username as Any?) == null ||
+            (raw.password as Any?) == null
+        ) {
+            raw.copy(serverUrl = server, username = user, password = pass)
+        } else {
+            raw
+        }
+    }
+
+    private fun sanitizeLiveTvSettings(raw: LiveTvSettings): LiveTvSettings {
+        val guideSize = safeString(raw.guideSize, "STANDARD").ifBlank { "STANDARD" }
+        val aspectMode = safeString(raw.aspectMode, "ORIGINAL").ifBlank { "ORIGINAL" }
+        val customEpg = safeString(raw.customEpgUrl, "")
+        return if ((raw.guideSize as Any?) == null ||
+            (raw.aspectMode as Any?) == null ||
+            (raw.customEpgUrl as Any?) == null
+        ) {
+            // Legacy R8-obfuscated settings JSON cannot be mapped safely — restore defaults cleanly
+            LiveTvSettings(
+                guideSize = guideSize,
+                aspectMode = aspectMode,
+                customEpgUrl = customEpg
+            )
+        } else {
+            raw
+        }
     }
 
     fun saveLiveTvSettings(settings: LiveTvSettings) {

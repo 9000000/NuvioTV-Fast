@@ -103,14 +103,55 @@ internal object LiveTvCacheManager {
             cacheFile.bufferedReader().use { reader ->
                 val jsonReader = JsonReader(reader)
                 jsonReader.isLenient = true
-                val channels: List<LiveTvChannel>? = gson.fromJson(jsonReader, channelListType)
-                (channels ?: emptyList()).also {
+                val rawChannels: List<LiveTvChannel> = gson.fromJson(jsonReader, channelListType)
+                    ?: return@use emptyList()
+                val sanitized = rawChannels.mapNotNull(::sanitizeChannel)
+                if (rawChannels.isNotEmpty() && sanitized.isEmpty()) {
+                    Log.w(TAG, "Deleting incompatible/obfuscated channels cache (${rawChannels.size} invalid entries)")
+                    cacheFile.delete()
+                    File(dir, GROUPS_CACHE_FILE).delete()
+                }
+                sanitized.also {
                     memoryCachedChannels = it
                 }
             }
         }.onFailure { e ->
             Log.e(TAG, "Failed to load channels cache", e)
         }.getOrDefault(emptyList())
+    }
+
+    private fun sanitizeChannel(channel: LiveTvChannel?): LiveTvChannel? {
+        if (channel == null) return null
+        val safeId = (channel.id as Any?) as? String
+        val safeName = (channel.name as Any?) as? String
+        val safeUrl = (channel.streamUrl as Any?) as? String
+        if (safeId.isNullOrBlank() || safeName.isNullOrBlank() || safeUrl.isNullOrBlank()) {
+            return null
+        }
+        val headersMissing = (channel.headers as Any?) == null
+        val safeCatchup = channel.catchup?.let { c ->
+            if ((c.type as Any?) == null) c.copy(type = "default") else c
+        }
+        val safeDrm = channel.drm?.let { d ->
+            val scheme = (d.scheme as Any?) as? String
+            val license = (d.license as Any?) as? String
+            if (scheme.isNullOrBlank() || license.isNullOrBlank()) {
+                null
+            } else if ((d.licenseHeaders as Any?) == null) {
+                d.copy(licenseHeaders = emptyMap())
+            } else {
+                d
+            }
+        }
+        return if (headersMissing || safeCatchup !== channel.catchup || safeDrm !== channel.drm) {
+            channel.copy(
+                headers = if (headersMissing) emptyMap() else channel.headers,
+                catchup = safeCatchup,
+                drm = safeDrm
+            )
+        } else {
+            channel
+        }
     }
 
     /**

@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.leanback.holder
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline
+import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
@@ -38,6 +39,11 @@ class LeanbackPosterViewHolder(
     val progressBar: ProgressBar?,
     val badgeView: TextView?,
     val watchedBadgeView: TextView?,
+    val seeAllOverlay: LinearLayout? = null,
+    val seeAllArrowText: TextView? = null,
+    val seeAllLabelText: TextView? = null,
+    val fallbackTitleText: TextView? = null,
+    private val progressBarHeightPx: Float = 8f,
     cornerRadiusPx: Float,
     borderWidthPx: Int,
     glowMarginPx: Int,
@@ -51,6 +57,7 @@ class LeanbackPosterViewHolder(
     private var boundWidthPx: Int = 0
     private var boundHeightPx: Int = 0
     private var lastLoadedColorKey: String? = null
+    private var lastProgressAccentColor: Int = 0
 
     init {
         posterImage.outlineProvider = object : ViewOutlineProvider() {
@@ -71,9 +78,9 @@ class LeanbackPosterViewHolder(
         posterImage.invalidateOutline()
         val horizMargin = (newRadiusPx * 0.75f).toInt().coerceAtLeast(6)
         (progressBar?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
-            if (lp.leftMargin != horizMargin || lp.rightMargin != horizMargin) {
-                lp.leftMargin = horizMargin
-                lp.rightMargin = horizMargin
+            if (lp.marginStart != horizMargin || lp.marginEnd != horizMargin) {
+                lp.marginStart = horizMargin
+                lp.marginEnd = horizMargin
                 progressBar.layoutParams = lp
             }
         }
@@ -106,6 +113,15 @@ class LeanbackPosterViewHolder(
             }
         }
         super.updateFocusVisual(hasFocus)
+        titleText?.isSelected = hasFocus
+    }
+
+    override fun needsImageRebind(): Boolean {
+        val item = currentItem as? LeanbackCardItem.Poster ?: return false
+        if (item.isSeeAll) return false
+        val url = item.imageUrl?.trim()
+        if (url.isNullOrEmpty() || url.isPlaceholder()) return false
+        return posterImage.drawable == null && (imageDisposable == null || imageDisposable?.isDisposed == true)
     }
 
     override fun bind(
@@ -116,10 +132,12 @@ class LeanbackPosterViewHolder(
         showLabels: Boolean
     ) {
         val posterItem = item as? LeanbackCardItem.Poster
-        val rawImageUrl = item.imageUrl
+        val isSeeAll = posterItem?.isSeeAll == true
+        val style = adapter.themeStyle
+        val rawImageUrl = if (isSeeAll) null else item.imageUrl
         val hasLoadableImage = !rawImageUrl.isNullOrBlank() && !rawImageUrl.trim().isPlaceholder()
         val imageUrl = if (hasLoadableImage) rawImageUrl else null
-        val fallbackUrl = posterItem?.fallbackImageUrl?.takeIf { !it.isBlank() && !it.trim().isPlaceholder() }
+        val fallbackUrl = if (isSeeAll) null else posterItem?.fallbackImageUrl?.takeIf { !it.isBlank() && !it.trim().isPlaceholder() }
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
         val sameImageRequest = hasLoadableImage &&
@@ -132,6 +150,27 @@ class LeanbackPosterViewHolder(
 
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
+
+        // Apply theme colors & typography
+        titleText?.setTextColor(style.titleColor)
+        subtitleText?.setTextColor(style.subtitleColor)
+        seeAllArrowText?.setTextColor(style.titleColor)
+        seeAllLabelText?.setTextColor(style.titleColor)
+        fallbackTitleText?.setTextColor(style.titleColor)
+        style.typeface?.let { tf ->
+            if (titleText?.typeface !== tf) titleText?.typeface = tf
+            if (subtitleText?.typeface !== tf) subtitleText?.typeface = tf
+            if (badgeView?.typeface !== tf) badgeView?.typeface = tf
+            if (seeAllLabelText?.typeface !== tf) seeAllLabelText?.typeface = tf
+            if (fallbackTitleText?.typeface !== tf) fallbackTitleText?.typeface = tf
+        }
+        if (progressBar != null && lastProgressAccentColor != style.accentColor) {
+            progressBar.progressDrawable = PillProgressBarDrawable.create(
+                heightPx = progressBarHeightPx,
+                progressColor = style.accentColor
+            )
+            lastProgressAccentColor = style.accentColor
+        }
 
         if (!sameImageRequest) {
             lastLoadedColorKey = null
@@ -162,25 +201,38 @@ class LeanbackPosterViewHolder(
             }
         }
 
-        // Title & Subtitle text
-        if (showLabels && titleText != null && item.title.isNotBlank()) {
-            titleText.visibility = View.VISIBLE
-            titleText.text = item.title
-        } else {
-            titleText?.visibility = View.GONE
-        }
-
         val subtitle = posterItem?.subtitle
-        if (showLabels && subtitleText != null && !subtitle.isNullOrBlank()) {
-            subtitleText.visibility = View.VISIBLE
-            subtitleText.text = subtitle
-        } else {
+        if (isSeeAll) {
+            seeAllOverlay?.visibility = View.VISIBLE
+            seeAllLabelText?.text = item.title
+            fallbackTitleText?.visibility = View.GONE
+            titleText?.visibility = View.GONE
             subtitleText?.visibility = View.GONE
+            placeholderBackgroundDrawable.shape = GradientDrawable.RECTANGLE
+            placeholderBackgroundDrawable.setColor(style.avatarPlaceholderColor)
+            placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
+            cardContainer.background = placeholderBackgroundDrawable
+        } else {
+            seeAllOverlay?.visibility = View.GONE
+            // Title & Subtitle text
+            if (showLabels && titleText != null && item.title.isNotBlank()) {
+                titleText.visibility = View.VISIBLE
+                titleText.text = item.title
+            } else {
+                titleText?.visibility = View.GONE
+            }
+
+            if (showLabels && subtitleText != null && !subtitle.isNullOrBlank()) {
+                subtitleText.visibility = View.VISIBLE
+                subtitleText.text = subtitle
+            } else {
+                subtitleText?.visibility = View.GONE
+            }
         }
 
         // Progress bar
         val progress = posterItem?.progressPercent
-        if (progress != null && progress > 0 && progressBar != null) {
+        if (!isSeeAll && progress != null && progress > 0 && progressBar != null) {
             progressBar.visibility = View.VISIBLE
             progressBar.progress = progress.coerceIn(0, 100)
         } else {
@@ -189,7 +241,7 @@ class LeanbackPosterViewHolder(
 
         // Badge text (top-end)
         val badge = posterItem?.badgeText
-        if (!badge.isNullOrBlank() && badgeView != null) {
+        if (!isSeeAll && !badge.isNullOrBlank() && badgeView != null) {
             badgeView.visibility = View.VISIBLE
             badgeView.text = badge
         } else {
@@ -197,15 +249,26 @@ class LeanbackPosterViewHolder(
         }
 
         // Watched indicator badge (top-start)
-        if (posterItem?.isWatched == true && watchedBadgeView != null) {
+        if (!isSeeAll && posterItem?.isWatched == true && watchedBadgeView != null) {
             watchedBadgeView.visibility = View.VISIBLE
         } else {
             watchedBadgeView?.visibility = View.GONE
         }
 
+        // Accessibility content description
+        val descParts = ArrayList<String>(3)
+        if (item.title.isNotBlank()) descParts.add(item.title)
+        if (!subtitle.isNullOrBlank()) descParts.add(subtitle)
+        if (posterItem?.isWatched == true) descParts.add("Watched")
+        root.contentDescription = descParts.joinToString(", ").ifEmpty { null }
+
+        val shouldShowFallbackTitle = !isSeeAll && !showLabels && item.title.isNotBlank() &&
+            !item.key.startsWith("__placeholder_")
+
         // Coil image loading with zero GPU overdraw & MemoryCache fast-path
         if (imageUrl != null) {
             if (!sameImageRequest) {
+                fallbackTitleText?.visibility = View.GONE
                 val boundKey = item.key
                 boundImageUrl = imageUrl
                 boundFallbackUrl = fallbackUrl
@@ -221,6 +284,7 @@ class LeanbackPosterViewHolder(
                     isStillBound = { currentItem?.key == boundKey },
                     onCacheHit = { result ->
                         cardContainer.background = null
+                        fallbackTitleText?.visibility = View.GONE
                         if (root.hasFocus() || bindingAdapterPosition == 0) {
                             lastLoadedColorKey = colorCacheKey
                             resolveDominantColorFromImage(
@@ -233,6 +297,7 @@ class LeanbackPosterViewHolder(
                     },
                     onAsyncSuccess = { result ->
                         cardContainer.background = null
+                        fallbackTitleText?.visibility = View.GONE
                         if (root.hasFocus() || bindingAdapterPosition == 0) {
                             lastLoadedColorKey = colorCacheKey
                             resolveDominantColorFromImage(
@@ -246,6 +311,10 @@ class LeanbackPosterViewHolder(
                     onAsyncError = {
                         boundImageUrl = null
                         ensurePlaceholderBackground()
+                        if (shouldShowFallbackTitle && fallbackTitleText != null) {
+                            fallbackTitleText.text = item.title
+                            fallbackTitleText.visibility = View.VISIBLE
+                        }
                     }
                 )
             }
@@ -258,7 +327,15 @@ class LeanbackPosterViewHolder(
             boundHeightPx = 0
             lastLoadedColorKey = null
             posterImage.setImageDrawable(null)
-            ensurePlaceholderBackground()
+            if (!isSeeAll) {
+                ensurePlaceholderBackground()
+                if (shouldShowFallbackTitle && fallbackTitleText != null) {
+                    fallbackTitleText.text = item.title
+                    fallbackTitleText.visibility = View.VISIBLE
+                } else {
+                    fallbackTitleText?.visibility = View.GONE
+                }
+            }
         }
 
         updateFocusVisual(root.hasFocus())
@@ -274,6 +351,13 @@ class LeanbackPosterViewHolder(
         boundHeightPx = 0
         lastLoadedColorKey = null
         posterImage.setImageDrawable(null)
+        titleText?.isSelected = false
+        badgeView?.visibility = View.GONE
+        watchedBadgeView?.visibility = View.GONE
+        progressBar?.visibility = View.GONE
+        seeAllOverlay?.visibility = View.GONE
+        fallbackTitleText?.visibility = View.GONE
+        root.contentDescription = null
     }
 
     companion object {
@@ -329,6 +413,7 @@ class LeanbackPosterViewHolder(
             }
             cardContainer.addView(posterImage)
 
+            val themeStyle = adapter.themeStyle
             val pbHeightPx = 4f * dp
             val horizMargin = (cornerRadiusPx * 0.75f).toInt().coerceAtLeast(6)
             val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -337,11 +422,14 @@ class LeanbackPosterViewHolder(
                     pbHeightPx.toInt().coerceAtLeast(2)
                 ).apply {
                     gravity = Gravity.BOTTOM
-                    leftMargin = horizMargin
-                    rightMargin = horizMargin
+                    marginStart = horizMargin
+                    marginEnd = horizMargin
                     bottomMargin = (6f * dp).toInt()
                 }
-                progressDrawable = PillProgressBarDrawable.create(pbHeightPx)
+                progressDrawable = PillProgressBarDrawable.create(
+                    heightPx = pbHeightPx,
+                    progressColor = themeStyle.accentColor
+                )
                 visibility = View.GONE
             }
             cardContainer.addView(progressBar)
@@ -353,7 +441,7 @@ class LeanbackPosterViewHolder(
                 ).apply {
                     gravity = Gravity.TOP or Gravity.END
                     topMargin = (6f * dp).toInt()
-                    rightMargin = (6f * dp).toInt()
+                    marginEnd = (6f * dp).toInt()
                 }
                 setPadding((6f * dp).toInt(), (2f * dp).toInt(), (6f * dp).toInt(), (2f * dp).toInt())
                 background = GradientDrawable().apply {
@@ -374,7 +462,7 @@ class LeanbackPosterViewHolder(
                 ).apply {
                     gravity = Gravity.TOP or Gravity.START
                     topMargin = (6f * dp).toInt()
-                    leftMargin = (6f * dp).toInt()
+                    marginStart = (6f * dp).toInt()
                 }
                 gravity = Gravity.CENTER
                 background = GradientDrawable().apply {
@@ -388,6 +476,61 @@ class LeanbackPosterViewHolder(
             }
             cardContainer.addView(watchedBadgeView)
 
+            val seeAllOverlay = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                val pad = (12f * dp).toInt()
+                setPadding(pad, pad, pad, pad)
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                visibility = View.GONE
+            }
+            val seeAllArrowText = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                text = "→"
+                setTextColor(themeStyle.titleColor)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+            }
+            val seeAllLabelText = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (6f * dp).toInt()
+                }
+                setTextColor(themeStyle.titleColor)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+                gravity = Gravity.CENTER
+            }
+            seeAllOverlay.addView(seeAllArrowText)
+            seeAllOverlay.addView(seeAllLabelText)
+            cardContainer.addView(seeAllOverlay)
+
+            val fallbackTitleText = TextView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                val pad = (10f * dp).toInt()
+                setPadding(pad, pad, pad, pad)
+                gravity = Gravity.CENTER
+                setTextColor(themeStyle.titleColor)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                maxLines = 3
+                ellipsize = TextUtils.TruncateAt.END
+                visibility = View.GONE
+            }
+            cardContainer.addView(fallbackTitleText)
+
             root.addView(cardContainer)
 
             val titleText = TextView(context).apply {
@@ -397,10 +540,12 @@ class LeanbackPosterViewHolder(
                 ).apply {
                     topMargin = (8f * dp).toInt()
                 }
-                setTextColor(Color.WHITE)
+                setTextColor(themeStyle.titleColor)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
                 maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
+                isSingleLine = true
+                ellipsize = TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1
                 gravity = Gravity.CENTER_HORIZONTAL
                 visibility = if (showLabels) View.VISIBLE else View.GONE
             }.also { root.addView(it) }
@@ -412,7 +557,7 @@ class LeanbackPosterViewHolder(
                 ).apply {
                     topMargin = (2f * dp).toInt()
                 }
-                setTextColor(Color.parseColor("#A0A0A5"))
+                setTextColor(themeStyle.subtitleColor)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
@@ -430,11 +575,19 @@ class LeanbackPosterViewHolder(
                 progressBar = progressBar,
                 badgeView = badgeView,
                 watchedBadgeView = watchedBadgeView,
+                seeAllOverlay = seeAllOverlay,
+                seeAllArrowText = seeAllArrowText,
+                seeAllLabelText = seeAllLabelText,
+                fallbackTitleText = fallbackTitleText,
+                progressBarHeightPx = pbHeightPx,
                 cornerRadiusPx = cornerRadiusPx,
                 borderWidthPx = chrome.borderWidthPx,
                 glowMarginPx = chrome.glowMarginPx,
                 adapter = adapter
-            ).also { it.ensurePlaceholderBackground() }
+            ).also {
+                it.lastProgressAccentColor = themeStyle.accentColor
+                it.ensurePlaceholderBackground()
+            }
         }
     }
 }

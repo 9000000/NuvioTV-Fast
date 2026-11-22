@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.home
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline
+import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
@@ -27,12 +28,14 @@ import coil3.Image
 import coil3.SingletonImageLoader
 import coil3.request.Disposable
 import com.nuvio.tv.core.image.HomeImageLoadingProfile
+import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.adapter.computeLeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.core.HorizontalPrefetchProfileCache
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.core.PillProgressBarDrawable
 import com.nuvio.tv.ui.leanback.holder.FocusIsolatedRootLayout
 import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
@@ -44,17 +47,22 @@ class LeanbackCardViewHolder(
     val titleText: TextView?,
     val progressBar: ProgressBar?,
     var cornerRadiusPx: Float,
-    val borderWidthPx: Int,
-    val glowMarginPx: Int,
-    var adapter: LeanbackRowAdapter
+    var adapter: LeanbackRowAdapter,
+    val watchedBadgeView: TextView? = null,
+    val emojiCoverView: TextView? = null,
+    val fallbackTitleText: TextView? = null,
+    private val progressBarHeightPx: Float = 7f
 ) : RecyclerView.ViewHolder(root) {
 
+    private var lastProgressAccentColor: Int = 0
+
     private val placeholderBackgroundDrawable = GradientDrawable().apply {
-        setColor(Color.parseColor("#1A1A1A"))
+        setColor(adapter.themeStyle.placeholderColor)
         cornerRadius = cornerRadiusPx
     }
 
     private fun ensurePlaceholderBackground() {
+        placeholderBackgroundDrawable.setColor(adapter.themeStyle.placeholderColor)
         placeholderBackgroundDrawable.cornerRadius = cornerRadiusPx
         if (cardContainer.background !== placeholderBackgroundDrawable) {
             cardContainer.background = placeholderBackgroundDrawable
@@ -72,9 +80,9 @@ class LeanbackCardViewHolder(
 
         val horizMargin = (newRadiusPx * 0.75f).toInt().coerceAtLeast(6)
         (progressBar?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
-            if (lp.leftMargin != horizMargin || lp.rightMargin != horizMargin) {
-                lp.leftMargin = horizMargin
-                lp.rightMargin = horizMargin
+            if (lp.marginStart != horizMargin || lp.marginEnd != horizMargin) {
+                lp.marginStart = horizMargin
+                lp.marginEnd = horizMargin
                 progressBar.layoutParams = lp
             }
         }
@@ -86,11 +94,12 @@ class LeanbackCardViewHolder(
 
     private var currentItem: ModernCarouselItem? = null
     var currentDominantColor: Int = Color.WHITE
-    private var imageDisposable: Disposable? = null
+    internal var imageDisposable: Disposable? = null
     private var boundImageUrl: String? = null
     private var boundFallbackUrl: String? = null
     private var boundWidthPx: Int = 0
     private var boundHeightPx: Int = 0
+    private var boundBlurred: Boolean = false
     private var lastLoadedColorKey: String? = null
 
     init {
@@ -129,18 +138,12 @@ class LeanbackCardViewHolder(
         }
 
         root.setOnKeyListener { _, keyCode, event ->
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        if (adapter.onNavigateDown()) return@setOnKeyListener true
-                    }
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (adapter.onNavigateUp()) return@setOnKeyListener true
-                    }
-                    KeyEvent.KEYCODE_BACK -> {
-                        if (adapter.onNavigateBack()) return@setOnKeyListener true
-                    }
-                }
+            if (event.action == KeyEvent.ACTION_DOWN &&
+                event.repeatCount == 0 &&
+                keyCode == KeyEvent.KEYCODE_MENU
+            ) {
+                currentItem?.let { adapter.onItemLongClick(it) }
+                return@setOnKeyListener true
             }
             false
         }
@@ -187,7 +190,11 @@ class LeanbackCardViewHolder(
             }
         }
 
-        val isLandscape = adapter.cardWidthPx > adapter.cardHeightPx
+        titleText?.let { tv ->
+            if (tv.isSelected != hasFocus) {
+                tv.isSelected = hasFocus
+            }
+        }
 
         val targetTranslationZ = if (hasFocus) 12f else 0f
         if (root.translationZ != targetTranslationZ) root.translationZ = targetTranslationZ
@@ -197,7 +204,7 @@ class LeanbackCardViewHolder(
 
         val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
         if (hasFocus) {
-            gridView?.notifyCardFocused(cardContainer, isLandscape, currentDominantColor)
+            gridView?.notifyCardFocused(cardContainer, currentDominantColor)
         }
     }
 
@@ -242,6 +249,8 @@ class LeanbackCardViewHolder(
         val hasLoadableImage = !rawCandidateUrl.isNullOrBlank() && !rawCandidateUrl.trim().isPlaceholder()
         val imageUrl = if (hasLoadableImage) rawCandidateUrl else null
         val fallbackUrl = item.metaPreview?.rawPosterUrl?.takeIf { !it.isBlank() && !it.trim().isPlaceholder() }
+        val cwPayload = item.payload as? ModernPayload.ContinueWatching
+        val shouldBlur = adapter.blurUnwatchedEpisodes && cwPayload?.item is ContinueWatchingItem.NextUp
         val colorCacheKey = imageUrl ?: item.key
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
@@ -251,6 +260,7 @@ class LeanbackCardViewHolder(
             boundFallbackUrl == fallbackUrl &&
             boundWidthPx == wPx &&
             boundHeightPx == hPx &&
+            boundBlurred == shouldBlur &&
             (posterImage.drawable != null || imageDisposable?.isDisposed == false)
 
         currentItem = item
@@ -279,16 +289,54 @@ class LeanbackCardViewHolder(
             }
         }
 
-        // Title
+        // Title, typography & accessibility description
+        val style = adapter.themeStyle
+        style.typeface?.let { tf ->
+            if (titleText != null && titleText.typeface !== tf) titleText.typeface = tf
+            if (fallbackTitleText != null && fallbackTitleText.typeface !== tf) fallbackTitleText.typeface = tf
+        }
+        fallbackTitleText?.setTextColor(style.titleColor)
         if (showLabels && titleText != null && item.title.isNotBlank()) {
             titleText.visibility = View.VISIBLE
+            titleText.setTextColor(style.titleColor)
             titleText.text = item.title
         } else {
             titleText?.visibility = View.GONE
         }
 
+        // Watched badge (hidden for placeholder items)
+        val isPlaceholderItem = item.imageUrl?.trim()?.isPlaceholder() == true ||
+            (item.payload as? ModernPayload.Catalog)?.itemId?.startsWith("__placeholder_") == true
+        val isWatched = !isPlaceholderItem &&
+            item.metaPreview?.let { adapter.isCatalogItemWatched(it) } == true
+        applyWatchedBadgeState(isWatched, item)
+
+        // Collection folder emoji cover when no artwork image is available
+        val folderEmoji = (item.payload as? ModernPayload.CollectionFolder)
+            ?.coverEmoji
+            ?.takeIf { imageUrl == null && it.isNotBlank() }
+        if (emojiCoverView != null) {
+            if (folderEmoji != null) {
+                emojiCoverView.text = folderEmoji
+                emojiCoverView.visibility = View.VISIBLE
+            } else {
+                emojiCoverView.visibility = View.GONE
+            }
+        }
+
+        val shouldShowFallbackTitle = !isPlaceholderItem &&
+            folderEmoji == null &&
+            !showLabels &&
+            item.title.isNotBlank()
+
         // Progress bar for Continue Watching
-        val cwPayload = item.payload as? ModernPayload.ContinueWatching
+        if (progressBar != null && lastProgressAccentColor != style.accentColor) {
+            progressBar.progressDrawable = PillProgressBarDrawable.create(
+                heightPx = progressBarHeightPx,
+                progressColor = style.accentColor
+            )
+            lastProgressAccentColor = style.accentColor
+        }
         val progressItem = cwPayload?.item as? ContinueWatchingItem.InProgress
         if (progressItem != null && progressBar != null) {
             progressBar.visibility = View.VISIBLE
@@ -304,12 +352,14 @@ class LeanbackCardViewHolder(
         // Image loading via unified LeanbackArtworkLoader (matches CustomPoster FALLBACK_URL_KEY fast-path)
         if (imageUrl != null) {
             if (!sameImageRequest) {
+                fallbackTitleText?.visibility = View.GONE
                 val boundKey = item.key
                 val boundColorKey = colorCacheKey
                 boundImageUrl = imageUrl
                 boundFallbackUrl = fallbackUrl
                 boundWidthPx = wPx
                 boundHeightPx = hPx
+                boundBlurred = shouldBlur
                 imageDisposable?.dispose()
                 imageDisposable = LeanbackArtworkLoader.loadIntoImageView(
                     imageView = posterImage,
@@ -317,9 +367,11 @@ class LeanbackCardViewHolder(
                     fallbackUrl = fallbackUrl,
                     widthPx = wPx,
                     heightPx = hPx,
+                    blurred = shouldBlur,
                     isStillBound = { currentItem?.key == boundKey },
                     onCacheHit = { result ->
                         cardContainer.background = null
+                        fallbackTitleText?.visibility = View.GONE
                         if (root.hasFocus() || bindingAdapterPosition == 0) {
                             resolveCardColorFromImage(
                                 result = result,
@@ -331,6 +383,7 @@ class LeanbackCardViewHolder(
                     },
                     onAsyncSuccess = { result ->
                         cardContainer.background = null
+                        fallbackTitleText?.visibility = View.GONE
                         if (root.hasFocus() || bindingAdapterPosition == 0) {
                             resolveCardColorFromImage(
                                 result = result,
@@ -343,6 +396,10 @@ class LeanbackCardViewHolder(
                     onAsyncError = {
                         boundImageUrl = null
                         ensurePlaceholderBackground()
+                        if (shouldShowFallbackTitle && fallbackTitleText != null) {
+                            fallbackTitleText.text = item.title
+                            fallbackTitleText.visibility = View.VISIBLE
+                        }
                     }
                 )
             }
@@ -353,9 +410,16 @@ class LeanbackCardViewHolder(
             boundFallbackUrl = null
             boundWidthPx = 0
             boundHeightPx = 0
+            boundBlurred = false
             lastLoadedColorKey = null
             posterImage.setImageDrawable(null)
             ensurePlaceholderBackground()
+            if (shouldShowFallbackTitle && fallbackTitleText != null) {
+                fallbackTitleText.text = item.title
+                fallbackTitleText.visibility = View.VISIBLE
+            } else {
+                fallbackTitleText?.visibility = View.GONE
+            }
         }
 
         // Sync focus visual to current focus state when bound or recycled
@@ -378,10 +442,38 @@ class LeanbackCardViewHolder(
         }
     }
 
+    internal fun applyWatchedBadgeState(isWatched: Boolean, item: ModernCarouselItem? = currentItem) {
+        if (watchedBadgeView != null) {
+            watchedBadgeView.visibility = if (isWatched) View.VISIBLE else View.GONE
+            if (isWatched) {
+                (watchedBadgeView.background as? GradientDrawable)?.setColor(adapter.themeStyle.accentColor)
+            }
+        }
+        if (item != null) {
+            root.contentDescription = buildString {
+                append(item.title)
+                if (!item.subtitle.isNullOrBlank()) {
+                    if (isNotEmpty()) append(", ")
+                    append(item.subtitle)
+                }
+                if (isWatched) {
+                    if (isNotEmpty()) append(", ")
+                    append("Watched")
+                }
+            }.ifBlank { null }
+        }
+    }
+
     fun unbind() {
         root.animate().cancel()
         root.scaleX = 1.0f
         root.scaleY = 1.0f
+        root.contentDescription = null
+        titleText?.isSelected = false
+        watchedBadgeView?.visibility = View.GONE
+        emojiCoverView?.visibility = View.GONE
+        fallbackTitleText?.visibility = View.GONE
+        progressBar?.visibility = View.GONE
         imageDisposable?.dispose()
         imageDisposable = null
         currentItem = null
@@ -389,6 +481,7 @@ class LeanbackCardViewHolder(
         boundFallbackUrl = null
         boundWidthPx = 0
         boundHeightPx = 0
+        boundBlurred = false
         lastLoadedColorKey = null
         posterImage.setImageDrawable(null)
         cardContainer.foreground = null
@@ -406,10 +499,9 @@ class LeanbackRowAdapter(
     var onItemClick: (ModernCarouselItem) -> Unit,
     var onItemLongClick: (ModernCarouselItem) -> Unit,
     onLoadMore: () -> Unit,
-    var onNavigateDown: () -> Boolean,
-    var onNavigateUp: () -> Boolean,
-    var onNavigateLeftOnFirstItem: () -> Boolean,
-    var onNavigateBack: () -> Boolean
+    var themeStyle: LeanbackThemeStyle = LeanbackThemeStyle.Default,
+    var isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
+    var blurUnwatchedEpisodes: Boolean = false
 ) : RecyclerView.Adapter<LeanbackCardViewHolder>() {
 
     private var lastLoadMoreTimestampMs = 0L
@@ -429,6 +521,7 @@ class LeanbackRowAdapter(
         }
 
     private var items: List<ModernCarouselItem> = emptyList()
+    private var watchedStates: BooleanArray = BooleanArray(0)
     private var pendingItems: List<ModernCarouselItem>? = null
     private var pendingApplyPosted: Boolean = false
     var isSubmittingItems: Boolean = false
@@ -436,23 +529,89 @@ class LeanbackRowAdapter(
 
     fun getItem(position: Int): ModernCarouselItem? = items.getOrNull(position)
 
+    private fun resolveItemWatchedState(item: ModernCarouselItem): Boolean {
+        val isPlaceholderItem = item.imageUrl?.trim()?.isPlaceholder() == true ||
+            (item.payload as? ModernPayload.Catalog)?.itemId?.startsWith("__placeholder_") == true
+        return !isPlaceholderItem && item.metaPreview?.let { isCatalogItemWatched(it) } == true
+    }
+
+    /**
+     * Synchronizes watched badges in-place when [isCatalogItemWatched] changes for any item
+     * even if the [ModernCarouselItem] list reference itself has not changed.
+     * Returns the adapter positions whose watched state changed.
+     */
+    fun syncWatchedStateChanges(targetList: List<ModernCarouselItem> = items): List<Int> {
+        val size = targetList.size
+        if (size == 0) {
+            if (watchedStates.isNotEmpty()) watchedStates = BooleanArray(0)
+            return emptyList()
+        }
+        val oldStates = watchedStates
+        if (oldStates.size != size) {
+            watchedStates = BooleanArray(size) { resolveItemWatchedState(targetList[it]) }
+            return emptyList()
+        }
+        var changedPositions: MutableList<Int>? = null
+        val rv = attachedRecyclerView
+        for (i in 0 until size) {
+            val item = targetList[i]
+            val nowWatched = resolveItemWatchedState(item)
+            if (oldStates[i] != nowWatched) {
+                oldStates[i] = nowWatched
+                if (changedPositions == null) {
+                    changedPositions = ArrayList(4)
+                }
+                changedPositions.add(i)
+                val liveVh = rv?.findViewHolderForAdapterPosition(i) as? LeanbackCardViewHolder
+                if (liveVh != null) {
+                    liveVh.applyWatchedBadgeState(nowWatched, item)
+                } else if (rv != null && (rv.isComputingLayout || rv.isInLayout)) {
+                    val changedIndex = i
+                    rv.post {
+                        if (attachedRecyclerView === rv && changedIndex in items.indices) {
+                            notifyItemChanged(changedIndex)
+                        }
+                    }
+                } else {
+                    notifyItemChanged(i)
+                }
+            }
+        }
+        return changedPositions ?: emptyList()
+    }
+
     fun updateConfig(
         newWidthPx: Int,
         newHeightPx: Int,
         newRadiusPx: Float,
-        newShowLabels: Boolean
+        newShowLabels: Boolean,
+        newThemeStyle: LeanbackThemeStyle = themeStyle,
+        newBlurUnwatchedEpisodes: Boolean = blurUnwatchedEpisodes
     ) {
         val changed = cardWidthPx != newWidthPx ||
             cardHeightPx != newHeightPx ||
             cornerRadiusPx != newRadiusPx ||
-            showLabels != newShowLabels
+            showLabels != newShowLabels ||
+            themeStyle != newThemeStyle ||
+            blurUnwatchedEpisodes != newBlurUnwatchedEpisodes
         if (changed) {
             cardWidthPx = newWidthPx
             cardHeightPx = newHeightPx
             cornerRadiusPx = newRadiusPx
             showLabels = newShowLabels
+            themeStyle = newThemeStyle
+            blurUnwatchedEpisodes = newBlurUnwatchedEpisodes
             if (items.isNotEmpty()) {
-                notifyItemRangeChanged(0, items.size)
+                val rv = attachedRecyclerView
+                if (rv != null && (rv.isComputingLayout || rv.isInLayout)) {
+                    rv.post {
+                        if (attachedRecyclerView === rv && items.isNotEmpty()) {
+                            notifyItemRangeChanged(0, items.size)
+                        }
+                    }
+                } else {
+                    notifyItemRangeChanged(0, items.size)
+                }
             }
         }
     }
@@ -493,10 +652,14 @@ class LeanbackRowAdapter(
     }
 
     fun submitItems(newItems: List<ModernCarouselItem>) {
-        if (items === newItems) return
+        if (items === newItems) {
+            syncWatchedStateChanges(items)
+            return
+        }
         if (items.size == newItems.size && itemsMatchVisuals(items, newItems, items.size)) {
             items = newItems
             pendingItems = null
+            syncWatchedStateChanges(newItems)
             return
         }
 
@@ -515,13 +678,23 @@ class LeanbackRowAdapter(
             val mayTakeFocus = (rv as? ModernInteropHorizontalGridView)?.mayTakeFocus() != false
             for (i in 0 until rv.childCount) {
                 val child = rv.getChildAt(i)
-                val vh = rv.getChildViewHolder(child) as? LeanbackCardViewHolder
-                if (vh != null && vh.itemView.hasFocus()) {
+                val vh = rv.getChildViewHolder(child) as? LeanbackCardViewHolder ?: continue
+                if (vh.itemView.hasFocus()) {
                     if (mayTakeFocus) {
                         vh.updateFocusVisual(true)
                     } else {
                         vh.itemView.clearFocus()
                         vh.updateFocusVisual(false)
+                    }
+                }
+                if (vh.posterImage.drawable == null && vh.imageDisposable == null) {
+                    val pos = rv.getChildAdapterPosition(child)
+                    if (pos != RecyclerView.NO_POSITION && pos in items.indices) {
+                        val item = items[pos]
+                        val rawUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+                        if (!rawUrl.isNullOrBlank() && !rawUrl.trim().isPlaceholder()) {
+                            onBindViewHolder(vh, pos)
+                        }
                     }
                 }
             }
@@ -567,6 +740,7 @@ class LeanbackRowAdapter(
         val oldSize = oldItems.size
         val newSize = newItems.size
         items = newItems
+        watchedStates = BooleanArray(newSize) { resolveItemWatchedState(newItems[it]) }
         applyItemsInternal(oldItems, oldSize, newSize, newItems)
     }
 
@@ -689,9 +863,6 @@ class LeanbackRowAdapter(
             layoutParams = ViewGroup.LayoutParams(cardWidthPx, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
 
-        val glowSpreadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 18f, metrics)
-        val glowMarginPx = (glowSpreadPx * 1.35f).toInt()
-
         val cardContainer = FrameLayout(context).apply {
             layoutParams = LinearLayout.LayoutParams(cardWidthPx, cardHeightPx)
             clipToOutline = false
@@ -708,8 +879,43 @@ class LeanbackRowAdapter(
         }
         cardContainer.addView(posterImage)
 
+        val emojiCoverView = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 32f)
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+        }
+        cardContainer.addView(emojiCoverView)
+
+        val badgeSizePx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 22f, metrics).toInt()
+        val badgeMarginPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, metrics).toInt()
+        val watchedBadgeView = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(badgeSizePx, badgeSizePx).apply {
+                gravity = Gravity.TOP or Gravity.START
+                marginStart = badgeMarginPx
+                marginEnd = badgeMarginPx
+                topMargin = badgeMarginPx
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(themeStyle.accentColor)
+            }
+            text = "\u2713"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTypeface(null, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+        }
+        cardContainer.addView(watchedBadgeView)
+
+        val pbHeightPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3.5f, metrics)
         val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
-            val h = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3.5f, metrics).toInt().coerceAtLeast(2)
+            val h = pbHeightPx.toInt().coerceAtLeast(2)
             val horizMargin = (cornerRadiusPx * 0.75f).toInt().coerceAtLeast(6)
             val bMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 4f, metrics).toInt()
             layoutParams = FrameLayout.LayoutParams(
@@ -717,16 +923,36 @@ class LeanbackRowAdapter(
                 h
             ).apply {
                 gravity = Gravity.BOTTOM
-                leftMargin = horizMargin
-                rightMargin = horizMargin
+                marginStart = horizMargin
+                marginEnd = horizMargin
                 bottomMargin = bMargin
             }
             max = 100
             progress = 0
-            progressDrawable = PillProgressBarDrawable.create(h.toFloat())
+            progressDrawable = PillProgressBarDrawable.create(
+                heightPx = pbHeightPx,
+                progressColor = themeStyle.accentColor
+            )
             visibility = View.GONE
         }
         cardContainer.addView(progressBar)
+
+        val fallbackPadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 10f, metrics).toInt()
+        val fallbackTitleText = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setPadding(fallbackPadPx, fallbackPadPx, fallbackPadPx, fallbackPadPx)
+            gravity = Gravity.CENTER
+            setTextColor(themeStyle.titleColor)
+            themeStyle.typeface?.let { typeface = it }
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            maxLines = 3
+            ellipsize = TextUtils.TruncateAt.END
+            visibility = View.GONE
+        }
+        cardContainer.addView(fallbackTitleText)
 
         root.addView(cardContainer)
 
@@ -737,16 +963,15 @@ class LeanbackRowAdapter(
             ).apply {
                 topMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, metrics).toInt()
             }
-            setTextColor(Color.WHITE)
+            setTextColor(themeStyle.titleColor)
+            themeStyle.typeface?.let { typeface = it }
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            isSingleLine = true
             maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
+            ellipsize = TextUtils.TruncateAt.MARQUEE
+            marqueeRepeatLimit = -1
             visibility = if (showLabels) View.VISIBLE else View.GONE
         }.also { root.addView(it) }
-
-        val borderWidthPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2.0f, metrics)
-            .toInt()
-            .coerceAtLeast(2)
 
         return LeanbackCardViewHolder(
             root = root,
@@ -755,9 +980,11 @@ class LeanbackRowAdapter(
             titleText = titleText,
             progressBar = progressBar,
             cornerRadiusPx = cornerRadiusPx,
-            borderWidthPx = borderWidthPx,
-            glowMarginPx = glowMarginPx,
-            adapter = this
+            adapter = this,
+            watchedBadgeView = watchedBadgeView,
+            emojiCoverView = emojiCoverView,
+            fallbackTitleText = fallbackTitleText,
+            progressBarHeightPx = pbHeightPx
         )
     }
 
@@ -811,6 +1038,8 @@ class LeanbackRowAdapter(
         val wPx = cardWidthPx.coerceAtLeast(1)
         val hPx = cardHeightPx.coerceAtLeast(1)
         val nextUrl = nextItem.imageUrl ?: nextItem.heroPreview.poster ?: nextItem.heroPreview.backdrop
+        val cwPayload = nextItem.payload as? ModernPayload.ContinueWatching
+        val shouldBlur = blurUnwatchedEpisodes && cwPayload?.item is ContinueWatchingItem.NextUp
         LeanbackArtworkLoader.prefetch(
             context = context,
             imageLoader = imageLoader,
@@ -818,6 +1047,7 @@ class LeanbackRowAdapter(
             fallbackUrl = nextItem.metaPreview?.rawPosterUrl,
             widthPx = wPx,
             heightPx = hPx,
+            blurred = shouldBlur,
             prefetchedKeysTracker = prefetchedKeys
         )
     }

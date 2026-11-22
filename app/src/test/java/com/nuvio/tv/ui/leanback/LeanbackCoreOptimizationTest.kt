@@ -5,16 +5,20 @@ import android.content.Context
 import android.view.View
 import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.unit.dp
+import coil3.Extras
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
 import com.nuvio.tv.core.image.HomeImageLoadingProfile
 import com.nuvio.tv.domain.model.PLACEHOLDER_IMAGE_URL
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.adapter.computeLeanbackUpdatePlan
+import com.nuvio.tv.ui.leanback.container.isVerticalGridLastRow
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
@@ -624,12 +628,295 @@ class LeanbackCoreOptimizationTest {
         onItemFocused = { _, _ -> },
         onItemClick = {},
         onItemLongClick = {},
-        onLoadMore = {},
-        onNavigateDown = { false },
-        onNavigateUp = { false },
-        onNavigateLeftOnFirstItem = { false },
-        onNavigateBack = { false }
+        onLoadMore = {}
     ).withTestObservable()
+
+    @Test
+    fun `vertical grid isLastRow handles partial trailing rows accurately`() {
+        // 6 columns, 8 items -> row 0: 0..5, row 1: 6..7
+        for (pos in 0..5) {
+            assertTrue("pos $pos should NOT be last row in 6-col 8-item grid", !isVerticalGridLastRow(pos, totalItems = 8, cols = 6))
+        }
+        assertTrue(isVerticalGridLastRow(6, totalItems = 8, cols = 6))
+        assertTrue(isVerticalGridLastRow(7, totalItems = 8, cols = 6))
+
+        // Exact full rows: 4 cols, 8 items -> row 0: 0..3, row 1: 4..7
+        assertTrue(!isVerticalGridLastRow(3, totalItems = 8, cols = 4))
+        assertTrue(isVerticalGridLastRow(4, totalItems = 8, cols = 4))
+
+        // Single row & empty
+        assertTrue(isVerticalGridLastRow(0, totalItems = 1, cols = 6))
+        assertTrue(!isVerticalGridLastRow(0, totalItems = 0, cols = 6))
+        assertTrue(!isVerticalGridLastRow(-1, totalItems = 5, cols = 6))
+    }
+
+    @Test
+    fun `computeAdaptiveGridColumns prevents horizontal overflow across screen and poster sizes`() {
+        // Standard 960dp TV minus 80dp padding = 880dp
+        assertEquals(6, computeAdaptiveGridColumns(availableWidth = 880.dp, cardWidth = 130.dp, horizontalSpacing = 12.dp))
+        // Large poster 180dp on 880dp -> must shrink to 4 cols instead of overflowing 6 cols
+        assertEquals(4, computeAdaptiveGridColumns(availableWidth = 880.dp, cardWidth = 180.dp, horizontalSpacing = 12.dp))
+        // Landscape 260dp on 880dp -> 3 cols
+        assertEquals(3, computeAdaptiveGridColumns(availableWidth = 880.dp, cardWidth = 260.dp, horizontalSpacing = 12.dp))
+        // Clamping floor/ceiling
+        assertEquals(2, computeAdaptiveGridColumns(availableWidth = 200.dp, cardWidth = 260.dp, horizontalSpacing = 12.dp, minColumns = 2))
+        assertEquals(8, computeAdaptiveGridColumns(availableWidth = 2000.dp, cardWidth = 100.dp, horizontalSpacing = 10.dp, maxColumns = 8))
+    }
+
+    @Test
+    fun `artwork loader defers hardware bitmap policy unless blur transformation is requested`() {
+        val context = mockk<Context>(relaxed = true)
+        val imageLoader = mockk<ImageLoader>(relaxed = true)
+        val requests = mutableListOf<ImageRequest>()
+        every { imageLoader.memoryCache } returns null
+        every { imageLoader.enqueue(capture(requests)) } returns mockk(relaxed = true)
+
+        LeanbackArtworkLoader.prefetch(
+            context = context,
+            imageLoader = imageLoader,
+            imageUrl = "https://example.com/regular_poster.jpg",
+            widthPx = 240,
+            heightPx = 360,
+            blurred = false
+        )
+        LeanbackArtworkLoader.prefetch(
+            context = context,
+            imageLoader = imageLoader,
+            imageUrl = "https://example.com/blurred_episode.jpg",
+            widthPx = 320,
+            heightPx = 180,
+            blurred = true
+        )
+
+        assertEquals(2, requests.size)
+        // Regular artwork leaves allowHardware unset so HardwareBitmapSettingInterceptor controls it
+        assertNull(requests[0].extras[Extras.Key.allowHardware])
+        // Blurred artwork forces software bitmap for BlurTransformation pixel access
+        assertEquals(false, requests[1].extras[Extras.Key.allowHardware])
+    }
+
+    @Test
+    fun `universal adapter debounces repeated loadMore calls for unchanged item count`() {
+        var loadMoreCount = 0
+        val adapter = LeanbackUniversalAdapter(
+            cardWidthPx = 240,
+            cardHeightPx = 360,
+            cornerRadiusPx = 12f,
+            showLabels = true,
+            animationsEnabled = { true },
+            onItemFocused = { _, _ -> },
+            onItemClick = {},
+            onItemLongClick = {},
+            onLoadMore = { loadMoreCount++ }
+        ).withTestObservable()
+
+        val initialItems = (0 until 10).map { idx ->
+            LeanbackCardItem.Poster(key = "p_$idx", title = "P$idx", imageUrl = "https://example.com/p_$idx.jpg")
+        }
+        adapter.submitItems(initialItems)
+        adapter.requestLoadMore()
+        adapter.requestLoadMore()
+        adapter.requestLoadMore()
+        assertEquals("Repeated requestLoadMore with same item count must fire once", 1, loadMoreCount)
+
+        // After new page arrives, requestLoadMore can fire again once debounce window elapses
+        val nextPage = initialItems + LeanbackCardItem.Poster(
+            key = "p_10",
+            title = "P10",
+            imageUrl = "https://example.com/p_10.jpg"
+        )
+        adapter.submitItems(nextPage)
+        assertEquals(1, loadMoreCount)
+    }
+
+    @Test
+    fun `theme style resolves all 7 poster border styles accurately including rainbow and solid colors`() {
+        val dominantNeon = 0xFF00E5FF.toInt()
+        val solidGold = 0xFFFFD000.toInt()
+        val solidRed = 0xFFFF2A55.toInt()
+        val rainbowStops = listOf(0xFFFF2A55.toInt(), 0xFFFFD000.toInt(), 0xFF05DF72.toInt(), 0xFF2B7FFF.toInt())
+
+        // 1. NONE -> transparent and not rainbow
+        val noneStyle = com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle(
+            posterBorderStyle = com.nuvio.tv.domain.model.PosterBorderStyle.NONE,
+            hideFocusBorder = true,
+            focusRingColor = 0
+        )
+        assertTrue(!noneStyle.isRainbowBorder)
+        assertEquals(0, noneStyle.resolveFocusedBorderColor(dominantNeon, blendWithDominant = true))
+
+        // 2. SOLID_GOLD -> pure solid gold without blending poster dominant color
+        val goldStyle = com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle(
+            posterBorderStyle = com.nuvio.tv.domain.model.PosterBorderStyle.SOLID_GOLD,
+            focusRingColor = solidGold
+        )
+        assertTrue(!goldStyle.isRainbowBorder)
+        assertEquals(solidGold, goldStyle.resolveFocusedBorderColor(dominantNeon, blendWithDominant = true))
+        assertEquals(solidGold, goldStyle.resolveFocusedBorderColor(dominantNeon, blendWithDominant = false))
+
+        // 3. RAINBOW -> preserves rainbow gradient colors and marks isRainbowBorder = true
+        val rainbowStyle = com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle(
+            posterBorderStyle = com.nuvio.tv.domain.model.PosterBorderStyle.RAINBOW,
+            focusRingColor = solidRed,
+            focusGradientColors = rainbowStops
+        )
+        assertTrue(rainbowStyle.isRainbowBorder)
+        assertEquals(rainbowStops, rainbowStyle.focusGradientColors)
+        assertEquals(solidRed, rainbowStyle.resolveFocusedBorderColor(dominantNeon, blendWithDominant = true))
+
+        // 4. THEME -> returns exact theme ring when blendWithDominant is false
+        val themeRing = 0xFF38BDF8.toInt()
+        val themeStyle = com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle(
+            posterBorderStyle = com.nuvio.tv.domain.model.PosterBorderStyle.THEME,
+            focusRingColor = themeRing
+        )
+        assertEquals(themeRing, themeStyle.resolveFocusedBorderColor(dominantNeon, blendWithDominant = false))
+    }
+
+    @Test
+    fun `modern row adapter detects watched state changes in place even when item list reference is unchanged`() {
+        val watchedIds = mutableSetOf<String>()
+        val items = (0 until 5).map { idx ->
+            val id = "movie_$idx"
+            val url = "https://example.com/$id.jpg"
+            val meta = com.nuvio.tv.domain.model.MetaPreview(
+                id = id,
+                type = com.nuvio.tv.domain.model.ContentType.MOVIE,
+                rawType = "movie",
+                name = "Movie $idx",
+                poster = url,
+                posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
+                background = null,
+                logo = null,
+                description = null,
+                releaseInfo = "2026",
+                imdbRating = 8.0f,
+                genres = emptyList()
+            )
+            ModernCarouselItem(
+                key = "key_$idx",
+                title = "Movie $idx",
+                subtitle = "2026",
+                imageUrl = url,
+                heroPreview = HeroPreview(
+                    title = "Movie $idx",
+                    logo = null,
+                    description = null,
+                    contentTypeText = "Movie",
+                    yearText = "2026",
+                    imdbText = "8.0",
+                    genres = StableList(),
+                    poster = url,
+                    backdrop = null,
+                    imageUrl = url
+                ),
+                payload = ModernPayload.Catalog(
+                    focusKey = "focus_$idx",
+                    itemId = id,
+                    itemType = "movie",
+                    addonBaseUrl = "https://addon.example",
+                    trailerTitle = "Movie $idx",
+                    trailerReleaseInfo = "2026",
+                    trailerApiType = "movie"
+                ),
+                metaPreview = meta
+            )
+        }
+
+        val adapter = createRowAdapter().apply {
+            isCatalogItemWatched = { meta -> meta.id in watchedIds }
+        }
+
+        adapter.submitItems(items)
+        assertTrue(adapter.syncWatchedStateChanges().isEmpty())
+
+        // Mark movie_2 as watched with the exact same list reference
+        watchedIds.add("movie_2")
+        assertEquals(listOf(2), adapter.syncWatchedStateChanges())
+
+        // Subsequent submitItems/sync without further watched state changes is a no-op
+        adapter.submitItems(items)
+        assertTrue(adapter.syncWatchedStateChanges().isEmpty())
+
+        // Toggle movie_2 off and movie_0, movie_4 on
+        watchedIds.remove("movie_2")
+        watchedIds.add("movie_0")
+        watchedIds.add("movie_4")
+        assertEquals(listOf(0, 2, 4), adapter.syncWatchedStateChanges())
+    }
+
+    @Test
+    fun `modern row adapter prefetches next up continue watching items with blur transformation when enabled`() {
+        val (standardContext, _) = mockDeviceContext(totalRamBytes = 4L * 1024L * 1024L * 1024L)
+        val nextUpInfo = com.nuvio.tv.ui.screens.home.NextUpInfo(
+            contentId = "tt999",
+            contentType = "series",
+            name = "Show",
+            poster = "https://example.com/show_poster.jpg",
+            backdrop = "https://example.com/show_backdrop.jpg",
+            logo = null,
+            videoId = "tt999:1:2",
+            season = 1,
+            episode = 2,
+            episodeTitle = "Ep 2",
+            thumbnail = "https://example.com/ep2_thumb.jpg",
+            released = "2026-01-01",
+            hasAired = true,
+            airDateLabel = null,
+            lastWatched = 1000L,
+            sortTimestamp = 1000L
+        )
+        val cwItems = (0 until 10).map { idx ->
+            val url = "https://example.com/ep_${idx}_thumb.jpg"
+            ModernCarouselItem(
+                key = "cw_$idx",
+                title = "Show $idx",
+                subtitle = "S1 E$idx",
+                imageUrl = url,
+                heroPreview = HeroPreview(
+                    title = "Show $idx",
+                    logo = null,
+                    description = null,
+                    contentTypeText = "S1 E$idx",
+                    yearText = null,
+                    imdbText = null,
+                    genres = StableList(),
+                    poster = url,
+                    backdrop = url,
+                    imageUrl = url
+                ),
+                payload = ModernPayload.ContinueWatching(
+                    com.nuvio.tv.ui.screens.home.ContinueWatchingItem.NextUp(nextUpInfo.copy(contentId = "tt$idx"))
+                )
+            )
+        }
+
+        val imageLoader = mockk<ImageLoader>(relaxed = true)
+        val enqueuedRequests = mutableListOf<ImageRequest>()
+        every { imageLoader.memoryCache } returns null
+        every { imageLoader.enqueue(capture(enqueuedRequests)) } returns mockk(relaxed = true)
+
+        mockkObject(SingletonImageLoader)
+        try {
+            every { SingletonImageLoader.get(any()) } returns imageLoader
+
+            val adapter = createRowAdapter().apply {
+                blurUnwatchedEpisodes = true
+                submitItems(cwItems)
+                attachedRecyclerView = mockAttachedRecyclerView(standardContext, visibleCount = 4, firstIndex = 0)
+            }
+            adapter.onFocusedPositionChanged(standardContext, 0)
+
+            assertTrue(enqueuedRequests.isNotEmpty())
+            // All prefetched NextUp items must disable hardware bitmaps and include "_blur" suffix in memoryCacheKey
+            for (req in enqueuedRequests) {
+                assertEquals(false, req.extras[Extras.Key.allowHardware])
+                assertTrue("Expected _blur in memoryCacheKey, got ${req.memoryCacheKey}", req.memoryCacheKey?.endsWith("_blur") == true)
+            }
+        } finally {
+            unmockkObject(SingletonImageLoader)
+        }
+    }
 
     private fun createUniversalAdapter(): LeanbackUniversalAdapter = LeanbackUniversalAdapter(
         cardWidthPx = 240,

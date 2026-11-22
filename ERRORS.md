@@ -563,3 +563,88 @@
 - **Status**: Fixed
 
 ---
+
+## [2026-11-22 10:59] - Crash bản Release ngay khi mở app do R8 obfuscate `CachedInProgressItem` / `CachedNextUpItem`
+
+- **Type**: Runtime
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/data/local/ContinueWatchingEnrichmentCache.kt:47`, `app/proguard-rules.pro:43`
+- **Agent**: mon
+- **Root Cause**: `CachedInProgressItem` và `CachedNextUpItem` được serialize/deserialize bằng Gson nhưng không có `@Keep` và không có trong `proguard-rules.pro`. Mỗi lần build bản Release mới, R8 đổi tên field khiến Gson đọc file cache cũ ra `contentId = null` (qua Unsafe), làm `HomeViewModel.loadContinueWatching()` ném `NullPointerException: Parameter specified as non-null is null: parameter contentId` khi gọi `watchProgressRepository.isDroppedShow(it.contentId)`.
+- **Error Message**:
+  ```
+  java.lang.NullPointerException: Parameter specified as non-null is null: method ha.hg.u, parameter contentId
+      at ha.hg.u(SourceFile:3)
+      at mb.j4.invokeSuspend(SourceFile:959)
+  ```
+- **Fix Applied**: Thêm `@Keep` và `-keep` trong `proguard-rules.pro` cho `CachedNextUpItem`, `CachedInProgressItem`, `PendingProgressUpsert`, `PendingWatchedUpsert` và các model Gson Live TV; bổ sung bước lọc tự chữa lành (`sanitizeInProgressItem`/`sanitizeNextUpItem` tự xóa file cache obfuscated cũ) trong `ContinueWatchingEnrichmentCache.kt`; bọc `runCatching` trong `HomeViewModel.loadContinueWatching()`.
+- **Prevention**: Mọi data class lưu đĩa bằng Gson bắt buộc phải gắn `@Keep` (hoặc `@SerializedName`) và có lọc phòng thủ null-safety khi đọc cache từ đĩa.
+- **Status**: Fixed
+
+---
+
+## [2026-11-22 11:18] - Crash bản Release khi bấm vào mục Live TV do dữ liệu Gson cũ bị obfuscated bởi R8
+
+- **Type**: Runtime
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/features/livetv/LiveTvRepository.kt:911`, `LiveTvStorage.kt:128`, `LiveTvCacheManager.kt:92`, `LiveTvModels.kt`, `app/proguard-rules.pro`
+- **Agent**: mon
+- **Root Cause**: Các model Live TV (`LiveTvPlaylist`, `LiveTvChannel`, `LiveTvSettings`, `LiveTvStalkerSettings`, `LiveTvXtreamSettings`, `CatchupInfo`, `DrmInfo`, `LiveTvPlaylistType`) trước đây không có `@Keep`, nên dữ liệu đã lưu trong SharedPreferences & file `live_tv_channels_cache.json` ở bản Release cũ mang tên field obfuscated. Khi bản Release mới giữ tên field thật, Gson đọc JSON cũ qua Unsafe để các trường non-null (`id`, `source`, `type`, `streamUrl`, `portalUrl`, `guideSize`...) thành `null` → ném `NullPointerException` ngay khi vào Live TV.
+- **Fix Applied**: Gắn `@Keep` + bổ sung `-keep` trong `proguard-rules.pro` cho cả nested models (`CatchupInfo`, `DrmInfo`, `EpgAssignment`, `LiveTvPlaylistType`); thêm lọc phòng thủ qua `Any?` trong `decodePlaylists()` (tự rơi về `legacyUrl`), `LiveTvStorage` (sanitize 3 settings), và `LiveTvCacheManager.loadChannels()` (tự xóa file cache kênh cũ hỏng để tự nạp lại).
+- **Prevention**: Khi thêm `-keep` cho bất kỳ model Gson nào đã từng chạy ở Release không có `-keep`, BẮT BUỘC phải kèm lớp sanitize kiểm tra null qua `Any?` ở chỗ đọc từ đĩa/SharedPreferences để không làm văng app của người dùng nâng cấp đè từ bản cũ.
+- **Status**: Fixed
+
+---
+
+
+## [2026-11-22 12:01] - Thiếu import extension `requestFocusAfterFrames` trong `FolderDetailScreen.kt`
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailScreen.kt:290`
+- **Agent**: mon
+- **Root Cause**: Gọi extension `FocusRequester.requestFocusAfterFrames()` trong `FolderDetailScreen.kt` mà chưa import `com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames`.
+- **Error Message**: 
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailScreen.kt:290:54 Unresolved reference 'requestFocusAfterFrames'.
+  ```
+- **Fix Applied**: Thay bằng `repeat(2) { androidx.compose.runtime.withFrameNanos { } }` kèm `runCatching { tabFocusRequesters.getOrNull(targetIdx)?.requestFocus() }` trực tiếp không cần phụ thuộc package `detail`.
+- **Prevention**: Kiểm tra danh sách imports đầu file trước khi sử dụng extension hàm nội bộ từ package khác.
+- **Status**: Fixed
+
+---
+
+## [2026-11-22 12:02] - Thiếu tham số `sortTimestamp` trong constructor `NextUpInfo` ở `LeanbackCoreOptimizationTest.kt`
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt:870`
+- **Agent**: mon
+- **Root Cause**: Khởi tạo `NextUpInfo` trong unit test mới mà chưa truyền tham số bắt buộc `sortTimestamp: Long`.
+- **Error Message**: 
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt:870:13 No value passed for parameter 'sortTimestamp'.
+  ```
+- **Fix Applied**: Thêm `sortTimestamp = 1000L` vào constructor `NextUpInfo` trong test.
+- **Prevention**: Kiểm tra định nghĩa data class khi viết mock/fixture dữ liệu mới trong unit test.
+- **Status**: Fixed
+
+---
+
+## [2026-11-22 12:04] - `registerAdapterDataObserver` không nhận callback trên JVM Unit Test do `android.database.Observable` stub
+
+- **Type**: Process
+- **Severity**: Low
+- **File**: `app/src/test/java/com/nuvio/tv/ui/leanback/LeanbackCoreOptimizationTest.kt:844`
+- **Agent**: mon
+- **Root Cause**: Trên môi trường pure JVM Unit Test (`returnDefaultValues = true`, không dùng Robolectric), `android.database.Observable.registerObserver()` trong `android.jar` là stub rỗng nên không lưu observer vào `mObservers`.
+- **Error Message**: 
+  ```
+  LeanbackCoreOptimizationTest > modern row adapter detects watched state changes in place even when item list reference is unchanged FAILED
+      java.lang.AssertionError at LeanbackCoreOptimizationTest.kt:844
+  ```
+- **Fix Applied**: Cho `LeanbackRowAdapter.syncWatchedStateChanges()` trả về `List<Int>` các vị trí vừa thay đổi trạng thái watched và kiểm chứng trực tiếp kết quả trả về trong unit test.
+- **Prevention**: Không dùng `RecyclerView.Adapter.registerAdapterDataObserver` trong pure JVM test không có Robolectric; trả về danh sách thay đổi hoặc verify trực tiếp trên method/ViewHolder.
+- **Status**: Fixed
+
+---

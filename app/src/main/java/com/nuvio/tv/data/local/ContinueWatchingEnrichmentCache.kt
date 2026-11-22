@@ -2,6 +2,7 @@ package com.nuvio.tv.data.local
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.Keep
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nuvio.tv.core.profile.ProfileManager
@@ -14,6 +15,7 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Keep
 data class CachedNextUpItem(
     val contentId: String,
     val contentType: String,
@@ -44,6 +46,7 @@ data class CachedNextUpItem(
     val ratingVisible: Boolean = true
 )
 
+@Keep
 data class CachedInProgressItem(
     val contentId: String,
     val contentType: String,
@@ -107,8 +110,16 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
             try {
                 val file = nextUpFile()
                 if (!file.exists()) return@withContext emptyList()
-                gson.fromJson(file.readText(), object : TypeToken<List<CachedNextUpItem>>() {}.type)
-                    ?: emptyList()
+                val raw: List<CachedNextUpItem> = gson.fromJson(
+                    file.readText(),
+                    object : TypeToken<List<CachedNextUpItem>>() {}.type
+                ) ?: return@withContext emptyList()
+                val sanitized = raw.mapNotNull(::sanitizeNextUpItem)
+                if (raw.isNotEmpty() && sanitized.isEmpty()) {
+                    Log.w(TAG, "Deleting incompatible/corrupt next-up cache (${raw.size} invalid entries)")
+                    file.delete()
+                }
+                sanitized
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to read next-up cache: ${e.message}")
                 emptyList()
@@ -153,8 +164,16 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
             try {
                 val file = inProgressFile()
                 if (!file.exists()) return@withContext emptyList()
-                gson.fromJson(file.readText(), object : TypeToken<List<CachedInProgressItem>>() {}.type)
-                    ?: emptyList()
+                val raw: List<CachedInProgressItem> = gson.fromJson(
+                    file.readText(),
+                    object : TypeToken<List<CachedInProgressItem>>() {}.type
+                ) ?: return@withContext emptyList()
+                val sanitized = raw.mapNotNull(::sanitizeInProgressItem)
+                if (raw.isNotEmpty() && sanitized.isEmpty()) {
+                    Log.w(TAG, "Deleting incompatible/corrupt in-progress cache (${raw.size} invalid entries)")
+                    file.delete()
+                }
+                sanitized
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to read in-progress cache: ${e.message}")
                 emptyList()
@@ -239,6 +258,33 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
         }
         _cacheCleared.value++
     }
+
+    private fun sanitizeNextUpItem(item: CachedNextUpItem?): CachedNextUpItem? {
+        if (item == null) return null
+        if (!isValidNonBlankString(item.contentId) ||
+            !isValidNonBlankString(item.contentType) ||
+            !isValidNonBlankString(item.name) ||
+            !isValidNonBlankString(item.videoId)
+        ) {
+            return null
+        }
+        return if ((item.genres as Any?) == null) item.copy(genres = emptyList()) else item
+    }
+
+    private fun sanitizeInProgressItem(item: CachedInProgressItem?): CachedInProgressItem? {
+        if (item == null) return null
+        if (!isValidNonBlankString(item.contentId) ||
+            !isValidNonBlankString(item.contentType) ||
+            !isValidNonBlankString(item.name) ||
+            !isValidNonBlankString(item.videoId)
+        ) {
+            return null
+        }
+        return if ((item.genres as Any?) == null) item.copy(genres = emptyList()) else item
+    }
+
+    private fun isValidNonBlankString(value: Any?): Boolean =
+        value is String && value.isNotBlank()
 
     private fun atomicWrite(target: File, content: String) {
         val tmp = File(target.parentFile, "${target.name}.tmp")

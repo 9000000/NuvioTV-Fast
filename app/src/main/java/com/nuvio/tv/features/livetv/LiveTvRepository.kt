@@ -917,9 +917,16 @@ internal fun decodePlaylists(blob: String): List<LiveTvPlaylist> {
         }.getOrNull()
         if (parsed != null) {
             return parsed.mapNotNull { playlist ->
-                if (playlist.id.isBlank() || playlist.source.isBlank()) return@mapNotNull null
-                val safeName = playlist.name.takeIf(String::isNotBlank) ?: "M3U playlist"
-                if (safeName == playlist.name) playlist else playlist.copy(name = safeName)
+                // Guard against legacy R8-obfuscated JSON where Gson leaves non-null fields null via Unsafe
+                val safeId = (playlist?.id as Any?) as? String
+                val safeSource = (playlist?.source as Any?) as? String
+                val safeType = (playlist?.type as Any?) as? LiveTvPlaylistType
+                if (safeId.isNullOrBlank() || safeSource.isNullOrBlank() || safeType == null) {
+                    return@mapNotNull null
+                }
+                val rawName = (playlist.name as Any?) as? String
+                val safeName = rawName?.takeIf(String::isNotBlank) ?: "M3U playlist"
+                if (safeName == rawName) playlist else playlist.copy(name = safeName)
             }
         }
     }

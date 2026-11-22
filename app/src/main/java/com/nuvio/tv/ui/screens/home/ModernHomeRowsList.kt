@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
+import com.nuvio.tv.ui.leanback.core.rememberLeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
 
 import com.nuvio.tv.domain.model.catalogRowLegacyKey
@@ -502,6 +503,7 @@ internal fun ModernHomeRowsList(
 ) {
     // Unwrap StableRef wrappers for internal use (not passed to child composables)
     val animationsEnabled = NuvioTheme.animationsEnabled
+    val themeStyle = rememberLeanbackThemeStyle(borderWidthDp = 2.0f)
     val isSidebarExpanded = LocalSidebarExpanded.current
     val isSidebarExpandedState = rememberUpdatedState(isSidebarExpanded)
     val focusedItemByRowMap = focusedItemByRow.value
@@ -756,7 +758,9 @@ internal fun ModernHomeRowsList(
                         val item = items[itemIdx]
                         val url = (item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop)?.trim()
                         if (url.isNullOrEmpty() || url.isPlaceholder()) continue
-                        val dedupKey = "${url}|${wPx}x${hPx}"
+                        val cwPayload = item.payload as? ModernPayload.ContinueWatching
+                        val shouldBlur = blurUnwatchedEpisodes && cwPayload?.item is ContinueWatchingItem.NextUp
+                        val dedupKey = if (shouldBlur) "${url}|${wPx}x${hPx}|blur" else "${url}|${wPx}x${hPx}"
                         if (!prefetchedVerticalItems.tryMarkPrefetchedBounded(dedupKey)) continue
                         LeanbackArtworkLoader.prefetch(
                             context = context,
@@ -764,7 +768,8 @@ internal fun ModernHomeRowsList(
                             imageUrl = url,
                             fallbackUrl = item.metaPreview?.rawPosterUrl,
                             widthPx = wPx,
-                            heightPx = hPx
+                            heightPx = hPx,
+                            blurred = shouldBlur
                         )
                     }
                 }
@@ -1002,6 +1007,14 @@ internal fun ModernHomeRowsList(
         }
     }
 
+    fun refreshAllVisibleRowImages(excludeGrid: androidx.leanback.widget.HorizontalGridView? = null) {
+        rowGrids.values.forEach { grid ->
+            if (grid !== excludeGrid && grid.isAttachedToWindow) {
+                triggerLandingRowImageRefresh(grid)
+            }
+        }
+    }
+
     fun handoffOverlayToGrid(
         rowKey: String,
         targetCardIndex: Int,
@@ -1088,7 +1101,16 @@ internal fun ModernHomeRowsList(
             scrollJob?.isActive == true ||
             overlayHost?.ringView?.visibility == View.VISIBLE ||
             overlayHost?.hasFocus() == true
-        if (!overlayActive) return
+        val wasHoldScrolling = LeanbackArtworkLoader.isHoldScrolling
+        if (wasHoldScrolling) {
+            LeanbackArtworkLoader.isHoldScrolling = false
+        }
+        if (!overlayActive) {
+            if (wasHoldScrolling) {
+                refreshAllVisibleRowImages()
+            }
+            return
+        }
 
         overlayGenerationRef.incrementAndGet()
         verticalHoldDirectionRef.set(0)
@@ -1096,8 +1118,10 @@ internal fun ModernHomeRowsList(
         verticalHoldTimeoutRef.getAndSet(null)?.cancel()
         scrollJob?.cancel()
         isVerticalGlideRef.set(false)
+        LeanbackArtworkLoader.isHoldScrolling = false
         latestOnFastScrollingChanged.value(false)
         overlayHost?.deactivateGlideFocusAndHideRing()
+        refreshAllVisibleRowImages()
         // Hand focus back cleanly without snapping selectedPosition backward over a pending horizontal move
         val key = effectiveActiveRowKey()
         val grid = key?.let { rowGrids[it] as? ModernInteropHorizontalGridView }
@@ -1155,6 +1179,7 @@ internal fun ModernHomeRowsList(
             overlayGenerationRef.incrementAndGet()
             isVerticalGlideRef.set(false)
             verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+            refreshAllVisibleRowImages()
             return
         }
         val lastNonEmptyIdx = findLastNonEmptyRowIndex(rows).coerceAtLeast(0)
@@ -1187,6 +1212,7 @@ internal fun ModernHomeRowsList(
             overlayGenerationRef.incrementAndGet()
             isVerticalGlideRef.set(false)
             verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
+            refreshAllVisibleRowImages()
             return
         }
 
@@ -1210,6 +1236,7 @@ internal fun ModernHomeRowsList(
         val landingAnchorX = resolveAnchoredLeftPx(landingW)
         val landingGrid = rowGrids[landingRow.key]
         triggerLandingRowImageRefresh(landingGrid)
+        refreshAllVisibleRowImages(excludeGrid = landingGrid)
         val landingColor = resolveRowTargetGlowColor(
             grid = landingGrid,
             cardIndex = targetCardIndex,
@@ -2088,7 +2115,9 @@ internal fun ModernHomeRowsList(
                     isPendingFocus = localPendingFocusRowKey == row.key,
                     pendingFocusIndex = localPendingFocusIndex,
                     pendingFocusNonce = localPendingFocusNonce,
-                    onClearPendingFocus = stableClearPendingFocus
+                    onClearPendingFocus = stableClearPendingFocus,
+                    isCatalogItemWatched = isCatalogItemWatched,
+                    blurUnwatchedEpisodes = blurUnwatchedEpisodes
                 )
             }
         }
@@ -2101,6 +2130,8 @@ internal fun ModernHomeRowsList(
                 factory = { ctx ->
                     VerticalRingOverlayHost(ctx).also { host ->
                         host.preMeasureCardSize(catalogCardWidthPx, catalogCardHeightPx)
+                        host.ringView.isGlowEnabled = animationsEnabled
+                        host.ringView.themeStyle = themeStyle
                         host.isGlideHolding = { verticalHoldDirectionRef.get() != 0 }
                         host.onVerticalRepeat = { sign -> latestOnVerticalHoldScroll.value(sign) }
                         host.onVerticalRelease = { latestOnVerticalHoldRelease.value() }
@@ -2111,6 +2142,8 @@ internal fun ModernHomeRowsList(
                 },
                 update = { host ->
                     verticalOverlayHostRef.set(host)
+                    host.ringView.isGlowEnabled = animationsEnabled
+                    host.ringView.themeStyle = themeStyle
                     host.preMeasureCardSize(catalogCardWidthPx, catalogCardHeightPx)
                 }
             )
