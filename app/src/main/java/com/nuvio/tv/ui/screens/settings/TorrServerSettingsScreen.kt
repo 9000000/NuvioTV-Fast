@@ -226,11 +226,12 @@ fun TorrServerSettingsContent(
     if (showServerUrlDialog) {
         TorrServerTextInputDialog(
             title = stringResource(R.string.torrserver_server_url_title),
-            subtitle = "Nhập địa chỉ máy chủ TorrServer (vd: http://192.168.1.100:8090 hoặc http://127.0.0.1:8090)",
+            subtitle = "Nhập địa chỉ máy chủ TorrServer (vd: 192.168.1.100:8090 hoặc http://127.0.0.1:8090 - tự động thêm http:// nếu thiếu)",
             initialValue = uiState.serverUrl,
             placeholder = "http://192.168.1.100:8090",
             onSave = { url ->
-                viewModel.onEvent(TorrServerSettingsEvent.UpdateServerUrl(url))
+                val normalized = com.nuvio.tv.core.torrent.TorrServerRemoteApi.normalizeServerUrl(url)
+                viewModel.onEvent(TorrServerSettingsEvent.UpdateServerUrl(normalized))
                 showServerUrlDialog = false
             },
             onDismiss = { showServerUrlDialog = false }

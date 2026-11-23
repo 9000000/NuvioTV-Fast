@@ -90,6 +90,22 @@ class TorrServerRemoteApi @Inject constructor(
     companion object {
         private const val TAG = "TorrServerRemoteApi"
         private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * Normalizes a TorrServer URL by trimming whitespace, trailing slashes,
+         * and automatically prepending "http://" if no scheme (http:// or https://) is specified.
+         */
+        fun normalizeServerUrl(rawUrl: String?): String {
+            val trimmed = rawUrl?.trim()?.trimEnd('/').orEmpty()
+            if (trimmed.isEmpty()) return ""
+            return if (!trimmed.startsWith("http://", ignoreCase = true) &&
+                !trimmed.startsWith("https://", ignoreCase = true)
+            ) {
+                "http://$trimmed"
+            } else {
+                trimmed
+            }
+        }
     }
 
     private val client = OkHttpClient.Builder()
@@ -109,7 +125,8 @@ class TorrServerRemoteApi @Inject constructor(
 
     suspend fun newStreamCall(streamUrl: String): okhttp3.Call = withContext(Dispatchers.IO) {
         val config = addonConfig.config.first()
-        val requestBuilder = Request.Builder().url(streamUrl).get()
+        val normalized = normalizeServerUrl(streamUrl)
+        val requestBuilder = Request.Builder().url(normalized).get()
         addAuthHeader(requestBuilder, config.authUsername, config.authPassword)
         client.newCall(requestBuilder.build())
     }
@@ -120,7 +137,7 @@ class TorrServerRemoteApi @Inject constructor(
         password: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         val config = addonConfig.config.first()
-        val targetUrl = (serverUrl ?: config.serverUrl).trim().trimEnd('/')
+        val targetUrl = normalizeServerUrl(serverUrl ?: config.serverUrl)
         val targetUser = username ?: config.authUsername
         val targetPass = password ?: config.authPassword
 
@@ -128,12 +145,12 @@ class TorrServerRemoteApi @Inject constructor(
             return@withContext Result.failure(IllegalArgumentException("Server URL is empty"))
         }
 
-        val requestBuilder = Request.Builder()
-            .url("$targetUrl/echo")
-            .get()
-        addAuthHeader(requestBuilder, targetUser, targetPass)
-
         try {
+            val requestBuilder = Request.Builder()
+                .url("$targetUrl/echo")
+                .get()
+            addAuthHeader(requestBuilder, targetUser, targetPass)
+
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (response.isSuccessful) {
                     val version = response.body?.string()?.trim()?.ifEmpty { "Connected" } ?: "Connected"
@@ -156,7 +173,7 @@ class TorrServerRemoteApi @Inject constructor(
         saveToDbOverride: Boolean? = null
     ): String? = withContext(Dispatchers.IO) {
         val config = addonConfig.config.first()
-        val serverUrl = (serverUrlOverride ?: config.serverUrl).trim().trimEnd('/')
+        val serverUrl = normalizeServerUrl(serverUrlOverride ?: config.serverUrl)
         if (serverUrl.isBlank()) return@withContext null
         val saveToDb = saveToDbOverride ?: config.saveToDb
 
@@ -172,12 +189,12 @@ class TorrServerRemoteApi @Inject constructor(
             }
         }
 
-        val requestBuilder = Request.Builder()
-            .url("$serverUrl/torrents")
-            .post(body.toString().toRequestBody(JSON_TYPE))
-        addAuthHeader(requestBuilder, config.authUsername, config.authPassword)
-
         try {
+            val requestBuilder = Request.Builder()
+                .url("$serverUrl/torrents")
+                .post(body.toString().toRequestBody(JSON_TYPE))
+            addAuthHeader(requestBuilder, config.authUsername, config.authPassword)
+
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     Log.e(TAG, "addTorrent failed HTTP ${response.code}")
@@ -199,7 +216,7 @@ class TorrServerRemoteApi @Inject constructor(
         serverUrlOverride: String? = null
     ): TorrServerRemoteStatus? = withContext(Dispatchers.IO) {
         val config = addonConfig.config.first()
-        val serverUrl = (serverUrlOverride ?: config.serverUrl).trim().trimEnd('/')
+        val serverUrl = normalizeServerUrl(serverUrlOverride ?: config.serverUrl)
         if (serverUrl.isBlank() || hash.isBlank()) return@withContext null
 
         val body = JSONObject().apply {
@@ -207,12 +224,12 @@ class TorrServerRemoteApi @Inject constructor(
             put("hash", hash)
         }
 
-        val requestBuilder = Request.Builder()
-            .url("$serverUrl/torrents")
-            .post(body.toString().toRequestBody(JSON_TYPE))
-        addAuthHeader(requestBuilder, config.authUsername, config.authPassword)
-
         try {
+            val requestBuilder = Request.Builder()
+                .url("$serverUrl/torrents")
+                .post(body.toString().toRequestBody(JSON_TYPE))
+            addAuthHeader(requestBuilder, config.authUsername, config.authPassword)
+
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
                 val rawBody = response.body?.string()
@@ -264,7 +281,7 @@ class TorrServerRemoteApi @Inject constructor(
             // Keep torrent saved on server if saveToDb is enabled
             return@withContext
         }
-        val serverUrl = (serverUrlOverride ?: config.serverUrl).trim().trimEnd('/')
+        val serverUrl = normalizeServerUrl(serverUrlOverride ?: config.serverUrl)
         if (serverUrl.isBlank() || hash.isBlank()) return@withContext
 
         val body = JSONObject().apply {
@@ -272,12 +289,12 @@ class TorrServerRemoteApi @Inject constructor(
             put("hash", hash)
         }
 
-        val requestBuilder = Request.Builder()
-            .url("$serverUrl/torrents")
-            .post(body.toString().toRequestBody(JSON_TYPE))
-        addAuthHeader(requestBuilder, config.authUsername, config.authPassword)
-
         try {
+            val requestBuilder = Request.Builder()
+                .url("$serverUrl/torrents")
+                .post(body.toString().toRequestBody(JSON_TYPE))
+            addAuthHeader(requestBuilder, config.authUsername, config.authPassword)
+
             client.newCall(requestBuilder.build()).execute().close()
         } catch (e: Exception) {
             Log.w(TAG, "dropTorrent exception: ${e.message}")
@@ -293,7 +310,7 @@ class TorrServerRemoteApi @Inject constructor(
         gst: Boolean = false,
         hash: String? = null
     ): String {
-        val base = serverUrl.trim().trimEnd('/')
+        val base = normalizeServerUrl(serverUrl)
         if (gst && !hash.isNullOrBlank()) {
             return "$base/gst/$hash/master.m3u8?index=$fileIdx"
         }
@@ -311,12 +328,12 @@ class TorrServerRemoteApi @Inject constructor(
     }
 
     fun buildDirectStreamUrl(serverUrl: String, hash: String, fileIdx: Int): String {
-        val base = serverUrl.trim().trimEnd('/')
+        val base = normalizeServerUrl(serverUrl)
         return "$base/play/$hash/$fileIdx"
     }
 
     fun buildGstStreamUrl(serverUrl: String, hash: String, fileIdx: Int): String {
-        val base = serverUrl.trim().trimEnd('/')
+        val base = normalizeServerUrl(serverUrl)
         return "$base/gst/$hash/master.m3u8?index=$fileIdx"
     }
 
@@ -326,7 +343,7 @@ class TorrServerRemoteApi @Inject constructor(
         password: String? = null
     ): Result<Boolean> = withContext(Dispatchers.IO) {
         val config = addonConfig.config.first()
-        val targetUrl = (serverUrl ?: config.serverUrl).trim().trimEnd('/')
+        val targetUrl = normalizeServerUrl(serverUrl ?: config.serverUrl)
         val targetUser = username ?: config.authUsername
         val targetPass = password ?: config.authPassword
 
@@ -334,12 +351,12 @@ class TorrServerRemoteApi @Inject constructor(
             return@withContext Result.failure(IllegalArgumentException("Server URL is empty"))
         }
 
-        val requestBuilder = Request.Builder()
-            .url("$targetUrl/gst/settings")
-            .get()
-        addAuthHeader(requestBuilder, targetUser, targetPass)
-
         try {
+            val requestBuilder = Request.Builder()
+                .url("$targetUrl/gst/settings")
+                .get()
+            addAuthHeader(requestBuilder, targetUser, targetPass)
+
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (response.isSuccessful) {
                     val body = response.body?.string().orEmpty()

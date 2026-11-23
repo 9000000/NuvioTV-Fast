@@ -96,8 +96,9 @@ class TorrServerSettingsViewModel @Inject constructor(
                 torrentSettings.setHideTorrentStats(event.enabled)
             }
             is TorrServerSettingsEvent.UpdateServerUrl -> {
-                addonConfig.setServerUrl(event.url)
-                _uiState.update { it.copy(serverStatusMessage = null, serverStatusSuccess = null) }
+                val normalized = TorrServerRemoteApi.normalizeServerUrl(event.url)
+                addonConfig.setServerUrl(normalized)
+                _uiState.update { it.copy(serverUrl = normalized, serverStatusMessage = null, serverStatusSuccess = null) }
             }
             is TorrServerSettingsEvent.UpdateCredentials -> {
                 addonConfig.setCredentials(event.user, event.pass)
@@ -126,8 +127,13 @@ class TorrServerSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isCheckingGst = true, gstStatusMessage = null, gstStatusSuccess = null) }
             val current = _uiState.value
+            val normalizedUrl = TorrServerRemoteApi.normalizeServerUrl(current.serverUrl)
+            if (normalizedUrl != current.serverUrl && normalizedUrl.isNotBlank()) {
+                addonConfig.setServerUrl(normalizedUrl)
+                _uiState.update { it.copy(serverUrl = normalizedUrl) }
+            }
             val result = remoteApi.checkGStreamerSupport(
-                serverUrl = current.serverUrl,
+                serverUrl = normalizedUrl,
                 username = current.authUsername,
                 password = current.authPassword
             )
@@ -158,8 +164,13 @@ class TorrServerSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isTestingServer = true, serverStatusMessage = null, serverStatusSuccess = null) }
             val current = _uiState.value
+            val normalizedUrl = TorrServerRemoteApi.normalizeServerUrl(current.serverUrl)
+            if (normalizedUrl != current.serverUrl && normalizedUrl.isNotBlank()) {
+                addonConfig.setServerUrl(normalizedUrl)
+                _uiState.update { it.copy(serverUrl = normalizedUrl) }
+            }
             val result = remoteApi.healthCheck(
-                serverUrl = current.serverUrl,
+                serverUrl = normalizedUrl,
                 username = current.authUsername,
                 password = current.authPassword
             )
@@ -177,7 +188,7 @@ class TorrServerSettingsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isTestingServer = false,
-                            serverStatusMessage = error.message ?: "Unknown error",
+                            serverStatusMessage = error.message ?: "Không thể kết nối tới máy chủ",
                             serverStatusSuccess = false
                         )
                     }

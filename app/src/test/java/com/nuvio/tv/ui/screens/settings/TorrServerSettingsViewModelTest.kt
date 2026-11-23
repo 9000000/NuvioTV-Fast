@@ -83,6 +83,18 @@ class TorrServerSettingsViewModelTest {
     }
 
     @Test
+    fun updatesServerUrlWithoutSchemeAutomaticallyPrependsHttp() = runTest {
+        val viewModel = createViewModel()
+        runCurrent()
+
+        viewModel.onEvent(TorrServerSettingsEvent.UpdateServerUrl("192.168.1.100:8090"))
+        runCurrent()
+
+        verify { addonConfig.setServerUrl("http://192.168.1.100:8090") }
+        assertEquals("http://192.168.1.100:8090", viewModel.uiState.value.serverUrl)
+    }
+
+    @Test
     fun updatesCredentials() = runTest {
         val viewModel = createViewModel()
         runCurrent()

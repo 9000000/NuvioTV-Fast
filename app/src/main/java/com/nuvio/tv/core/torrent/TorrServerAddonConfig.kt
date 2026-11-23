@@ -61,7 +61,7 @@ class TorrServerAddonConfig @Inject constructor(
             TorrServerAddonConfigData(
                 enabled = prefs[Keys.ENABLED] ?: false,
                 useEmbeddedServer = prefs[Keys.USE_EMBEDDED_SERVER] ?: true,
-                serverUrl = prefs[Keys.SERVER_URL] ?: "http://127.0.0.1:8090",
+                serverUrl = TorrServerRemoteApi.normalizeServerUrl(prefs[Keys.SERVER_URL] ?: "http://127.0.0.1:8090"),
                 addonUrl = prefs[Keys.ADDON_URL] ?: "",
                 authUsername = prefs[Keys.AUTH_USERNAME] ?: "",
                 authPassword = prefs[Keys.AUTH_PASSWORD] ?: "",
@@ -86,7 +86,7 @@ class TorrServerAddonConfig @Inject constructor(
 
     fun setServerUrl(url: String) {
         scope.launch {
-            val normalized = url.trim().trimEnd('/')
+            val normalized = TorrServerRemoteApi.normalizeServerUrl(url)
             context.torrServerAddonDataStore.edit { it[Keys.SERVER_URL] = normalized }
         }
     }
@@ -129,7 +129,7 @@ class TorrServerAddonConfig @Inject constructor(
         context.torrServerAddonDataStore.edit {
             it[Keys.ENABLED] = config.enabled
             it[Keys.USE_EMBEDDED_SERVER] = config.useEmbeddedServer
-            it[Keys.SERVER_URL] = config.serverUrl.trim().trimEnd('/')
+            it[Keys.SERVER_URL] = TorrServerRemoteApi.normalizeServerUrl(config.serverUrl)
             it[Keys.ADDON_URL] = config.addonUrl.trim()
             it[Keys.AUTH_USERNAME] = config.authUsername.trim()
             it[Keys.AUTH_PASSWORD] = config.authPassword

@@ -701,3 +701,26 @@
 - **Status**: Fixed
 
 ---
+
+## [2026-11-23 13:38] - Văng app khi nhập địa chỉ máy chủ TorrServer không có http:// hoặc https://
+
+- **Type**: Runtime
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/core/torrent/TorrServerRemoteApi.kt:132`
+- **Agent**: mon
+- **Root Cause**: Phương thức `Request.Builder().url("$targetUrl/echo")` trong `TorrServerRemoteApi.healthCheck` được gọi bên ngoài khối `try-catch`. Khi người dùng chỉ nhập IP hoặc host (ví dụ: `192.168.1.100:8090` hoặc `localhost:8090`) mà thiếu scheme (`http://` hoặc `https://`), OkHttp ném ra `java.lang.IllegalArgumentException: unexpected url`. Ngoại lệ không được bắt, văng thẳng lên `viewModelScope.launch` trong `TorrServerSettingsViewModel.testServerConnection()` khiến ứng dụng bị crash (văng).
+- **Error Message**: 
+  ```
+  java.lang.IllegalArgumentException: unexpected url: 192.168.1.100:8090/echo
+      at okhttp3.Request$Builder.url(Request.kt:176)
+      at com.nuvio.tv.core.torrent.TorrServerRemoteApi.healthCheck(TorrServerRemoteApi.kt:132)
+  ```
+- **Fix Applied**: 
+  1. Thêm phương thức `TorrServerRemoteApi.normalizeServerUrl(rawUrl)` tự động cắt tỉa khoảng trắng, dấu `/` cuối và tự động gắn tiền tố `http://` nếu người dùng chưa nhập scheme (`http://` hoặc `https://`).
+  2. Áp dụng chuẩn hóa URL tự động ở tất cả các tầng: UI Dialog (`TorrServerTextInputDialog`), ViewModel (`TorrServerSettingsViewModel`), DataStore Config (`TorrServerAddonConfig`), và API client (`TorrServerRemoteApi`).
+  3. Đưa toàn bộ tiến trình tạo `Request.Builder().url(...)` vào bên trong khối `try-catch` trong mọi phương thức (`healthCheck`, `checkGStreamerSupport`, `addTorrent`, `getTorrentDetails`, `dropTorrent`), đảm bảo mọi lỗi định dạng URL hoặc lỗi kết nối đều được bắt an toàn và trả về `Result.failure` thay vì crash app.
+  4. Bổ sung bộ Unit Test đầy đủ trong `TorrServerRemoteApiUrlNormalizationTest` và `TorrServerSettingsViewModelTest`.
+- **Prevention**: Luôn chuẩn hóa URL đầu vào do người dùng nhập trước khi truyền cho HTTP client và đặt lệnh khởi tạo URL của OkHttp bên trong khối `try-catch`.
+- **Status**: Fixed
+
+---
