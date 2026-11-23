@@ -1,5 +1,22 @@
 # Error Log
 
+## [2026-11-23 18:25] - UI Player Bị Giật Lag Và Phụ Đề Bị Chậm Đi Nhiều Giây Do AutoSync V2 Bật Mặc Định Và Vòng Lặp applySubtitleStyle Trên PlayerView
+
+- **Type**: Logic
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/player/autosync/AutoSyncPreferences.kt:27`, `app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerScreen.kt:2686`, `app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerObservers.kt:1440`
+- **Agent**: mon
+- **Root Cause**: (1) Tính năng AutoSync V2 sau khi merge từ dev được đặt mặc định bật (`_enabled = true`, `_aggressiveMode = true`). Khi bắt đầu phát hoặc chọn phụ đề, AutoSync chạy job nặng ngầm quét HTTP byte-range request và tự ý re-time timeline phụ đề sai lệch hàng chục giây. (2) `PlayerScreen.kt` gọi `applySubtitleStyleIfNeeded` trong `LaunchedEffect` theo dõi `subtitleLiftPx`. Khi controls bar hiện/ẩn hoặc animate, `subtitleLiftPx` thay đổi 60 lần/giây, kích hoạt `applyAssFontScaleCompat` và `invalidateSubtitles()` ở mỗi frame; hơn nữa khi `subView == null` (Libass hoặc chưa có track view), `setTag` không được gọi khiến mỗi lần recompose tiếp theo đều bị lặp lại vô tận. (3) `PlayerRuntimeControllerObservers.kt` lắng nghe `playerSettings` mà không lọc `distinctUntilChanged()`, khiến `_uiState.ttsConfig` cập nhật thừa.
+- **Error Message**:
+  ```
+  User report: Quá trình xử lý có nặng không tôi thấy giao diện player bị chậm và lag, phụ đề cũng bị chậm đi rất nhiều, bật hay tắt Thuyết minh âm thanh vòm đều bị, tắt cả thuyết minh cũng bị, nhưng phim vẫn chạy mượt.
+  ```
+- **Fix Applied**: (1) Chuyển mặc định `AutoSyncPreferences.enabled` và `aggressiveMode` từ `true` sang `false` để giữ nguyên timeline gốc và không tốn CPU quét ngầm. (2) Tách `targetAssScale` vào tag riêng `player_view_libass_font_scale_tag`, chỉ gọi `applyAssFontScaleCompat` và `invalidateSubtitles()` khi scale thực sự thay đổi; luôn lưu `setTag(R.id.player_view_subtitle_style_tag, config)` ngay cả khi `subView == null`. (3) Thêm `.map { it.toSubtitleTtsConfig() }.distinctUntilChanged()` trong `observeSubtitleTts`. Sửa assert sai `OUTLINE_WIDTH_DEFAULT` trong `StyledSubtitlePresenterTest`.
+- **Prevention**: Luôn cache cấu hình font scale riêng biệt khỏi offset layout hoạt họa; không bao giờ bỏ qua việc lưu cache state tag khi view con tạm thời null; tắt mặc định các tính năng thử nghiệm re-time timeline tự động trên Android TV.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-21 09:02] - Đọc Trễ Câu Tiếp Theo Khi Bật "Chờ Đọc Xong Câu" (`waitForCueCompletion`) Trên Google TTS Offline
 
 - **Type**: Logic

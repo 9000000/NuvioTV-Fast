@@ -2686,19 +2686,23 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
     if (!force && getTag(R.id.player_view_subtitle_style_tag) == config) {
         return
     }
-    (player as? ExoPlayer)?.getAssHandlerCompat()?.applyAssFontScaleCompat(
-        (subtitleStyle.size / 100f).coerceIn(0.5f, 3.0f)
-    )
-    findViewById<android.widget.FrameLayout>(R.id.libass_overlay_container_gl)
-        ?.findAssOverlayChild()
-        ?.invalidateSubtitles()
+
+    val targetAssScale = (subtitleStyle.size / 100f).coerceIn(0.5f, 3.0f)
+    val lastAssScale = getTag(R.id.player_view_libass_font_scale_tag) as? Float
+    if (force || lastAssScale != targetAssScale) {
+        setTag(R.id.player_view_libass_font_scale_tag, targetAssScale)
+        (player as? ExoPlayer)?.getAssHandlerCompat()?.applyAssFontScaleCompat(targetAssScale)
+        findViewById<android.widget.FrameLayout>(R.id.libass_overlay_container_gl)
+            ?.findAssOverlayChild()
+            ?.invalidateSubtitles()
+    }
+
+    setTag(R.id.player_view_subtitle_style_tag, config)
+
     val subView = subtitleView
     if (subView == null) {
-        // SubtitleView not yet available (no track selected yet). Don't set the
-        // tag so that when subtitles become active the style is re-applied.
         return
     }
-    setTag(R.id.player_view_subtitle_style_tag, config)
     subView.apply {
         val scaledFontSize = SUBTITLE_BASE_TEXT_SP * (subtitleStyle.size / 100f)
         setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, scaledFontSize)

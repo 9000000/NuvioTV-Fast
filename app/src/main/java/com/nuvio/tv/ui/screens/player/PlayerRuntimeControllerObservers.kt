@@ -1437,10 +1437,12 @@ internal fun PlayerRuntimeController.observeDeviceLocalReleaseDecoderOnBackgroun
 
 internal fun PlayerRuntimeController.observeSubtitleTts() {
     scope.launch {
-        playerSettingsDataStore.playerSettings.collect { settings ->
-            val config = settings.toSubtitleTtsConfig()
-            _uiState.update { it.copy(ttsConfig = config) }
-        }
+        playerSettingsDataStore.playerSettings
+            .map { it.toSubtitleTtsConfig() }
+            .distinctUntilChanged()
+            .collect { config ->
+                _uiState.update { it.copy(ttsConfig = config) }
+            }
     }
 
     scope.launch {

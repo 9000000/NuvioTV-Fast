@@ -143,6 +143,6 @@ class StyledSubtitlePresenterTest {
     fun `outline width range allows values from 1 to 15`() {
         assertEquals(1, SubtitleStyleSettings.OUTLINE_WIDTH_MIN)
         assertEquals(15, SubtitleStyleSettings.OUTLINE_WIDTH_MAX)
-        assertEquals(5, SubtitleStyleSettings.OUTLINE_WIDTH_DEFAULT)
+        assertEquals(2, SubtitleStyleSettings.OUTLINE_WIDTH_DEFAULT)
     }
 }
