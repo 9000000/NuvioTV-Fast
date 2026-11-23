@@ -3798,6 +3798,8 @@
     <string name="tts_max_auto_speed_title">Maximum Adaptive Speed</string>
     <string name="tts_wait_for_cue_title">Wait for Cue Completion</string>
     <string name="tts_wait_for_cue_subtitle">Delay next subtitle if current speech is still speaking</string>
+    <string name="tts_transliterate_names_title">Transliterate English names &amp; words</string>
+    <string name="tts_transliterate_names_subtitle">Pronounce English character names, places, and terms naturally in Vietnamese</string>
     <string name="tts_hide_subtitles_title">Hide Visual Subtitles</string>
     <string name="tts_hide_subtitles_subtitle">Only hear voice without displaying text on screen</string>
     <string name="tts_install_voice_title">Install Offline Voice Data</string>

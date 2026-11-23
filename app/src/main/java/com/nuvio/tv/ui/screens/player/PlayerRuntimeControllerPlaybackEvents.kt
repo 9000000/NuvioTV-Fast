@@ -2283,6 +2283,9 @@ fun PlayerRuntimeController.onEvent(
         is PlayerEvent.OnSetTtsWaitForCueCompletion -> {
             scope.launch { playerSettingsDataStore.setTtsWaitForCueCompletion(event.waitForCue) }
         }
+        is PlayerEvent.OnSetTtsTransliterateEnglishNames -> {
+            scope.launch { playerSettingsDataStore.setTtsTransliterateEnglishNames(event.enabled) }
+        }
         is PlayerEvent.OnSetTtsHideSubtitlesWhenEnabled -> {
             scope.launch { playerSettingsDataStore.setTtsHideSubtitlesWhenEnabled(event.hideSubtitles) }
         }

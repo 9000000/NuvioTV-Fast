@@ -3712,6 +3712,8 @@
     <string name="tts_max_auto_speed_title">Tốc độ tăng tối đa</string>
     <string name="tts_wait_for_cue_title">Chờ đọc xong câu</string>
     <string name="tts_wait_for_cue_subtitle">Giữ hoặc chờ đọc xong câu trước khi đọc phụ đề kế tiếp</string>
+    <string name="tts_transliterate_names_title">Phiên âm tên riêng &amp; từ tiếng Anh</string>
+    <string name="tts_transliterate_names_subtitle">Đọc tự nhiên tên nhân vật, địa danh và thuật ngữ tiếng Anh theo ngữ âm tiếng Việt</string>
     <string name="tts_hide_subtitles_title">Ẩn chữ phụ đề trên màn hình</string>
     <string name="tts_hide_subtitles_subtitle">Chỉ nghe thuyết minh, không hiện chữ phụ đề trên màn hình</string>
     <string name="tts_install_voice_title">Cài đặt dữ liệu giọng đọc ngoại tuyến</string>

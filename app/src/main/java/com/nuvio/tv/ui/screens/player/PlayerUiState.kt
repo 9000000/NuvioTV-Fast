@@ -465,6 +465,7 @@ sealed class PlayerEvent {
     data class OnSetTtsAutoSpeedEnabled(val enabled: Boolean) : PlayerEvent()
     data class OnSetTtsMaxAutoSpeed(val maxSpeed: Float) : PlayerEvent()
     data class OnSetTtsWaitForCueCompletion(val waitForCue: Boolean) : PlayerEvent()
+    data class OnSetTtsTransliterateEnglishNames(val enabled: Boolean) : PlayerEvent()
     data class OnSetTtsHideSubtitlesWhenEnabled(val hideSubtitles: Boolean) : PlayerEvent()
     data class OnPreviewTtsVoice(val sampleText: String? = null) : PlayerEvent()
     data object OnOpenTtsVoiceInstaller : PlayerEvent()

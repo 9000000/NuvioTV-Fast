@@ -68,6 +68,7 @@ internal fun SubtitleTtsOverlay(
     onAutoSpeedEnabledChange: (Boolean) -> Unit,
     onMaxAutoSpeedChange: (Float) -> Unit,
     onWaitForCueCompletionChange: (Boolean) -> Unit,
+    onTransliterateEnglishNamesChange: (Boolean) -> Unit,
     onHideSubtitlesChange: (Boolean) -> Unit,
     onPreviewVoice: () -> Unit,
     onOpenVoiceInstaller: () -> Unit,
@@ -346,6 +347,16 @@ internal fun SubtitleTtsOverlay(
                                 value = if (config.waitForCueCompletion) onText else offText,
                                 isChecked = config.waitForCueCompletion,
                                 onClick = { onWaitForCueCompletionChange(!config.waitForCueCompletion) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        item(key = "tts_transliterate_names") {
+                            TtsActionCard(
+                                title = stringResource(R.string.tts_transliterate_names_title),
+                                value = if (config.transliterateEnglishNames) onText else offText,
+                                isChecked = config.transliterateEnglishNames,
+                                onClick = { onTransliterateEnglishNamesChange(!config.transliterateEnglishNames) },
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }

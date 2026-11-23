@@ -214,6 +214,14 @@ internal fun PlaybackAudioSection(
         )
 
         SettingsToggleRow(
+            title = stringResource(R.string.tts_transliterate_names_title),
+            subtitle = stringResource(R.string.tts_transliterate_names_subtitle),
+            checked = settings.ttsTransliterateEnglishNames,
+            onToggle = { onUpdate { setTtsTransliterateEnglishNames(!settings.ttsTransliterateEnglishNames) } },
+            enabled = enabled
+        )
+
+        SettingsToggleRow(
             title = stringResource(R.string.tts_hide_subtitles_title),
             subtitle = stringResource(R.string.tts_hide_subtitles_subtitle),
             checked = settings.ttsHideSubtitlesWhenEnabled,

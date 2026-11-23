@@ -31,17 +31,20 @@ class SubtitleTtsCoordinator internal constructor(
     private val engine: GoogleOfflineTtsEngine,
     configFlow: Flow<SubtitleTtsConfig>,
     mainDispatcher: CoroutineDispatcher,
+    private val transliterator: EnglishToVietnameseTransliterator? = null,
 ) {
     @Inject
     constructor(
         engine: GoogleOfflineTtsEngine,
         playerSettingsDataStore: PlayerSettingsDataStore,
+        transliterator: EnglishToVietnameseTransliterator,
     ) : this(
         engine = engine,
         configFlow = playerSettingsDataStore.playerSettings
             .map { it.toSubtitleTtsConfig() }
             .distinctUntilChanged(),
         mainDispatcher = Dispatchers.Main.immediate,
+        transliterator = transliterator,
     )
 
     companion object {
@@ -240,13 +243,13 @@ class SubtitleTtsCoordinator internal constructor(
             clampedVolume
         }
         val cleanText = SubtitleTtsTextCleaner.clean(sampleText).ifBlank { sampleText.trim() }
-        val speechText = SubtitleTtsTextCleaner.ensureSentenceEndingPunctuation(cleanText)
-        if (speechText.isBlank()) return
+        val (spokenCleanText, finalSpeechText) = prepareSpeechText(cleanText, effectiveConfig)
+        if (finalSpeechText.isBlank()) return
 
         _statusMessage.value = null
         val playbackGen = queueState.beginPlayback()
         engine.speak(
-            text = speechText,
+            text = finalSpeechText,
             voiceName = effectiveConfig.voiceName,
             pitch = SubtitleTtsTimingCalculator.clampPitch(effectiveConfig.pitch),
             speed = SubtitleTtsTimingCalculator.clampBaseSpeed(effectiveConfig.baseSpeed),
@@ -319,22 +322,38 @@ class SubtitleTtsCoordinator internal constructor(
         engine.stop()
     }
 
+    private fun prepareSpeechText(
+        cleanText: String,
+        config: SubtitleTtsConfig,
+    ): Pair<String, String> {
+        val isVietnameseTarget = config.preferredLanguageCode.startsWith("vi", ignoreCase = true) ||
+            (config.voiceName?.startsWith("vi", ignoreCase = true) == true)
+        val spokenCleanText = if (config.transliterateEnglishNames && isVietnameseTarget && transliterator != null) {
+            transliterator.transliterate(cleanText)
+        } else {
+            cleanText
+        }
+        val speechText = SubtitleTtsTextCleaner.ensureSentenceEndingPunctuation(spokenCleanText)
+        return spokenCleanText to speechText
+    }
+
     private fun startSpeakingCue(
         cleanText: String,
         speechText: String,
         budgetMs: Long?,
         config: SubtitleTtsConfig,
     ) {
+        val (spokenCleanText, finalSpeechText) = prepareSpeechText(cleanText, config)
         val playbackGen = queueState.beginPlayback()
         val targetSpeed = SubtitleTtsTimingCalculator.calculateTimingAwareSpeed(
-            cleanText = cleanText,
+            cleanText = spokenCleanText,
             budgetMs = budgetMs,
             baseSpeed = config.baseSpeed,
             autoSpeedEnabled = config.autoSpeedEnabled,
             maxAutoSpeed = config.maxAutoSpeed,
         )
         val estimatedSpeechMs = SubtitleTtsTimingCalculator.estimateSpokenDurationMs(
-            cleanText = cleanText,
+            cleanText = spokenCleanText,
             speechSpeed = targetSpeed,
         )
         activeSpeechGen = playbackGen
@@ -342,7 +361,7 @@ class SubtitleTtsCoordinator internal constructor(
         activeSpeechEstimatedMs = estimatedSpeechMs
         startSpeechCompletionWatchdog(playbackGen, estimatedSpeechMs)
         engine.speak(
-            text = speechText,
+            text = finalSpeechText,
             voiceName = config.voiceName,
             pitch = config.pitch,
             speed = targetSpeed,

@@ -453,6 +453,7 @@ data class PlayerSettings(
     val ttsAutoSpeedEnabled: Boolean = true,
     val ttsMaxAutoSpeed: Float = SubtitleTtsTimingCalculator.DEFAULT_MAX_AUTO_SPEED,
     val ttsWaitForCueCompletion: Boolean = false,
+    val ttsTransliterateEnglishNames: Boolean = true,
     val ttsHideSubtitlesWhenEnabled: Boolean = false
 ) {
     /** Prefer FFmpeg/extension audio decoder (EXTENSION_RENDERER_MODE_PREFER). */
@@ -968,6 +969,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val ttsAutoSpeedEnabledKey = booleanPreferencesKey("tts_auto_speed_enabled")
     private val ttsMaxAutoSpeedKey = floatPreferencesKey("tts_max_auto_speed")
     private val ttsWaitForCueCompletionKey = booleanPreferencesKey("tts_wait_for_cue_completion")
+    private val ttsTransliterateEnglishNamesKey = booleanPreferencesKey("tts_transliterate_english_names")
     private val ttsHideSubtitlesWhenEnabledKey = booleanPreferencesKey("tts_hide_subtitles_when_enabled")
 
     private val migrationLoadControlDefaultsAlignedDoneKey = booleanPreferencesKey("migration_load_control_defaults_aligned_done")
@@ -1490,6 +1492,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[ttsMaxAutoSpeedKey] ?: SubtitleTtsTimingCalculator.DEFAULT_MAX_AUTO_SPEED
                 ),
                 ttsWaitForCueCompletion = prefs[ttsWaitForCueCompletionKey] ?: false,
+                ttsTransliterateEnglishNames = prefs[ttsTransliterateEnglishNamesKey] ?: true,
                 ttsHideSubtitlesWhenEnabled = prefs[ttsHideSubtitlesWhenEnabledKey] ?: false
             )
         } catch (e: ClassCastException) {
@@ -1905,6 +1908,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setTtsWaitForCueCompletion(enabled: Boolean) {
         store().edit { prefs ->
             prefs[ttsWaitForCueCompletionKey] = enabled
+        }
+    }
+
+    suspend fun setTtsTransliterateEnglishNames(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[ttsTransliterateEnglishNamesKey] = enabled
         }
     }
 
