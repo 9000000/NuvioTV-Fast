@@ -50,13 +50,13 @@ internal object EmbeddedSubtitleTimelineLoader {
     private const val CUES_FALLBACK_PROBE_BYTES = 128 * 1024
     private const val MAX_CUES_DIRECT_FETCH_BYTES = 2 * 1024 * 1024
     private const val MAX_MP4_DIRECT_MOOV_BYTES = 4 * 1024 * 1024
-    private const val TAIL_PROBE_BYTES = 4 * 1024 * 1024
+    private const val TAIL_PROBE_BYTES = 2 * 1024 * 1024
     private const val MAX_SEEK_HEAD_BYTES = 2 * 1024 * 1024
     private const val MAX_INFO_BYTES = 512 * 1024
     private const val MAX_TRACKS_BYTES = 4 * 1024 * 1024
-    private const val MAX_CUES_BYTES = 8 * 1024 * 1024
-    private const val MAX_TOTAL_DOWNLOAD_BYTES = 24L * 1024L * 1024L
-    private const val MAX_RANGE_REQUESTS = 16
+    private const val MAX_CUES_BYTES = 4 * 1024 * 1024
+    private const val MAX_TOTAL_DOWNLOAD_BYTES = 8L * 1024L * 1024L
+    private const val MAX_RANGE_REQUESTS = 10
     private const val MAX_SEEK_HEAD_HOPS = 4
     private const val DEFAULT_TIMESTAMP_SCALE_NS = 1_000_000L
     private const val DEFAULT_CUE_DURATION_MS = 5_000L
@@ -149,9 +149,14 @@ internal object EmbeddedSubtitleTimelineLoader {
         scope: CoroutineScope,
         sourceUrl: String,
         sourceHeaders: Map<String, String> = emptyMap(),
+        skipTailProbe: Boolean = false,
+        initialDelayMs: Long = 0L,
     ) {
-        scope.launch {
-            val loaded = load(sourceUrl, sourceHeaders)
+        scope.launch(AutomaticSubtitleSync.autoSyncDispatcher) {
+            if (initialDelayMs > 0L) {
+                kotlinx.coroutines.delay(initialDelayMs)
+            }
+            val loaded = load(sourceUrl, sourceHeaders, skipTailProbe = skipTailProbe)
             if (loaded != null && loaded.tracks.isNotEmpty()) {
                 AutomaticSubtitleSync.warmIndexedReferences(loaded)
             }
@@ -161,6 +166,7 @@ internal object EmbeddedSubtitleTimelineLoader {
     suspend fun load(
         sourceUrl: String,
         sourceHeaders: Map<String, String> = emptyMap(),
+        skipTailProbe: Boolean = false,
     ): IndexedEmbeddedTimeline? {
         if (!sourceUrl.startsWith("http://", ignoreCase = true) &&
             !sourceUrl.startsWith("https://", ignoreCase = true)
@@ -168,7 +174,7 @@ internal object EmbeddedSubtitleTimelineLoader {
             return null
         }
 
-        val cacheKey = "$sourceUrl#${sourceHeaders.hashCode()}"
+        val cacheKey = "$sourceUrl#${sourceHeaders.hashCode()}#$skipTailProbe"
         val nowNs = System.nanoTime()
         val ownedLoad = CompletableDeferred<IndexedEmbeddedTimeline?>()
         val activeLoad = synchronized(cacheLock) {
@@ -192,12 +198,12 @@ internal object EmbeddedSubtitleTimelineLoader {
                 synchronized(cacheLock) {
                     if (inFlight[cacheKey] === activeLoad) inFlight.remove(cacheKey)
                 }
-                load(sourceUrl, sourceHeaders)
+                load(sourceUrl, sourceHeaders, skipTailProbe = skipTailProbe)
             }
         }
 
         try {
-            return loadAndCache(cacheKey, sourceUrl, sourceHeaders)
+            return loadAndCache(cacheKey, sourceUrl, sourceHeaders, skipTailProbe = skipTailProbe)
                 .also(ownedLoad::complete)
         } finally {
             synchronized(cacheLock) {
@@ -211,12 +217,13 @@ internal object EmbeddedSubtitleTimelineLoader {
         cacheKey: String,
         sourceUrl: String,
         sourceHeaders: Map<String, String>,
+        skipTailProbe: Boolean = false,
     ): IndexedEmbeddedTimeline? {
         return try {
             val loaded = try {
                 withTimeout(TOTAL_TIMEOUT_MS) {
                     withContext(Dispatchers.IO) {
-                        loadMatroskaCueIndex(sourceUrl, sourceHeaders)
+                        loadMatroskaCueIndex(sourceUrl, sourceHeaders, skipTailProbe = skipTailProbe)
                     }
                 }
             } catch (_: TimeoutCancellationException) {
@@ -249,6 +256,7 @@ internal object EmbeddedSubtitleTimelineLoader {
     private suspend fun loadMatroskaCueIndex(
         sourceUrl: String,
         sourceHeaders: Map<String, String>,
+        skipTailProbe: Boolean = false,
     ): IndexedEmbeddedTimeline? {
         val startedAtNs = System.nanoTime()
         val stats = RangeStats(
@@ -404,14 +412,18 @@ internal object EmbeddedSubtitleTimelineLoader {
             }
         } else {
             null
-        } ?: findAndParseCuesNearFileEnd(
-            sourceUrl = sourceUrl,
-            sourceHeaders = sourceHeaders,
-            totalLength = initialMetadata.totalLength,
-            subtitleTracks = subtitleTracks,
-            timestampScaleNs = timestampScaleNs,
-            stats = stats,
-        ) ?: return null
+        } ?: (if (!skipTailProbe) {
+            findAndParseCuesNearFileEnd(
+                sourceUrl = sourceUrl,
+                sourceHeaders = sourceHeaders,
+                totalLength = initialMetadata.totalLength,
+                subtitleTracks = subtitleTracks,
+                timestampScaleNs = timestampScaleNs,
+                stats = stats,
+            )
+        } else {
+            null
+        }) ?: return null
 
         if (subtitleTracks.all { track -> parsedCues[track.number]?.cues.orEmpty().isEmpty() }) {
             return IndexedEmbeddedTimeline(

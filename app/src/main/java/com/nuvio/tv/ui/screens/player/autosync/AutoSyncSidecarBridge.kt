@@ -19,6 +19,43 @@ private const val TAG = "NuvioAutoSyncSidecar"
 private const val SIDECAR_WAIT_MS = 15_000L
 private const val SIDECAR_WAIT_POLL_MS = 25L
 private const val DIRECT_INDEX_TOLERANCE_MS = 50L
+private const val SANITY_MAX_NORMAL_SHIFT_MS = 25_000.0
+private const val SANITY_MAX_SCALE_DEVIATION = 0.05
+private const val SANITY_STRICT_TARGET_COVERAGE = 0.85
+private const val SANITY_STRICT_REFERENCE_COVERAGE = 0.70
+private const val SANITY_STRICT_MAX_GROUP_COST = 0.25
+private const val SANITY_STRICT_MAX_RESIDUAL_MS = 600.0
+private const val SANITY_EXCEPTIONAL_TARGET_COVERAGE = 0.95
+private const val SANITY_EXCEPTIONAL_REFERENCE_COVERAGE = 0.90
+private const val SANITY_EXCEPTIONAL_MAX_GROUP_COST = 0.15
+
+/**
+ * TV safety guard preventing aggressive/noisy AutoSync matches from shifting subtitles
+ * off by tens of seconds or distorting playback speed when reference evidence is weak.
+ */
+internal fun AutoSyncTimelineRetimeResult.passesTvSanityGuard(): Boolean {
+    if (!confident) return false
+
+    val scaleDeviation = kotlin.math.abs(alignmentScale - 1.0)
+    if (scaleDeviation > SANITY_MAX_SCALE_DEVIATION) {
+        val isExceptionalFit =
+            targetCoverage >= SANITY_EXCEPTIONAL_TARGET_COVERAGE &&
+                referenceCoverage >= SANITY_EXCEPTIONAL_REFERENCE_COVERAGE &&
+                averageGroupCost <= SANITY_EXCEPTIONAL_MAX_GROUP_COST
+        if (!isExceptionalFit) return false
+    }
+
+    if (maxAlignmentShiftMs() > SANITY_MAX_NORMAL_SHIFT_MS) {
+        val isStrongEvidence =
+            targetCoverage >= SANITY_STRICT_TARGET_COVERAGE &&
+                referenceCoverage >= SANITY_STRICT_REFERENCE_COVERAGE &&
+                averageGroupCost <= SANITY_STRICT_MAX_GROUP_COST &&
+                medianGroupResidualMs <= SANITY_STRICT_MAX_RESIDUAL_MS
+        if (!isStrongEvidence) return false
+    }
+
+    return true
+}
 
 internal suspend fun applyAutoSyncSidecarTimeline(
     sidecar: PlayerRuntimeController,

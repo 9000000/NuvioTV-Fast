@@ -23,9 +23,11 @@ import com.nuvio.tv.ui.screens.player.autosync.AutomaticSubtitleSync
 import com.nuvio.tv.ui.screens.player.autosync.EmbeddedSubtitleTimelineLoader
 import com.nuvio.tv.ui.screens.player.autosync.applyAutoSyncSidecarTimeline
 import com.nuvio.tv.ui.screens.player.autosync.maxAlignmentShiftMs
+import com.nuvio.tv.ui.screens.player.autosync.passesTvSanityGuard
 import com.nuvio.tv.ui.screens.player.autosync.replaceAutoSyncSidecarSubtitle
 import com.nuvio.tv.ui.screens.player.autosync.searchAfterSelectedFailed
 import java.io.File
+import java.net.URI
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -58,9 +60,26 @@ internal fun PlayerRuntimeController.autoSyncExtractorsFactory(
     return factory
 }
 
+private const val AUTOSYNC_PREFETCH_INITIAL_DELAY_MS = 2_000L
+
+internal fun isLocalOrTorrentAutoSyncSource(url: String, isTorrentStream: Boolean): Boolean {
+    if (isTorrentStream) return true
+    val host = runCatching { URI(url).host?.lowercase() }.getOrNull() ?: return false
+    val port = runCatching { URI(url).port }.getOrNull() ?: -1
+    if (host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]") return true
+    // Local LAN TorrServer instances commonly run on port 8090 or /stream/ paths.
+    if (port == 8090 || url.contains("/stream/", ignoreCase = true) && (
+            host.startsWith("192.168.") || host.startsWith("10.") || host.startsWith("172.")
+            )
+    ) {
+        return true
+    }
+    return false
+}
+
 /**
- * Starts the embedded subtitle index download while the stream opens, so a later AutoSync run
- * finds it cached or joins the in-flight load instead of starting when a subtitle is selected.
+ * Starts the embedded subtitle index download after a brief startup settle delay so ExoPlayer
+ * and TorrServer get uncontested bandwidth during initial playback startup.
  */
 internal fun PlayerRuntimeController.prefetchAutoSyncIndex(
     url: String,
@@ -68,7 +87,14 @@ internal fun PlayerRuntimeController.prefetchAutoSyncIndex(
 ) {
     AutoSyncPreferences.ensureLoaded(context)
     if (!AutoSyncPreferences.isEnabled(context)) return
-    EmbeddedSubtitleTimelineLoader.prefetch(scope, url, headers)
+    val skipTailProbe = isLocalOrTorrentAutoSyncSource(url, _uiState.value.isTorrentStream)
+    EmbeddedSubtitleTimelineLoader.prefetch(
+        scope = scope,
+        sourceUrl = url,
+        sourceHeaders = headers,
+        skipTailProbe = skipTailProbe,
+        initialDelayMs = AUTOSYNC_PREFETCH_INITIAL_DELAY_MS,
+    )
 }
 
 /** The user picked [subtitle]: check only that subtitle, never swap in another one. */
@@ -178,6 +204,7 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
                 "AUTO_SYNC_V2 start scope=${candidateScope.name} " +
                     "lang=${selectedSubtitle.lang} candidates=${candidatesAtStart.size}",
             )
+            val skipTailProbe = isLocalOrTorrentAutoSyncSource(sourceUrlAtStart, _uiState.value.isTorrentStream)
             var analysisOutcome: AutoSyncAnalysisOutcome? = null
             suspend fun search(withAlternatives: Boolean) = AutomaticSubtitleSync.findTimelineRetime(
                 sourceKey = sourceUrlAtStart,
@@ -198,6 +225,7 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
                 },
                 onReferenceReady = {},
                 onAnalysisOutcome = { outcome -> analysisOutcome = outcome },
+                skipTailProbe = skipTailProbe,
             )
             var resolved = search(
                 withAlternatives = candidateScope == AutoSyncCandidateScope.STARTUP_SEARCH,
@@ -238,6 +266,17 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
                 ?: _uiState.value.addonSubtitles.firstOrNull { it.url == resolved.subtitleUrl }
                 ?: selectedSubtitle.takeIf { it.url == resolved.subtitleUrl }
                 ?: return@launch
+
+            if (!resolved.timeline.passesTvSanityGuard()) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "AUTO_SYNC_V2 rejected by TV sanity guard: shiftMs=${resolved.timeline.maxAlignmentShiftMs().toLong()} " +
+                        "scale=${resolved.timeline.alignmentScale} cost=${resolved.timeline.averageGroupCost} " +
+                        "targetCov=${resolved.timeline.targetCoverage} refCov=${resolved.timeline.referenceCoverage}"
+                )
+                AutoSyncSyncedSubtitle.mark(selectedUrl, AutoSyncState.NO_FIT)
+                return@launch
+            }
 
             // A confident match whose whole-film correction is within the user's tolerance keeps
             // the selected subtitle's original timing instead of retiming it.
@@ -319,6 +358,7 @@ internal fun PlayerRuntimeController.maybeRunAutomaticSubtitleSync(
     }.also { job ->
         job.invokeOnCompletion {
             selectedBodyDeferred.complete(null)
+            AutoSyncExtractorsFactory.markObservationComplete(sourceUrlAtStart)
             AutoSyncSyncedSubtitle.end(statusRun)
         }
     }
@@ -361,6 +401,7 @@ private fun PlayerRuntimeController.runMpvAutomaticSubtitleSync(
                 "AUTO_SYNC_V2 mpv start scope=${candidateScope.name} " +
                     "lang=${selectedSubtitle.lang} candidates=${candidatesAtStart.size}",
             )
+            val skipTailProbe = isLocalOrTorrentAutoSyncSource(sourceUrlAtStart, _uiState.value.isTorrentStream)
             var analysisOutcome: AutoSyncAnalysisOutcome? = null
             suspend fun search(withAlternatives: Boolean) = AutomaticSubtitleSync.findTimelineRetime(
                 sourceKey = sourceUrlAtStart,
@@ -380,6 +421,7 @@ private fun PlayerRuntimeController.runMpvAutomaticSubtitleSync(
                 },
                 onAnalysisOutcome = { outcome -> analysisOutcome = outcome },
                 allowLiveReference = false,
+                skipTailProbe = skipTailProbe,
             )
             var resolved = search(
                 withAlternatives = candidateScope == AutoSyncCandidateScope.STARTUP_SEARCH,
@@ -419,6 +461,17 @@ private fun PlayerRuntimeController.runMpvAutomaticSubtitleSync(
             val chosenSubtitle = candidateByUrl[resolved.subtitleUrl]
                 ?: _uiState.value.addonSubtitles.firstOrNull { it.url == resolved.subtitleUrl }
                 ?: return@launch
+
+            if (!resolved.timeline.passesTvSanityGuard()) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "AUTO_SYNC_V2 rejected by TV sanity guard: shiftMs=${resolved.timeline.maxAlignmentShiftMs().toLong()} " +
+                        "scale=${resolved.timeline.alignmentScale} cost=${resolved.timeline.averageGroupCost} " +
+                        "targetCov=${resolved.timeline.targetCoverage} refCov=${resolved.timeline.referenceCoverage}"
+                )
+                AutoSyncSyncedSubtitle.mark(selectedUrl, AutoSyncState.NO_FIT)
+                return@launch
+            }
 
             // A confident match whose whole-film correction is within the user's tolerance keeps
             // the selected subtitle's original timing instead of retiming it.
@@ -527,6 +580,7 @@ private fun PlayerRuntimeController.runLibassAutomaticSubtitleSync(
                 "AUTO_SYNC_V2 libass start scope=${candidateScope.name} " +
                     "lang=${selectedSubtitle.lang} candidates=${candidatesAtStart.size}",
             )
+            val skipTailProbe = isLocalOrTorrentAutoSyncSource(sourceUrlAtStart, _uiState.value.isTorrentStream)
             var analysisOutcome: AutoSyncAnalysisOutcome? = null
             var startupSearch = candidateScope == AutoSyncCandidateScope.STARTUP_SEARCH
             suspend fun search(ass: Boolean) = AutomaticSubtitleSync.findTimelineRetime(
@@ -550,6 +604,7 @@ private fun PlayerRuntimeController.runLibassAutomaticSubtitleSync(
                     null
                 },
                 onAnalysisOutcome = { outcome -> analysisOutcome = outcome },
+                skipTailProbe = skipTailProbe,
             )
             var resolved = search(ass = true)
             if (
@@ -589,6 +644,17 @@ private fun PlayerRuntimeController.runLibassAutomaticSubtitleSync(
             val chosenSubtitle = candidateByUrl[resolved.subtitleUrl]
                 ?: _uiState.value.addonSubtitles.firstOrNull { it.url == resolved.subtitleUrl }
                 ?: return@launch
+
+            if (!resolved.timeline.passesTvSanityGuard()) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "AUTO_SYNC_V2 rejected by TV sanity guard: shiftMs=${resolved.timeline.maxAlignmentShiftMs().toLong()} " +
+                        "scale=${resolved.timeline.alignmentScale} cost=${resolved.timeline.averageGroupCost} " +
+                        "targetCov=${resolved.timeline.targetCoverage} refCov=${resolved.timeline.referenceCoverage}"
+                )
+                AutoSyncSyncedSubtitle.mark(selectedUrl, AutoSyncState.NO_FIT)
+                return@launch
+            }
 
             // A confident match whose whole-film correction is within the user's tolerance keeps
             // the selected subtitle's original timing instead of retiming it.

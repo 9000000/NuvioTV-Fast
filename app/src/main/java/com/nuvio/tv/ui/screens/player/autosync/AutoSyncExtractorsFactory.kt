@@ -20,6 +20,8 @@ import androidx.media3.extractor.text.CueDecoder
 import com.nuvio.tv.ui.screens.player.RewrappableExtractor
 import com.nuvio.tv.ui.screens.player.SubtitleSyncCue
 import java.io.EOFException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
 /** Observes embedded text timestamps while forwarding the extractor output unchanged to Media3. */
@@ -27,8 +29,23 @@ internal class AutoSyncExtractorsFactory(
     private val delegate: ExtractorsFactory,
     private val sourceKey: String,
 ) : ExtractorsFactory {
+    private val observing = AtomicBoolean(true)
+
     init {
         EmbeddedSubtitleCueStore.reset(sourceKey)
+        activeObservers[sourceKey] = observing
+    }
+
+    companion object {
+        private val activeObservers = ConcurrentHashMap<String, AtomicBoolean>()
+
+        /**
+         * Disables extractor-side cue copying & decoding for [sourceKey] once AutoSync finishes,
+         * reducing ongoing playback overhead to zero.
+         */
+        fun markObservationComplete(sourceKey: String) {
+            activeObservers.remove(sourceKey)?.set(false)
+        }
     }
 
     override fun createExtractors(): Array<Extractor> = wrap(delegate.createExtractors())
@@ -38,26 +55,29 @@ internal class AutoSyncExtractorsFactory(
 
     private fun wrap(extractors: Array<Extractor>): Array<Extractor> =
         Array<Extractor>(extractors.size) { index ->
-            ObservingExtractor(extractors[index], sourceKey)
+            ObservingExtractor(extractors[index], sourceKey, observing)
         }
 }
 
 private class ObservingExtractor(
     private val delegate: Extractor,
     private val sourceKey: String,
+    private val observing: AtomicBoolean,
 ) : RewrappableExtractor {
     override val wrappedExtractor: Extractor get() = delegate
-    override fun rewrap(inner: Extractor): Extractor = ObservingExtractor(inner, sourceKey)
+    override fun rewrap(inner: Extractor): Extractor = ObservingExtractor(inner, sourceKey, observing)
     override fun sniff(input: ExtractorInput) = delegate.sniff(input)
     override fun getSniffFailureDetails(): List<SniffFailure> = delegate.getSniffFailureDetails()
-    override fun init(output: ExtractorOutput) = delegate.init(ObservingExtractorOutput(output, sourceKey))
+    override fun init(output: ExtractorOutput) = delegate.init(ObservingExtractorOutput(output, sourceKey, observing))
     override fun read(input: ExtractorInput, seekPosition: PositionHolder) = delegate.read(input, seekPosition)
 
     override fun seek(position: Long, timeUs: Long) {
-        EmbeddedSubtitleCueStore.beginNewGeneration(
-            sourceKey = sourceKey,
-            targetTimeMs = timeUs.takeIf { it != C.TIME_UNSET }?.div(1_000L),
-        )
+        if (observing.get()) {
+            EmbeddedSubtitleCueStore.beginNewGeneration(
+                sourceKey = sourceKey,
+                targetTimeMs = timeUs.takeIf { it != C.TIME_UNSET }?.div(1_000L),
+            )
+        }
         delegate.seek(position, timeUs)
     }
 
@@ -68,13 +88,14 @@ private class ObservingExtractor(
 private class ObservingExtractorOutput(
     private val delegate: ExtractorOutput,
     private val sourceKey: String,
+    private val observing: AtomicBoolean,
 ) : ExtractorOutput {
     private val textTracks = mutableMapOf<Int, TrackOutput>()
 
     override fun track(id: Int, type: Int): TrackOutput {
         val output = delegate.track(id, type)
         return if (type == C.TRACK_TYPE_TEXT) {
-            textTracks.getOrPut(id) { ObservingTextTrackOutput(output, sourceKey, id) }
+            textTracks.getOrPut(id) { ObservingTextTrackOutput(output, sourceKey, id, observing) }
         } else output
     }
 
@@ -86,10 +107,12 @@ private class ObservingTextTrackOutput(
     private val delegate: TrackOutput,
     private val sourceKey: String,
     private val trackId: Int,
+    private val observing: AtomicBoolean,
 ) : TrackOutput {
     private val cueDecoder = CueDecoder()
     private var format: Format? = null
     private var buffered = ByteArray(0)
+    private var scratchReadBuffer = ByteArray(0)
     private var start = 0
     private var end = 0
 
@@ -101,34 +124,45 @@ private class ObservingTextTrackOutput(
     }
 
     override fun sampleData(input: DataReader, length: Int, allowEndOfInput: Boolean, sampleDataPart: Int): Int {
-        if (sampleDataPart != TrackOutput.SAMPLE_DATA_PART_MAIN) {
+        if (!observing.get() || sampleDataPart != TrackOutput.SAMPLE_DATA_PART_MAIN) {
             return delegate.sampleData(input, length, allowEndOfInput, sampleDataPart)
         }
-        val bytes = ByteArray(length)
-        val read = input.read(bytes, 0, length)
+        if (scratchReadBuffer.size < length) {
+            scratchReadBuffer = ByteArray(max(length, max(scratchReadBuffer.size * 2, 256)))
+        }
+        val read = input.read(scratchReadBuffer, 0, length)
         if (read == C.RESULT_END_OF_INPUT) {
             return if (allowEndOfInput) C.RESULT_END_OF_INPUT else throw EOFException()
         }
         if (read > 0) {
-            append(bytes, 0, read)
-            delegate.sampleData(ParsableByteArray(bytes, read), read, sampleDataPart)
+            append(scratchReadBuffer, 0, read)
+            delegate.sampleData(ParsableByteArray(scratchReadBuffer, read), read, sampleDataPart)
         }
         return read
     }
 
     override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) {
-        if (sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) append(data.data, data.position, length)
+        if (observing.get() && sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) {
+            append(data.data, data.position, length)
+        }
         delegate.sampleData(data, length, sampleDataPart)
     }
 
     override fun sampleMetadata(timeUs: Long, flags: Int, size: Int, offset: Int, cryptoData: TrackOutput.CryptoData?) {
-        observe(timeUs, size, offset)
-        delegate.sampleMetadata(timeUs, flags, size, offset, cryptoData)
-        start = (end - offset).coerceIn(start, end)
-        if (start == end) {
+        if (observing.get()) {
+            observe(timeUs, size, offset)
+            start = (end - offset).coerceIn(start, end)
+            if (start == end) {
+                start = 0
+                end = 0
+            }
+        } else if (buffered.isNotEmpty() || scratchReadBuffer.isNotEmpty()) {
+            buffered = ByteArray(0)
+            scratchReadBuffer = ByteArray(0)
             start = 0
             end = 0
         }
+        delegate.sampleMetadata(timeUs, flags, size, offset, cryptoData)
     }
 
     private fun observe(timeUs: Long, size: Int, offset: Int) {

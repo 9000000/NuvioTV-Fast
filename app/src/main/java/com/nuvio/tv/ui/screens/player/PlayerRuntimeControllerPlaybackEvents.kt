@@ -1897,6 +1897,12 @@ fun PlayerRuntimeController.onEvent(
         is PlayerEvent.OnResetSubtitleDelay -> {
             resetSubtitleDelay(event.showOverlay)
         }
+        PlayerEvent.OnRevertAutoSyncSubtitle -> {
+            cancelAutomaticSubtitleSync()
+            if (revertSidecarAutoSyncTimeline()) {
+                setSubtitleDelayMs(targetMs = 0, showOverlay = false)
+            }
+        }
         PlayerEvent.OnShowSpeedDialog -> {
             val state = _uiState.value
             if (state.tunnelingEnabled) {

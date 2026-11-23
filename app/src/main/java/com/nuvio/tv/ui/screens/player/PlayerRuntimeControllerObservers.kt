@@ -1446,6 +1446,16 @@ internal fun PlayerRuntimeController.observeSubtitleTts() {
     }
 
     scope.launch {
+        com.nuvio.tv.ui.screens.player.autosync.AutoSyncPreferences.enabled
+            .collect { enabled ->
+                if (!enabled) {
+                    cancelAutomaticSubtitleSync()
+                    revertSidecarAutoSyncTimeline()
+                }
+            }
+    }
+
+    scope.launch {
         subtitleTtsCoordinator.availability.collect { availability ->
             _uiState.update { it.copy(ttsAvailability = availability) }
         }

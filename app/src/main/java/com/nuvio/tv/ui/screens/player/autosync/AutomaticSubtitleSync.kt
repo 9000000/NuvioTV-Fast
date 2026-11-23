@@ -1,12 +1,16 @@
 package com.nuvio.tv.ui.screens.player.autosync
 
+import android.os.Process
 import android.os.SystemClock
 import androidx.media3.common.C
 import com.nuvio.tv.ui.screens.player.BdavAutoSyncSources
 import com.nuvio.tv.ui.screens.player.SubtitleSyncCue
+import java.util.concurrent.Executors
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -30,12 +34,21 @@ import kotlin.math.roundToLong
  * transform and runs cue/group DP retiming.
  */
 internal object AutomaticSubtitleSync {
-    internal val autoSyncDispatcher = Dispatchers.Default.limitedParallelism(2)
+    // Dedicated single-threaded low-priority worker so AutoSync never competes with UI or video/audio threads on TV hardware.
+    internal val autoSyncDispatcher: CoroutineDispatcher = Executors.newSingleThreadExecutor { runnable ->
+        Thread({
+            runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND) }
+            runnable.run()
+        }, "NuvioAutoSyncWorker").apply {
+            isDaemon = true
+            priority = Thread.MIN_PRIORITY
+        }
+    }.asCoroutineDispatcher()
 
     private const val MIN_SELECTED_CUES = 1
-    private const val MAX_PARALLEL_ALTERNATIVE_DOWNLOADS = 6
-    private const val MAX_PARALLEL_ALTERNATIVE_PARSES = 2
-    private const val MAX_PARALLEL_ALTERNATIVE_MATCHES = 2
+    private const val MAX_PARALLEL_ALTERNATIVE_DOWNLOADS = 2
+    private const val MAX_PARALLEL_ALTERNATIVE_PARSES = 1
+    private const val MAX_PARALLEL_ALTERNATIVE_MATCHES = 1
     private const val EXCEPTIONAL_MATCH_QUALITY = 0.95
     private const val EXCEPTIONAL_MATCH_TARGET_COVERAGE = 0.99
     private const val EXCEPTIONAL_MATCH_REFERENCE_COVERAGE = 0.97
@@ -139,6 +152,12 @@ internal object AutomaticSubtitleSync {
     }
 
     private suspend fun prepareIndexedReferences(
+        indexedTimeline: IndexedEmbeddedTimeline,
+    ): PreparedIndexedReferences = withContext(autoSyncDispatcher) {
+        prepareIndexedReferencesOnWorker(indexedTimeline)
+    }
+
+    private suspend fun prepareIndexedReferencesOnWorker(
         indexedTimeline: IndexedEmbeddedTimeline,
     ): PreparedIndexedReferences {
         val owned = kotlinx.coroutines.CompletableDeferred<PreparedIndexedReferences>()
@@ -262,6 +281,40 @@ internal object AutomaticSubtitleSync {
         sourceHeaders: Map<String, String> = emptyMap(),
         /** False when the player does not feed [EmbeddedSubtitleCueStore] (mpv): indexed references only. */
         allowLiveReference: Boolean = true,
+        /** True on TorrServer / local torrent streams so tail-probing never stalls initial playback buffering. */
+        skipTailProbe: Boolean = false,
+    ): AutoSyncResolvedTimeline? = withContext(autoSyncDispatcher) {
+        findTimelineRetimeOnWorker(
+            sourceKey = sourceKey,
+            selectedSubtitleUrl = selectedSubtitleUrl,
+            selectedSubtitleHeaders = selectedSubtitleHeaders,
+            selectedSubtitleBodyDeferred = selectedSubtitleBodyDeferred,
+            preferredLanguage = preferredLanguage,
+            alternativeSubtitles = alternativeSubtitles,
+            alternativeSubtitlesProvider = alternativeSubtitlesProvider,
+            onReferenceReady = onReferenceReady,
+            onNoSubtitleTracks = onNoSubtitleTracks,
+            onAnalysisOutcome = onAnalysisOutcome,
+            sourceHeaders = sourceHeaders,
+            allowLiveReference = allowLiveReference,
+            skipTailProbe = skipTailProbe,
+        )
+    }
+
+    private suspend fun findTimelineRetimeOnWorker(
+        sourceKey: String,
+        selectedSubtitleUrl: String,
+        selectedSubtitleHeaders: Map<String, String>,
+        selectedSubtitleBodyDeferred: Deferred<String?>? = null,
+        preferredLanguage: String?,
+        alternativeSubtitles: List<AutoSyncSubtitleCandidate> = emptyList(),
+        alternativeSubtitlesProvider: (() -> List<AutoSyncSubtitleCandidate>)? = null,
+        onReferenceReady: () -> Unit = {},
+        onNoSubtitleTracks: () -> Unit = {},
+        onAnalysisOutcome: ((AutoSyncAnalysisOutcome) -> Unit)? = null,
+        sourceHeaders: Map<String, String> = emptyMap(),
+        allowLiveReference: Boolean = true,
+        skipTailProbe: Boolean = false,
     ): AutoSyncResolvedTimeline? {
         if (alternativeSubtitles.isEmpty() && alternativeSubtitlesProvider == null) {
             synchronized(resolvedCacheLock) { resolvedCache[sourceKey to selectedSubtitleUrl] }
@@ -274,6 +327,7 @@ internal object AutomaticSubtitleSync {
                 EmbeddedSubtitleTimelineLoader.load(
                     sourceUrl = sourceKey,
                     sourceHeaders = sourceHeaders,
+                    skipTailProbe = skipTailProbe,
                 )
             }
             val selectedSubtitleDeferred = async {

@@ -105,6 +105,8 @@ internal fun PlayerRuntimeController.stopSidecarAddonSubtitle(clearView: Boolean
     AutoSyncSyncedSubtitle.clear() // AutoSync hook
     AutoSyncLibassSubtitles.clear(_exoPlayer?.getAssHandlerCompat()) // AutoSync hook
     sidecarTimedCues = emptyList()
+    originalSidecarSubtitleKey = null
+    originalSidecarTimedCues = emptyList()
     lastSidecarCueSignature = null
     if (clearView) {
         postToSubtitleView { view ->
@@ -171,6 +173,8 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(
                 return@launch
             }
 
+            originalSidecarSubtitleKey = subtitleKey
+            originalSidecarTimedCues = parseResult.cues
             sidecarTimedCues = parseResult.cues
             Log.d(
                 PlayerRuntimeController.TAG,
@@ -253,6 +257,24 @@ internal fun PlayerRuntimeController.commitPreparedSidecarSubtitle(
     return true
 }
 
+/**
+ * Restores the un-retimed cues saved before AutoSync modified the active sidecar subtitle.
+ * Returns true if original cues were restored.
+ */
+internal fun PlayerRuntimeController.revertSidecarAutoSyncTimeline(): Boolean {
+    val activeKey = activeSidecarSubtitleKey ?: return false
+    val originalKey = originalSidecarSubtitleKey ?: return false
+    val originalCues = originalSidecarTimedCues
+    if (originalCues.isEmpty() || activeKey != originalKey) return false
+    if (sidecarTimedCues === originalCues) return false
+
+    sidecarTimedCues = originalCues
+    lastSidecarCueSignature = null
+    AutoSyncSyncedSubtitle.clear()
+    renderSidecarCuesAtCurrentPosition()
+    return true
+}
+
 internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
     val cues = sidecarTimedCues
     if (cues.isEmpty() || activeSidecarSubtitleKey == null) return
@@ -262,7 +284,8 @@ internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
             audioDelayUs.get() -
             subtitleDelayUs.get()
         ).coerceAtLeast(0L)
-    val active = collectActiveSidecarCues(cues, positionUs)
+    val prefixMaxEndUs = sidecarCuePrefixMaxEndUs
+    val active = collectActiveSidecarCues(cues, positionUs, prefixMaxEndUs)
     val stripSdh = currentPlayerSettingsForReport.subtitleStyle.stripSdh
     // Sign before sanitising, filtering and merging to skip that work while cues are
     // unchanged. stripSdh is included because it changes what filtering removes.
@@ -272,37 +295,37 @@ internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
     val sanitized = active.map { SubtitleMojibakeSanitizer.sanitizeCue(it) }
     val filtered = if (stripSdh) SubtitleSdhFilter.filterCues(sanitized) else sanitized
     val merged = PlayerSubtitleUtils.mergeOverlappingCues(filtered)
-    val activeTimed = collectActiveSidecarTimedCues(cues, positionUs)
-    val timingContext = if (activeTimed.isNotEmpty()) {
-        val earliestStartUs = activeTimed.minOf { it.startTimeUs }
-        val earliestStartMs = earliestStartUs / 1_000L
-        val latestEndUs = activeTimed.maxOf {
-            if (it.durationUs != androidx.media3.common.C.TIME_UNSET) {
-                it.startTimeUs + it.durationUs
-            } else {
-                it.startTimeUs + 2_000_000L
+    // Skip timing-context & next-cue scan entirely when subtitle TTS is disabled.
+    val timingContext = if (_uiState.value.ttsConfig.enabled) {
+        val activeTimed = collectActiveSidecarTimedCues(cues, positionUs, prefixMaxEndUs)
+        if (activeTimed.isNotEmpty()) {
+            val earliestStartUs = activeTimed.minOf { it.startTimeUs }
+            val earliestStartMs = earliestStartUs / 1_000L
+            val latestEndUs = activeTimed.maxOf {
+                if (it.durationUs != androidx.media3.common.C.TIME_UNSET) {
+                    it.startTimeUs + it.durationUs
+                } else {
+                    it.startTimeUs + 2_000_000L
+                }
             }
+            val latestEndMs = latestEndUs / 1_000L
+            val nextCueStartMs = findNextSidecarCueStartMs(cues, earliestStartUs, positionUs)
+            val text = merged.mapNotNull { it.text?.toString()?.takeIf(String::isNotBlank) }.joinToString("\n")
+            val speed = player.playbackParameters.speed
+            com.nuvio.tv.core.tts.SubtitleTimelineTimingHelper.createTimingContext(
+                rawText = text,
+                startMs = earliestStartMs,
+                endMs = latestEndMs,
+                playbackSpeed = speed,
+                nextCueStartMs = nextCueStartMs,
+                positionMs = positionUs / 1_000L
+            )
+        } else {
+            null
         }
-        val latestEndMs = latestEndUs / 1_000L
-        val nextCueStartMs = cues.asSequence()
-            .filter { candidate ->
-                candidate.startTimeUs > earliestStartUs &&
-                    candidate.startTimeUs >= positionUs &&
-                    candidate.cues.any { !it.text.isNullOrBlank() }
-            }
-            .minOfOrNull { it.startTimeUs }
-            ?.div(1_000L)
-        val text = merged.mapNotNull { it.text?.toString()?.takeIf(String::isNotBlank) }.joinToString("\n")
-        val speed = player.playbackParameters.speed
-        com.nuvio.tv.core.tts.SubtitleTimelineTimingHelper.createTimingContext(
-            rawText = text,
-            startMs = earliestStartMs,
-            endMs = latestEndMs,
-            playbackSpeed = speed,
-            nextCueStartMs = nextCueStartMs,
-            positionMs = positionUs / 1_000L
-        )
-    } else null
+    } else {
+        null
+    }
 
     val currentKey = activeSidecarSubtitleKey ?: return
     val currentGeneration = activeSidecarGeneration.takeIf { it != 0L } ?: return
@@ -444,19 +467,106 @@ internal fun parseSidecarTimedCuesLenient(rawText: String, sourceUrl: String): L
     return out
 }
 
-/** [cues] must be ordered by [CuesWithTiming.startTimeUs]; the scan stops at the first later cue. */
+private fun sidecarCueEndUs(entry: CuesWithTiming, defaultDurationIfUnsetUs: Long?): Long = when {
+    defaultDurationIfUnsetUs != null && entry.durationUs != C.TIME_UNSET -> entry.startTimeUs + entry.durationUs
+    entry.endTimeUs != C.TIME_UNSET -> entry.endTimeUs
+    entry.durationUs != C.TIME_UNSET -> entry.startTimeUs + entry.durationUs
+    defaultDurationIfUnsetUs != null -> entry.startTimeUs + defaultDurationIfUnsetUs
+    else -> Long.MAX_VALUE
+}
+
+/**
+ * Precomputes prefix maximum end timestamps for O(log N) active-cue interval lookups
+ * over a [cues] list sorted by [CuesWithTiming.startTimeUs].
+ */
+internal fun buildSidecarPrefixMaxEndUs(cues: List<CuesWithTiming>): LongArray {
+    if (cues.isEmpty()) return LongArray(0)
+    val prefixMax = LongArray(cues.size)
+    var runningMax = Long.MIN_VALUE
+    for (i in cues.indices) {
+        val endUs = maxOf(
+            sidecarCueEndUs(cues[i], defaultDurationIfUnsetUs = null),
+            sidecarCueEndUs(cues[i], defaultDurationIfUnsetUs = 2_000_000L)
+        )
+        if (endUs > runningMax) runningMax = endUs
+        prefixMax[i] = runningMax
+    }
+    return prefixMax
+}
+
+/** Largest index `i` in [cues] where `cues[i].startTimeUs <= positionUs`, or -1 if none. */
+private fun upperBoundStartIndex(cues: List<CuesWithTiming>, positionUs: Long): Int {
+    var lo = 0
+    var hi = cues.lastIndex
+    var ans = -1
+    while (lo <= hi) {
+        val mid = (lo + hi) ushr 1
+        if (cues[mid].startTimeUs <= positionUs) {
+            ans = mid
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+    return ans
+}
+
+/**
+ * Finds the start time (ms) of the next non-blank cue strictly after [earliestStartUs]
+ * and at/after [positionUs] in O(log N) time.
+ */
+internal fun findNextSidecarCueStartMs(
+    cues: List<CuesWithTiming>,
+    earliestStartUs: Long,
+    positionUs: Long
+): Long? {
+    if (cues.isEmpty()) return null
+    val minStartUs = maxOf(earliestStartUs + 1L, positionUs)
+    var lo = 0
+    var hi = cues.size
+    while (lo < hi) {
+        val mid = (lo + hi) ushr 1
+        if (cues[mid].startTimeUs < minStartUs) {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+    for (i in lo until cues.size) {
+        val candidate = cues[i]
+        if (candidate.cues.any { !it.text.isNullOrBlank() }) {
+            return candidate.startTimeUs / 1_000L
+        }
+    }
+    return null
+}
+
+/** [cues] must be ordered by [CuesWithTiming.startTimeUs]. Uses O(log N) binary search when [prefixMaxEndUs] is provided. */
 internal fun collectActiveSidecarTimedCues(
     cues: List<CuesWithTiming>,
-    positionUs: Long
+    positionUs: Long,
+    prefixMaxEndUs: LongArray? = null
 ): List<CuesWithTiming> {
+    if (cues.isEmpty()) return emptyList()
+    if (prefixMaxEndUs != null && prefixMaxEndUs.size == cues.size) {
+        val hi = upperBoundStartIndex(cues, positionUs)
+        if (hi < 0) return emptyList()
+        val reversed = ArrayList<CuesWithTiming>(4)
+        for (i in hi downTo 0) {
+            if (prefixMaxEndUs[i] <= positionUs) break
+            val entry = cues[i]
+            val endUs = sidecarCueEndUs(entry, defaultDurationIfUnsetUs = 2_000_000L)
+            if (positionUs < endUs) {
+                reversed.add(entry)
+            }
+        }
+        if (reversed.size > 1) reversed.reverse()
+        return reversed
+    }
     val out = ArrayList<CuesWithTiming>()
     for (entry in cues) {
         if (entry.startTimeUs > positionUs) break
-        val endUs = when {
-            entry.durationUs != androidx.media3.common.C.TIME_UNSET -> entry.startTimeUs + entry.durationUs
-            entry.endTimeUs != androidx.media3.common.C.TIME_UNSET -> entry.endTimeUs
-            else -> entry.startTimeUs + 2_000_000L
-        }
+        val endUs = sidecarCueEndUs(entry, defaultDurationIfUnsetUs = 2_000_000L)
         if (positionUs < endUs) {
             out.add(entry)
         }
@@ -464,20 +574,36 @@ internal fun collectActiveSidecarTimedCues(
     return out
 }
 
-/** [cues] must be ordered by [CuesWithTiming.startTimeUs]; the scan stops at the first later cue. */
+/** [cues] must be ordered by [CuesWithTiming.startTimeUs]. Uses O(log N) binary search when [prefixMaxEndUs] is provided. */
 internal fun collectActiveSidecarCues(
     cues: List<CuesWithTiming>,
-    positionUs: Long
+    positionUs: Long,
+    prefixMaxEndUs: LongArray? = null
 ): List<Cue> {
     if (cues.isEmpty()) return emptyList()
+    if (prefixMaxEndUs != null && prefixMaxEndUs.size == cues.size) {
+        val hi = upperBoundStartIndex(cues, positionUs)
+        if (hi < 0) return emptyList()
+        val matchedIndices = ArrayList<Int>(4)
+        for (i in hi downTo 0) {
+            if (prefixMaxEndUs[i] <= positionUs) break
+            val entry = cues[i]
+            val end = sidecarCueEndUs(entry, defaultDurationIfUnsetUs = null)
+            if (positionUs < end) {
+                matchedIndices.add(i)
+            }
+        }
+        if (matchedIndices.isEmpty()) return emptyList()
+        val active = ArrayList<Cue>(matchedIndices.size)
+        for (j in matchedIndices.lastIndex downTo 0) {
+            active.addAll(cues[matchedIndices[j]].cues)
+        }
+        return active
+    }
     val active = ArrayList<Cue>(4)
     for (entry in cues) {
         if (entry.startTimeUs > positionUs) break
-        val end = when {
-            entry.endTimeUs != C.TIME_UNSET -> entry.endTimeUs
-            entry.durationUs != C.TIME_UNSET -> entry.startTimeUs + entry.durationUs
-            else -> Long.MAX_VALUE
-        }
+        val end = sidecarCueEndUs(entry, defaultDurationIfUnsetUs = null)
         if (positionUs < end) {
             active.addAll(entry.cues)
         }

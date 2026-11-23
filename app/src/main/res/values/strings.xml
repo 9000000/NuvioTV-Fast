@@ -3779,6 +3779,7 @@
     <!-- Audio-Subtitle Auto Sync Status -->
     <string name="autosync_status_title">Auto Sync Status</string>
     <string name="autosync_status_synced">Synced</string>
+    <string name="autosync_revert_original">Revert to original timing</string>
     <string name="autosync_status_not_needed">Not needed</string>
     <string name="autosync_status_in_progress">In progress</string>
     <string name="autosync_status_no_fit">May not match</string>

@@ -498,9 +498,13 @@ class PlayerRuntimeController(
     internal var sidecarGenerationCounter: Long = 0L // AutoSync hook
     internal var activeSidecarGeneration: Long = 0L // AutoSync hook
     internal var activeSidecarSubtitleKey: String? = null
+    internal var sidecarCuePrefixMaxEndUs: LongArray = LongArray(0)
+    internal var originalSidecarSubtitleKey: String? = null
+    internal var originalSidecarTimedCues: List<androidx.media3.extractor.text.CuesWithTiming> = emptyList()
     internal var sidecarTimedCues: List<androidx.media3.extractor.text.CuesWithTiming> = emptyList()
         set(value) {
             field = value
+            sidecarCuePrefixMaxEndUs = buildSidecarPrefixMaxEndUs(value)
             subtitleCueTracker.setPrescannedTexts(
                 value.flatMap { it.cues }.mapNotNull { it.text?.toString()?.takeIf(String::isNotBlank) }
             )

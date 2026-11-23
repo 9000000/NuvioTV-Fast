@@ -99,29 +99,43 @@ internal fun StyledSubtitleText(
         val paddingX = STYLED_SUBTITLE_PADDING_X * unit
         val paddingY = STYLED_SUBTITLE_PADDING_Y * unit
         val maxTextWidth = (constraints.maxWidth - paddingX * 2).toInt().coerceAtLeast(1)
-        val textStyle = TextStyle(
-            fontFamily = fontFamily,
-            fontSize = with(density) { textSizePx.toSp() },
-            fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
-            textAlign = when (horizontal) {
-                SubtitleHorizontalPosition.START -> TextAlign.Left
-                SubtitleHorizontalPosition.CENTER -> TextAlign.Center
-                SubtitleHorizontalPosition.END -> TextAlign.Right
-            },
-            textDirection = TextDirection.ContentOrLtr
-        )
-        val textConstraints = Constraints(maxWidth = maxTextWidth)
-        val textAlpha = Color(style.textColor).alpha
-        val fillText = text.mapColors { subtitleFileColor(it, style.fileColorBrightness, textAlpha) }
-        val layout = measurer.measure(text = fillText, style = textStyle, constraints = textConstraints)
-        val outlineLayout = if (text.spanStyles.any { it.item.color.isSpecified }) {
-            measurer.measure(text = text.mapColors { Color.Unspecified }, style = textStyle, constraints = textConstraints)
-        } else {
-            layout
+        val textStyle = remember(fontFamily, textSizePx, style.bold, horizontal, density) {
+            TextStyle(
+                fontFamily = fontFamily,
+                fontSize = with(density) { textSizePx.toSp() },
+                fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
+                textAlign = when (horizontal) {
+                    SubtitleHorizontalPosition.START -> TextAlign.Left
+                    SubtitleHorizontalPosition.CENTER -> TextAlign.Center
+                    SubtitleHorizontalPosition.END -> TextAlign.Right
+                },
+                textDirection = TextDirection.ContentOrLtr
+            )
         }
-        val lineLeft = (0 until layout.lineCount).minOfOrNull { layout.getLineLeft(it) } ?: 0f
-        val lineRight = (0 until layout.lineCount).maxOfOrNull { layout.getLineRight(it) } ?: 0f
-        val lineWidth = (0 until layout.lineCount).maxOfOrNull { layout.getLineRight(it) - layout.getLineLeft(it) } ?: 0f
+        val textConstraints = remember(maxTextWidth) { Constraints(maxWidth = maxTextWidth) }
+        val textAlpha = Color(style.textColor).alpha
+        val fillText = remember(text, style.fileColorBrightness, textAlpha) {
+            text.mapColors { subtitleFileColor(it, style.fileColorBrightness, textAlpha) }
+        }
+        val layout = remember(measurer, fillText, textStyle, textConstraints) {
+            measurer.measure(text = fillText, style = textStyle, constraints = textConstraints)
+        }
+        val hasInlineColor = remember(text) {
+            text.spanStyles.any { it.item.color.isSpecified }
+        }
+        val outlineLayout = remember(measurer, text, hasInlineColor, textStyle, textConstraints, layout) {
+            if (hasInlineColor) {
+                measurer.measure(text = text.mapColors { Color.Unspecified }, style = textStyle, constraints = textConstraints)
+            } else {
+                layout
+            }
+        }
+        val (lineLeft, lineRight, lineWidth) = remember(layout) {
+            val left = (0 until layout.lineCount).minOfOrNull { layout.getLineLeft(it) } ?: 0f
+            val right = (0 until layout.lineCount).maxOfOrNull { layout.getLineRight(it) } ?: 0f
+            val width = (0 until layout.lineCount).maxOfOrNull { layout.getLineRight(it) - layout.getLineLeft(it) } ?: 0f
+            Triple(left, right, width)
+        }
         val blockHeight = layout.size.height + paddingY * 2
         val textColor = Color(style.textColor)
         val outlineColor = Color(style.outlineColor)

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,7 +84,9 @@ import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames
+import com.nuvio.tv.ui.screens.player.autosync.AutoSyncState
 import com.nuvio.tv.ui.screens.player.autosync.AutoSyncStatusIndicator
+import com.nuvio.tv.ui.screens.player.autosync.AutoSyncSyncedSubtitle
 import com.nuvio.tv.ui.screens.player.autosync.AutoSyncedChip
 
 private const val SubtitleOffLanguageKey = "__off__"
@@ -613,6 +616,7 @@ internal fun SubtitleSelectionOverlay(
                         subtitleStyle = subtitleStyle,
                         isEditingHdrStyle = isEditingHdrStyle,
                         subtitleDelayMs = subtitleDelayMs,
+                        selectedAddonSubtitleUrl = selectedAddonSubtitle?.url,
                         listState = styleListState,
                         onMoveLeft = ::moveFocusBackToOptionRail,
                         focusRequesters = styleRequesters,
@@ -838,6 +842,7 @@ private fun SubtitleStyleRail(
     subtitleStyle: SubtitleStyleSettings,
     isEditingHdrStyle: Boolean,
     subtitleDelayMs: Int,
+    selectedAddonSubtitleUrl: String?,
     listState: LazyListState,
     onMoveLeft: () -> Unit,
     focusRequesters: Map<String, FocusRequester>,
@@ -876,50 +881,99 @@ private fun SubtitleStyleRail(
                 .heightIn(max = 720.dp)
         ) {
             item {
-                Card(
-                    onClick = { onEvent(PlayerEvent.OnShowSubtitleDelayOverlay) },
-                    colors = overlayCardColors(selected = false),
-                    shape = CardDefaults.shape(RoundedCornerShape(NuvioTheme.radii.md)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(requireNotNull(focusRequesters[StyleFocusKey.DelaySet]))
-                        .onPreviewKeyEvent { event ->
-                            when (event.nativeKeyEvent.keyCode) {
-                                moveLeftKey -> {
-                                    when (event.nativeKeyEvent.action) {
-                                        android.view.KeyEvent.ACTION_DOWN -> {
-                                            onMoveLeft()
-                                            true
-                                        }
+                val autoSyncStatus by AutoSyncSyncedSubtitle.status.collectAsState()
+                val canRevertAutoSync = selectedAddonSubtitleUrl != null &&
+                    autoSyncStatus?.url == selectedAddonSubtitleUrl &&
+                    autoSyncStatus?.state == AutoSyncState.SYNCED
 
-                                        android.view.KeyEvent.ACTION_UP -> true
-                                        else -> false
-                                    }
-                                }
-
-                                else -> false
-                            }
-                        }
-                        .onFocusChanged { if (it.isFocused) onStyleFocused(StyleFocusKey.DelaySet) },
-                    scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
-                ) {
-                    Row(
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Card(
+                        onClick = { onEvent(PlayerEvent.OnShowSubtitleDelayOverlay) },
+                        colors = overlayCardColors(selected = false),
+                        shape = CardDefaults.shape(RoundedCornerShape(NuvioTheme.radii.md)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = NuvioTheme.spacing.md, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .focusRequester(requireNotNull(focusRequesters[StyleFocusKey.DelaySet]))
+                            .onPreviewKeyEvent { event ->
+                                when (event.nativeKeyEvent.keyCode) {
+                                    moveLeftKey -> {
+                                        when (event.nativeKeyEvent.action) {
+                                            android.view.KeyEvent.ACTION_DOWN -> {
+                                                onMoveLeft()
+                                                true
+                                            }
+
+                                            android.view.KeyEvent.ACTION_UP -> true
+                                            else -> false
+                                        }
+                                    }
+
+                                    else -> false
+                                }
+                            }
+                            .onFocusChanged { if (it.isFocused) onStyleFocused(StyleFocusKey.DelaySet) },
+                        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
                     ) {
-                        Text(
-                            text = stringResource(R.string.subtitle_tab_delay),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White
-                        )
-                        Text(
-                            text = formatSubtitleDelay(subtitleDelayMs).keepLtr(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = NuvioTheme.spacing.md, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.subtitle_tab_delay),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White
+                            )
+                            Text(
+                                text = formatSubtitleDelay(subtitleDelayMs).keepLtr(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+
+                    if (canRevertAutoSync) {
+                        Card(
+                            onClick = { onEvent(PlayerEvent.OnRevertAutoSyncSubtitle) },
+                            colors = overlayCardColors(selected = false),
+                            shape = CardDefaults.shape(RoundedCornerShape(NuvioTheme.radii.md)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onPreviewKeyEvent { event ->
+                                    when (event.nativeKeyEvent.keyCode) {
+                                        moveLeftKey -> {
+                                            when (event.nativeKeyEvent.action) {
+                                                android.view.KeyEvent.ACTION_DOWN -> {
+                                                    onMoveLeft()
+                                                    true
+                                                }
+
+                                                android.view.KeyEvent.ACTION_UP -> true
+                                                else -> false
+                                            }
+                                        }
+
+                                        else -> false
+                                    }
+                                },
+                            scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = NuvioTheme.spacing.md, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.autosync_revert_original),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White
+                                )
+                            }
+                        }
                     }
                 }
             }

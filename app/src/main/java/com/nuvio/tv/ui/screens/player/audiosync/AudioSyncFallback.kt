@@ -152,9 +152,8 @@ internal class AudioSyncFallback private constructor(
         controller.enabled = true
         controller.samplingMode = AudioSyncSettings.samplingMode.value
         controller.listensBeforeSession = true
-        // Start an already-downloaded recognizer before subtitle discovery, downloads or
-        // AutoSync's analysis. Recognition can then begin immediately on a later takeover.
-        controller.prepareRecognizer()
+        // Defer heavy ONNX/Sherpa recognizer loading until takeOver() so normal AutoSync
+        // runs and stream startup do not burn TV RAM/CPU unnecessarily.
         if (!armed) {
             // Defer title lookup until an AutoSync run actually starts, instead of stream setup.
             armed = true
@@ -212,6 +211,7 @@ internal class AudioSyncFallback private constructor(
             return false
         }
         takeOverJob?.cancel()
+        controller.prepareRecognizer()
         statusRun = AutoSyncSyncedSubtitle.start(url)
         if (isMpv) {
             takeOverJob = scope.launch { takeOverMpv(url) }

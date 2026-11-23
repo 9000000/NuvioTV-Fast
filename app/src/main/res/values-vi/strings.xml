@@ -3732,6 +3732,7 @@
     <!-- Audio-Subtitle Auto Sync & Watchdog Translations -->
     <string name="autosync_status_title">Trạng thái đồng bộ tự động</string>
     <string name="autosync_status_synced">Đã đồng bộ</string>
+    <string name="autosync_revert_original">Khôi phục mốc thời gian gốc</string>
     <string name="autosync_status_not_needed">Không cần đồng bộ</string>
     <string name="autosync_status_in_progress">Đang đồng bộ...</string>
     <string name="autosync_status_no_fit">Có thể không khớp</string>

@@ -6,6 +6,8 @@
     <item name="player_view_libass_geometry_context_tag" type="id" />
     <item name="player_view_libass_geometry_snapshot_tag" type="id" />
     <item name="player_view_subtitle_style_tag" type="id" />
+    <item name="player_view_subtitle_typography_tag" type="id" />
+    <item name="player_view_subtitle_position_tag" type="id" />
     <item name="player_view_libass_font_scale_tag" type="id" />
     <item name="player_view_subtitle_metrics_callback_tag" type="id" />
     <item name="player_view_sidecar_generation_tag" type="id" />

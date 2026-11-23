@@ -1133,111 +1133,38 @@ fun PlayerScreen(
 
             Box(modifier = playerSurfaceModifier) {
                 val previewConfiguredSubtitlePosition = uiState.showSubtitleOverlay || uiState.showSubtitleStylePanel
-                val subtitleCueState by viewModel.controller.subtitleCueTracker.state.collectAsState()
-                val prescannedSubtitleTexts by viewModel.controller.subtitleCueTracker.prescannedTexts.collectAsState()
                 val renderedSubtitleStyle = uiState.effectiveSubtitleStyle
-                val styledSubtitleTypeface = rememberSubtitleTypeface(renderedSubtitleStyle.fontId)
-                val measuredSubtitleTextMetrics = remember(
-                    subtitleTextMetrics,
-                    renderedSubtitleStyle.usesStyledRenderer,
-                    styledSubtitleTypeface
-                ) {
-                    subtitleTextMetrics?.let { metrics ->
-                        if (renderedSubtitleStyle.usesStyledRenderer) metrics.forStyledRenderer(styledSubtitleTypeface) else metrics
-                    }
-                }
-                val subtitleWidthKey = listOf(uiState.selectedSubtitleTrackIndex, uiState.selectedAddonSubtitle, measuredSubtitleTextMetrics)
-                var widestSubtitleBlockPx by remember(subtitleWidthKey) { mutableStateOf<Float?>(null) }
-                val subtitleMeasurePaint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
-                LaunchedEffect(subtitleWidthKey, prescannedSubtitleTexts) {
-                    val metrics = measuredSubtitleTextMetrics ?: return@LaunchedEffect
-                    val texts = prescannedSubtitleTexts
-                    val widest = withContext(Dispatchers.Default) {
-                        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-                        texts.maxOfOrNull { measureSubtitleBlockPx(paint, it, metrics) }
-                    } ?: return@LaunchedEffect
-                    widestSubtitleBlockPx = maxOf(widestSubtitleBlockPx ?: 0f, widest)
-                }
-                LaunchedEffect(subtitleWidthKey, subtitleCueState) {
-                    val metrics = measuredSubtitleTextMetrics ?: return@LaunchedEffect
-                    if (!subtitleCueState.visible) return@LaunchedEffect
-                    val width = if (subtitleCueState.hasBitmap) {
-                        Float.MAX_VALUE
-                    } else {
-                        measureSubtitleBlockPx(subtitleMeasurePaint, subtitleCueState.text, metrics)
-                    }
-                    widestSubtitleBlockPx = maxOf(widestSubtitleBlockPx ?: 0f, width)
-                }
-                val subtitleTitleMarginPx = with(LocalDensity.current) { SUBTITLE_TITLE_MARGIN.toPx() }
-                val subtitleClearsControlsTitle = measuredSubtitleTextMetrics?.let {
-                    subtitleClearsTitle(widestSubtitleBlockPx, it.centerXPx, controlsTitleRightPx, subtitleTitleMarginPx)
-                } == true
-                val effectiveControlsClearancePx = effectiveSubtitleControlsClearancePx(
-                    fullClearancePx = subtitleControlsClearancePx,
-                    progressBarClearancePx = progressBarSubtitleClearancePx,
-                    clearsTitle = subtitleClearsControlsTitle
-                )
-                var heldControlsClearancePx by remember { mutableFloatStateOf(0f) }
-                val controlsClearanceMeasured = playerControlsVisible && subtitleControlsClearancePx > 0f
-                LaunchedEffect(controlsClearanceMeasured, effectiveControlsClearancePx) {
-                    heldControlsClearancePx = if (controlsClearanceMeasured) {
-                        maxOf(heldControlsClearancePx, effectiveControlsClearancePx)
-                    } else {
-                        0f
-                    }
-                }
-                val targetSubtitleLiftPx = computeSubtitleLiftPx(
-                    previewConfiguredPosition = previewConfiguredSubtitlePosition,
-                    controlsVisible = controlsClearanceMeasured,
-                    controlsClearancePx = maxOf(heldControlsClearancePx, effectiveControlsClearancePx),
-                    fallbackControlsLiftPx = fallbackSubtitleLiftPx,
-                    skipVisible = skipButtonActuallyVisible,
-                    skipClearancePx = skipClearancePx,
-                    postPlayVisible = postPlayOverlayMode != null,
-                    postPlayClearancePx = postPlayClearancePx,
-                    seekVisible = seekOverlayVisible,
-                    seekClearancePx = seekClearancePx
-                )
                 var subtitleLiftPx by remember { mutableFloatStateOf(0f) }
-                var pendingDropCueVersion by remember { mutableStateOf<Long?>(null) }
-                var subtitleDropTimedOut by remember { mutableStateOf(false) }
-                var controlsHideAnimationFinished by remember { mutableStateOf(false) }
-                LaunchedEffect(playerControlsVisible) {
-                    controlsHideAnimationFinished = false
-                    if (!playerControlsVisible) {
-                        delay(PLAYER_CONTROLS_FADE_DURATION_MS.toLong())
-                        controlsHideAnimationFinished = true
-                    }
-                }
-                val applySubtitleLiftImmediately = shouldApplySubtitleLiftImmediately(
+
+                // Isolated composable so subtitle cue changes do not recompose ExoPlayerSurface/AndroidView.
+                SubtitleLiftStateCoordinator(
+                    subtitleCueTracker = viewModel.controller.subtitleCueTracker,
+                    selectedSubtitleTrackIndex = uiState.selectedSubtitleTrackIndex,
+                    selectedAddonSubtitle = uiState.selectedAddonSubtitle,
+                    renderedSubtitleStyle = renderedSubtitleStyle,
+                    subtitleTextMetrics = subtitleTextMetrics,
                     isPlaying = uiState.isPlaying,
-                    previewConfiguredPosition = previewConfiguredSubtitlePosition,
-                    controlsVisible = playerControlsVisible || !controlsHideAnimationFinished
-                )
-                LaunchedEffect(
-                    targetSubtitleLiftPx,
-                    subtitleCueState,
-                    applySubtitleLiftImmediately,
-                    subtitleDropTimedOut
-                ) {
-                    val decision = nextSubtitleLift(
-                        targetLiftPx = targetSubtitleLiftPx,
-                        appliedLiftPx = subtitleLiftPx,
-                        cueVersion = subtitleCueState.version,
-                        cueVisible = subtitleCueState.visible,
-                        applyImmediately = applySubtitleLiftImmediately,
-                        pendingDropCueVersion = pendingDropCueVersion,
-                        dropTimedOut = subtitleDropTimedOut
-                    )
-                    subtitleLiftPx = decision.appliedLiftPx
-                    pendingDropCueVersion = decision.pendingDropCueVersion
-                    if (decision.pendingDropCueVersion == null) subtitleDropTimedOut = false
-                }
-                LaunchedEffect(pendingDropCueVersion) {
-                    if (pendingDropCueVersion != null) {
-                        delay(SUBTITLE_LIFT_DROP_TIMEOUT_MS)
-                        subtitleDropTimedOut = true
+                    previewConfiguredSubtitlePosition = previewConfiguredSubtitlePosition,
+                    playerControlsVisible = playerControlsVisible,
+                    subtitleControlsClearancePx = subtitleControlsClearancePx,
+                    progressBarSubtitleClearancePx = progressBarSubtitleClearancePx,
+                    controlsTitleRightPx = controlsTitleRightPx,
+                    fallbackSubtitleLiftPx = fallbackSubtitleLiftPx,
+                    skipButtonActuallyVisible = skipButtonActuallyVisible,
+                    skipClearancePx = skipClearancePx,
+                    postPlayOverlayVisible = postPlayOverlayMode != null,
+                    postPlayClearancePx = postPlayClearancePx,
+                    seekOverlayVisible = seekOverlayVisible,
+                    seekClearancePx = seekClearancePx,
+                    onSubtitleLiftPxChanged = { lift ->
+                        if (subtitleLiftPx != lift) {
+                            subtitleLiftPx = lift
+                        }
                     }
+                )
+
+                val subtitleTrackKey = remember(uiState.selectedSubtitleTrackIndex, uiState.selectedAddonSubtitle) {
+                    listOf(uiState.selectedSubtitleTrackIndex, uiState.selectedAddonSubtitle)
                 }
                 if (uiState.internalPlayerEngine == InternalPlayerEngine.MVP_PLAYER) {
                     MpvPlayerSurface(
@@ -1247,7 +1174,7 @@ fun PlayerScreen(
                         aspectMode = uiState.aspectMode,
                         subtitleStyle = uiState.effectiveSubtitleStyle,
                         subtitleLiftPx = subtitleLiftPx,
-                        subtitleTrackKey = subtitleWidthKey.take(2),
+                        subtitleTrackKey = subtitleTrackKey,
                         hideVisualSubtitles = hideVisualSubtitles,
                         onSubtitleTextMetricsChanged = { subtitleTextMetrics = it },
                         modifier = Modifier.fillMaxSize()
@@ -1276,14 +1203,10 @@ fun PlayerScreen(
                 }
 
                 if (!hideVisualSubtitles) {
-                    val styledSubtitleCues by viewModel.controller.styledSubtitles.cues.collectAsState()
-                    val fallbackSubtitleTextSizePx = with(LocalDensity.current) {
-                        (SUBTITLE_BASE_TEXT_SP * renderedSubtitleStyle.size / 100f).sp.toPx()
-                    }
-                    StyledSubtitleOverlay(
-                        cues = styledSubtitleCues,
+                    StyledSubtitleLayer(
+                        styledSubtitles = viewModel.controller.styledSubtitles,
                         style = renderedSubtitleStyle,
-                        textSizePx = subtitleTextMetrics?.textSizePx ?: fallbackSubtitleTextSizePx,
+                        subtitleTextMetrics = subtitleTextMetrics,
                         liftPx = subtitleLiftPx,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -2640,9 +2563,183 @@ private fun PlayerView.logLibassOverlayGeometry(message: String) {
 private fun describeRect(rect: RectF?): String =
     rect?.let { "${it.left},${it.top},${it.right},${it.bottom}" } ?: "null"
 
+@Composable
+private fun SubtitleLiftStateCoordinator(
+    subtitleCueTracker: SubtitleCueTracker,
+    selectedSubtitleTrackIndex: Int,
+    selectedAddonSubtitle: com.nuvio.tv.domain.model.Subtitle?,
+    renderedSubtitleStyle: SubtitleStyleSettings,
+    subtitleTextMetrics: SubtitleTextMetrics?,
+    isPlaying: Boolean,
+    previewConfiguredSubtitlePosition: Boolean,
+    playerControlsVisible: Boolean,
+    subtitleControlsClearancePx: Float,
+    progressBarSubtitleClearancePx: Float,
+    controlsTitleRightPx: Float,
+    fallbackSubtitleLiftPx: Float,
+    skipButtonActuallyVisible: Boolean,
+    skipClearancePx: Float,
+    postPlayOverlayVisible: Boolean,
+    postPlayClearancePx: Float,
+    seekOverlayVisible: Boolean,
+    seekClearancePx: Float,
+    onSubtitleLiftPxChanged: (Float) -> Unit
+) {
+    val subtitleCueState by subtitleCueTracker.state.collectAsState()
+    val prescannedSubtitleTexts by subtitleCueTracker.prescannedTexts.collectAsState()
+    val styledSubtitleTypeface = rememberSubtitleTypeface(renderedSubtitleStyle.fontId)
+    val measuredSubtitleTextMetrics = remember(
+        subtitleTextMetrics,
+        renderedSubtitleStyle.usesStyledRenderer,
+        styledSubtitleTypeface
+    ) {
+        subtitleTextMetrics?.let { metrics ->
+            if (renderedSubtitleStyle.usesStyledRenderer) metrics.forStyledRenderer(styledSubtitleTypeface) else metrics
+        }
+    }
+    val subtitleWidthKey = remember(selectedSubtitleTrackIndex, selectedAddonSubtitle, measuredSubtitleTextMetrics) {
+        listOf(selectedSubtitleTrackIndex, selectedAddonSubtitle, measuredSubtitleTextMetrics)
+    }
+    var widestSubtitleBlockPx by remember(subtitleWidthKey) { mutableStateOf<Float?>(null) }
+    val subtitleMeasurePaint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
+    LaunchedEffect(subtitleWidthKey, prescannedSubtitleTexts) {
+        val metrics = measuredSubtitleTextMetrics ?: return@LaunchedEffect
+        val texts = prescannedSubtitleTexts
+        if (texts.isEmpty()) return@LaunchedEffect
+        val widest = withContext(Dispatchers.Default) {
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            texts.maxOfOrNull { measureSubtitleBlockPx(paint, it, metrics) }
+        } ?: return@LaunchedEffect
+        widestSubtitleBlockPx = maxOf(widestSubtitleBlockPx ?: 0f, widest)
+    }
+    LaunchedEffect(subtitleWidthKey, subtitleCueState) {
+        val metrics = measuredSubtitleTextMetrics ?: return@LaunchedEffect
+        if (!subtitleCueState.visible) return@LaunchedEffect
+        val width = if (subtitleCueState.hasBitmap) {
+            Float.MAX_VALUE
+        } else {
+            measureSubtitleBlockPx(subtitleMeasurePaint, subtitleCueState.text, metrics)
+        }
+        widestSubtitleBlockPx = maxOf(widestSubtitleBlockPx ?: 0f, width)
+    }
+    val subtitleTitleMarginPx = with(LocalDensity.current) { SUBTITLE_TITLE_MARGIN.toPx() }
+    val subtitleClearsControlsTitle = measuredSubtitleTextMetrics?.let {
+        subtitleClearsTitle(widestSubtitleBlockPx, it.centerXPx, controlsTitleRightPx, subtitleTitleMarginPx)
+    } == true
+    val effectiveControlsClearancePx = effectiveSubtitleControlsClearancePx(
+        fullClearancePx = subtitleControlsClearancePx,
+        progressBarClearancePx = progressBarSubtitleClearancePx,
+        clearsTitle = subtitleClearsControlsTitle
+    )
+    var heldControlsClearancePx by remember { mutableFloatStateOf(0f) }
+    val controlsClearanceMeasured = playerControlsVisible && subtitleControlsClearancePx > 0f
+    LaunchedEffect(controlsClearanceMeasured, effectiveControlsClearancePx) {
+        heldControlsClearancePx = if (controlsClearanceMeasured) {
+            maxOf(heldControlsClearancePx, effectiveControlsClearancePx)
+        } else {
+            0f
+        }
+    }
+    val targetSubtitleLiftPx = computeSubtitleLiftPx(
+        previewConfiguredPosition = previewConfiguredSubtitlePosition,
+        controlsVisible = controlsClearanceMeasured,
+        controlsClearancePx = maxOf(heldControlsClearancePx, effectiveControlsClearancePx),
+        fallbackControlsLiftPx = fallbackSubtitleLiftPx,
+        skipVisible = skipButtonActuallyVisible,
+        skipClearancePx = skipClearancePx,
+        postPlayVisible = postPlayOverlayVisible,
+        postPlayClearancePx = postPlayClearancePx,
+        seekVisible = seekOverlayVisible,
+        seekClearancePx = seekClearancePx
+    )
+    var appliedLiftPx by remember { mutableFloatStateOf(0f) }
+    var pendingDropCueVersion by remember { mutableStateOf<Long?>(null) }
+    var subtitleDropTimedOut by remember { mutableStateOf(false) }
+    var controlsHideAnimationFinished by remember { mutableStateOf(false) }
+    val latestOnSubtitleLiftPxChanged by rememberUpdatedState(onSubtitleLiftPxChanged)
+
+    LaunchedEffect(playerControlsVisible) {
+        controlsHideAnimationFinished = false
+        if (!playerControlsVisible) {
+            delay(PLAYER_CONTROLS_FADE_DURATION_MS.toLong())
+            controlsHideAnimationFinished = true
+        }
+    }
+    val applySubtitleLiftImmediately = shouldApplySubtitleLiftImmediately(
+        isPlaying = isPlaying,
+        previewConfiguredPosition = previewConfiguredSubtitlePosition,
+        controlsVisible = playerControlsVisible || !controlsHideAnimationFinished
+    )
+    LaunchedEffect(
+        targetSubtitleLiftPx,
+        subtitleCueState,
+        applySubtitleLiftImmediately,
+        subtitleDropTimedOut
+    ) {
+        val decision = nextSubtitleLift(
+            targetLiftPx = targetSubtitleLiftPx,
+            appliedLiftPx = appliedLiftPx,
+            cueVersion = subtitleCueState.version,
+            cueVisible = subtitleCueState.visible,
+            applyImmediately = applySubtitleLiftImmediately,
+            pendingDropCueVersion = pendingDropCueVersion,
+            dropTimedOut = subtitleDropTimedOut
+        )
+        appliedLiftPx = decision.appliedLiftPx
+        pendingDropCueVersion = decision.pendingDropCueVersion
+        if (decision.pendingDropCueVersion == null) subtitleDropTimedOut = false
+        latestOnSubtitleLiftPxChanged(decision.appliedLiftPx)
+    }
+    LaunchedEffect(pendingDropCueVersion) {
+        if (pendingDropCueVersion != null) {
+            delay(SUBTITLE_LIFT_DROP_TIMEOUT_MS)
+            subtitleDropTimedOut = true
+        }
+    }
+}
+
+@Composable
+private fun StyledSubtitleLayer(
+    styledSubtitles: StyledSubtitlePresenter,
+    style: SubtitleStyleSettings,
+    subtitleTextMetrics: SubtitleTextMetrics?,
+    liftPx: Float,
+    modifier: Modifier = Modifier
+) {
+    val styledSubtitleCues by styledSubtitles.cues.collectAsState()
+    if (styledSubtitleCues.isEmpty) return
+    val fallbackSubtitleTextSizePx = with(LocalDensity.current) {
+        (SUBTITLE_BASE_TEXT_SP * style.size / 100f).sp.toPx()
+    }
+    StyledSubtitleOverlay(
+        cues = styledSubtitleCues,
+        style = style,
+        textSizePx = subtitleTextMetrics?.textSizePx ?: fallbackSubtitleTextSizePx,
+        liftPx = liftPx,
+        modifier = modifier
+    )
+}
+
 private data class SubtitleAppliedConfig(
     val style: SubtitleStyleSettings,
     val isAss: Boolean,
+    val liftPx: Float
+)
+
+private data class SubtitleTypographyConfig(
+    val size: Int,
+    val font: String,
+    val customFontPath: String?,
+    val bold: Boolean,
+    val textColor: Int,
+    val backgroundColor: Int,
+    val outlineEnabled: Boolean,
+    val outlineColor: Int,
+    val isAss: Boolean
+)
+
+private data class SubtitlePositionConfig(
+    val verticalOffset: Int,
     val liftPx: Float
 )
 
@@ -2673,8 +2770,77 @@ private fun PlayerView.isAssOrSsaSubtitleSelected(): Boolean =
         sidecarKey = subtitleView?.getTag(R.id.player_view_sidecar_generation_tag) as? String
     )
 
+private val cachedBuiltInSubtitleTypefaces =
+    java.util.concurrent.ConcurrentHashMap<Pair<String, Boolean>, android.graphics.Typeface>()
 private var cachedCustomFontPath: String? = null
 private var cachedCustomTypeface: android.graphics.Typeface? = null
+private var cachedCustomBoldTypeface: android.graphics.Typeface? = null
+
+private fun resolveCachedSubtitleTypeface(
+    context: android.content.Context,
+    font: String,
+    bold: Boolean,
+    customPath: String?
+): android.graphics.Typeface {
+    if (font == com.nuvio.tv.data.local.SubtitleFontOption.CUSTOM) {
+        val base = if (customPath != null) {
+            if (customPath == cachedCustomFontPath && cachedCustomTypeface != null) {
+                cachedCustomTypeface
+            } else {
+                runCatching { android.graphics.Typeface.createFromFile(customPath) }.getOrNull().also { tf ->
+                    cachedCustomFontPath = customPath
+                    cachedCustomTypeface = tf
+                    cachedCustomBoldTypeface = null
+                }
+            }
+        } else {
+            cachedCustomFontPath = null
+            cachedCustomTypeface = null
+            cachedCustomBoldTypeface = null
+            null
+        }
+        return if (base != null) {
+            if (bold) {
+                cachedCustomBoldTypeface ?: android.graphics.Typeface.create(base, android.graphics.Typeface.BOLD).also {
+                    cachedCustomBoldTypeface = it
+                }
+            } else {
+                base
+            }
+        } else {
+            if (bold) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+        }
+    }
+
+    val cacheKey = font to bold
+    cachedBuiltInSubtitleTypefaces[cacheKey]?.let { return it }
+
+    val base = when (font) {
+        com.nuvio.tv.data.local.SubtitleFontOption.PHIMMOI -> runCatching {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.fontphimmoi)
+        }.getOrNull()
+        com.nuvio.tv.data.local.SubtitleFontOption.INTER -> runCatching {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_variable)
+        }.getOrNull()
+        com.nuvio.tv.data.local.SubtitleFontOption.OPENSANS -> runCatching {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.opensans_variable)
+        }.getOrNull()
+        com.nuvio.tv.data.local.SubtitleFontOption.DMSANS -> runCatching {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.dm_sans_variable)
+        }.getOrNull()
+        com.nuvio.tv.data.local.SubtitleFontOption.OSWALD -> runCatching {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.oswald)
+        }.getOrNull()
+        else -> null
+    }
+    val resolved = if (base != null) {
+        if (bold) android.graphics.Typeface.create(base, android.graphics.Typeface.BOLD) else base
+    } else {
+        if (bold) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+    }
+    cachedBuiltInSubtitleTypefaces[cacheKey] = resolved
+    return resolved
+}
 
 private fun PlayerView.applySubtitleStyleIfNeeded(
     subtitleStyle: SubtitleStyleSettings,
@@ -2683,10 +2849,8 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
 ) {
     val isAss = isAssOrSsaSubtitleSelected()
     val config = SubtitleAppliedConfig(subtitleStyle, isAss, liftPx)
-    if (!force && getTag(R.id.player_view_subtitle_style_tag) == config) {
-        return
-    }
 
+    // Tier 1: Libass font scale (independent of controls liftPx and ExoPlayer SubtitleView).
     val targetAssScale = (subtitleStyle.size / 100f).coerceIn(0.5f, 3.0f)
     val lastAssScale = getTag(R.id.player_view_libass_font_scale_tag) as? Float
     if (force || lastAssScale != targetAssScale) {
@@ -2697,99 +2861,83 @@ private fun PlayerView.applySubtitleStyleIfNeeded(
             ?.invalidateSubtitles()
     }
 
-    setTag(R.id.player_view_subtitle_style_tag, config)
-
-    val subView = subtitleView
-    if (subView == null) {
+    val subView = subtitleView ?: return
+    if (!force && getTag(R.id.player_view_subtitle_style_tag) == config) {
         return
     }
-    subView.apply {
-        val scaledFontSize = SUBTITLE_BASE_TEXT_SP * (subtitleStyle.size / 100f)
-        setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, scaledFontSize)
-        setApplyEmbeddedFontSizes(false)
+    setTag(R.id.player_view_subtitle_style_tag, config)
 
-        val baseTypeface = when (subtitleStyle.font) {
-            com.nuvio.tv.data.local.SubtitleFontOption.PHIMMOI -> runCatching {
-                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.fontphimmoi)
-            }.getOrNull()
-            com.nuvio.tv.data.local.SubtitleFontOption.INTER -> runCatching {
-                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter_variable)
-            }.getOrNull()
-            com.nuvio.tv.data.local.SubtitleFontOption.OPENSANS -> runCatching {
-                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.opensans_variable)
-            }.getOrNull()
-            com.nuvio.tv.data.local.SubtitleFontOption.DMSANS -> runCatching {
-                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.dm_sans_variable)
-            }.getOrNull()
-            com.nuvio.tv.data.local.SubtitleFontOption.OSWALD -> runCatching {
-                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.oswald)
-            }.getOrNull()
-            com.nuvio.tv.data.local.SubtitleFontOption.CUSTOM -> runCatching {
-                val prefs = context.getSharedPreferences(
-                    "nuvio_global_subtitle_prefs",
-                    android.content.Context.MODE_PRIVATE
-                )
-                val path = prefs.getString("custom_subtitle_font_path", null)
-                if (path != null) {
-                    if (path == cachedCustomFontPath && cachedCustomTypeface != null) {
-                        cachedCustomTypeface
-                    } else {
-                        val tf = android.graphics.Typeface.createFromFile(path)
-                        cachedCustomFontPath = path
-                        cachedCustomTypeface = tf
-                        tf
-                    }
-                } else {
-                    cachedCustomFontPath = null
-                    cachedCustomTypeface = null
-                    null
-                }
-            }.getOrNull()
-            else -> null
-        }
-
-
-        val typeface = if (baseTypeface != null) {
-            if (subtitleStyle.bold) {
-                android.graphics.Typeface.create(baseTypeface, android.graphics.Typeface.BOLD)
-            } else {
-                baseTypeface
-            }
-        } else {
-            if (subtitleStyle.bold) {
-                android.graphics.Typeface.DEFAULT_BOLD
-            } else {
-                android.graphics.Typeface.DEFAULT
-            }
-        }
-
-        val edgeType = if (subtitleStyle.outlineEnabled) {
-            androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE
-        } else {
-            androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE
-        }
-
-        setStyle(
-            androidx.media3.ui.CaptionStyleCompat(
-                subtitleStyle.textColor,
-                subtitleStyle.backgroundColor,
-                android.graphics.Color.TRANSPARENT,
-                edgeType,
-                subtitleStyle.outlineColor,
-                typeface
-            )
-        )
-
-        setApplyEmbeddedStyles(!isAss)
-
-        val applyPosition = {
-            val placement = subtitleBottomPlacement(height, subtitleStyle.verticalOffset, liftPx)
-            setPadding(paddingLeft, paddingTop, paddingRight, placement.paddingPx)
-            setBottomPaddingFraction(placement.fraction)
-        }
-        if (height > 0) applyPosition() else post { applyPosition() }
+    // Tier 2: ExoPlayer SubtitleView typography & caption style (skipped when only liftPx changes).
+    val customFontPath = if (subtitleStyle.font == com.nuvio.tv.data.local.SubtitleFontOption.CUSTOM) {
+        context.getSharedPreferences("nuvio_global_subtitle_prefs", android.content.Context.MODE_PRIVATE)
+            .getString("custom_subtitle_font_path", null)
+    } else {
+        null
     }
-    if (subView.width > 0) reportSubtitleTextMetrics() else post { reportSubtitleTextMetrics() }
+    val typographyConfig = SubtitleTypographyConfig(
+        size = subtitleStyle.size,
+        font = subtitleStyle.font,
+        customFontPath = customFontPath,
+        bold = subtitleStyle.bold,
+        textColor = subtitleStyle.textColor,
+        backgroundColor = subtitleStyle.backgroundColor,
+        outlineEnabled = subtitleStyle.outlineEnabled,
+        outlineColor = subtitleStyle.outlineColor,
+        isAss = isAss
+    )
+    val typographyChanged = force || getTag(R.id.player_view_subtitle_typography_tag) != typographyConfig
+    if (typographyChanged) {
+        setTag(R.id.player_view_subtitle_typography_tag, typographyConfig)
+        subView.apply {
+            val scaledFontSize = SUBTITLE_BASE_TEXT_SP * (subtitleStyle.size / 100f)
+            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, scaledFontSize)
+            setApplyEmbeddedFontSizes(false)
+
+            val typeface = resolveCachedSubtitleTypeface(
+                context = context,
+                font = subtitleStyle.font,
+                bold = subtitleStyle.bold,
+                customPath = customFontPath
+            )
+            val edgeType = if (subtitleStyle.outlineEnabled) {
+                androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE
+            } else {
+                androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE
+            }
+            setStyle(
+                androidx.media3.ui.CaptionStyleCompat(
+                    subtitleStyle.textColor,
+                    subtitleStyle.backgroundColor,
+                    android.graphics.Color.TRANSPARENT,
+                    edgeType,
+                    subtitleStyle.outlineColor,
+                    typeface
+                )
+            )
+            setApplyEmbeddedStyles(!isAss)
+        }
+    }
+
+    // Tier 3: Subtitle vertical placement (fast padding update only).
+    val positionConfig = SubtitlePositionConfig(
+        verticalOffset = subtitleStyle.verticalOffset,
+        liftPx = liftPx
+    )
+    if (force || typographyChanged || getTag(R.id.player_view_subtitle_position_tag) != positionConfig) {
+        setTag(R.id.player_view_subtitle_position_tag, positionConfig)
+        subView.apply {
+            val applyPosition = {
+                val placement = subtitleBottomPlacement(height, subtitleStyle.verticalOffset, liftPx)
+                setPadding(paddingLeft, paddingTop, paddingRight, placement.paddingPx)
+                setBottomPaddingFraction(placement.fraction)
+            }
+            if (height > 0) applyPosition() else post { applyPosition() }
+        }
+    }
+
+    if (typographyChanged) {
+        if (subView.width > 0) reportSubtitleTextMetrics() else post { reportSubtitleTextMetrics() }
+    }
 }
 
 private fun PlayerView.reportSubtitleTextMetrics() {
@@ -2821,16 +2969,27 @@ private fun PlayerView.exoSubtitleTextMetrics(): SubtitleTextMetrics? {
     )
 }
 
+private val measureBoldTypefaceCache =
+    java.util.Collections.synchronizedMap(java.util.WeakHashMap<android.graphics.Typeface, android.graphics.Typeface>())
+
 private fun measureSubtitleBlockPx(
     paint: android.graphics.Paint,
     text: String,
     metrics: SubtitleTextMetrics
 ): Float {
     paint.textSize = metrics.textSizePx
-    paint.typeface = android.graphics.Typeface.create(
-        metrics.typeface ?: android.graphics.Typeface.DEFAULT,
-        if (metrics.bold) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
-    )
+    val base = metrics.typeface ?: android.graphics.Typeface.DEFAULT
+    paint.typeface = if (metrics.bold) {
+        if (base === android.graphics.Typeface.DEFAULT) {
+            android.graphics.Typeface.DEFAULT_BOLD
+        } else {
+            measureBoldTypefaceCache.getOrPut(base) {
+                android.graphics.Typeface.create(base, android.graphics.Typeface.BOLD)
+            }
+        }
+    } else {
+        base
+    }
     return subtitleBlockWidthPx(text, metrics) { paint.measureText(it) }
 }
 
