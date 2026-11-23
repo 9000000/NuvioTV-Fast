@@ -165,7 +165,17 @@ private fun PlayerRuntimeController.onTorrentStreaming(torrentState: TorrentStat
             )
         }
     } else {
-        val message = if (statsHidden) null else context.getString(R.string.player_torrent_status, peerInfo, speed)
+        val currentState = _uiState.value
+        val isBuffering = currentState.isBuffering
+        val statsOverlayVisible = currentState.showTorrentStats && !statsHidden
+        if (!isBuffering && !statsOverlayVisible && currentState.torrentBufferingMessage == null) {
+            return
+        }
+        val message = if (isBuffering && !statsHidden) {
+            context.getString(R.string.player_torrent_status, peerInfo, speed)
+        } else {
+            null
+        }
         _uiState.update {
             it.copy(
                 loadingProgress = null,

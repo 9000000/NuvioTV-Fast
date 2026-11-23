@@ -1,5 +1,22 @@
 # Error Log
 
+## [2026-11-23 19:45] - Đóng Băng Main Thread Gây Lag UI Player & Chậm Thuyết Minh Do Biên Dịch 160 Unicode Regex/Câu Trong `EnglishToVietnameseTransliterator`
+
+- **Type**: Logic
+- **Severity**: Critical
+- **File**: `app/src/main/java/com/nuvio/tv/core/tts/EnglishToVietnameseTransliterator.kt:92`, `app/src/main/java/com/nuvio/tv/core/tts/TtsPhoneticDictionary.kt:71`, `app/src/main/java/com/nuvio/tv/core/tts/GoogleOfflineTtsEngine.kt:489`, `app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerTorrent.kt:169`, `app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerPlaybackEvents.kt:451`
+- **Agent**: mon
+- **Root Cause**: (1) `EnglishToVietnameseTransliterator.transliterate()` chạy trên `Dispatchers.Main.immediate` cho mỗi câu phụ đề và biên dịch mới 159 biểu thức Unicode Lookbehind/Lookahead `Regex` + 1 `TOKEN_REGEX` (= 160 `Pattern.compile()`) trên mỗi câu, đồng thời `TtsPhoneticDictionary` đọc & parse 1.017 dòng asset lần đầu ngay trên Main Thread. (2) `GoogleOfflineTtsEngine.speakInternal()` lọc lại toàn bộ danh sách giọng hệ thống và gọi lặp Binder IPC `setPitch`/`setSpeechRate` trên mỗi câu. (3) `onTorrentStreaming()` và vòng lặp 500ms của MPV gọi `_uiState.update` không điều kiện làm recompose toàn bộ `PlayerScreen` liên tục. (4) `AudioSyncTaps.wrapAudioSink` bọc cố định vào `AudioSink` ngay cả khi AudioSync tắt.
+- **Error Message**:
+  ```
+  User report: vẫn bị lag và phụ đề chậm thuyết minh chậm
+  ```
+- **Fix Applied**: (1) Đánh chỉ mục sẵn `phrasesByFirstWord` theo từ đầu tiên trong `TtsPhoneticDictionary` và chuyển `EnglishToVietnameseTransliterator` sang single-pass $O(1)$ lookup dùng 1 `TOKEN_REGEX` tĩnh (0 lần compile Regex mỗi câu), kèm `preloadAsync()` trên thread nền khi `startSession()`. (2) Cache `cachedAllowedVoices` và `appliedPitch`/`appliedSpeed` trong `GoogleOfflineTtsEngine`. (3) Chặn `_uiState.update` thừa trong `onTorrentStreaming` và nhánh MPV `startProgressUpdates`. (4) Chỉ bọc `AudioSyncTaps.wrapAudioSink` khi AutoSync + AudioSync fallback cùng bật.
+- **Prevention**: Không bao giờ gọi `Regex(...)` trong vòng lặp hot-path hoặc trên Main Thread; luôn pre-compile regex tĩnh hoặc dùng chỉ mục HashMap; có unit test hiệu năng 500 lần `transliterate` trong `EnglishToVietnameseTransliteratorTest`.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-23 18:25] - UI Player Bị Giật Lag Và Phụ Đề Bị Chậm Đi Nhiều Giây Do AutoSync V2 Bật Mặc Định Và Vòng Lặp applySubtitleStyle Trên PlayerView
 
 - **Type**: Logic

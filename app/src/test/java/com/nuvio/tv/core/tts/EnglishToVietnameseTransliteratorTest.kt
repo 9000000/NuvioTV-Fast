@@ -144,4 +144,18 @@ class EnglishToVietnameseTransliteratorTest {
         assertEquals("", transliterator.transliterate(""))
         assertEquals("   ", transliterator.transliterate("   "))
     }
+
+    @Test
+    fun transliteratesPunctuatedMultiWordPhrasesWithoutPerCueRegexOverhead() {
+        val input = "Obi-Wan Kenobi xem Fast & Furious cùng Tony Stark ở New York!"
+        val startNs = System.nanoTime()
+        var output = ""
+        repeat(500) {
+            output = transliterator.transliterate(input)
+        }
+        val elapsedMs = (System.nanoTime() - startNs) / 1_000_000L
+        assertTrue(output.contains("Tô ni Xtác"))
+        assertTrue(output.contains("Niu Yoóc"))
+        assertTrue("500 transliterations took ${elapsedMs}ms (expected < 500ms)", elapsedMs < 500L)
+    }
 }

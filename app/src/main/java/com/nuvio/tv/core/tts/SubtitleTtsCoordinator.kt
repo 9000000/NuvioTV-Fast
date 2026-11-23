@@ -113,6 +113,7 @@ class SubtitleTtsCoordinator internal constructor(
         queueState.resetAllHistory()
         val currentConfig = _config.value
         if (currentConfig.enabled) {
+            transliterator?.preloadAsync()
             engine.ensureInitialized(
                 allowNetworkVoiceFallback = currentConfig.allowNetworkVoiceFallback,
                 preferredLanguageCode = currentConfig.preferredLanguageCode,

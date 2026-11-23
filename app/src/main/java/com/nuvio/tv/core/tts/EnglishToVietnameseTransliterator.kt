@@ -12,13 +12,29 @@ import javax.inject.Singleton
 @Singleton
 class EnglishToVietnameseTransliterator internal constructor(
     private val dictionaryProvider: () -> TtsPhoneticDictionary.ParsedDictionary,
+    private val preloadAction: (() -> Unit)? = null,
 ) {
     @Inject
-    constructor(dictionary: TtsPhoneticDictionary) : this({ dictionary.getDictionary() })
+    constructor(dictionary: TtsPhoneticDictionary) : this(
+        dictionaryProvider = { dictionary.getDictionary() },
+        preloadAction = { dictionary.preloadAsync() },
+    )
 
     // Constructor for testing
-    constructor(preset: TtsPhoneticDictionary.ParsedDictionary) : this({ preset })
+    constructor(preset: TtsPhoneticDictionary.ParsedDictionary) : this(
+        dictionaryProvider = { preset },
+        preloadAction = null,
+    )
+
+    fun preloadAsync() {
+        preloadAction?.invoke()
+    }
+
     companion object {
+        private val TOKEN_REGEX = Regex("([\\p{L}\\p{N}']+)|([^\\p{L}\\p{N}']+)")
+
+        private fun isWordBoundaryChar(ch: Char): Boolean =
+            ch == '_' || Character.isLetterOrDigit(ch)
         /**
          * Common non-diacritic Vietnamese words that might look like English words but must
          * NEVER be transliterated when appearing in Vietnamese subtitles.
@@ -84,27 +100,17 @@ class EnglishToVietnameseTransliterator internal constructor(
         if (text.startsWith("http://") || text.startsWith("https://")) return text
 
         val dict = dictionaryProvider()
-        val phrases = dict.phrases
+        val phrasesByFirstWord = dict.phrasesByFirstWord
         val words = dict.words
+        val lowerText = text.lowercase(Locale.ROOT)
+        val sb = StringBuilder(text.length + 32)
+        var skipUntil = 0
 
-        // Phase 1: Match multi-word phrases first
-        var processedText = text
-        for (phrase in phrases) {
-            val pattern = Regex(
-                "(?i)(?<![\\p{L}\\p{N}_])" + Regex.escape(phrase.rawKey) + "(?![\\p{L}\\p{N}_])"
-            )
-            if (pattern.containsMatchIn(processedText)) {
-                processedText = pattern.replace(processedText) { match ->
-                    preserveCaseOrPhonetic(match.value, phrase.phonetic)
-                }
-            }
-        }
+        for (match in TOKEN_REGEX.findAll(text)) {
+            val matchStart = match.range.first
+            val matchEndExclusive = match.range.last + 1
+            if (matchStart < skipUntil) continue
 
-        // Phase 2: Tokenize and process single words
-        val tokenRegex = Regex("([\\p{L}\\p{N}']+)|([^\\p{L}\\p{N}']+)")
-        val sb = StringBuilder(processedText.length + 32)
-
-        for (match in tokenRegex.findAll(processedText)) {
             val token = match.value
             val isWord = match.groups[1] != null
 
@@ -113,7 +119,33 @@ class EnglishToVietnameseTransliterator internal constructor(
                 continue
             }
 
+            // O(1) multi-word phrase lookup indexed by first word (zero per-cue regex compilation).
+            if (phrasesByFirstWord.isNotEmpty() &&
+                (matchStart == 0 || !isWordBoundaryChar(text[matchStart - 1]))
+            ) {
+                val candidates = phrasesByFirstWord[token.lowercase(Locale.ROOT)]
+                if (candidates != null) {
+                    var matchedPhrase: TtsPhoneticDictionary.PhraseEntry? = null
+                    for (candidate in candidates) {
+                        val endIndex = matchStart + candidate.rawKey.length
+                        if (endIndex <= lowerText.length &&
+                            lowerText.startsWith(candidate.rawKey, matchStart) &&
+                            (endIndex == text.length || !isWordBoundaryChar(text[endIndex]))
+                        ) {
+                            matchedPhrase = candidate
+                            break
+                        }
+                    }
+                    if (matchedPhrase != null) {
+                        sb.append(preserveCaseOrPhonetic(text.substring(matchStart, matchStart + matchedPhrase.rawKey.length), matchedPhrase.phonetic))
+                        skipUntil = matchStart + matchedPhrase.rawKey.length
+                        continue
+                    }
+                }
+            }
+
             sb.append(transliterateSingleToken(token, words))
+            skipUntil = matchEndExclusive
         }
 
         return sb.toString()

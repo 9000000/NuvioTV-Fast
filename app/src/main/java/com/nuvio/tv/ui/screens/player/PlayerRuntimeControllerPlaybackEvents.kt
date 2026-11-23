@@ -377,7 +377,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     )
                     val playingNow = view.isPlayingNow()
                     val mpvSubText = view.currentSubtitleText()
-                    val mpvSubTiming = if (!mpvSubText.isNullOrBlank()) {
+                    val mpvSubTiming = if (_uiState.value.ttsConfig.enabled && !mpvSubText.isNullOrBlank()) {
                         view.getSubtitleCueTimingContext(
                             rawText = mpvSubText,
                             playbackSpeed = _uiState.value.playbackSpeed
@@ -447,17 +447,26 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         hasFatalError = !_uiState.value.error.isNullOrBlank(),
                         durationMs = effectiveDuration
                     )
-                    val wasEnded = _uiState.value.playbackEnded
-                    _uiState.update { state ->
-                        state.copy(
-                            isPlaying = playingNow,
-                            isBuffering = if (naturalEnded) false else (!firstFrameReady || cacheBuffering),
-                            showLoadingOverlay = if (state.loadingOverlayEnabled) !firstFrameReady else false,
-                            // Snap the loading-logo fill to 100% once playback is
-                            // ready so the logo finishes filling on dismissal.
-                            loadingProgress = if (firstFrameReady && state.loadingProgress != null) 1f else state.loadingProgress,
-                            playbackEnded = naturalEnded
-                        )
+                    val currentState = _uiState.value
+                    val wasEnded = currentState.playbackEnded
+                    val targetBuffering = if (naturalEnded) false else (!firstFrameReady || cacheBuffering)
+                    val targetShowLoading = if (currentState.loadingOverlayEnabled) !firstFrameReady else false
+                    val targetLoadingProgress = if (firstFrameReady && currentState.loadingProgress != null) 1f else currentState.loadingProgress
+                    if (currentState.isPlaying != playingNow ||
+                        currentState.isBuffering != targetBuffering ||
+                        currentState.showLoadingOverlay != targetShowLoading ||
+                        currentState.loadingProgress != targetLoadingProgress ||
+                        currentState.playbackEnded != naturalEnded
+                    ) {
+                        _uiState.update { state ->
+                            state.copy(
+                                isPlaying = playingNow,
+                                isBuffering = targetBuffering,
+                                showLoadingOverlay = targetShowLoading,
+                                loadingProgress = targetLoadingProgress,
+                                playbackEnded = naturalEnded
+                            )
+                        }
                     }
                     // libmpv has no Media3 listener callbacks. Keep Android's active media
                     // session in sync with the state sampled by this existing progress tick.

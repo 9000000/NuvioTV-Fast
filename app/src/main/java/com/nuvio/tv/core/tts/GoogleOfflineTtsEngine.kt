@@ -69,8 +69,12 @@ class GoogleOfflineTtsEngine @Inject constructor(
     @Volatile private var preferredLanguageCodeSnapshot: String = GoogleOfflineTtsVoiceSelector.DEFAULT_LANGUAGE
     @Volatile private var pendingUtterance: PendingUtterance? = null
     @Volatile private var cachedSystemVoices: List<Voice> = emptyList()
+    @Volatile private var cachedAllowedVoicesKey: Triple<List<Voice>, Boolean, String>? = null
+    @Volatile private var cachedAllowedVoices: List<GoogleTtsVoiceInfo> = emptyList()
     @Volatile private var appliedVoiceName: String? = null
     @Volatile private var appliedLanguageTag: String? = null
+    @Volatile private var appliedPitch: Float = Float.NaN
+    @Volatile private var appliedSpeed: Float = Float.NaN
     @Volatile private var activeUtteranceStarted: Boolean = false
     private var activeOnCompleted: (() -> Unit)? = null
 
@@ -484,13 +488,24 @@ class GoogleOfflineTtsEngine @Inject constructor(
             if (activeUtteranceId.get() != utteranceId) return
 
             val systemVoices = cachedSystemVoices.ifEmpty {
-                snapshotSystemVoices(currentTts).also { cachedSystemVoices = it }
+                snapshotSystemVoices(currentTts).also {
+                    cachedSystemVoices = it
+                    cachedAllowedVoicesKey = null
+                }
             }
-            val allowedVoices = GoogleOfflineTtsVoiceSelector.selectAvailableVoices(
-                rawVoices = systemVoices.toRawVoices(),
-                allowNetworkFallback = utterance.allowNetworkVoiceFallback,
-                preferredLanguageCode = utterance.preferredLanguageCode,
-            )
+            val filterKey = Triple(systemVoices, utterance.allowNetworkVoiceFallback, utterance.preferredLanguageCode)
+            val allowedVoices = if (cachedAllowedVoicesKey == filterKey) {
+                cachedAllowedVoices
+            } else {
+                GoogleOfflineTtsVoiceSelector.selectAvailableVoices(
+                    rawVoices = systemVoices.toRawVoices(),
+                    allowNetworkFallback = utterance.allowNetworkVoiceFallback,
+                    preferredLanguageCode = utterance.preferredLanguageCode,
+                ).also {
+                    cachedAllowedVoices = it
+                    cachedAllowedVoicesKey = filterKey
+                }
+            }
             if (_voices.value != allowedVoices) {
                 _voices.value = allowedVoices
             }
@@ -536,8 +551,14 @@ class GoogleOfflineTtsEngine @Inject constructor(
                 return
             }
 
-            currentTts.setPitch(utterance.pitch)
-            currentTts.setSpeechRate(utterance.speed)
+            if (appliedPitch != utterance.pitch) {
+                currentTts.setPitch(utterance.pitch)
+                appliedPitch = utterance.pitch
+            }
+            if (appliedSpeed != utterance.speed) {
+                currentTts.setSpeechRate(utterance.speed)
+                appliedSpeed = utterance.speed
+            }
 
             if (activeUtteranceId.get() != utteranceId) return
 
@@ -606,7 +627,11 @@ class GoogleOfflineTtsEngine @Inject constructor(
         activeUtteranceStarted = false
         appliedVoiceName = null
         appliedLanguageTag = null
+        appliedPitch = Float.NaN
+        appliedSpeed = Float.NaN
         cachedSystemVoices = emptyList()
+        cachedAllowedVoicesKey = null
+        cachedAllowedVoices = emptyList()
         activeUtteranceId.set(null)
         activeOnCompleted = null
         if (clearPending) {

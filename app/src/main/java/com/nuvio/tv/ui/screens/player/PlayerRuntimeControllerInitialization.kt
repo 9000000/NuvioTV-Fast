@@ -2366,10 +2366,17 @@ private class SubtitleOffsetRenderersFactory(
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessors(arrayOf(gainAudioProcessor, nightModeAudioProcessor))
         val baseAudioSink = builder.build()
-        // Audio sync hook: tap the base sink so the returned sink stays a PlaybackSpeedAwareAudioSink
-        // and buildAudioRenderers keeps installing PlaybackSpeedAwareAudioRenderer.
+        // Audio sync hook: only wrap the audio sink when AutoSync + AudioSync fallback are active.
+        val audioSinkForPlayback = if (
+            com.nuvio.tv.ui.screens.player.autosync.AutoSyncPreferences.isEnabled(context) &&
+            com.nuvio.tv.ui.screens.player.audiosync.AudioSyncSettings.fallbackEnabled.value
+        ) {
+            AudioSyncTaps.wrapAudioSink(baseAudioSink)
+        } else {
+            baseAudioSink
+        }
         val playbackSpeedAwareAudioSink = PlaybackSpeedAwareAudioSink(
-            sink = AudioSyncTaps.wrapAudioSink(baseAudioSink),
+            sink = audioSinkForPlayback,
             initialForcePcm = initialForcePcm,
             forcePcmForBluetooth = bluetoothForcePcm
         )

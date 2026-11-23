@@ -7,6 +7,7 @@ import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,6 +21,14 @@ class TtsPhoneticDictionary @Inject constructor(
     companion object {
         const val DEFAULT_DICT_ASSET_PATH = "tts_en_vi_dict.tsv"
         private const val TAG = "TtsPhoneticDictionary"
+        private val WHITESPACE_REGEX = Regex("\\s+")
+        private val FIRST_WORD_REGEX = Regex("[\\p{L}\\p{N}']+")
+        private val preloadExecutor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "NuvioTtsDictLoader").apply {
+                isDaemon = true
+                priority = Thread.MIN_PRIORITY
+            }
+        }
 
         fun parseFromInputStream(inputStream: InputStream): ParsedDictionary {
             val phrases = mutableListOf<PhraseEntry>()
@@ -35,7 +44,7 @@ class TtsPhoneticDictionary @Inject constructor(
                     val value = parts[1].trim()
                     if (key.isEmpty() || value.isEmpty()) continue
 
-                    val tokens = key.split(Regex("\\s+")).filter { it.isNotEmpty() }
+                    val tokens = key.split(WHITESPACE_REGEX).filter { it.isNotEmpty() }
                     if (tokens.size > 1) {
                         phrases.add(PhraseEntry(tokens = tokens, rawKey = key, phonetic = value))
                     } else {
@@ -50,7 +59,18 @@ class TtsPhoneticDictionary @Inject constructor(
                     .thenByDescending { it.rawKey.length }
             )
 
-            return ParsedDictionary(phrases = phrases, words = words)
+            // Index phrases by their first word token for O(1) lookup without regex compilation.
+            val byFirstWord = HashMap<String, MutableList<PhraseEntry>>()
+            for (phrase in phrases) {
+                val firstWord = FIRST_WORD_REGEX.find(phrase.rawKey)?.value ?: continue
+                byFirstWord.getOrPut(firstWord) { ArrayList(2) }.add(phrase)
+            }
+
+            return ParsedDictionary(
+                phrases = phrases,
+                words = words,
+                phrasesByFirstWord = byFirstWord,
+            )
         }
     }
 
@@ -63,10 +83,17 @@ class TtsPhoneticDictionary @Inject constructor(
     data class ParsedDictionary(
         val phrases: List<PhraseEntry>,
         val words: Map<String, String>,
+        val phrasesByFirstWord: Map<String, List<PhraseEntry>> = emptyMap(),
     )
 
     @Volatile private var cachedDictionary: ParsedDictionary? = null
     private val loadLock = Any()
+
+    /** Preloads the dictionary off the main thread so first TTS cue has zero file I/O latency. */
+    fun preloadAsync() {
+        if (cachedDictionary != null) return
+        preloadExecutor.execute { getDictionary() }
+    }
 
     fun getDictionary(): ParsedDictionary {
         cachedDictionary?.let { return it }
