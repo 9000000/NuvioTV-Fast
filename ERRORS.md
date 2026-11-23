@@ -666,3 +666,38 @@
 - **Status**: Fixed
 
 ---
+
+## [2026-11-23 13:17] - Dấu ngoặc nhọn thừa đóng sớm class NuvioMpvSurfaceView khi resolve conflict syncStyledSubtitles
+
+- **Type**: Syntax
+- **Severity**: Medium
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/player/NuvioMpvSurfaceView.kt:307`
+- **Agent**: mon
+- **Root Cause**: Khi dung hợp code giữa tính năng phụ đề kiểu mới (upstream) và tùy chỉnh outline width/visibility (custom), một dấu `}` thừa vô tình được giữ lại trong block `runCatching`, khiến định nghĩa class `NuvioMpvSurfaceView` bị đóng sớm và đẩy các method bên dưới ra ngoài top-level scope, gây ra 470 lỗi cascade.
+- **Error Message**: 
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/NuvioMpvSurfaceView.kt:309:10 Syntax error: Expecting member declaration.
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/NuvioMpvSurfaceView.kt:31:1 Class 'NuvioMpvSurfaceView' is not abstract and does not implement abstract base class members:
+  ```
+- **Fix Applied**: Xóa dấu `}` thừa tại dòng 307 và chạy script kiểm tra cân bằng đóng mở ngoặc nhọn (`Opens: 229, Closes: 229`).
+- **Prevention**: Luôn chạy script kiểm tra cân bằng ngoặc nhọn sau khi giải quyết conflict trên các file có block lồng nhau phức tạp.
+- **Status**: Fixed
+
+---
+
+## [2026-11-23 13:20] - Thiếu mock usenetSourceSettings trong PlaybackSettingsTorrServerMutualExclusionTest
+
+- **Type**: Integration
+- **Severity**: Low
+- **File**: `app/src/test/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsTorrServerMutualExclusionTest.kt:52`
+- **Agent**: mon
+- **Root Cause**: Constructor của `PlaybackSettingsViewModel` nhận thêm tham số `usenetSourceSettings` từ upstream commit `#4760`, nhưng test cũ của TorrServer chưa cập nhật mock cho tham số mới này.
+- **Error Message**: 
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsTorrServerMutualExclusionTest.kt:52:13 No value passed for parameter 'usenetSourceSettings'.
+  ```
+- **Fix Applied**: Bổ sung `val usenetSourceSettings = mockk<UsenetSourceSettings>(relaxed = true)` vào hàm khởi tạo test.
+- **Prevention**: Khi thêm tham số vào ViewModel constructor trong quá trình merge, grep toàn bộ test files để bổ sung mock tương ứng.
+- **Status**: Fixed
+
+---
