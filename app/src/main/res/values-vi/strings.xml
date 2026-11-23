@@ -1991,7 +1991,7 @@
     <string name="parental_severity_moderate">Vừa phải</string>
     <string name="parental_severity_mild">Nhẹ</string>
     <string name="player_ends_at">Kết thúc lúc %1$s</string>
-    <string name="player_live_watched">TRỰC TIẾP  %1$s</string>
+    <string name="player_live_watched">ĐANG PHÁT  %1$s</string>
     <!-- Season/episode code shown in player UI (e.g. S01E02). %1$d = season, %2$d = episode. -->
     <string name="season_episode_format">M%1$d T%2$d</string>
     <string name="player_subtitle_delay">Độ trễ phụ đề</string>
@@ -2645,7 +2645,7 @@
     <string name="livetv_quick_channels_title">DANH SÁCH KÊNH</string>
     <string name="livetv_categories_title">DANH MỤC</string>
     <string name="livetv_guide_schedule_title">LỊCH PHÁT SÓNG</string>
-    <string name="livetv_live_badge">TRỰC TIẾP</string>
+    <string name="livetv_live_badge">ĐANG PHÁT</string>
     <string name="livetv_catchup_badge">XEM LẠI</string>
     <string name="livetv_upcoming_badge">SẮP CHIẾU</string>
     <string name="livetv_past_badge">ĐÃ PHÁT</string>

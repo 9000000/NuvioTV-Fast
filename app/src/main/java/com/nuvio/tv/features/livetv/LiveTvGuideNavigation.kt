@@ -1,6 +1,7 @@
 package com.nuvio.tv.features.livetv
 
 internal const val LIVE_TV_GUIDE_GRID_COLUMNS = 3
+internal const val LIVE_TV_FULLSCREEN_OSD_AUTO_HIDE_MS = 2_000L
 private const val EPG_PAST_WINDOW_MS = 4 * 60 * 60 * 1000L
 private const val EPG_FUTURE_WINDOW_MS = 24 * 60 * 60 * 1000L
 private const val EPG_MAX_PAST_PROGRAMS = 4
@@ -384,5 +385,90 @@ private fun computeRowStride(
         }
     }
     return (fallbackHeightPx + verticalSpacingPx).coerceAtLeast(1)
+}
+
+internal enum class FullscreenKeyDirection {
+    UP,
+    DOWN,
+    CHANNEL_UP,
+    CHANNEL_DOWN
+}
+
+internal sealed interface FullscreenKeyAction {
+    data object None : FullscreenKeyAction
+    data object ShowOsd : FullscreenKeyAction
+    data class MoveQuickChannel(val index: Int) : FullscreenKeyAction
+    data class SwitchChannel(val index: Int) : FullscreenKeyAction
+}
+
+/**
+ * Computes the next or previous channel index with wrap-around for CH+/CH- zapping.
+ */
+internal fun stepFullscreenChannelIndex(
+    currentIndex: Int,
+    totalCount: Int,
+    forward: Boolean
+): Int? {
+    if (totalCount <= 0) return null
+    val safeIndex = currentIndex.coerceIn(0, totalCount - 1)
+    return if (forward) {
+        if (safeIndex < totalCount - 1) safeIndex + 1 else 0
+    } else {
+        if (safeIndex > 0) safeIndex - 1 else totalCount - 1
+    }
+}
+
+/**
+ * Resolves D-pad Up/Down and hardware CH+/CH- behavior in fullscreen Live TV playback:
+ * - D-pad Up/Down only scrolls the quick channel list when open, or reveals the info OSD when closed.
+ * - Hardware CH+/CH- switches channels with wrap-around (or shows OSD when only 1 channel exists).
+ */
+internal fun resolveFullscreenDpadOrChannelAction(
+    direction: FullscreenKeyDirection,
+    showQuickChannels: Boolean,
+    quickChannelIndex: Int,
+    playingChannelIndex: Int,
+    totalChannels: Int
+): FullscreenKeyAction {
+    return when (direction) {
+        FullscreenKeyDirection.UP -> {
+            if (showQuickChannels) {
+                if (quickChannelIndex > 0) {
+                    FullscreenKeyAction.MoveQuickChannel(quickChannelIndex - 1)
+                } else {
+                    FullscreenKeyAction.None
+                }
+            } else {
+                FullscreenKeyAction.ShowOsd
+            }
+        }
+        FullscreenKeyDirection.DOWN -> {
+            if (showQuickChannels) {
+                if (quickChannelIndex < totalChannels - 1) {
+                    FullscreenKeyAction.MoveQuickChannel(quickChannelIndex + 1)
+                } else {
+                    FullscreenKeyAction.None
+                }
+            } else {
+                FullscreenKeyAction.ShowOsd
+            }
+        }
+        FullscreenKeyDirection.CHANNEL_UP,
+        FullscreenKeyDirection.CHANNEL_DOWN -> {
+            if (totalChannels <= 0) return FullscreenKeyAction.None
+            if (totalChannels == 1) return FullscreenKeyAction.ShowOsd
+            val baseIndex = if (playingChannelIndex in 0 until totalChannels) {
+                playingChannelIndex
+            } else {
+                quickChannelIndex.coerceIn(0, totalChannels - 1)
+            }
+            val nextIndex = stepFullscreenChannelIndex(
+                currentIndex = baseIndex,
+                totalCount = totalChannels,
+                forward = direction == FullscreenKeyDirection.CHANNEL_UP
+            ) ?: return FullscreenKeyAction.None
+            FullscreenKeyAction.SwitchChannel(nextIndex)
+        }
+    }
 }
 

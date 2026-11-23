@@ -361,4 +361,138 @@ class LiveTvGuideNavigationTest {
         )
         assertEquals(listOf("ch_p2_sport"), p2AllChannels.map { it.id })
     }
+
+    @Test
+    fun `stepFullscreenChannelIndex wraps cleanly for CH+ and CH-`() {
+        assertNull(stepFullscreenChannelIndex(currentIndex = 0, totalCount = 0, forward = true))
+        assertEquals(0, stepFullscreenChannelIndex(currentIndex = 0, totalCount = 1, forward = true))
+        assertEquals(0, stepFullscreenChannelIndex(currentIndex = 0, totalCount = 1, forward = false))
+
+        // CH+ moves forward and wraps from last to first
+        assertEquals(1, stepFullscreenChannelIndex(currentIndex = 0, totalCount = 3, forward = true))
+        assertEquals(2, stepFullscreenChannelIndex(currentIndex = 1, totalCount = 3, forward = true))
+        assertEquals(0, stepFullscreenChannelIndex(currentIndex = 2, totalCount = 3, forward = true))
+
+        // CH- moves backward and wraps from first to last
+        assertEquals(2, stepFullscreenChannelIndex(currentIndex = 0, totalCount = 3, forward = false))
+        assertEquals(0, stepFullscreenChannelIndex(currentIndex = 1, totalCount = 3, forward = false))
+        assertEquals(1, stepFullscreenChannelIndex(currentIndex = 2, totalCount = 3, forward = false))
+
+        // Out-of-bounds index is clamped safely before stepping
+        assertEquals(0, stepFullscreenChannelIndex(currentIndex = 99, totalCount = 3, forward = true))
+        assertEquals(2, stepFullscreenChannelIndex(currentIndex = -5, totalCount = 3, forward = false))
+    }
+
+    @Test
+    fun `fullscreen D-pad Up and Down only show info OSD when quick channels closed while CH keys zap`() {
+        assertEquals(2_000L, LIVE_TV_FULLSCREEN_OSD_AUTO_HIDE_MS)
+
+        // When quick channels drawer is closed, D-pad Up/Down never switch channel and only reveal OSD
+        assertEquals(
+            FullscreenKeyAction.ShowOsd,
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.UP,
+                showQuickChannels = false,
+                quickChannelIndex = 1,
+                playingChannelIndex = 1,
+                totalChannels = 5
+            )
+        )
+        assertEquals(
+            FullscreenKeyAction.ShowOsd,
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.DOWN,
+                showQuickChannels = false,
+                quickChannelIndex = 1,
+                playingChannelIndex = 1,
+                totalChannels = 5
+            )
+        )
+
+        // When quick channels drawer is open, D-pad Up/Down move highlight within bounds
+        assertEquals(
+            FullscreenKeyAction.MoveQuickChannel(0),
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.UP,
+                showQuickChannels = true,
+                quickChannelIndex = 1,
+                playingChannelIndex = 2,
+                totalChannels = 5
+            )
+        )
+        assertEquals(
+            FullscreenKeyAction.None,
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.UP,
+                showQuickChannels = true,
+                quickChannelIndex = 0,
+                playingChannelIndex = 2,
+                totalChannels = 5
+            )
+        )
+        assertEquals(
+            FullscreenKeyAction.MoveQuickChannel(2),
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.DOWN,
+                showQuickChannels = true,
+                quickChannelIndex = 1,
+                playingChannelIndex = 2,
+                totalChannels = 5
+            )
+        )
+        assertEquals(
+            FullscreenKeyAction.None,
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.DOWN,
+                showQuickChannels = true,
+                quickChannelIndex = 4,
+                playingChannelIndex = 2,
+                totalChannels = 5
+            )
+        )
+
+        // Hardware CH+/CH- switch channels relative to currently playing channel
+        assertEquals(
+            FullscreenKeyAction.SwitchChannel(3),
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.CHANNEL_UP,
+                showQuickChannels = false,
+                quickChannelIndex = 0,
+                playingChannelIndex = 2,
+                totalChannels = 5
+            )
+        )
+        assertEquals(
+            FullscreenKeyAction.SwitchChannel(1),
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.CHANNEL_DOWN,
+                showQuickChannels = true,
+                quickChannelIndex = 4,
+                playingChannelIndex = 2,
+                totalChannels = 5
+            )
+        )
+
+        // Single-channel list on CH+/CH- reveals OSD without reloading the active stream
+        assertEquals(
+            FullscreenKeyAction.ShowOsd,
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.CHANNEL_UP,
+                showQuickChannels = false,
+                quickChannelIndex = 0,
+                playingChannelIndex = 0,
+                totalChannels = 1
+            )
+        )
+        assertEquals(
+            FullscreenKeyAction.None,
+            resolveFullscreenDpadOrChannelAction(
+                direction = FullscreenKeyDirection.CHANNEL_DOWN,
+                showQuickChannels = false,
+                quickChannelIndex = 0,
+                playingChannelIndex = -1,
+                totalChannels = 0
+            )
+        )
+    }
 }

@@ -116,7 +116,7 @@ object SyntheticEpgGenerator {
 
         val parsedTime = parseEventTime(name, nowMs)
         val cleanName = cleanChannelTitle(name)
-        val groupName = channel.group?.trim().takeIf { !it.isNullOrBlank() } ?: "Trực tiếp"
+        val groupName = channel.group?.trim().takeIf { !it.isNullOrBlank() } ?: "Truyền hình"
 
         if (parsedTime != null) {
             val eventStart = parsedTime.startMs
@@ -140,7 +140,7 @@ object SyntheticEpgGenerator {
                     startMs = eventStart,
                     stopMs = eventStop,
                     title = cleanName,
-                    description = "🔴 Trực tiếp: $cleanName · Nhóm: $groupName",
+                    description = "🔴 Đang phát: $cleanName · Nhóm: $groupName",
                     category = "Thể thao"
                 )
             )
@@ -171,7 +171,7 @@ object SyntheticEpgGenerator {
                         startMs = bStart,
                         stopMs = bStop,
                         title = cleanName,
-                        description = "Phát sóng trực tiếp liên tục trên $cleanName · Nhóm: $groupName",
+                        description = "Đang phát sóng liên tục trên $cleanName · Nhóm: $groupName",
                         category = groupName
                     )
                 )

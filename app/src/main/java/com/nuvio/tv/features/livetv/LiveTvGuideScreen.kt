@@ -1,5 +1,6 @@
 package com.nuvio.tv.features.livetv
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -280,7 +281,13 @@ private fun LiveTvGuideContent(
 
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var showOsd by remember { mutableStateOf(true) }
+    var osdTrigger by remember { mutableIntStateOf(0) }
     var showQuickChannels by remember { mutableStateOf(false) }
+
+    fun triggerOsd() {
+        showOsd = true
+        osdTrigger++
+    }
 
     LaunchedEffect(rawChannels.isNotEmpty(), groups, favoriteSet, recentIds, settings.showRecentGroup) {
         if (rawChannels.isNotEmpty() && (!hasSyncedInitialGroupDrawer || selectedGroupId == null)) {
@@ -421,9 +428,9 @@ private fun LiveTvGuideContent(
         }
     }
 
-    LaunchedEffect(showOsd, channelIndex, isFullscreen) {
+    LaunchedEffect(showOsd, osdTrigger, channelIndex, isFullscreen, showQuickChannels) {
         if (isFullscreen && showOsd && !showQuickChannels) {
-            delay(5_000L)
+            delay(LIVE_TV_FULLSCREEN_OSD_AUTO_HIDE_MS)
             showOsd = false
         }
     }
@@ -644,7 +651,7 @@ private fun LiveTvGuideContent(
             viewModel.play(ch, effectiveGroupId)
         }
         isFullscreen = true
-        showOsd = true
+        triggerOsd()
     }
 
     fun playChannelAction(ch: LiveTvChannel, forceFullscreen: Boolean = false) {
@@ -654,7 +661,7 @@ private fun LiveTvGuideContent(
                 viewModel.play(ch, effectiveGroupId)
             }
             isFullscreen = true
-            showOsd = true
+            triggerOsd()
         } else {
             viewModel.play(ch, effectiveGroupId)
         }
@@ -706,6 +713,7 @@ private fun LiveTvGuideContent(
             quickChannelListState = quickChannelListState,
             onChannelIndexChanged = { channelIndex = it },
             onShowOsdChanged = { showOsd = it },
+            onTriggerOsd = ::triggerOsd,
             onShowQuickChannelsChanged = { showQuickChannels = it },
             onExitFullscreen = {
                 isFullscreen = false
@@ -1063,6 +1071,7 @@ private fun FullscreenPlayerOverlay(
     quickChannelListState: androidx.compose.foundation.lazy.LazyListState,
     onChannelIndexChanged: (Int) -> Unit,
     onShowOsdChanged: (Boolean) -> Unit,
+    onTriggerOsd: () -> Unit,
     onShowQuickChannelsChanged: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit
 ) {
@@ -1080,6 +1089,42 @@ private fun FullscreenPlayerOverlay(
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                val keyCode = e.nativeKeyEvent.keyCode
+                val dpadOrChannelDirection = when {
+                    e.key == Key.DirectionUp -> FullscreenKeyDirection.UP
+                    e.key == Key.DirectionDown -> FullscreenKeyDirection.DOWN
+                    keyCode == AndroidKeyEvent.KEYCODE_CHANNEL_UP -> FullscreenKeyDirection.CHANNEL_UP
+                    keyCode == AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> FullscreenKeyDirection.CHANNEL_DOWN
+                    else -> null
+                }
+                if (dpadOrChannelDirection != null) {
+                    val playingIdx = channels.indexOfFirst { it.key == playback.channelKey }
+                    when (
+                        val action = resolveFullscreenDpadOrChannelAction(
+                            direction = dpadOrChannelDirection,
+                            showQuickChannels = showQuickChannels,
+                            quickChannelIndex = channelIndex,
+                            playingChannelIndex = playingIdx,
+                            totalChannels = channels.size
+                        )
+                    ) {
+                        FullscreenKeyAction.None -> Unit
+                        FullscreenKeyAction.ShowOsd -> {
+                            if (showQuickChannels) onShowQuickChannelsChanged(false)
+                            onTriggerOsd()
+                        }
+                        is FullscreenKeyAction.MoveQuickChannel -> {
+                            onChannelIndexChanged(action.index)
+                        }
+                        is FullscreenKeyAction.SwitchChannel -> {
+                            if (showQuickChannels) onShowQuickChannelsChanged(false)
+                            onChannelIndexChanged(action.index)
+                            channels.getOrNull(action.index)?.let { viewModel.play(it, selectedGroupId) }
+                            onTriggerOsd()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 when {
                     e.key == Key.Back -> {
                         if (showQuickChannels) {
@@ -1088,28 +1133,6 @@ private fun FullscreenPlayerOverlay(
                             if (playingIdx >= 0) onChannelIndexChanged(playingIdx)
                         } else {
                             onExitFullscreen()
-                        }
-                        true
-                    }
-                    e.key == Key.DirectionUp -> {
-                        if (showQuickChannels) {
-                            if (channelIndex > 0) onChannelIndexChanged(channelIndex - 1)
-                        } else if (channels.isNotEmpty()) {
-                            val next = if (channelIndex > 0) channelIndex - 1 else channels.lastIndex
-                            onChannelIndexChanged(next)
-                            channels.getOrNull(next)?.let { viewModel.play(it, selectedGroupId) }
-                            onShowOsdChanged(true)
-                        }
-                        true
-                    }
-                    e.key == Key.DirectionDown -> {
-                        if (showQuickChannels) {
-                            if (channelIndex < channels.lastIndex) onChannelIndexChanged(channelIndex + 1)
-                        } else if (channels.isNotEmpty()) {
-                            val next = if (channelIndex < channels.lastIndex) channelIndex + 1 else 0
-                            onChannelIndexChanged(next)
-                            channels.getOrNull(next)?.let { viewModel.play(it, selectedGroupId) }
-                            onShowOsdChanged(true)
                         }
                         true
                     }
@@ -1128,7 +1151,7 @@ private fun FullscreenPlayerOverlay(
                             val playingIdx = channels.indexOfFirst { it.key == playback.channelKey }
                             if (playingIdx >= 0) onChannelIndexChanged(playingIdx)
                         } else {
-                            onShowOsdChanged(!showOsd)
+                            if (showOsd) onShowOsdChanged(false) else onTriggerOsd()
                         }
                         true
                     }
@@ -1141,7 +1164,7 @@ private fun FullscreenPlayerOverlay(
                             }
                             onShowQuickChannelsChanged(false)
                         } else {
-                            onShowOsdChanged(!showOsd)
+                            if (showOsd) onShowOsdChanged(false) else onTriggerOsd()
                         }
                         true
                     }
