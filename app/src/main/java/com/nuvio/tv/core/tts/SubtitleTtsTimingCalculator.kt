@@ -7,12 +7,12 @@ package com.nuvio.tv.core.tts
 object SubtitleTtsTimingCalculator {
     const val MIN_MAX_AUTO_SPEED = 1.4f
     const val MAX_MAX_AUTO_SPEED = 3.0f
-    const val DEFAULT_MAX_AUTO_SPEED = 2.1f
+    const val DEFAULT_MAX_AUTO_SPEED = 2.5f
 
     const val MIN_BASE_SPEED = 0.7f
     const val MIN_UI_BASE_SPEED = 0.8f
     const val MAX_BASE_SPEED = 2.0f
-    const val DEFAULT_BASE_SPEED = 1.0f
+    const val DEFAULT_BASE_SPEED = 1.4f
 
     const val MIN_PLAYBACK_SPEED = 0.25f
     const val MAX_PLAYBACK_SPEED = 4.0f

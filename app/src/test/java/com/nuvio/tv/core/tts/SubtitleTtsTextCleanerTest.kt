@@ -89,8 +89,13 @@ class SubtitleTtsTextCleanerTest {
             0.001f,
         )
         assertEquals(
-            2.1f,
+            2.208f,
             SubtitleTtsTextCleaner.calculateEffectiveSpeed(veryLongText, 1.6f, autoSpeedEnabled = true),
+            0.001f,
+        )
+        assertEquals(
+            2.5f,
+            SubtitleTtsTextCleaner.calculateEffectiveSpeed(veryLongText, 1.9f, autoSpeedEnabled = true),
             0.001f,
         )
         assertEquals(

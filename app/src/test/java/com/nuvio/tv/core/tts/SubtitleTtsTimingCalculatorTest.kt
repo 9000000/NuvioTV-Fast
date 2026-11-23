@@ -11,9 +11,9 @@ class SubtitleTtsTimingCalculatorTest {
 
     @Test
     fun configConstantsAndPlayerSettingsDefaultsMatchSpec() {
-        assertEquals(1.0f, SubtitleTtsTimingCalculator.DEFAULT_BASE_SPEED, 0.001f)
+        assertEquals(1.4f, SubtitleTtsTimingCalculator.DEFAULT_BASE_SPEED, 0.001f)
         assertEquals(2.0f, SubtitleTtsTimingCalculator.MAX_BASE_SPEED, 0.001f)
-        assertEquals(2.1f, SubtitleTtsTimingCalculator.DEFAULT_MAX_AUTO_SPEED, 0.001f)
+        assertEquals(2.5f, SubtitleTtsTimingCalculator.DEFAULT_MAX_AUTO_SPEED, 0.001f)
         assertEquals(3.0f, SubtitleTtsTimingCalculator.MAX_MAX_AUTO_SPEED, 0.001f)
         assertEquals(0.8f, SubtitleTtsTimingCalculator.MIN_UI_BASE_SPEED, 0.001f)
         assertEquals(1.4f, SubtitleTtsTimingCalculator.MIN_MAX_AUTO_SPEED, 0.001f)
@@ -24,10 +24,10 @@ class SubtitleTtsTimingCalculatorTest {
         assertFalse(settings.ttsAllowNetworkVoiceFallback)
         assertEquals(0.25f, settings.ttsMovieVolume, 0.001f)
         assertEquals(1.0f, settings.ttsVoiceVolume, 0.001f)
-        assertEquals(1.0f, settings.ttsBaseSpeed, 0.001f)
+        assertEquals(1.4f, settings.ttsBaseSpeed, 0.001f)
         assertEquals(1.0f, settings.ttsPitch, 0.001f)
         assertTrue(settings.ttsAutoSpeedEnabled)
-        assertEquals(2.1f, settings.ttsMaxAutoSpeed, 0.001f)
+        assertEquals(2.5f, settings.ttsMaxAutoSpeed, 0.001f)
         assertFalse(settings.ttsWaitForCueCompletion)
         assertFalse(settings.ttsHideSubtitlesWhenEnabled)
 
