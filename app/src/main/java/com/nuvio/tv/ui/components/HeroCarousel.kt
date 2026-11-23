@@ -111,6 +111,7 @@ fun HeroCarousel(
     // Slide whose description is still on its first scroll pass, or -1.
     var descriptionScrollHoldIndex by remember { mutableIntStateOf(-1) }
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
 
     LaunchedEffect(activeIndex, isFocused) {
         if (!isFocused) return@LaunchedEffect
@@ -160,17 +161,34 @@ fun HeroCarousel(
             }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
+                    val isRepeat = event.nativeKeyEvent.repeatCount > 0
                     when (event.key) {
                         Key.DirectionLeft -> {
                             if (isRtl) {
                                 if (activeIndex < items.size - 1) { activeIndex++; true } else false
                             } else {
-                                if (activeIndex > 0) { activeIndex--; true } else false
+                                if (activeIndex > 0) {
+                                    activeIndex--
+                                    true
+                                } else if (!isRepeat && openSidebar != null) {
+                                    openSidebar()
+                                    true
+                                } else {
+                                    false
+                                }
                             }
                         }
                         Key.DirectionRight -> {
                             if (isRtl) {
-                                if (activeIndex > 0) { activeIndex--; true } else false
+                                if (activeIndex > 0) {
+                                    activeIndex--
+                                    true
+                                } else if (!isRepeat && openSidebar != null) {
+                                    openSidebar()
+                                    true
+                                } else {
+                                    false
+                                }
                             } else {
                                 if (activeIndex < items.size - 1) { activeIndex++; true } else false
                             }

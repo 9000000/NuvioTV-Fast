@@ -1,9 +1,12 @@
 package com.nuvio.tv.ui.screens.detail
 
+import android.view.KeyEvent
+import androidx.compose.ui.focus.FocusRequester
 import com.nuvio.tv.domain.model.Video
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -496,6 +499,108 @@ class DetailSeasonSelectionTest {
                 hasWaitedForSeasonAdvance = false
             )
         )
+    }
+
+    @Test
+    fun `resolveSeasonTabFocusRequester reuses map entry so selected season requester stays attached`() {
+        val map = mutableMapOf<Int, FocusRequester>()
+        val restorerRequester = map.getOrPut(1) { FocusRequester() }
+
+        val tabRequester = resolveSeasonTabFocusRequester(1, map)
+
+        assertSame(restorerRequester, tabRequester)
+        assertSame(tabRequester, map[1])
+    }
+
+    @Test
+    fun `handleSeasonTabDpadDownKey flushes pending season before navigating down to episodes`() {
+        val events = mutableListOf<String>()
+
+        val consumed = handleSeasonTabDpadDownKey(
+            action = KeyEvent.ACTION_DOWN,
+            keyCode = KeyEvent.KEYCODE_DPAD_DOWN,
+            onDpadDownPending = { events += "flush_pending" },
+            onNavigateDown = {
+                events += "navigate_down"
+                true
+            }
+        )
+
+        assertTrue(consumed)
+        assertEquals(listOf("flush_pending", "navigate_down"), events)
+    }
+
+    @Test
+    fun `handleSeasonTabDpadDownKey ignores non-down keys and action up`() {
+        val events = mutableListOf<String>()
+
+        assertFalse(
+            handleSeasonTabDpadDownKey(
+                action = KeyEvent.ACTION_UP,
+                keyCode = KeyEvent.KEYCODE_DPAD_DOWN,
+                onDpadDownPending = { events += "flush_pending" },
+                onNavigateDown = {
+                    events += "navigate_down"
+                    true
+                }
+            )
+        )
+        assertFalse(
+            handleSeasonTabDpadDownKey(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_DPAD_RIGHT,
+                onDpadDownPending = { events += "flush_pending" },
+                onNavigateDown = {
+                    events += "navigate_down"
+                    true
+                }
+            )
+        )
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `handleSeasonTabDpadUpKey invokes navigate up callback and consumes dpad up`() {
+        var navigatedUp = false
+
+        val consumed = handleSeasonTabDpadUpKey(
+            action = KeyEvent.ACTION_DOWN,
+            keyCode = KeyEvent.KEYCODE_DPAD_UP,
+            onNavigateUp = {
+                navigatedUp = true
+                true
+            }
+        )
+
+        assertTrue(consumed)
+        assertTrue(navigatedUp)
+    }
+
+    @Test
+    fun `handleSeasonTabDpadUpKey ignores non-up keys and action up`() {
+        var navigatedUp = false
+
+        assertFalse(
+            handleSeasonTabDpadUpKey(
+                action = KeyEvent.ACTION_UP,
+                keyCode = KeyEvent.KEYCODE_DPAD_UP,
+                onNavigateUp = {
+                    navigatedUp = true
+                    true
+                }
+            )
+        )
+        assertFalse(
+            handleSeasonTabDpadUpKey(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_DPAD_DOWN,
+                onNavigateUp = {
+                    navigatedUp = true
+                    true
+                }
+            )
+        )
+        assertFalse(navigatedUp)
     }
 
     private fun step(

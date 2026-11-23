@@ -29,6 +29,8 @@ fun CastSection(
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     sectionFocusRequester: FocusRequester? = null,
+    entryFocusNonce: Int = 0,
+    onClearEntryFocus: () -> Unit = {},
     restorePersonId: Int? = null,
     restoreFocusToken: Int = 0,
     blockDefaultRestore: Boolean = false,
@@ -133,7 +135,10 @@ fun CastSection(
             pendingFocusIndex = initialIndex,
             pendingFocusNonce = restoreFocusToken,
             onClearPendingFocus = onRestoreFocusHandled,
-            entryFocusRequester = sectionFocusRequester
+            entryFocusRequester = sectionFocusRequester,
+            entryFocusNonce = entryFocusNonce,
+            entryFocusIndex = initialIndex,
+            onClearEntryFocus = onClearEntryFocus
         )
     }
 }

@@ -129,6 +129,39 @@ internal fun resolveSeasonPosters(meta: Meta, seasons: List<Int>): Map<Int, Stri
     return posters.takeIf { it.isNotEmpty() }
 }
 
+internal fun resolveSeasonTabFocusRequester(
+    season: Int,
+    seasonFocusRequesters: MutableMap<Int, FocusRequester>
+): FocusRequester = seasonFocusRequesters.getOrPut(season) { FocusRequester() }
+
+internal fun handleSeasonTabDpadDownKey(
+    action: Int,
+    keyCode: Int,
+    onDpadDownPending: () -> Unit,
+    onNavigateDown: (() -> Boolean)?
+): Boolean {
+    if (action == AndroidKeyEvent.ACTION_DOWN && keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+        onDpadDownPending()
+        if (onNavigateDown != null && onNavigateDown()) {
+            return true
+        }
+    }
+    return false
+}
+
+internal fun handleSeasonTabDpadUpKey(
+    action: Int,
+    keyCode: Int,
+    onNavigateUp: (() -> Boolean)?
+): Boolean {
+    if (action == AndroidKeyEvent.ACTION_DOWN && keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP) {
+        if (onNavigateUp != null && onNavigateUp()) {
+            return true
+        }
+    }
+    return false
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun SeasonTabs(
@@ -140,6 +173,7 @@ fun SeasonTabs(
     selectedTabFocusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
+    onNavigateUp: (() -> Boolean)? = null,
     onNavigateDown: (() -> Boolean)? = null,
     isFocusEnabled: Boolean = true,
     posterStyle: SeasonPosterTabsStyle? = null
@@ -220,6 +254,7 @@ fun SeasonTabs(
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (selectedTabFocusRequester != null) Modifier.focusRequester(selectedTabFocusRequester) else Modifier)
                 .onFocusChanged { seasonRowHasFocus = it.hasFocus }
                 .onPreviewKeyEvent { event ->
                     val native = event.nativeKeyEvent
@@ -252,10 +287,8 @@ fun SeasonTabs(
         ) {
             items(sortedSeasons, key = { it }) { season ->
                 val isSelected = season == selectedSeason
-                val seasonFocusRequester = if (isSelected && selectedTabFocusRequester != null) {
-                    selectedTabFocusRequester
-                } else {
-                    remember(season) { seasonFocusRequesters.getOrPut(season) { FocusRequester() } }
+                val seasonFocusRequester = remember(season) {
+                    resolveSeasonTabFocusRequester(season, seasonFocusRequesters)
                 }
                 SeasonTab(
                     season = season,
@@ -269,6 +302,7 @@ fun SeasonTabs(
                     focusRequester = seasonFocusRequester,
                     upFocusRequester = upFocusRequester,
                     downFocusRequester = downFocusRequester,
+                    onNavigateUp = onNavigateUp,
                     onNavigateDown = onNavigateDown,
                     onClick = onTabClick,
                     onLongPress = onTabLongPress,
@@ -300,6 +334,7 @@ private fun SeasonTab(
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester?,
     downFocusRequester: FocusRequester?,
+    onNavigateUp: (() -> Boolean)? = null,
     onNavigateDown: (() -> Boolean)? = null,
     onClick: (Int) -> Unit,
     onLongPress: (Int) -> Unit,
@@ -351,7 +386,7 @@ private fun SeasonTab(
                     if (onNavigateDown == null && isSelected && downFocusRequester != null) {
                         down = downFocusRequester
                     }
-                    if (upFocusRequester != null) {
+                    if (onNavigateUp == null && upFocusRequester != null) {
                         up = upFocusRequester
                     }
                 }
@@ -364,6 +399,23 @@ private fun SeasonTab(
                 }
                 .onPreviewKeyEvent { event ->
                     val native = event.nativeKeyEvent
+                    if (handleSeasonTabDpadUpKey(
+                            action = native.action,
+                            keyCode = native.keyCode,
+                            onNavigateUp = onNavigateUp
+                        )
+                    ) {
+                        return@onPreviewKeyEvent true
+                    }
+                    if (handleSeasonTabDpadDownKey(
+                            action = native.action,
+                            keyCode = native.keyCode,
+                            onDpadDownPending = onDpadDownPending,
+                            onNavigateDown = onNavigateDown
+                        )
+                    ) {
+                        return@onPreviewKeyEvent true
+                    }
                     if (native.action == AndroidKeyEvent.ACTION_DOWN) {
                         if (native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
                             longPressTriggered = true
@@ -507,6 +559,7 @@ fun EpisodesRow(
     entryFocusRequester: FocusRequester? = null,
     entryFocusNonce: Int = 0,
     entryFocusIndex: Int = 0,
+    onClearEntryFocus: () -> Unit = {},
     onNavigateDown: (() -> Boolean)? = null,
     onNavigateUp: (() -> Boolean)? = null,
     episodeFocusRequesters: MutableMap<String, FocusRequester> = mutableMapOf(),
@@ -658,7 +711,8 @@ fun EpisodesRow(
         },
         entryFocusRequester = entryFocusRequester,
         entryFocusNonce = entryFocusNonce,
-        entryFocusIndex = entryFocusIndex
+        entryFocusIndex = entryFocusIndex,
+        onClearEntryFocus = onClearEntryFocus
     )
 
     optionsEpisode?.let { selectedEpisode ->

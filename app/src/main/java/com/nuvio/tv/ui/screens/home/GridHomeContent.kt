@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.State
 import androidx.compose.foundation.lazy.grid.items
 import com.nuvio.tv.LocalContentFocusRequester
+import com.nuvio.tv.LocalOpenSidebar
 import com.nuvio.tv.LocalRequestUpdateBannerFocus
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -434,6 +435,29 @@ fun GridHomeContent(
         }
 
         val requestUpdateBannerFocus = LocalRequestUpdateBannerFocus.current
+        val openSidebar = LocalOpenSidebar.current
+        val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+        val firstColumnKeys = remember(trimmedPostItems, actualColumnsPerRow) {
+            computeGridFirstColumnKeys(trimmedPostItems, actualColumnsPerRow)
+        }
+        val sidebarTriggerModifier = remember(openSidebar, isRtl) {
+            if (openSidebar != null) {
+                val towardStartKey = if (isRtl) Key.DirectionRight else Key.DirectionLeft
+                Modifier.onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.type == KeyEventType.KeyDown &&
+                        keyEvent.key == towardStartKey &&
+                        keyEvent.nativeKeyEvent.repeatCount == 0
+                    ) {
+                        openSidebar()
+                        true
+                    } else {
+                        false
+                    }
+                }
+            } else {
+                Modifier
+            }
+        }
 
         LazyVerticalGrid(
             state = gridState,
@@ -767,6 +791,7 @@ fun GridHomeContent(
                         }
                         GridContentCard(
                             item = gridItem.item,
+                            modifier = if (itemKey in firstColumnKeys) sidebarTriggerModifier else Modifier,
                             focusRequester = focusRequester ?: focusRequesters.getOrPut(itemKey) { FocusRequester() },
                             posterCardStyle = posterCardStyle,
                             showLabel = uiState.posterLabelsEnabled,
@@ -818,6 +843,7 @@ fun GridHomeContent(
                         }
                         SeeAllGridCard(
                             posterCardStyle = posterCardStyle,
+                            modifier = if (itemKey in firstColumnKeys) sidebarTriggerModifier else Modifier,
                             focusRequester = focusRequester ?: focusRequesters.getOrPut(itemKey) { FocusRequester() },
                             onFocused = remember(itemKey) {
                                 {
@@ -846,6 +872,7 @@ fun GridHomeContent(
                             collectionTitle = gridItem.collectionTitle,
                             focusGlowEnabled = gridItem.focusGlowEnabled,
                             posterCardStyle = posterCardStyle,
+                            modifier = if (itemKey in firstColumnKeys) sidebarTriggerModifier else Modifier,
                             focusRequester = focusRequesters.getOrPut(itemKey) { FocusRequester() },
                             onFocused = remember(itemKey) { { lastFocusedGridItemKey.value = itemKey; activeCwRowKey.value = null } },
                             onClick = remember(gridItem.collectionId, gridItem.folder.id) {
@@ -1197,4 +1224,31 @@ private fun buildSectionMapping(gridItems: List<GridItem>, indexOffset: Int = 0)
         }
     }
     return SectionMapping(mapping)
+}
+
+internal fun computeGridFirstColumnKeys(
+    items: List<Pair<GridItem, String>>,
+    columnsPerRow: Int
+): Set<String> {
+    val cols = columnsPerRow.coerceAtLeast(1)
+    val firstColKeys = HashSet<String>()
+    var indexInSection = 0
+    for ((item, key) in items) {
+        when (item) {
+            is GridItem.Hero,
+            is GridItem.SectionDivider,
+            is GridItem.CollectionHeader -> {
+                indexInSection = 0
+            }
+            is GridItem.Content,
+            is GridItem.SeeAll,
+            is GridItem.CollectionFolder -> {
+                if (indexInSection % cols == 0) {
+                    firstColKeys.add(key)
+                }
+                indexInSection++
+            }
+        }
+    }
+    return firstColKeys
 }

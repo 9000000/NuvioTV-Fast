@@ -377,11 +377,21 @@ fun HeroContentSection(
                             description = description,
                             onShowFullDescription = onShowFullDescription,
                             upFocusRequester = playButtonFocusRequester,
+                            downFocusRequester = playButtonDownFocusRequester,
                             onFocused = onHeroActionFocused,
                             onTruncationChanged = onTruncationChanged,
                             modifier = Modifier
                                 .fillMaxWidth(0.6f)
                                 .padding(bottom = NuvioTheme.spacing.md)
+                                .onPreviewKeyEvent { event ->
+                                    val native = event.nativeKeyEvent
+                                    if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                                        if (onNavigateDown != null && onNavigateDown()) {
+                                            return@onPreviewKeyEvent true
+                                        }
+                                    }
+                                    false
+                                }
                         )
                     }
 

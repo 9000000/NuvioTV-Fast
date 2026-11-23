@@ -70,6 +70,7 @@ fun LeanbackNativeRow(
     entryFocusRequester: FocusRequester? = null,
     entryFocusNonce: Int = 0,
     entryFocusIndex: Int = 0,
+    onClearEntryFocus: () -> Unit = {},
     onClearPendingFocus: () -> Unit = {},
     recycledViewPool: RecyclerView.RecycledViewPool? = null,
     paddingValues: PaddingValues? = null,
@@ -125,6 +126,7 @@ fun LeanbackNativeRow(
     }
 
     fun executeAttachedRowFocus(grid: InteropHorizontalGridView, targetIdx: Int) {
+        grid.restoredPosition = targetIdx
         grid.post {
             if (!grid.isAttachedToWindow || !grid.mayTakeFocus()) return@post
             if (animationsEnabled) {
@@ -132,10 +134,22 @@ fun LeanbackNativeRow(
             } else {
                 grid.setSelectedPosition(targetIdx)
             }
-            grid.requestFocus()
+            val composeEntered = if (entryFocusRequester != null) {
+                runCatching {
+                    entryFocusRequester.requestFocus()
+                    true
+                }.getOrDefault(false)
+            } else {
+                false
+            }
+            if (!composeEntered || !grid.hasFocus()) {
+                grid.requestFocus()
+            }
             val vh = grid.findViewHolderForAdapterPosition(targetIdx)
             if (vh != null) {
-                vh.itemView.requestFocus()
+                if (!vh.itemView.hasFocus()) {
+                    vh.itemView.requestFocus()
+                }
                 (vh as? LeanbackBaseViewHolder)?.updateFocusVisual(true)
             } else {
                 grid.post {
@@ -210,7 +224,7 @@ fun LeanbackNativeRow(
         }
     }
 
-    LaunchedEffect(entryFocusNonce, entryFocusIndex, rowKey) {
+    LaunchedEffect(entryFocusNonce, rowKey) {
         if (entryFocusNonce <= 0) return@LaunchedEffect
         repeat(8) {
             withFrameNanos { }
@@ -220,18 +234,30 @@ fun LeanbackNativeRow(
                     grid = gridView,
                     targetIdx = entryFocusIndex.coerceIn(0, items.lastIndex)
                 )
+                onClearEntryFocus()
                 return@LaunchedEffect
             }
         }
+        onClearEntryFocus()
     }
 
+    // Never attach focusProperties { canFocus = true } to AndroidView: Compose's internal
+    // FocusGroupPropertiesNode intentionally sets canFocus = false on the outer FocusTargetNode
+    // so focus enters the inner FocusTargetInteropElement (InteropHorizontalGridView). Overriding
+    // canFocus = true breaks AndroidView focus interop and causes horizontal D-pad navigation to
+    // lose focus back to the top Compose focusable row.
     AndroidView(
         modifier = modifier
             .then(
+                if (entryFocusRequester != null) {
+                    Modifier.focusRequester(entryFocusRequester)
+                } else {
+                    Modifier
+                }
+            )
+            .then(
                 if (!isFocusEnabled) {
                     Modifier.focusProperties { canFocus = false }
-                } else if (entryFocusRequester != null) {
-                    Modifier.focusRequester(entryFocusRequester)
                 } else {
                     Modifier
                 }
@@ -361,10 +387,9 @@ fun LeanbackNativeRow(
             adapter.updateConfig(cardWidthPx, cardHeightPx, cornerRadiusPx, showLabels, themeStyle)
             rowGrids?.put(rowKey, gridView)
             adapter.submitItems(items)
-            if (initialFocusPosition in items.indices) {
+            if (initialFocusPosition in items.indices && !gridView.hasFocus()) {
                 gridView.restoredPosition = initialFocusPosition
                 if (initialFocusPosition != lastAppliedInitialPosition &&
-                    !gridView.hasFocus() &&
                     initialFocusPosition in 0 until adapter.itemCount
                 ) {
                     gridView.setSelectedPosition(initialFocusPosition)

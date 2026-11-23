@@ -1485,23 +1485,35 @@ private fun MetaDetailsContent(
             }
         }
     }
-    val detailRowBringIntoViewResponder = remember(suppressDetailRowRelocation) {
+    var lastDetailDpadKey by rememberSaveable(meta.id) { mutableIntStateOf(0) }
+    val tapScroll = remember { DetailTapScroll() }
+    val currentLastDetailDpadKey by rememberUpdatedState(lastDetailDpadKey)
+    val currentPendingRestoreType by rememberUpdatedState(pendingRestoreType)
+    // SeasonTabs scroll position is explicitly managed by onHeroNavigateDown and
+    // onEpisodesRowNavigateUp. Suppress automatic Compose BringIntoView relocation here so
+    // focusing a SeasonTab after animateScrollToItem(1) never bounces the page back down.
+    val detailRowBringIntoViewResponder = remember {
         object : BringIntoViewResponder {
-            override fun calculateRectForParent(localRect: Rect): Rect {
-                return if (suppressDetailRowRelocation) Rect.Zero else localRect
-            }
-
+            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
             override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
         }
     }
-    var lastDetailDpadKey by rememberSaveable(meta.id) { mutableIntStateOf(0) }
-    val tapScroll = remember { DetailTapScroll() }
-    val episodeRowStayVerticalResponder = remember(lastDetailDpadKey, pendingRestoreType) {
+    val currentShowSeasonTabsForResponder by rememberUpdatedState(
+        isSeries && seasons.isNotEmpty() && !(seasons.size == 1 && meta.apiType.equals("other", ignoreCase = true))
+    )
+    val episodeRowStayVerticalResponder = remember {
         object : BringIntoViewResponder {
             override fun calculateRectForParent(localRect: Rect): Rect {
-                val stayVertical = pendingRestoreType == RestoreTarget.EPISODE ||
-                    lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_LEFT ||
-                    lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_RIGHT
+                val episodesIndex = if (currentShowSeasonTabsForResponder) 2 else 1
+                val layoutInfo = listState.layoutInfo
+                val epItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == episodesIndex }
+                val episodesFullyVisible = epItem != null &&
+                    epItem.offset >= 0 &&
+                    (epItem.offset + epItem.size) <= layoutInfo.viewportEndOffset
+                val stayVertical = currentPendingRestoreType == RestoreTarget.EPISODE ||
+                    currentLastDetailDpadKey == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    currentLastDetailDpadKey == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                    (currentLastDetailDpadKey == KeyEvent.KEYCODE_DPAD_DOWN && episodesFullyVisible)
                 return if (stayVertical) {
                     Rect(localRect.left, 0f, localRect.right, 0f)
                 } else {
@@ -2073,28 +2085,24 @@ private fun MetaDetailsContent(
         )
     }
 
-    val seasonDownFocusRequester = remember(
-        selectedSeason,
-        episodesForSeason,
-        seasonEpisodeFocusRequesters,
-        lastFocusedEpisodeIdBySeason[selectedSeason],
-        targetEpisodeForCurrentSeason,
-        pendingRestoreType,
+    // Single stable FocusRequester for the LeanbackNativeRow AndroidView hosting episodes.
+    // Keeping this instance stable prevents Compose from detaching/re-attaching the
+    // FocusRequesterModifierNode (and bouncing focus back to SeasonTabs) whenever horizontal
+    // navigation updates lastFocusedEpisodeIdBySeason.
+    val episodesRowFocusRequester = remember { FocusRequester() }
+    val seasonDownFocusRequester = if (episodesForSeason.isNotEmpty()) episodesRowFocusRequester else null
+    val episodesRowEntryFocusNonce = remember(meta.id) { mutableIntStateOf(0) }
+    val castSectionEntryFocusNonce = remember(meta.id) { mutableIntStateOf(0) }
+    val preferredEpisodeIdForSeason = if (pendingRestoreType == RestoreTarget.EPISODE) {
         pendingRestoreEpisodeId
-    ) {
-        if (pendingRestoreType == RestoreTarget.EPISODE) {
-            pendingRestoreEpisodeId?.let { seasonEpisodeFocusRequesters[it] }
-        } else {
-            val preferredEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason]
-                ?: targetEpisodeForCurrentSeason?.id
-            (preferredEpisodeId?.let { seasonEpisodeFocusRequesters[it] })
-                ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
-        }
+    } else {
+        lastFocusedEpisodeIdBySeason[selectedSeason] ?: targetEpisodeForCurrentSeason?.id
     }
-    val episodesRowEntryFocusNonce = remember(meta.id, selectedSeason) { mutableIntStateOf(0) }
-    val seasonDownFocusIndex = episodesForSeason.indexOfFirst { episode ->
-        seasonEpisodeFocusRequesters[episode.id] === seasonDownFocusRequester
-    }.coerceAtLeast(0)
+    val seasonDownFocusIndex = remember(episodesForSeason, preferredEpisodeIdForSeason) {
+        preferredEpisodeIdForSeason?.let { id ->
+            episodesForSeason.indexOfFirst { it.id == id }
+        }?.takeIf { it >= 0 } ?: 0
+    }
 
     val activePeopleTabFocusRequester = visiblePeopleTabItems
         .firstOrNull { it.tab == activePeopleTab }
@@ -2461,6 +2469,7 @@ private fun MetaDetailsContent(
         val onHeroNavigateDown = remember(
             showSeasonTabs,
             showEpisodesRow,
+            selectedSeason,
             hasVisiblePeopleSection,
             hasVisiblePeopleTabs,
             shouldSplitCollection,
@@ -2473,6 +2482,7 @@ private fun MetaDetailsContent(
             selectedSeasonFocusRequester,
             seasonFocusRequesters,
             seasonDownFocusRequester,
+            episodesRowEntryFocusNonce,
             castSectionFocusRequester,
             isTvShow,
             meta.networks.size,
@@ -2481,26 +2491,37 @@ private fun MetaDetailsContent(
             productionSectionFocusRequester
         ) {
             {
+                initialHeroFocusRequested = true
                 coroutineScope.launch {
                     when {
                         showSeasonTabs -> {
+                            // Always scroll SeasonTabs to the top of the viewport so both the
+                            // season tabs and the episodes row underneath are visible together.
+                            // detailRowBringIntoViewResponder returns Rect.Zero so focusing the
+                            // season tab afterward will never bounce the scroll position back down.
                             listState.animateScrollToItem(1)
-                            repeat(2) { withFrameNanos { } }
                             val req = seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester
-                            runCatching { req.requestFocus() }
+                            if (!req.requestFocusAfterFrames()) {
+                                selectedSeasonFocusRequester.requestFocusAfterFrames(frames = 0)
+                            }
                         }
                         showEpisodesRow -> {
                             val targetIdx = if (showSeasonTabs) 2 else 1
                             listState.animateScrollToItem(targetIdx)
-                            val req = seasonDownFocusRequester ?: seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester
-                            req.requestFocusAfterFrames()
+                            episodesRowEntryFocusNonce.intValue++
                         }
                         hasVisiblePeopleSection -> {
                             val targetIdx = 1
                             listState.animateScrollToItem(targetIdx)
-                            repeat(2) { withFrameNanos { } }
-                            val req = if (hasVisiblePeopleTabs) activePeopleTabFocusRequester else castSectionFocusRequester
-                            runCatching { req.requestFocus() }
+                            if (hasVisiblePeopleTabs) {
+                                repeat(2) { withFrameNanos { } }
+                                runCatching { activePeopleTabFocusRequester.requestFocus() }
+                            } else if (visiblePeopleTabItems.firstOrNull()?.tab == PeopleSectionTab.CAST) {
+                                castSectionEntryFocusNonce.intValue++
+                            } else {
+                                repeat(2) { withFrameNanos { } }
+                                runCatching { castSectionFocusRequester.requestFocus() }
+                            }
                         }
                         shouldSplitCollection && collection.isNotEmpty() -> {
                             listState.animateScrollToItem(1)
@@ -2534,12 +2555,41 @@ private fun MetaDetailsContent(
             }
         }
 
+        val onSeasonTabsNavigateUp = remember(heroPlayButtonFocusRequester, listState) {
+            {
+                coroutineScope.launch {
+                    val heroVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == 0 }
+                    if (!heroVisible || listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
+                        listState.animateScrollToItem(0)
+                    }
+                    heroPlayButtonFocusRequester.requestFocusAfterFrames(frames = if (heroVisible) 0 else 2)
+                }
+                true
+            }
+        }
+
         val onSeasonTabsNavigateDown = remember(showEpisodesRow, showSeasonTabs, episodesRowEntryFocusNonce) {
             {
                 if (showEpisodesRow) {
+                    initialHeroFocusRequested = true
                     coroutineScope.launch {
                         val episodesIndex = if (showSeasonTabs) 2 else 1
-                        listState.animateScrollToItem(episodesIndex)
+                        val layoutInfo = listState.layoutInfo
+                        val epItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == episodesIndex }
+                        when {
+                            epItem == null -> {
+                                // Episodes row is not composed yet; bring SeasonTabs + Episodes into view together.
+                                listState.animateScrollToItem(if (showSeasonTabs) 1 else episodesIndex)
+                            }
+                            epItem.offset + epItem.size > layoutInfo.viewportEndOffset -> {
+                                // Reveal only the clipped bottom portion without pushing the episodes row to the top.
+                                val overflow = (epItem.offset + epItem.size - layoutInfo.viewportEndOffset).toFloat()
+                                if (overflow > 1f) {
+                                    listState.animateScrollBy(overflow, NuvioMotion.slowTween())
+                                }
+                            }
+                            // Already fully visible: keep current scroll position untouched.
+                        }
                         episodesRowEntryFocusNonce.intValue++
                     }
                     true
@@ -2555,14 +2605,16 @@ private fun MetaDetailsContent(
             heroPlayButtonFocusRequester
         ) {
             {
-                // The episode row is tall enough that scrolling to it pushes the season tabs
-                // off screen, which disposes their focus requesters. Scroll back up before
-                // requesting focus, otherwise DPAD_UP would be swallowed with no visible change.
                 if (showSeasonTabs) {
                     coroutineScope.launch {
-                        listState.animateScrollToItem(1)
+                        val seasonItem = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == 1 }
+                        if (seasonItem == null || seasonItem.offset < 0) {
+                            listState.animateScrollToItem(1)
+                        }
                         val req = seasonFocusRequesters[selectedSeason] ?: selectedSeasonFocusRequester
-                        req.requestFocusAfterFrames()
+                        if (!req.requestFocusAfterFrames(frames = if (seasonItem != null && seasonItem.offset >= 0) 0 else 2)) {
+                            selectedSeasonFocusRequester.requestFocusAfterFrames(frames = 0)
+                        }
                     }
                 } else {
                     coroutineScope.launch {
@@ -2601,9 +2653,15 @@ private fun MetaDetailsContent(
                     hasVisiblePeopleSection -> {
                         coroutineScope.launch {
                             listState.animateScrollToItem(targetIdx)
-                            repeat(2) { withFrameNanos { } }
-                            val req = if (hasVisiblePeopleTabs) activePeopleTabFocusRequester else castSectionFocusRequester
-                            runCatching { req.requestFocus() }
+                            if (hasVisiblePeopleTabs) {
+                                repeat(2) { withFrameNanos { } }
+                                runCatching { activePeopleTabFocusRequester.requestFocus() }
+                            } else if (visiblePeopleTabItems.firstOrNull()?.tab == PeopleSectionTab.CAST) {
+                                castSectionEntryFocusNonce.intValue++
+                            } else {
+                                repeat(2) { withFrameNanos { } }
+                                runCatching { castSectionFocusRequester.requestFocus() }
+                            }
                         }
                         true
                     }
@@ -2879,6 +2937,7 @@ private fun MetaDetailsContent(
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
                             upFocusRequester = heroPlayFocusRequester,
                             downFocusRequester = seasonDownFocusRequester,
+                            onNavigateUp = onSeasonTabsNavigateUp,
                             onNavigateDown = onSeasonTabsNavigateDown,
                             isFocusEnabled = (initialHeroFocusRequested || pendingRestoreType != null) && pendingRestoreType != RestoreTarget.EPISODE,
                             posterStyle = seasonPosterStyle
@@ -2929,6 +2988,7 @@ private fun MetaDetailsContent(
                             entryFocusRequester = seasonDownFocusRequester,
                             entryFocusNonce = episodesRowEntryFocusNonce.intValue,
                             entryFocusIndex = seasonDownFocusIndex,
+                            onClearEntryFocus = { episodesRowEntryFocusNonce.intValue = 0 },
                             onNavigateDown = onEpisodesRowNavigateDown,
                             onNavigateUp = onEpisodesRowNavigateUp,
                             episodeFocusRequesters = seasonEpisodeFocusRequesters,
@@ -2984,12 +3044,35 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.COLLECTION -> collectionSectionFocusRequester
                             PeopleSectionTab.RATINGS -> ratingsContentFocusRequester
                         }
+                        val peopleContentItemIndex = 1 +
+                            (if (showSeasonTabs) 1 else 0) +
+                            (if (showEpisodesRow) 1 else 0) +
+                            (if (hasVisiblePeopleTabs) 1 else 0)
                         PeopleSectionTabs(
                             activeTab = activePeopleTab,
                             tabs = visiblePeopleTabItems,
                             tabsCanFocus = initialHeroFocusRequested && pendingRestoreType != RestoreTarget.COMPANY_OR_NETWORK,
                             upFocusRequester = seasonDownFocusRequester ?: heroPlayFocusRequester,
                             contentDownFocusRequester = activeTabDownFocusRequester,
+                            onNavigateDown = if (activePeopleTab == PeopleSectionTab.CAST) {
+                                {
+                                    coroutineScope.launch {
+                                        val layoutInfo = listState.layoutInfo
+                                        val contentItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == peopleContentItemIndex }
+                                        when {
+                                            contentItem == null -> listState.animateScrollToItem(peopleContentItemIndex)
+                                            contentItem.offset + contentItem.size > layoutInfo.viewportEndOffset -> {
+                                                val overflow = (contentItem.offset + contentItem.size - layoutInfo.viewportEndOffset).toFloat()
+                                                if (overflow > 1f) {
+                                                    listState.animateScrollBy(overflow, NuvioMotion.slowTween())
+                                                }
+                                            }
+                                        }
+                                        castSectionEntryFocusNonce.intValue++
+                                    }
+                                    true
+                                }
+                            } else null,
                             onTabFocused = { tab ->
                                 val lockedTab = when (pendingRestoreType) {
                                     RestoreTarget.MORE_LIKE_THIS -> PeopleSectionTab.MORE_LIKE_THIS
@@ -3034,6 +3117,8 @@ private fun MetaDetailsContent(
                                     upFocusRequester = if (hasVisiblePeopleTabs) castTabFocusRequester else seasonDownFocusRequester ?: heroPlayFocusRequester,
                                     downFocusRequester = peopleSectionDownFocusRequester,
                                     sectionFocusRequester = castSectionFocusRequester,
+                                    entryFocusNonce = castSectionEntryFocusNonce.intValue,
+                                    onClearEntryFocus = { castSectionEntryFocusNonce.intValue = 0 },
                                     restorePersonId = if (!childOverlayVisible && pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
                                     blockDefaultRestore = !initialHeroFocusRequested || (pendingRestoreType != null && pendingRestoreType != RestoreTarget.CAST_MEMBER),
@@ -3739,6 +3824,7 @@ private fun PeopleSectionTabs(
     tabsCanFocus: Boolean = true,
     upFocusRequester: FocusRequester? = null,
     contentDownFocusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Boolean)? = null,
     onTabFocused: (PeopleSectionTab) -> Unit
 ) {
     val defaultRequester = tabs.first().focusRequester
@@ -3770,6 +3856,7 @@ private fun PeopleSectionTabs(
                     focusRequester = item.focusRequester,
                     upFocusRequester = upFocusRequester,
                     downFocusRequester = contentDownFocusRequester,
+                    onNavigateDown = onNavigateDown,
                     onFocused = { onTabFocused(item.tab) }
                 )
             }
@@ -3795,6 +3882,7 @@ private fun PeopleSectionTabButton(
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
+    onNavigateDown: (() -> Boolean)? = null,
     onFocused: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -3803,12 +3891,21 @@ private fun PeopleSectionTabButton(
         onClick = onFocused,
         modifier = Modifier
             .focusRequester(focusRequester)
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.action == KeyEvent.ACTION_DOWN && native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (onNavigateDown != null && onNavigateDown()) {
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                false
+            }
             .focusProperties {
                 this.canFocus = canFocus
                 if (upFocusRequester != null) {
                     up = upFocusRequester
                 }
-                if (downFocusRequester != null) {
+                if (onNavigateDown == null && downFocusRequester != null) {
                     down = downFocusRequester
                 }
             }

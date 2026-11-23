@@ -25,6 +25,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.unit.Dp
@@ -74,6 +77,8 @@ fun GridContinueWatchingSection(
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     var lastRequestedFocusIndex by remember { mutableIntStateOf(-1) }
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
+    val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
 
     LaunchedEffect(focusedItemIndex) {
         if (focusedItemIndex >= 0 && focusedItemIndex < items.size) {
@@ -156,6 +161,28 @@ fun GridContinueWatchingSection(
                     cornerRadius = cornerRadius,
                     isFocused = isCardFocused,
                     modifier = focusModifier
+                        .then(
+                            if (index == 0 && openSidebar != null) {
+                                Modifier.onPreviewKeyEvent { keyEvent ->
+                                    val towardStartKey = if (isRtl) {
+                                        androidx.compose.ui.input.key.Key.DirectionRight
+                                    } else {
+                                        androidx.compose.ui.input.key.Key.DirectionLeft
+                                    }
+                                    if (keyEvent.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
+                                        keyEvent.key == towardStartKey &&
+                                        keyEvent.nativeKeyEvent.repeatCount == 0
+                                    ) {
+                                        openSidebar()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
                         .onFocusChanged { focusState ->
                             isCardFocused = focusState.isFocused
                             if (focusState.isFocused) {

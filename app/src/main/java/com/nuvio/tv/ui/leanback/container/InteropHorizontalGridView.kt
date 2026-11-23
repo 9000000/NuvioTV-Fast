@@ -46,6 +46,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var canTakeFocus: (() -> Boolean)? = null
 
     private var isNavigatingToSidebar: Boolean = false
+    private var isNavigatingOutOfRow: Boolean = false
 
     fun mayTakeFocus(): Boolean = isFocusable &&
         descendantFocusability != ViewGroup.FOCUS_BLOCK_DESCENDANTS &&
@@ -200,15 +201,17 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     override fun requestFocus(direction: Int, previouslyFocusedRect: Rect?): Boolean {
         if (clearFocusDepth > 0) return false
         isNavigatingToSidebar = false
+        isNavigatingOutOfRow = false
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         if (!mayTakeFocus()) return false
         if (isBusyLayout) {
             post { if (mayTakeFocus()) requestFocus(direction, previouslyFocusedRect) }
             return false
         }
+        val total = universalAdapter?.itemCount ?: 0
         val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
             pendingTargetPosition
-        } else if (restoredPosition > 0) {
+        } else if (total > 0 && restoredPosition in 0 until total) {
             restoredPosition
         } else {
             selectedPosition.coerceAtLeast(0)
@@ -250,10 +253,10 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     }
 
     override fun clearChildFocus(child: View?) {
-        val deliberateRowChange = isNavigatingToSidebar || canTakeFocus?.invoke() == false
+        val deliberateRowChange = isNavigatingToSidebar || isNavigatingOutOfRow || canTakeFocus?.invoke() == false
         val shouldProtectFocus = isAttachedToWindow &&
             !deliberateRowChange &&
-            (hasPendingHorizontalNavigation || universalAdapter?.isSubmittingItems == true)
+            (hasPendingHorizontalNavigation || universalAdapter?.isSubmittingItems == true || isComputingLayout || isInLayout)
 
         if (shouldProtectFocus) {
             val targetPos = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
@@ -354,6 +357,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                 universalAdapter?.flushPendingFocusedItem()
             }
         } else {
+            isNavigatingOutOfRow = false
             if (selectedPosition <= 0) {
                 hasReleasedKeyAfterArrivingAt0 = true
                 arrivedAt0FromEnd = false
@@ -521,6 +525,16 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         return true
                     }
                     setSelectedPositionSmooth(target)
+                    if (!isHoldingHorizontalKey) {
+                        val nextVh = findViewHolderForAdapterPosition(target)
+                        if (nextVh != null) {
+                            if (!nextVh.itemView.hasFocus()) {
+                                nextVh.itemView.requestFocus(towardStartFocusDir)
+                            }
+                        } else {
+                            ensureTargetChildFocused(target, towardStartFocusDir)
+                        }
+                    }
                     return true
                 }
                 towardEndKey -> {
@@ -573,6 +587,16 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         return true
                     }
                     setSelectedPositionSmooth(target)
+                    if (!isHoldingHorizontalKey) {
+                        val nextVh = findViewHolderForAdapterPosition(target)
+                        if (nextVh != null) {
+                            if (!nextVh.itemView.hasFocus()) {
+                                nextVh.itemView.requestFocus(towardEndFocusDir)
+                            }
+                        } else {
+                            ensureTargetChildFocused(target, towardEndFocusDir)
+                        }
+                    }
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
@@ -586,7 +610,10 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         return true
                     }
                     lastVerticalKeyTime = now
-                    if (onNavigateDown?.invoke() == true) return true
+                    if (onNavigateDown?.invoke() == true) {
+                        isNavigatingOutOfRow = true
+                        return true
+                    }
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     val wasHolding = isHoldingHorizontalKey
@@ -599,7 +626,10 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         return true
                     }
                     lastVerticalKeyTime = now
-                    if (onNavigateUp?.invoke() == true) return true
+                    if (onNavigateUp?.invoke() == true) {
+                        isNavigatingOutOfRow = true
+                        return true
+                    }
                 }
                 KeyEvent.KEYCODE_BACK -> {
                     val wasHolding = isHoldingHorizontalKey
