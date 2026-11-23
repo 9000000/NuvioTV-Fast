@@ -758,3 +758,21 @@
 - **Status**: Fixed
 
 ---
+
+## [2026-11-23 21:38] - Sai tên tham số SettingsPickerOption khi biên dịch AmbientModeSettings.kt
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/settings/AmbientModeSettings.kt:92`
+- **Agent**: mon
+- **Root Cause**: Dùng named parameter `label` thay vì `title` cho `SettingsPickerOption` mà không kiểm tra định nghĩa constructor.
+- **Error Message**:
+  ```
+  No parameter with name 'label' found.
+  No value passed for parameter 'title'.
+  ```
+- **Fix Applied**: Đổi `label =` thành `title =` trong `AmbientModeSettings.kt`.
+- **Prevention**: Luôn đọc nhanh signature của data class/Composable trong cùng package trước khi gọi bằng named arguments.
+- **Status**: Fixed
+
+---

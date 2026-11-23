@@ -400,6 +400,14 @@
     <string name="ambient_mode_catalogs_dialog_subtitle">Chọn tối đa 3 danh mục</string>
     <string name="ambient_mode_catalogs_default">Giống khu vực nổi bật</string>
     <string name="ambient_mode_catalogs_count">%1$d trong số %2$d</string>
+    <string name="ambient_mode_display_mode">Kiểu hiển thị</string>
+    <string name="ambient_mode_display_mode_subtitle">Chọn hiển thị phông nền ảnh hoặc phát trailer phim</string>
+    <string name="ambient_mode_display_mode_backdrop">Phông nền</string>
+    <string name="ambient_mode_display_mode_backdrop_desc">Trình chiếu ảnh phông nền toàn màn hình với hiệu ứng chuyển động nhẹ</string>
+    <string name="ambient_mode_display_mode_trailer">Trailer</string>
+    <string name="ambient_mode_display_mode_trailer_desc">Phát trailer toàn màn hình, tự chuyển sang phông nền nếu phim không có trailer</string>
+    <string name="ambient_mode_trailer_audio">Âm thanh trailer</string>
+    <string name="ambient_mode_trailer_audio_subtitle">Bật âm thanh khi phát trailer ở chế độ môi trường xung quanh (mặc định tắt tiếng)</string>
     <string name="appearance_app_icon_and_banner">Biểu tượng ứng dụng &amp; Ảnh biểu ngữ</string>
     <string name="appearance_app_icon_and_banner_subtitle">Thay đổi biểu tượng ứng dụng và ảnh biểu ngữ</string>
     <string name="appearance_app_icon_picker_title">Chọn Biểu tượng ứng dụng &amp; Ảnh biểu ngữ</string>

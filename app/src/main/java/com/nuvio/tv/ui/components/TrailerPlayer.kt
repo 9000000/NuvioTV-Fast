@@ -98,6 +98,7 @@ fun TrailerPlayer(
     overscanZoom: Float = 1f,
     autoCropLetterbox: Boolean = false,
     detectLetterbox: Boolean = false,
+    showSubtitles: Boolean = true,
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500)),
@@ -162,7 +163,7 @@ fun TrailerPlayer(
         }
     }
 
-    LaunchedEffect(isPlaying, trailerUrl, trailerAudioUrl, trailerPlayer) {
+    LaunchedEffect(isPlaying, trailerUrl, trailerAudioUrl, trailerPlayer, showSubtitles) {
         val player = trailerPlayer ?: return@LaunchedEffect
         player.volume = if (muted) 0f else 1f
         if (isPlaying && trailerUrl != null) {
@@ -178,7 +179,7 @@ fun TrailerPlayer(
                 return@LaunchedEffect
             }
             hasRenderedFirstFrame = false
-            val subtitle = resolvedPool?.subtitleFor(trailerUrl)
+            val subtitle = if (showSubtitles) resolvedPool?.subtitleFor(trailerUrl) else null
             subtitleTrack = subtitle
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                 .setPreferredTextLanguage(subtitle?.languageCode)

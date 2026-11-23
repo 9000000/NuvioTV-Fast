@@ -1334,8 +1334,11 @@ open class MainActivity : ComponentActivity() {
                             }
 
                             val isTrailerPlaying by trailerPlayerPool.isTrailerPlaying.collectAsState()
-                            LaunchedEffect(isTrailerPlaying) {
-                                if (!isTrailerPlaying) ambientIdleController.onInteraction()
+                            val isAmbientShowing by ambientIdleController.isShowing.collectAsState()
+                            LaunchedEffect(isTrailerPlaying, isAmbientShowing) {
+                                if (!isTrailerPlaying && !isAmbientShowing) {
+                                    ambientIdleController.onInteraction()
+                                }
                             }
                             val isPlayerActive = currentRoute?.startsWith("player/") == true
                             val isLiveTvActive = currentRoute == Screen.LiveTv.route ||
@@ -1345,7 +1348,7 @@ open class MainActivity : ComponentActivity() {
                                 allowed = !isPlayerActive &&
                                     !isLiveTvActive &&
                                     autoNextOverlay == null &&
-                                    !isTrailerPlaying,
+                                    (!isTrailerPlaying || isAmbientShowing),
                                 onShown = { trailerPlayerPool.stop() }
                             )
                         }

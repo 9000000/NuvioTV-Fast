@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.domain.model.AmbientDisplayMode
 import com.nuvio.tv.domain.model.AmbientModeSettings
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -30,13 +31,17 @@ class AmbientModeDataStore @Inject constructor(
     private val enabledKey = booleanPreferencesKey("ambient_enabled")
     private val timeoutMinutesKey = intPreferencesKey("ambient_timeout_minutes")
     private val catalogKeysKey = stringPreferencesKey("ambient_catalog_keys")
+    private val displayModeKey = stringPreferencesKey("ambient_display_mode")
+    private val trailerAudioEnabledKey = booleanPreferencesKey("ambient_trailer_audio_enabled")
 
     val settings: Flow<AmbientModeSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             AmbientModeSettings(
                 enabled = prefs[enabledKey] ?: true,
                 timeoutMinutes = prefs[timeoutMinutesKey] ?: AmbientModeSettings.DEFAULT_TIMEOUT_MINUTES,
-                catalogKeys = decodeKeys(prefs[catalogKeysKey])
+                catalogKeys = decodeKeys(prefs[catalogKeysKey]),
+                displayMode = AmbientDisplayMode.fromStorage(prefs[displayModeKey]),
+                trailerAudioEnabled = prefs[trailerAudioEnabledKey] ?: false
             )
         }
     }.distinctUntilChanged()
@@ -52,6 +57,14 @@ class AmbientModeDataStore @Inject constructor(
     suspend fun setCatalogKeys(keys: List<String>) {
         val limited = keys.distinct().take(AmbientModeSettings.MAX_CATALOGS)
         store().edit { it[catalogKeysKey] = JSONArray(limited).toString() }
+    }
+
+    suspend fun setDisplayMode(mode: AmbientDisplayMode) {
+        store().edit { it[displayModeKey] = mode.storageValue }
+    }
+
+    suspend fun setTrailerAudioEnabled(enabled: Boolean) {
+        store().edit { it[trailerAudioEnabledKey] = enabled }
     }
 
     private fun decodeKeys(raw: String?): List<String> {

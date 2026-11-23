@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.ambient
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -19,10 +20,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -45,11 +48,18 @@ import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.toBitmap
+import com.nuvio.tv.data.trailer.TrailerPlaybackSource
+import com.nuvio.tv.domain.model.AmbientDisplayMode
+import com.nuvio.tv.ui.components.TrailerPlayer
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val BACKDROP_FADE_IN_MS = 900
 private const val TITLE_DELAY_MS = 250L
@@ -57,24 +67,45 @@ private const val TITLE_FADE_IN_MS = 500
 private const val GENRES_DELAY_MS = 350L
 private const val GENRES_FADE_IN_MS = 450
 private const val SLIDE_HOLD_MS = 10_000L
+private const val MIN_FALLBACK_HOLD_MS = 2_000L
 private const val GENRES_FADE_OUT_MS = 250
 private const val TITLE_FADE_OUT_MS = 350
 private const val BACKDROP_FADE_OUT_MS = 700
+private const val TRAILER_FADE_IN_MS = 500
+private const val TRAILER_ERROR_FADE_OUT_MS = 300
+private const val TRAILER_FIRST_FRAME_TIMEOUT_MS = 8_000L
 private const val BLACK_HOLD_MS = 300L
 private const val ALL_FAILED_RETRY_MS = 15_000L
 private const val EMPTY_POLL_MS = 500L
 private const val MOTION_DURATION_MS = BACKDROP_FADE_IN_MS + TITLE_DELAY_MS.toInt() + TITLE_FADE_IN_MS +
     SLIDE_HOLD_MS.toInt() + GENRES_FADE_OUT_MS + TITLE_FADE_OUT_MS + BACKDROP_FADE_OUT_MS
 
+private enum class AmbientTrailerOutcome {
+    COMPLETED,
+    FAILED
+}
+
+private class ActiveAmbientTrailer(
+    val token: Long,
+    val source: TrailerPlaybackSource,
+    val firstFrameReady: CompletableDeferred<Boolean> = CompletableDeferred(),
+    val outcome: CompletableDeferred<AmbientTrailerOutcome> = CompletableDeferred()
+)
+
 private class LoadedSlide(
     val slide: AmbientSlide,
     val backdrop: ImageBitmap,
-    val logo: ImageBitmap?
+    val logo: ImageBitmap?,
+    val trailerDeferred: Deferred<TrailerPlaybackSource?>?
 )
 
 @Composable
 fun AmbientSlideshow(
     slides: List<AmbientSlide>,
+    displayMode: AmbientDisplayMode = AmbientDisplayMode.BACKDROP,
+    trailerAudioEnabled: Boolean = false,
+    allowTrailerPlayback: Boolean = true,
+    resolveTrailer: suspend (AmbientSlide) -> TrailerPlaybackSource? = { null },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -86,65 +117,160 @@ fun AmbientSlideshow(
     val genresOffsetPx = with(density) { 12.dp.toPx() }
 
     var current by remember { mutableStateOf<LoadedSlide?>(null) }
+    var activeTrailer by remember { mutableStateOf<ActiveAmbientTrailer?>(null) }
     val backdropAlpha = remember { Animatable(0f) }
+    val videoAlpha = remember { Animatable(0f) }
     val titleAlpha = remember { Animatable(0f) }
     val genresAlpha = remember { Animatable(0f) }
     val motionProgress = remember { Animatable(0f) }
     var motion by remember { mutableStateOf(nextAmbientMotion(null)) }
 
     val latestSlides by rememberUpdatedState(slides)
+    val latestDisplayMode by rememberUpdatedState(displayMode)
+    val latestAllowTrailer by rememberUpdatedState(allowTrailerPlayback)
+    val latestResolveTrailer by rememberUpdatedState(resolveTrailer)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(allowTrailerPlayback, displayMode) {
+        if (!allowTrailerPlayback || displayMode != AmbientDisplayMode.TRAILER) {
+            activeTrailer?.let { session ->
+                session.firstFrameReady.complete(false)
+                session.outcome.complete(AmbientTrailerOutcome.FAILED)
+            }
+            activeTrailer = null
+        }
+    }
+
+    LaunchedEffect(displayMode) {
         coroutineScope {
             var index = 0
             var misses = 0
+            var trailerToken = 0L
             var pending: Deferred<LoadedSlide?>? = null
-            while (true) {
-                val available = latestSlides
-                if (available.isEmpty()) {
-                    pending?.cancel()
-                    pending = null
-                    delay(EMPTY_POLL_MS)
-                    continue
-                }
-                val loaded = (pending ?: async {
-                    loadSlide(context, available[index % available.size], screenWidthPx, screenHeightPx)
-                }).await()
-                index += 1
-                val upcoming = latestSlides
-                pending = upcoming.takeIf { it.isNotEmpty() }?.let { list ->
-                    val next = list[index % list.size]
-                    async { loadSlide(context, next, screenWidthPx, screenHeightPx) }
-                }
-                if (loaded == null) {
-                    misses += 1
-                    if (misses >= available.size) {
-                        misses = 0
-                        delay(ALL_FAILED_RETRY_MS)
+            try {
+                while (true) {
+                    val available = latestSlides
+                    if (available.isEmpty()) {
+                        pending?.cancel()
+                        pending = null
+                        delay(EMPTY_POLL_MS)
+                        continue
                     }
-                    continue
+                    val wantTrailer = latestDisplayMode == AmbientDisplayMode.TRAILER
+                    val loaded = (pending ?: async {
+                        loadSlide(
+                            scope = this@coroutineScope,
+                            context = context,
+                            slide = available[index % available.size],
+                            widthPx = screenWidthPx,
+                            heightPx = screenHeightPx,
+                            preloadTrailer = wantTrailer,
+                            resolveTrailer = latestResolveTrailer
+                        )
+                    }).await()
+                    index += 1
+                    val upcoming = latestSlides
+                    pending = upcoming.takeIf { it.isNotEmpty() }?.let { list ->
+                        val next = list[index % list.size]
+                        async {
+                            loadSlide(
+                                scope = this@coroutineScope,
+                                context = context,
+                                slide = next,
+                                widthPx = screenWidthPx,
+                                heightPx = screenHeightPx,
+                                preloadTrailer = latestDisplayMode == AmbientDisplayMode.TRAILER,
+                                resolveTrailer = latestResolveTrailer
+                            )
+                        }
+                    }
+                    if (loaded == null) {
+                        misses += 1
+                        if (misses >= available.size) {
+                            misses = 0
+                            delay(ALL_FAILED_RETRY_MS)
+                        }
+                        continue
+                    }
+                    misses = 0
+                    current = loaded
+                    activeTrailer = null
+                    motion = nextAmbientMotion(motion)
+                    motionProgress.snapTo(0f)
+                    videoAlpha.snapTo(0f)
+                    var motionJob = launch {
+                        motionProgress.animateTo(1f, tween(MOTION_DURATION_MS, easing = LinearEasing))
+                    }
+                    backdropAlpha.animateTo(1f, tween(BACKDROP_FADE_IN_MS, easing = FastOutSlowInEasing))
+                    delay(TITLE_DELAY_MS)
+                    val genresJob = launch {
+                        delay(GENRES_DELAY_MS)
+                        genresAlpha.animateTo(1f, tween(GENRES_FADE_IN_MS, easing = LinearOutSlowInEasing))
+                    }
+                    titleAlpha.animateTo(1f, tween(TITLE_FADE_IN_MS, easing = LinearOutSlowInEasing))
+                    val titleShownAtMs = SystemClock.elapsedRealtime()
+
+                    if (latestDisplayMode == AmbientDisplayMode.TRAILER) {
+                        // Wait until AmbientModeHost finishes stopping any previous Home/Detail trailer.
+                        if (!latestAllowTrailer) {
+                            withTimeoutOrNull(2_000L) {
+                                snapshotFlow { latestAllowTrailer }.first { it }
+                            }
+                        }
+                        val trailerSource = loaded.trailerDeferred?.await()
+                        if (trailerSource != null && latestAllowTrailer && latestDisplayMode == AmbientDisplayMode.TRAILER) {
+                            trailerToken += 1L
+                            val session = ActiveAmbientTrailer(token = trailerToken, source = trailerSource)
+                            activeTrailer = session
+                            val renderedFirstFrame = withTimeoutOrNull(TRAILER_FIRST_FRAME_TIMEOUT_MS) {
+                                session.firstFrameReady.await()
+                            } ?: false
+
+                            if (renderedFirstFrame && latestAllowTrailer) {
+                                motionJob.cancel()
+                                videoAlpha.animateTo(1f, tween(TRAILER_FADE_IN_MS, easing = FastOutSlowInEasing))
+                                val outcome = session.outcome.await()
+                                if (outcome == AmbientTrailerOutcome.FAILED && latestAllowTrailer) {
+                                    videoAlpha.animateTo(
+                                        0f,
+                                        tween(TRAILER_ERROR_FADE_OUT_MS, easing = FastOutSlowInEasing)
+                                    )
+                                    activeTrailer = null
+                                    val remainingMs = SLIDE_HOLD_MS - (SystemClock.elapsedRealtime() - titleShownAtMs)
+                                    if (remainingMs > 0L) {
+                                        motionJob = launch {
+                                            motionProgress.animateTo(1f, tween(remainingMs.toInt(), easing = LinearEasing))
+                                        }
+                                        delay(remainingMs)
+                                    }
+                                }
+                            } else {
+                                activeTrailer = null
+                                val elapsedMs = SystemClock.elapsedRealtime() - titleShownAtMs
+                                val remainingMs = (SLIDE_HOLD_MS - elapsedMs).coerceAtLeast(MIN_FALLBACK_HOLD_MS)
+                                delay(remainingMs)
+                            }
+                        } else {
+                            val elapsedMs = SystemClock.elapsedRealtime() - titleShownAtMs
+                            val remainingMs = (SLIDE_HOLD_MS - elapsedMs).coerceAtLeast(0L)
+                            if (remainingMs > 0L) delay(remainingMs)
+                        }
+                    } else {
+                        delay(SLIDE_HOLD_MS)
+                    }
+
+                    loaded.trailerDeferred?.cancel()
+                    genresJob.cancel()
+                    genresAlpha.animateTo(0f, tween(GENRES_FADE_OUT_MS, easing = FastOutSlowInEasing))
+                    titleAlpha.animateTo(0f, tween(TITLE_FADE_OUT_MS, easing = FastOutSlowInEasing))
+                    backdropAlpha.animateTo(0f, tween(BACKDROP_FADE_OUT_MS, easing = FastOutSlowInEasing))
+                    activeTrailer = null
+                    videoAlpha.snapTo(0f)
+                    motionJob.cancel()
+                    delay(BLACK_HOLD_MS)
                 }
-                misses = 0
-                current = loaded
-                motion = nextAmbientMotion(motion)
-                motionProgress.snapTo(0f)
-                val motionJob = launch {
-                    motionProgress.animateTo(1f, tween(MOTION_DURATION_MS, easing = LinearEasing))
-                }
-                backdropAlpha.animateTo(1f, tween(BACKDROP_FADE_IN_MS, easing = FastOutSlowInEasing))
-                delay(TITLE_DELAY_MS)
-                val genresJob = launch {
-                    delay(GENRES_DELAY_MS)
-                    genresAlpha.animateTo(1f, tween(GENRES_FADE_IN_MS, easing = LinearOutSlowInEasing))
-                }
-                titleAlpha.animateTo(1f, tween(TITLE_FADE_IN_MS, easing = LinearOutSlowInEasing))
-                delay(SLIDE_HOLD_MS)
-                genresJob.cancel()
-                genresAlpha.animateTo(0f, tween(GENRES_FADE_OUT_MS, easing = FastOutSlowInEasing))
-                titleAlpha.animateTo(0f, tween(TITLE_FADE_OUT_MS, easing = FastOutSlowInEasing))
-                backdropAlpha.animateTo(0f, tween(BACKDROP_FADE_OUT_MS, easing = FastOutSlowInEasing))
-                motionJob.cancel()
-                delay(BLACK_HOLD_MS)
+            } finally {
+                activeTrailer = null
+                pending?.cancel()
             }
         }
     }
@@ -167,6 +293,37 @@ fun AmbientSlideshow(
                     applyAmbientMotion(motion, motionProgress.value)
                 }
         )
+        val trailerSession = activeTrailer
+        if (allowTrailerPlayback && displayMode == AmbientDisplayMode.TRAILER && trailerSession != null) {
+            key(trailerSession.token) {
+                TrailerPlayer(
+                    trailerUrl = trailerSession.source.videoUrl,
+                    trailerAudioUrl = trailerSession.source.audioUrl,
+                    isPlaying = true,
+                    muted = !trailerAudioEnabled,
+                    onFirstFrameRendered = {
+                        trailerSession.firstFrameReady.complete(true)
+                    },
+                    onEnded = {
+                        trailerSession.firstFrameReady.complete(true)
+                        trailerSession.outcome.complete(AmbientTrailerOutcome.COMPLETED)
+                    },
+                    onError = {
+                        trailerSession.firstFrameReady.complete(false)
+                        trailerSession.outcome.complete(AmbientTrailerOutcome.FAILED)
+                    },
+                    cropToFill = true,
+                    autoCropLetterbox = true,
+                    detectLetterbox = true,
+                    showSubtitles = false,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = videoAlpha.value * backdropAlpha.value
+                        }
+                )
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -231,17 +388,27 @@ fun AmbientSlideshow(
 }
 
 private suspend fun loadSlide(
+    scope: CoroutineScope,
     context: Context,
     slide: AmbientSlide,
     widthPx: Int,
-    heightPx: Int
+    heightPx: Int,
+    preloadTrailer: Boolean,
+    resolveTrailer: suspend (AmbientSlide) -> TrailerPlaybackSource?
 ): LoadedSlide? = coroutineScope {
     val logo = slide.logoUrl?.let { url -> async { loadBitmap(context, url, null) } }
+    // Launch trailer resolution on the parent slideshow scope so it keeps running while the backdrop renders.
+    val trailerDeferred = if (preloadTrailer) {
+        scope.async { resolveTrailer(slide) }
+    } else {
+        null
+    }
     val backdrop = loadBitmap(context, slide.backdropUrl, widthPx to heightPx) ?: run {
         logo?.cancel()
+        trailerDeferred?.cancel()
         return@coroutineScope null
     }
-    LoadedSlide(slide, backdrop, logo?.await())
+    LoadedSlide(slide, backdrop, logo?.await(), trailerDeferred)
 }
 
 private suspend fun loadBitmap(

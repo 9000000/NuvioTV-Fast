@@ -28,6 +28,7 @@ import javax.inject.Singleton
 private const val ITEMS_PER_CATALOG = 10
 private const val MAX_SLIDES = 30
 private const val MAX_GENRES = 3
+private val AMBIENT_YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 
 @Singleton
 class AmbientSlideLoader @Inject constructor(
@@ -87,12 +88,24 @@ class AmbientSlideLoader @Inject constructor(
         val backdrop = background?.takeIf { it.isNotBlank() }
             ?: landscapePoster?.takeIf { it.isNotBlank() }
             ?: return null
+        val ytIds = (trailerYtIds + trailers.mapNotNull { it.ytId })
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
         return AmbientSlide(
             id = "$apiType:$id",
             title = name,
             backdropUrl = backdrop,
             logoUrl = logo?.takeIf { it.isNotBlank() },
-            genres = genres.take(MAX_GENRES).map { localizedGenreLabel(context, it) }
+            genres = genres.take(MAX_GENRES).map { localizedGenreLabel(context, it) },
+            itemId = id,
+            imdbId = imdbId?.takeIf { it.isNotBlank() },
+            apiType = apiType,
+            year = extractAmbientYear(releaseInfo ?: released),
+            trailerYtIds = ytIds
         )
     }
+
+    private fun extractAmbientYear(raw: String?): String? =
+        raw?.let { AMBIENT_YEAR_REGEX.find(it)?.value }
 }

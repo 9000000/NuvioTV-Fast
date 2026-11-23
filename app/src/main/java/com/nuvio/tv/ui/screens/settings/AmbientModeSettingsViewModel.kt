@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.AmbientModeDataStore
+import com.nuvio.tv.domain.model.AmbientDisplayMode
 import com.nuvio.tv.domain.model.AmbientModeSettings
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -45,5 +46,13 @@ class AmbientModeSettingsViewModel @Inject constructor(
 
     fun setCatalogKeys(keys: List<String>) {
         viewModelScope.launch { dataStore.setCatalogKeys(keys) }
+    }
+
+    fun setDisplayMode(mode: AmbientDisplayMode) {
+        viewModelScope.launch { dataStore.setDisplayMode(mode) }
+    }
+
+    fun setTrailerAudioEnabled(enabled: Boolean) {
+        viewModelScope.launch { dataStore.setTrailerAudioEnabled(enabled) }
     }
 }

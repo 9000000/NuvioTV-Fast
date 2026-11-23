@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.AmbientModeDataStore
+import com.nuvio.tv.data.trailer.TrailerPlaybackSource
 import com.nuvio.tv.domain.model.AmbientModeSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -27,7 +28,8 @@ private const val REFRESH_INTERVAL_MS = 30L * 60_000L
 @HiltViewModel
 class AmbientModeViewModel @Inject constructor(
     dataStore: AmbientModeDataStore,
-    private val loader: AmbientSlideLoader
+    private val loader: AmbientSlideLoader,
+    private val trailerResolver: AmbientTrailerResolver
 ) : ViewModel() {
 
     val settings: StateFlow<AmbientModeSettings> = dataStore.settings
@@ -63,6 +65,9 @@ class AmbientModeViewModel @Inject constructor(
             _slides.value = _slides.value.shuffled()
         }
     }
+
+    suspend fun resolveTrailer(slide: AmbientSlide): TrailerPlaybackSource? =
+        trailerResolver.resolve(slide)
 
     private fun refresh(keys: List<String>) {
         if (loadJob?.isActive == true && loadingKeys == keys) return

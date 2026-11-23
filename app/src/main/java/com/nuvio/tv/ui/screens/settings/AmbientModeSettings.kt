@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.R
+import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.domain.model.AmbientDisplayMode
 import com.nuvio.tv.domain.model.AmbientModeSettings
 
 @Composable
@@ -23,6 +25,9 @@ internal fun AmbientModeSettingsCard(
     val settings = uiState.settings
     var showTimeoutDialog by remember { mutableStateOf(false) }
     var showCatalogsDialog by remember { mutableStateOf(false) }
+    var showDisplayModeDialog by remember { mutableStateOf(false) }
+    val supportsTrailerMode = AppFeaturePolicy.inAppTrailerPlaybackEnabled
+    val effectiveDisplayMode = if (supportsTrailerMode) settings.displayMode else AmbientDisplayMode.BACKDROP
     val selectedCatalogs = settings.catalogKeys.filter { key -> uiState.catalogs.any { it.key == key } }
 
     SettingsGroupCard(
@@ -37,6 +42,22 @@ internal fun AmbientModeSettingsCard(
             onToggle = { viewModel.setEnabled(!settings.enabled) }
         )
         if (settings.enabled) {
+            if (supportsTrailerMode) {
+                SettingsActionRow(
+                    title = stringResource(R.string.ambient_mode_display_mode),
+                    subtitle = stringResource(R.string.ambient_mode_display_mode_subtitle),
+                    value = displayModeLabel(effectiveDisplayMode),
+                    onClick = { showDisplayModeDialog = true }
+                )
+                if (effectiveDisplayMode == AmbientDisplayMode.TRAILER) {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.ambient_mode_trailer_audio),
+                        subtitle = stringResource(R.string.ambient_mode_trailer_audio_subtitle),
+                        checked = settings.trailerAudioEnabled,
+                        onToggle = { viewModel.setTrailerAudioEnabled(!settings.trailerAudioEnabled) }
+                    )
+                }
+            }
             SettingsActionRow(
                 title = stringResource(R.string.ambient_mode_timeout),
                 subtitle = stringResource(R.string.ambient_mode_timeout_subtitle),
@@ -59,6 +80,32 @@ internal fun AmbientModeSettingsCard(
                 onClick = { showCatalogsDialog = true }
             )
         }
+    }
+
+    if (showDisplayModeDialog && supportsTrailerMode) {
+        SettingsSingleChoiceDialog(
+            title = stringResource(R.string.ambient_mode_display_mode),
+            subtitle = stringResource(R.string.ambient_mode_display_mode_subtitle),
+            options = listOf(
+                SettingsPickerOption(
+                    value = AmbientDisplayMode.BACKDROP,
+                    title = stringResource(R.string.ambient_mode_display_mode_backdrop),
+                    description = stringResource(R.string.ambient_mode_display_mode_backdrop_desc)
+                ),
+                SettingsPickerOption(
+                    value = AmbientDisplayMode.TRAILER,
+                    title = stringResource(R.string.ambient_mode_display_mode_trailer),
+                    description = stringResource(R.string.ambient_mode_display_mode_trailer_desc)
+                )
+            ),
+            selectedValue = effectiveDisplayMode,
+            onOptionSelected = { mode ->
+                viewModel.setDisplayMode(mode)
+                showDisplayModeDialog = false
+            },
+            onDismiss = { showDisplayModeDialog = false },
+            maxHeight = 320.dp
+        )
     }
 
     if (showTimeoutDialog) {
@@ -96,6 +143,12 @@ internal fun AmbientModeSettingsCard(
             maxSelections = AmbientModeSettings.MAX_CATALOGS
         )
     }
+}
+
+@Composable
+private fun displayModeLabel(mode: AmbientDisplayMode): String = when (mode) {
+    AmbientDisplayMode.BACKDROP -> stringResource(R.string.ambient_mode_display_mode_backdrop)
+    AmbientDisplayMode.TRAILER -> stringResource(R.string.ambient_mode_display_mode_trailer)
 }
 
 @Composable

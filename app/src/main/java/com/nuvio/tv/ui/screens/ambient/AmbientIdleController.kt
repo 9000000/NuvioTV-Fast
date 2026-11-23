@@ -6,17 +6,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class AmbientIdleController {
-    private val _lastInteractionAt = MutableStateFlow(SystemClock.uptimeMillis())
+class AmbientIdleController(
+    private val uptimeMillisProvider: () -> Long = { SystemClock.uptimeMillis() }
+) {
+    private val _lastInteractionAt = MutableStateFlow(uptimeMillisProvider())
     val lastInteractionAt: StateFlow<Long> = _lastInteractionAt.asStateFlow()
 
     private val _isShowing = MutableStateFlow(false)
     val isShowing: StateFlow<Boolean> = _isShowing.asStateFlow()
 
+    @Volatile
+    var allowVolumeKeysWhileShowing: Boolean = false
+
     private var swallowedKeyCode: Int? = null
 
     fun onInteraction() {
-        _lastInteractionAt.value = SystemClock.uptimeMillis()
+        _lastInteractionAt.value = uptimeMillisProvider()
     }
 
     fun show() {
@@ -29,6 +34,9 @@ class AmbientIdleController {
     }
 
     fun consumeKeyEvent(event: KeyEvent): Boolean {
+        if (_isShowing.value && allowVolumeKeysWhileShowing && isAmbientVolumeKey(event.keyCode)) {
+            return false
+        }
         onInteraction()
         val continuesSwallowedPress = event.keyCode == swallowedKeyCode &&
             (event.action == KeyEvent.ACTION_UP || event.repeatCount > 0)
@@ -45,3 +53,8 @@ class AmbientIdleController {
         return false
     }
 }
+
+internal fun isAmbientVolumeKey(keyCode: Int): Boolean =
+    keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+        keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
+        keyCode == KeyEvent.KEYCODE_VOLUME_MUTE

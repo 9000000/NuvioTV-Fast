@@ -13,6 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -22,6 +25,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
+import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.domain.model.AmbientDisplayMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 
@@ -38,6 +43,12 @@ fun AmbientModeHost(
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val active = settings.enabled && allowed && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     val timeoutMs = settings.timeoutMinutes * 60_000L
+    val effectiveDisplayMode = if (AppFeaturePolicy.inAppTrailerPlaybackEnabled) {
+        settings.displayMode
+    } else {
+        AmbientDisplayMode.BACKDROP
+    }
+    var readyToPlay by remember { mutableStateOf(false) }
 
     LaunchedEffect(active, timeoutMs) {
         if (!active) {
@@ -54,12 +65,24 @@ fun AmbientModeHost(
     val localView = LocalView.current
     LaunchedEffect(isShowing) {
         if (isShowing) {
+            readyToPlay = false
             keyboardController?.hide()
             (localView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
                 ?.hideSoftInputFromWindow(localView.windowToken, 0)
             onShown()
             viewModel.onShown()
+            readyToPlay = true
+        } else {
+            readyToPlay = false
         }
+    }
+
+    val allowVolumeKeys = isShowing &&
+        effectiveDisplayMode == AmbientDisplayMode.TRAILER &&
+        settings.trailerAudioEnabled
+    DisposableEffect(controller, allowVolumeKeys) {
+        controller.allowVolumeKeysWhileShowing = allowVolumeKeys
+        onDispose { controller.allowVolumeKeysWhileShowing = false }
     }
 
     if (isShowing) {
@@ -77,6 +100,10 @@ fun AmbientModeHost(
     ) {
         AmbientSlideshow(
             slides = slides,
+            displayMode = effectiveDisplayMode,
+            trailerAudioEnabled = settings.trailerAudioEnabled,
+            allowTrailerPlayback = isShowing && readyToPlay,
+            resolveTrailer = viewModel::resolveTrailer,
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) { detectTapGestures { controller.dismiss() } }

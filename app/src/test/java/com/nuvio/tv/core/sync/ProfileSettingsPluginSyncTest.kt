@@ -9,6 +9,7 @@ import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.AmbientModeDataStore
 import com.nuvio.tv.data.local.PluginDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
+import com.nuvio.tv.domain.model.AmbientDisplayMode
 import com.nuvio.tv.domain.model.AmbientModeSettings
 import com.nuvio.tv.domain.model.UserProfile
 import com.squareup.moshi.Moshi
@@ -87,15 +88,21 @@ class ProfileSettingsPluginSyncTest {
         val ambient = AmbientModeDataStore(harness.factory, profileManager)
         ambient.setTimeoutMinutes(1)
         ambient.setEnabled(false)
+        ambient.setDisplayMode(AmbientDisplayMode.TRAILER)
+        ambient.setTrailerAudioEnabled(true)
         harness.service.pushCurrentProfileToRemote().getOrThrow()
         harness.factory.get(1, AmbientModeDataStore.FEATURE).edit { it.clear() }
         assertEquals(AmbientModeSettings.DEFAULT_TIMEOUT_MINUTES, ambient.settings.first().timeoutMinutes)
+        assertEquals(AmbientDisplayMode.BACKDROP, ambient.settings.first().displayMode)
+        assertFalse(ambient.settings.first().trailerAudioEnabled)
 
         assertTrue(harness.service.pullCurrentProfileFromRemote().getOrThrow())
 
         val restored = ambient.settings.first()
         assertEquals(1, restored.timeoutMinutes)
         assertFalse(restored.enabled)
+        assertEquals(AmbientDisplayMode.TRAILER, restored.displayMode)
+        assertTrue(restored.trailerAudioEnabled)
     }
 
     @Test
