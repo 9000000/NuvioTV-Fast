@@ -71,6 +71,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val torrentService: TorrentService,
     private val torrentModeCoordinator: TorrentModeCoordinator,
     private val subtitleTtsCoordinator: SubtitleTtsCoordinator,
+    private val usenetSourceSettings: com.nuvio.tv.core.usenet.UsenetSourceSettings,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -106,6 +107,9 @@ class PlaybackSettingsViewModel @Inject constructor(
                 }
             }
             .map { it.displayName }
+            // Auto-play counts built-in Usenet among the addons, so it can be allowed like one.
+            .plus(listOfNotNull(com.nuvio.tv.core.usenet.BuiltInUsenetService.GROUP_NAME
+                .takeIf { runCatching { usenetSourceSettings.read().enabled }.getOrDefault(false) }))
             .distinct()
             .sorted()
     }
@@ -444,6 +448,10 @@ suspend fun setSubtitleFontId(fontId: String) {
 
     suspend fun setSubtitleShadowSize(size: Int) {
         playerSettingsDataStore.setSubtitleShadowSize(size)
+    }
+
+    suspend fun setSubtitleCustomizeAss(enabled: Boolean) {
+        playerSettingsDataStore.setSubtitleCustomizeAss(enabled)
     }
 
     suspend fun resetSubtitleAppearance() {

@@ -101,6 +101,7 @@ import com.nuvio.tv.ui.util.recompositionHighlighter
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -1366,7 +1367,8 @@ private fun MetaDetailsContent(
         { video: Video -> playbackAvailability.canStream(meta.apiType, video.id, meta.id, video) }
     }
     val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
-    val listState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    val detailCacheWindow = remember { LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 1f) }
+    val listState = rememberLazyListState(cacheWindow = detailCacheWindow)
     val castRowListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
     val moreLikeThisListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
     val trailerListState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)

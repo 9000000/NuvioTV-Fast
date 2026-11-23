@@ -93,6 +93,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         com.nuvio.tv.core.network.ArcDns.init(this)
         super.onCreate()
         com.nuvio.tv.features.livetv.LiveTvStorage.init(this)
+        registerActivityLifecycleCallbacks(com.nuvio.tv.core.usenet.UsenetAppLifecycle())
         SentryInitializer.start(this, sentrySettingsDataStore)
         PluginRuntimeHooks.onApplicationCreate(this)
         androidTvChannelSyncService.start()

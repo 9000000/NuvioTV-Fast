@@ -251,9 +251,16 @@ jobs:
             set_property PLAYBACK_REPORTS_BASE_URL "https://nuvio.tv/"
           fi
 
-      - name: Build full release APKs
+      - name: Verify Usenet Android sidecars
         if: inputs.mode != 'dry-run'
-        run: ./gradlew :app:assembleFullRelease -x test --stacktrace
+        run: |
+          python3 -m unittest discover -s tests -p 'usenet_prebuilts_test.py'
+          python3 native/usenet/scripts/fetch_prebuilts.py
+          python3 native/usenet/scripts/check_prebuilts.py
+
+      - name: Test updater and Usenet and build full release APKs
+        if: inputs.mode != 'dry-run'
+        run: ./gradlew :app:testFullReleaseUnitTest --tests 'com.nuvio.tv.updater.*' --tests '*Usenet*' --tests 'com.nuvio.tv.core.player.StreamFallbackSessionTest' :app:assembleFullRelease --stacktrace
 
       - name: Rename release APKs
         if: inputs.mode != 'dry-run'

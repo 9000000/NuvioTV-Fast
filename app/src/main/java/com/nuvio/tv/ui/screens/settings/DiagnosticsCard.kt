@@ -224,7 +224,7 @@ internal fun LazyListScope.diagnosticsCardItems(
 }
 
 @Composable
-private fun DiagnosticsSectionCard(
+internal fun DiagnosticsSectionCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -284,7 +284,7 @@ private fun SectionHeader(label: String, subtitle: String? = null) {
 }
 
 @Composable
-private fun DiagnosticRow(
+internal fun DiagnosticRow(
     label: String,
     value: String,
     valueColor: Color = NuvioTheme.colors.TextPrimary

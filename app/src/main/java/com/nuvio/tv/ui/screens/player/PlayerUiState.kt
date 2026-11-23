@@ -139,6 +139,10 @@ data class PlayerUiState(
     val subtitleAutoSyncLoading: Boolean = false,
     val subtitleAutoSyncLoadedTrackKey: String? = null,
     val showSpeedDialog: Boolean = false,
+    val showDiscTitlesDialog: Boolean = false,
+    /** A Blu-ray's titles, when the stream is one clip of a disc with more than one. */
+    val discTitles: List<DiscTitle> = emptyList(),
+    val currentDiscTitle: String? = null,
     val showMoreDialog: Boolean = false,
     // Subtitle style settings
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
@@ -395,6 +399,8 @@ sealed class PlayerEvent {
     data class OnAdjustSubtitleDelay(val deltaMs: Int, val showOverlay: Boolean = true) : PlayerEvent()
     data class OnResetSubtitleDelay(val showOverlay: Boolean = true) : PlayerEvent()
     data object OnShowSpeedDialog : PlayerEvent()
+    data object OnShowDiscTitles : PlayerEvent()
+    data class OnSelectDiscTitle(val name: String) : PlayerEvent()
     data object OnShowMoreDialog : PlayerEvent()
     data object OnDismissMoreDialog : PlayerEvent()
     data object OnShowEpisodesPanel : PlayerEvent()
@@ -443,6 +449,7 @@ sealed class PlayerEvent {
     data class OnSetSubtitleShadowEnabled(val enabled: Boolean) : PlayerEvent()
     data class OnSetSubtitleShadowOpacity(val opacity: Int) : PlayerEvent()
     data class OnSetSubtitleShadowSize(val size: Int) : PlayerEvent()
+    data class OnSetSubtitleCustomizeAss(val enabled: Boolean) : PlayerEvent()
     data object OnResetSubtitleDefaults : PlayerEvent()
     data object OnToggleAspectRatio : PlayerEvent()
     data object OnSwitchInternalPlayerEngine : PlayerEvent()
@@ -518,4 +525,14 @@ data class StreamInfoData(
     val subtitleSource: String? = null,
     val playerEngine: String? = null,
     val serverPlayback: String? = null
+)
+
+/** A title of a Blu-ray disc: one of its playlists. */
+data class DiscTitle(
+    val name: String,
+    val durationMs: Long,
+    val clipCount: Int,
+    val isFeature: Boolean,
+    val audioLanguages: List<String> = emptyList(),
+    val subtitleLanguages: List<String> = emptyList()
 )

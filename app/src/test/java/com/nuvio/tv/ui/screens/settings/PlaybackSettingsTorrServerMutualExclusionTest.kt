@@ -36,6 +36,7 @@ class PlaybackSettingsTorrServerMutualExclusionTest {
     private val torrentService = mockk<TorrentService>(relaxed = true)
     private val torrentModeCoordinator = mockk<TorrentModeCoordinator>(relaxed = true)
     private val subtitleTtsCoordinator = mockk<com.nuvio.tv.core.tts.SubtitleTtsCoordinator>(relaxed = true)
+    private val usenetSourceSettings = mockk<com.nuvio.tv.core.usenet.UsenetSourceSettings>(relaxed = true)
     private val context = mockk<Context>(relaxed = true)
 
     private fun createViewModel(): PlaybackSettingsViewModel {
@@ -49,6 +50,7 @@ class PlaybackSettingsTorrServerMutualExclusionTest {
             torrentService = torrentService,
             torrentModeCoordinator = torrentModeCoordinator,
             subtitleTtsCoordinator = subtitleTtsCoordinator,
+            usenetSourceSettings = usenetSourceSettings,
             context = context
         )
     }

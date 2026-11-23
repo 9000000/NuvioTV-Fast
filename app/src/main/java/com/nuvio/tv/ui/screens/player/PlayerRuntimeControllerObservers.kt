@@ -1299,6 +1299,8 @@ internal fun PlayerRuntimeController.handleVc1PlaybackFailure(errorMessage: Stri
     val displayMessage = errorMessage?.takeIf { it.isNotBlank() }
         ?: _exoPlayer?.playerError?.toDisplayMessage(context)
         ?: return
+    if (returnToFeatureAfterExtraFailure(displayMessage)) return
+    if (tryNextStream(displayMessage)) return
     cancelFirstFrameWatchdog()
     cancelTunnelAvSyncWatchdog()
     cancelStallWatchdog()

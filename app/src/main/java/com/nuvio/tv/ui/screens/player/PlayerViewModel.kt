@@ -106,6 +106,7 @@ class PlayerViewModel @Inject constructor(
     private val serverPlayback: com.nuvio.tv.data.mediaserver.ServerPlayback,
     private val serverStreams: com.nuvio.tv.data.mediaserver.ServerStreams,
     private val subtitleTtsCoordinator: SubtitleTtsCoordinator,
+    private val usenetSourceSettings: com.nuvio.tv.core.usenet.UsenetSourceSettings,
     partyRepository: com.nuvio.tv.core.party.PartyRepository,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
     savedStateHandle: SavedStateHandle
@@ -159,6 +160,7 @@ class PlayerViewModel @Inject constructor(
         serverPlayback = serverPlayback,
         serverStreams = serverStreams,
         subtitleTtsCoordinator = subtitleTtsCoordinator,
+        usenetSourceSettings = usenetSourceSettings,
         party = partyRepository,
         profileId = savedStateHandle.get<String>("profileId")?.toIntOrNull()
             ?: profileManager.activeProfileId.value,
