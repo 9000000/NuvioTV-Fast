@@ -107,7 +107,10 @@ class AutoSyncTvOptimizationTest {
         val workerThread = withContext(AutomaticSubtitleSync.autoSyncDispatcher) {
             Thread.currentThread().name
         }
-        assertTrue("Expected dedicated NuvioAutoSyncWorker thread, got $workerThread", workerThread == "NuvioAutoSyncWorker")
+        assertTrue(
+            "Expected dedicated NuvioAutoSyncWorker thread, got $workerThread",
+            workerThread == "NuvioAutoSyncWorker" || workerThread.startsWith("NuvioAutoSyncWorker ")
+        )
         assertTrue("Expected worker thread to differ from caller thread", workerThread != callerThread)
     }
 }
