@@ -776,3 +776,20 @@
 - **Status**: Fixed
 
 ---
+
+## [2026-11-24 09:04] - Flaky assertion tên thread trong AutoSyncTvOptimizationTest khi chạy chung JVM với kotlinx-coroutines-test
+
+- **Type**: Process
+- **Severity**: Low
+- **File**: `app/src/test/java/com/nuvio/tv/ui/screens/player/autosync/AutoSyncTvOptimizationTest.kt:110`
+- **Agent**: mon
+- **Root Cause**: Khi chạy chung JVM với các test dùng `runTest`, `kotlinx.coroutines` DebugProbes nối hậu tố ` @coroutine#<id>` vào `Thread.currentThread().name` (ví dụ `NuvioAutoSyncWorker @coroutine#195`), khiến so sánh tuyệt đối `== "NuvioAutoSyncWorker"` thất bại.
+- **Error Message**:
+  ```
+  java.lang.AssertionError: Expected dedicated NuvioAutoSyncWorker thread, got NuvioAutoSyncWorker @coroutine#195
+  ```
+- **Fix Applied**: Cập nhật assertion chấp nhận `workerThread == "NuvioAutoSyncWorker" || workerThread.startsWith("NuvioAutoSyncWorker ")`.
+- **Prevention**: Không so sánh bằng tuyệt đối `Thread.currentThread().name` trong coroutine tests mà hãy kiểm tra prefix tên worker thread.
+- **Status**: Fixed
+
+---
