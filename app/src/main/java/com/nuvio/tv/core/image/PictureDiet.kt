@@ -3,7 +3,7 @@ package com.nuvio.tv.core.image
 import com.nuvio.tv.core.player.BufferSizing
 
 /** About three Home screens of posters plus one full-screen backdrop, in full colour. */
-const val SMALL_BOX_PICTURE_CACHE_BYTES = 40L * 1024 * 1024
+const val SMALL_BOX_PICTURE_CACHE_BYTES = 48L * 1024 * 1024
 
 private const val FALLBACK_MAX_BITMAP_SIDE = 1920
 private const val MIN_MAX_BITMAP_SIDE = 1280

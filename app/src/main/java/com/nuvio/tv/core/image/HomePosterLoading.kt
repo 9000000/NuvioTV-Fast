@@ -29,12 +29,12 @@ const val HOME_POSTER_BITMAP_PARALLELISM = 4
 
 private const val MIB = 1024L * 1024
 private const val LARGE_MEMORY_BOX_TOTAL_BYTES = 3_072L * MIB
-private const val LARGE_BOX_ARTWORK_CACHE_BYTES = 176L * MIB
+private const val LARGE_BOX_ARTWORK_CACHE_BYTES = 208L * MIB
 
 /** Boxes above 3 GB hold several rows more of decoded posters; smaller boxes keep the heap-based budget. */
 fun homeArtworkMemoryCacheBytes(heapBudgetBytes: Long, totalRamBytes: Long): Long =
     if (totalRamBytes > LARGE_MEMORY_BOX_TOTAL_BYTES) {
-        maxOf(heapBudgetBytes, minOf(LARGE_BOX_ARTWORK_CACHE_BYTES, totalRamBytes / 16))
+        maxOf(heapBudgetBytes, minOf(LARGE_BOX_ARTWORK_CACHE_BYTES, totalRamBytes / 14))
     } else heapBudgetBytes
 
 /**
@@ -60,36 +60,36 @@ data class HomeImageLoadingProfile(
     companion object {
         private val LOW_RAM = HomeImageLoadingProfile(
             isLowRam = true,
-            okHttpMaxRequests = 32,
-            okHttpMaxRequestsPerHost = 16,
-            connectionPoolMaxIdle = 12,
+            okHttpMaxRequests = 40,
+            okHttpMaxRequestsPerHost = 20,
+            connectionPoolMaxIdle = 16,
             bitmapDecodeParallelism = 4,
-            catalogConcurrency = 4,
-            eagerCatalogRows = 4,
-            dripAheadRows = 3,
-            lazyPrefetchAheadModern = 3,
-            lazyPrefetchAheadClassic = 2,
-            verticalPrefetchRows = 2,
-            verticalPrefetchItems = 6,
-            horizontalPrefetchAhead = 8,
-            horizontalPrefetchBehind = 2
-        )
-
-        private val STANDARD = HomeImageLoadingProfile(
-            isLowRam = false,
-            okHttpMaxRequests = 48,
-            okHttpMaxRequestsPerHost = 32,
-            connectionPoolMaxIdle = 20,
-            bitmapDecodeParallelism = 6,
-            catalogConcurrency = 6,
-            eagerCatalogRows = 6,
-            dripAheadRows = 6,
+            catalogConcurrency = 5,
+            eagerCatalogRows = 5,
+            dripAheadRows = 5,
             lazyPrefetchAheadModern = 4,
             lazyPrefetchAheadClassic = 3,
             verticalPrefetchRows = 3,
             verticalPrefetchItems = 8,
-            horizontalPrefetchAhead = 12,
-            horizontalPrefetchBehind = 2
+            horizontalPrefetchAhead = 10,
+            horizontalPrefetchBehind = 3
+        )
+
+        private val STANDARD = HomeImageLoadingProfile(
+            isLowRam = false,
+            okHttpMaxRequests = 64,
+            okHttpMaxRequestsPerHost = 40,
+            connectionPoolMaxIdle = 28,
+            bitmapDecodeParallelism = 8,
+            catalogConcurrency = 8,
+            eagerCatalogRows = 8,
+            dripAheadRows = 8,
+            lazyPrefetchAheadModern = 6,
+            lazyPrefetchAheadClassic = 4,
+            verticalPrefetchRows = 4,
+            verticalPrefetchItems = 10,
+            horizontalPrefetchAhead = 16,
+            horizontalPrefetchBehind = 4
         )
 
         fun forDevice(totalRamBytes: Long): HomeImageLoadingProfile =

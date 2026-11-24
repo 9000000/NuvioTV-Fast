@@ -406,20 +406,20 @@ class LeanbackCoreOptimizationTest {
     }
 
     @Test
-    fun `leanback row and universal adapters resolve low-ram 8-2 vs standard 12-2 horizontal prefetch profiles`() {
+    fun `leanback row and universal adapters resolve low-ram 10-3 vs standard 16-4 horizontal prefetch profiles`() {
         val gib = 1024L * 1024L * 1024L
         val (lowRamContext, lowRamAm) = mockDeviceContext(totalRamBytes = 2L * gib)
         val (standardContext, _) = mockDeviceContext(totalRamBytes = 4L * gib)
 
         val lowRamProfile = LeanbackArtworkLoader.resolveProfileForContext(lowRamContext)
         val standardProfile = LeanbackArtworkLoader.resolveProfileForContext(standardContext)
-        assertEquals(8, lowRamProfile.horizontalPrefetchAhead)
-        assertEquals(2, lowRamProfile.horizontalPrefetchBehind)
-        assertEquals(12, standardProfile.horizontalPrefetchAhead)
-        assertEquals(2, standardProfile.horizontalPrefetchBehind)
+        assertEquals(10, lowRamProfile.horizontalPrefetchAhead)
+        assertEquals(3, lowRamProfile.horizontalPrefetchBehind)
+        assertEquals(16, standardProfile.horizontalPrefetchAhead)
+        assertEquals(4, standardProfile.horizontalPrefetchBehind)
         verify(exactly = 1) { lowRamAm.getMemoryInfo(any()) }
 
-        val modernItems = (0 until 20).map { idx ->
+        val modernItems = (0 until 26).map { idx ->
             val url = "https://example.com/modern_$idx.jpg"
             ModernCarouselItem(
                 key = "modern_$idx",
@@ -449,7 +449,7 @@ class LeanbackCoreOptimizationTest {
                 )
             )
         }
-        val universalItems = (0 until 20).map { idx ->
+        val universalItems = (0 until 26).map { idx ->
             LeanbackCardItem.Poster(
                 key = "poster_$idx",
                 title = "Poster $idx",
@@ -466,7 +466,7 @@ class LeanbackCoreOptimizationTest {
         try {
             every { SingletonImageLoader.get(any()) } returns imageLoader
 
-            // LeanbackRowAdapter: Low-RAM (8 ahead, 2 behind)
+            // LeanbackRowAdapter: Low-RAM (10 ahead, 3 behind)
             val lowRamRowAdapter = createRowAdapter().apply {
                 submitItems(modernItems)
                 attachedRecyclerView = mockAttachedRecyclerView(lowRamContext, visibleCount = 6, firstIndex = 0)
@@ -474,7 +474,7 @@ class LeanbackCoreOptimizationTest {
             assertEquals(lowRamProfile, lowRamRowAdapter.resolveLoadingProfile(lowRamContext))
             lowRamRowAdapter.onFocusedPositionChanged(lowRamContext, 0)
             assertEquals(
-                (6..13).map { "https://example.com/modern_$it.jpg" },
+                (6..15).map { "https://example.com/modern_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
             // Cached profile reused across subsequent calls and scroll settle
@@ -482,12 +482,12 @@ class LeanbackCoreOptimizationTest {
             lowRamRowAdapter.attachedRecyclerView = mockAttachedRecyclerView(lowRamContext, visibleCount = 6, firstIndex = 5)
             lowRamRowAdapter.onScrollSettled()
             assertEquals(
-                listOf(14, 15, 16, 17, 18, 4, 3).map { "https://example.com/modern_$it.jpg" },
+                listOf(16, 17, 18, 19, 20, 4, 3, 2).map { "https://example.com/modern_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
             verify(exactly = 2) { lowRamAm.getMemoryInfo(any()) }
 
-            // LeanbackRowAdapter: Standard (12 ahead, 2 behind)
+            // LeanbackRowAdapter: Standard (16 ahead, 4 behind)
             enqueuedRequests.clear()
             val standardRowAdapter = createRowAdapter().apply {
                 submitItems(modernItems)
@@ -496,18 +496,18 @@ class LeanbackCoreOptimizationTest {
             assertEquals(standardProfile, standardRowAdapter.resolveLoadingProfile(standardContext))
             standardRowAdapter.onFocusedPositionChanged(standardContext, 0)
             assertEquals(
-                (6..17).map { "https://example.com/modern_$it.jpg" },
+                (6..21).map { "https://example.com/modern_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
             enqueuedRequests.clear()
             standardRowAdapter.attachedRecyclerView = mockAttachedRecyclerView(standardContext, visibleCount = 6, firstIndex = 6)
             standardRowAdapter.onFocusedPositionChanged(standardContext, 9)
             assertEquals(
-                listOf(18, 19, 5, 4).map { "https://example.com/modern_$it.jpg" },
+                listOf(22, 23, 24, 25, 5, 4, 3, 2).map { "https://example.com/modern_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
 
-            // LeanbackUniversalAdapter: Low-RAM (8 ahead, 2 behind)
+            // LeanbackUniversalAdapter: Low-RAM (10 ahead, 3 behind)
             enqueuedRequests.clear()
             val lowRamUniversalAdapter = createUniversalAdapter().apply {
                 submitItems(universalItems)
@@ -516,19 +516,19 @@ class LeanbackCoreOptimizationTest {
             assertEquals(lowRamProfile, lowRamUniversalAdapter.resolveLoadingProfile(lowRamContext))
             lowRamUniversalAdapter.onFocusedPositionChanged(lowRamContext, 0)
             assertEquals(
-                (6..13).map { "https://example.com/poster_$it.jpg" },
+                (6..15).map { "https://example.com/poster_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
             enqueuedRequests.clear()
             lowRamUniversalAdapter.attachedRecyclerView = mockAttachedRecyclerView(lowRamContext, visibleCount = 6, firstIndex = 5)
             lowRamUniversalAdapter.onScrollSettled()
             assertEquals(
-                listOf(14, 15, 16, 17, 18, 4, 3).map { "https://example.com/poster_$it.jpg" },
+                listOf(16, 17, 18, 19, 20, 4, 3, 2).map { "https://example.com/poster_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
             verify(exactly = 3) { lowRamAm.getMemoryInfo(any()) }
 
-            // LeanbackUniversalAdapter: Standard (12 ahead, 2 behind) + explicit override + submitItems while attached
+            // LeanbackUniversalAdapter: Standard (16 ahead, 4 behind) + explicit override + submitItems while attached
             enqueuedRequests.clear()
             val standardUniversalAdapter = createUniversalAdapter().apply {
                 submitItems(universalItems)
@@ -537,7 +537,7 @@ class LeanbackCoreOptimizationTest {
             assertEquals(standardProfile, standardUniversalAdapter.resolveLoadingProfile(standardContext))
             standardUniversalAdapter.onFocusedPositionChanged(standardContext, 0)
             assertEquals(
-                (6..17).map { "https://example.com/poster_$it.jpg" },
+                (6..21).map { "https://example.com/poster_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
             enqueuedRequests.clear()
@@ -545,7 +545,7 @@ class LeanbackCoreOptimizationTest {
             standardUniversalAdapter.attachedRecyclerView = mockAttachedRecyclerView(standardContext, visibleCount = 6, firstIndex = 6)
             standardUniversalAdapter.prefetchFromVisibleRange(standardContext)
             assertEquals(
-                listOf(18, 19, 5, 4).map { "https://example.com/poster_$it.jpg" },
+                listOf(5, 4, 3).map { "https://example.com/poster_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
 
@@ -556,7 +556,7 @@ class LeanbackCoreOptimizationTest {
             attachedRowAdapter.attachedRecyclerView = attachedRowRv
             attachedRowAdapter.submitItems(modernItems)
             assertEquals(
-                (6..13).map { "https://example.com/modern_$it.jpg" },
+                (6..15).map { "https://example.com/modern_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
 
@@ -566,7 +566,7 @@ class LeanbackCoreOptimizationTest {
             attachedUniversalAdapter.attachedRecyclerView = attachedUniversalRv
             attachedUniversalAdapter.submitItems(universalItems)
             assertEquals(
-                (6..17).map { "https://example.com/poster_$it.jpg" },
+                (6..21).map { "https://example.com/poster_$it.jpg" },
                 enqueuedRequests.map { it.data.toString() }
             )
         } finally {

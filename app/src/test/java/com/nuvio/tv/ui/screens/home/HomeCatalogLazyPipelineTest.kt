@@ -156,8 +156,66 @@ class HomeCatalogLazyPipelineTest {
     }
 
     @Test
+    fun `eager catalog flush is not blocked by a slower sibling eager catalog`(): Unit = runBlocking {
+        val addon = testAddon(listOf("eager_0", "eager_1", "eager_slow"))
+        val slowGate = CompletableDeferred<Unit>()
+        val firstGate = CompletableDeferred<Unit>()
+
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true) {
+            every {
+                getCatalog(
+                    addonBaseUrl = any(),
+                    addonId = any(),
+                    addonName = any(),
+                    catalogId = any(),
+                    catalogName = any(),
+                    type = any(),
+                    skip = any(),
+                    skipStep = any(),
+                    extraArgs = any(),
+                    supportsSkip = any(),
+                    posterScreen = any()
+                )
+            } answers {
+                val id = arg<String>(3)
+                flow {
+                    emit(NetworkResult.Loading)
+                    if (id == "eager_1") firstGate.await()
+                    if (id == "eager_slow") slowGate.await()
+                    emit(NetworkResult.Success(sampleRow(addon, id, "Title $id")))
+                }
+            }
+        }
+
+        val viewModel = newViewModel(catalogRepository)
+        viewModel.uiState.value
+        viewModel.isOpenFilesHighCheck = { true }
+        viewModel._uiState.update { it.copy(layoutPreferencesReady = true, homeLayout = HomeLayout.MODERN) }
+
+        viewModel.loadAllCatalogsPipeline(listOf(addon))
+
+        // Wait for eager_0 (first catalog) to render so hasRenderedFirstCatalog becomes true.
+        withTimeout(5_000) {
+            while (viewModel.uiState.value.catalogRows.none { it.catalogId == "eager_0" }) {
+                delay(20)
+            }
+        }
+
+        // Now release eager_1 while eager_slow is still blocked: eager_1 must appear promptly (< 500ms)
+        // without waiting on the 800ms safety flush or eager_slow completion.
+        firstGate.complete(Unit)
+        withTimeout(500) {
+            while (viewModel.uiState.value.catalogRows.none { it.catalogId == "eager_1" }) {
+                delay(20)
+            }
+        }
+        assertTrue(slowGate.isActive)
+        slowGate.complete(Unit)
+    }
+
+    @Test
     fun `background drip-load triggers up to dripAheadRows in order after eager catalogs finish`() = runBlocking {
-        val catalogIds = (0 until 10).map { "cat_$it" }
+        val catalogIds = (0 until 14).map { "cat_$it" }
         val addon = testAddon(catalogIds)
         val requestedCatalogIds = CopyOnWriteArrayList<String>()
 
@@ -222,7 +280,7 @@ class HomeCatalogLazyPipelineTest {
 
     @Test
     fun `scheduleBackgroundDripLazyCatalogs respects open-file pressure guard and dripAheadRows cap`() = runBlocking {
-        val catalogIds = (0 until 10).map { "cat_$it" }
+        val catalogIds = (0 until 14).map { "cat_$it" }
         val addon = testAddon(catalogIds)
         val requestedCatalogIds = CopyOnWriteArrayList<String>()
 

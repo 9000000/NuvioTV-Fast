@@ -56,8 +56,8 @@ object LeanbackArtworkLoader {
     @Volatile
     var isHoldScrolling: Boolean = false
 
-    private const val MAX_PREFETCHED_KEYS = 512
-    private const val PREFETCH_TRIM_BATCH = 128
+    private const val MAX_PREFETCHED_KEYS = 768
+    private const val PREFETCH_TRIM_BATCH = 192
 
     const val DEFAULT_HORIZONTAL_PREFETCH_AHEAD = 6
     const val DEFAULT_HORIZONTAL_PREFETCH_BEHIND = 2

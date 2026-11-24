@@ -187,6 +187,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     reconcilePosterStatusObserversPipeline(emptyList())
     _fullCatalogRows.value = emptyList()
     hasRenderedFirstCatalog = false
+    pendingCatalogUpdateDirty = false
     trailerPreviewLoadingIds.clear()
     trailerPreviewNegativeCache.clear()
     trailerPreviewUrlsState.clear()
@@ -480,12 +481,9 @@ internal fun HomeViewModel.loadCatalogPipeline(
                         if (pendingCatalogLoads == 0) {
                             catalogsLoadInProgress = false
                         }
-                        // Flush immediately when all pending loads complete, on the initial
-                        // catalog render, or whenever a lazy row finishes so slower sibling
-                        // loads never stall its display.
-                        if (pendingCatalogLoads == 0 || !hasRenderedFirstCatalog || isLazyLoad) {
-                            scheduleUpdateCatalogRows()
-                        }
+                        // Flush progressively via coalesced window so completed eager/lazy rows
+                        // appear without waiting on the slowest sibling addon.
+                        scheduleUpdateCatalogRows()
                         if (countedThisCompletion && !isLazyLoad && !isRefresh && pendingCatalogLoads == 0) {
                             scheduleBackgroundDripLazyCatalogs(generation)
                         }
@@ -512,10 +510,7 @@ internal fun HomeViewModel.loadCatalogPipeline(
                         if (pendingCatalogLoads == 0) {
                             catalogsLoadInProgress = false
                         }
-                        // Same batching logic as success path.
-                        if (pendingCatalogLoads == 0 || !hasRenderedFirstCatalog || isLazyLoad) {
-                            scheduleUpdateCatalogRows()
-                        }
+                        scheduleUpdateCatalogRows()
                         if (countedThisCompletion && !isLazyLoad && !isRefresh && pendingCatalogLoads == 0) {
                             scheduleBackgroundDripLazyCatalogs(generation)
                         }
@@ -536,8 +531,8 @@ internal fun HomeViewModel.loadCatalogPipeline(
  */
 internal fun HomeViewModel.scheduleBackgroundDripLazyCatalogs(
     generation: Long,
-    initialDelayMs: Long = 350L,
-    batchDelayMs: Long = 150L
+    initialDelayMs: Long = 200L,
+    batchDelayMs: Long = 100L
 ) {
     dripLazyCatalogJob?.cancel()
     dripLazyCatalogJob = viewModelScope.launch {
@@ -567,7 +562,8 @@ internal fun HomeViewModel.scheduleBackgroundDripLazyCatalogs(
 
         if (keysToDrip.isEmpty()) return@launch
 
-        val batches = keysToDrip.chunked(2)
+        val batchSize = if (imageLoadingProfile.isLowRam) 2 else 3
+        val batches = keysToDrip.chunked(batchSize)
         batches.forEachIndexed { batchIndex, batch ->
             if (generation != catalogLoadGeneration) return@launch
             if (isOpenFilesHighCheck()) {

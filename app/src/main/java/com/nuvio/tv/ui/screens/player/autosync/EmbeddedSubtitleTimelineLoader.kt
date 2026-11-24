@@ -54,9 +54,9 @@ internal object EmbeddedSubtitleTimelineLoader {
     private const val MAX_SEEK_HEAD_BYTES = 2 * 1024 * 1024
     private const val MAX_INFO_BYTES = 512 * 1024
     private const val MAX_TRACKS_BYTES = 4 * 1024 * 1024
-    private const val MAX_CUES_BYTES = 4 * 1024 * 1024
-    private const val MAX_TOTAL_DOWNLOAD_BYTES = 8L * 1024L * 1024L
-    private const val MAX_RANGE_REQUESTS = 10
+    private const val MAX_CUES_BYTES = 8 * 1024 * 1024
+    private const val MAX_TOTAL_DOWNLOAD_BYTES = 24L * 1024L * 1024L
+    private const val MAX_RANGE_REQUESTS = 16
     private const val MAX_SEEK_HEAD_HOPS = 4
     private const val DEFAULT_TIMESTAMP_SCALE_NS = 1_000_000L
     private const val DEFAULT_CUE_DURATION_MS = 5_000L
@@ -246,6 +246,9 @@ internal object EmbeddedSubtitleTimelineLoader {
         } catch (cancel: CancellationException) {
             // External cancellation must remain observable and must never publish cache state.
             throw cancel
+        } catch (_: OutOfMemoryError) {
+            // Transient heap pressure on memory-constrained TVs; fall back without poisoning negative cache.
+            null
         } catch (_: Exception) {
             synchronized(cacheLock) {
                 cache[cacheKey] = CachedLoadResult(

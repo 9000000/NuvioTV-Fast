@@ -98,7 +98,7 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
-        internal const val STARTUP_GRACE_PERIOD_MS = 1_500L
+        internal const val STARTUP_GRACE_PERIOD_MS = 1_000L
         internal const val CONTINUE_WATCHING_ENRICHMENT_GRACE_PERIOD_MS = 1_000L
         private const val CONTINUE_WATCHING_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
@@ -107,11 +107,11 @@ class HomeViewModel @Inject constructor(
 
         /** How long a home catalog is left alone before a return to Home re-requests it. */
         private const val HOME_CATALOG_REFRESH_TTL_MS = 15L * 60L * 1000L
-        internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 350L
-        internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 500L
-        internal const val DETAIL_META_PREFETCH_DEBOUNCE_MS = 300L
-        private const val MAX_ENRICHMENT_CACHE_SIZE = 64
-        private const val MAX_PREFETCH_CACHE_SIZE = 64
+        internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 250L
+        internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 360L
+        internal const val DETAIL_META_PREFETCH_DEBOUNCE_MS = 220L
+        private const val MAX_ENRICHMENT_CACHE_SIZE = 96
+        private const val MAX_PREFETCH_CACHE_SIZE = 96
         private const val MAX_CW_CACHE_SIZE = 64
 
         private fun <K, V> createLruMap(maxSize: Int): MutableMap<K, V> {
@@ -238,6 +238,8 @@ class HomeViewModel @Inject constructor(
     internal var customCatalogTitles: Map<String, String> = emptyMap()
     internal var currentHeroCatalogKeys: List<String> = emptyList()
     internal var catalogUpdateJob: Job? = null
+    @Volatile
+    internal var pendingCatalogUpdateDirty = false
     internal var hasRenderedFirstCatalog = false
     internal val imageLoadingProfile: HomeImageLoadingProfile by lazy {
         HomeImageLoadingProfile.forContext(appContext)
@@ -934,24 +936,28 @@ class HomeViewModel @Inject constructor(
         loadMoreCatalogItemsPipeline(catalogId, addonId, type)
 
     internal fun scheduleUpdateCatalogRows() {
-        catalogUpdateJob?.cancel()
+        pendingCatalogUpdateDirty = true
+        if (catalogUpdateJob?.isActive == true) {
+            return
+        }
         catalogUpdateJob = viewModelScope.launch {
-            val debounceMs = when {
-                // First render: use a moderate debounce so near-simultaneous
-                // catalog arrivals are batched into a single heavy update pass.
-                !hasRenderedFirstCatalog && hasAnyCatalogRows() -> {
-                    hasRenderedFirstCatalog = true
-                    120L
+            while (pendingCatalogUpdateDirty) {
+                val debounceMs = when {
+                    // First render: coalesce near-simultaneous arrivals without postponing
+                    // indefinitely as later catalogs trickle in.
+                    !hasRenderedFirstCatalog && hasAnyCatalogRows() -> {
+                        hasRenderedFirstCatalog = true
+                        80L
+                    }
+                    pendingCatalogLoads > 8 -> 120L
+                    pendingCatalogLoads > 3 -> 90L
+                    pendingCatalogLoads > 0 -> 50L
+                    else -> 40L
                 }
-                // During bulk loading, batch aggressively — placeholders are
-                // already visible so the user won't notice the delay.
-                pendingCatalogLoads > 8 -> 180L
-                pendingCatalogLoads > 3 -> 120L
-                pendingCatalogLoads > 0 -> 60L
-                else -> 50L
+                delay(debounceMs)
+                pendingCatalogUpdateDirty = false
+                updateCatalogRows()
             }
-            delay(debounceMs)
-            updateCatalogRows()
         }
     }
 

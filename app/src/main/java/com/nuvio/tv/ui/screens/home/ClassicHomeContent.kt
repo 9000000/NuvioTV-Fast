@@ -178,7 +178,7 @@ fun ClassicHomeContent(
     // Nested prefetch: when LazyColumn prefetches a row ahead of scrolling,
     // pre-compose up to 2 ContentCards in its nested LazyRow across multiple frames.
     // This spreads the composition work and prevents frame spikes when a new row scrolls in.
-    val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
+    val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 3) }
 
     val scope = rememberCoroutineScope()
     val columnListState = rememberLazyListState(
@@ -506,7 +506,7 @@ fun ClassicHomeContent(
     }
 
     val verticalPrefetchImageLoader = context.imageLoader
-    val prefetchedClassicVerticalKeys = remember { LinkedHashSet<String>(512) }
+    val prefetchedClassicVerticalKeys = remember { LinkedHashSet<String>(768) }
     val classicCatalogPortraitWidthPx = with(density) { classicCatalogPosterCardStyle.width.roundToPx() }.coerceAtLeast(1)
     val classicCatalogPortraitHeightPx = with(density) { classicCatalogPosterCardStyle.height.roundToPx() }.coerceAtLeast(1)
     val classicCatalogLandscapeWidthPx = with(density) { 260.dp.roundToPx() }.coerceAtLeast(1)
@@ -673,6 +673,7 @@ fun ClassicHomeContent(
                                     imageUrl = imageUrl,
                                     widthPx = classicSecondaryWidthPx,
                                     heightPx = classicSecondaryHeightPx,
+                                    isCollectionCover = true,
                                     prefetchedKeysTracker = prefetchedClassicVerticalKeys
                                 )
                             }

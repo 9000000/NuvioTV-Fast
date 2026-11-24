@@ -793,3 +793,38 @@
 - **Status**: Fixed
 
 ---
+
+## [2026-11-24 14:44] - Gradle classes.jar File Lock on Windows
+
+- **Type**: Process
+- **Severity**: Low
+- **File**: `app/build/intermediates/compile_app_classes_jar/fullDebug/bundleFullDebugClassesToCompileJar/classes.jar`
+- **Agent**: mon
+- **Root Cause**: Hai Gradle/Kotlin daemon chạy song song trên Windows giữ khóa file `classes.jar` trong lúc task `:app:bundleFullDebugClassesToCompileJar` ghi đè.
+- **Error Message**:
+  ```
+  java.nio.file.FileSystemException: ...\classes.jar: The process cannot access the file because it is being used by another process
+  ```
+- **Fix Applied**: Chạy `.\gradlew.bat --stop` để dừng các daemon cũ giữ khóa rồi chạy lại `:app:testFullDebugUnitTest`.
+- **Prevention**: Nếu gặp `FileSystemException` trên `classes.jar` ở Windows, dừng daemon bằng `.\gradlew.bat --stop` trước khi chạy lại build.
+- **Status**: Fixed
+
+---
+
+## [2026-11-24 16:04] - JUnit4 Non-Unit Return Type & Cache Bound Test Update
+
+- **Type**: Process
+- **Severity**: Low
+- **File**: `app/src/test/java/com/nuvio/tv/ui/screens/home/HomeCatalogLazyPipelineTest.kt:159`, `HomeEnrichmentRetryTest.kt:233`
+- **Agent**: mon
+- **Root Cause**: 1) Biểu thức cuối `slowGate.complete(Unit)` trả về `Boolean` làm hàm `@Test ... = runBlocking` không mang kiểu `Unit` theo yêu cầu JUnit 4 (`InvalidTestClassError`). 2) `HomeEnrichmentRetryTest` kiểm tra giới hạn cứng `64` cũ của `MAX_ENRICHMENT_CACHE_SIZE` (đã nâng lên `96`).
+- **Error Message**:
+  ```
+  HomeCatalogLazyPipelineTest > initializationError FAILED (InvalidTestClassError)
+  HomeEnrichmentRetryTest > the failed-enrichment set is cleared on success and stays bounded FAILED (AssertionError at line 220)
+  ```
+- **Fix Applied**: Khai báo rõ kiểu trả về `: Unit = runBlocking` trong `HomeCatalogLazyPipelineTest.kt` và cập nhật giới hạn kiểm thử `96` (`repeat(97)`) trong `HomeEnrichmentRetryTest.kt`.
+- **Prevention**: Luôn ghi rõ `: Unit = runBlocking` cho các hàm JUnit 4 dùng expression body và quét các test giới hạn kích thước LRU khi nâng hằng số cache.
+- **Status**: Fixed
+
+---

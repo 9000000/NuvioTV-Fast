@@ -254,8 +254,8 @@ internal fun findNearestNonEmptyRowIndex(
     return -1
 }
 
-private const val PREFETCH_DEDUP_MAX_SIZE = 512
-private const val PREFETCH_DEDUP_TRIM_BATCH = 128
+private const val PREFETCH_DEDUP_MAX_SIZE = 768
+private const val PREFETCH_DEDUP_TRIM_BATCH = 192
 
 private data class VerticalPrefetchSnapshot(
     val lastVisibleRowIndex: Int,
@@ -769,7 +769,8 @@ internal fun ModernHomeRowsList(
                             fallbackUrl = item.metaPreview?.rawPosterUrl,
                             widthPx = wPx,
                             heightPx = hPx,
-                            blurred = shouldBlur
+                            blurred = shouldBlur,
+                            isCollectionCover = item.payload is ModernPayload.CollectionFolder
                         )
                     }
                 }

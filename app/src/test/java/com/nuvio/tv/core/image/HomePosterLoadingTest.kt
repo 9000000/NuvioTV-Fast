@@ -17,19 +17,19 @@ class HomePosterLoadingTest {
     fun `forDevice returns low-RAM profile for 0L, 1_5GB, and 2_0GB`() {
         val expectedLowRam = HomeImageLoadingProfile(
             isLowRam = true,
-            okHttpMaxRequests = 32,
-            okHttpMaxRequestsPerHost = 16,
-            connectionPoolMaxIdle = 12,
+            okHttpMaxRequests = 40,
+            okHttpMaxRequestsPerHost = 20,
+            connectionPoolMaxIdle = 16,
             bitmapDecodeParallelism = 4,
-            catalogConcurrency = 4,
-            eagerCatalogRows = 4,
-            dripAheadRows = 3,
-            lazyPrefetchAheadModern = 3,
-            lazyPrefetchAheadClassic = 2,
-            verticalPrefetchRows = 2,
-            verticalPrefetchItems = 6,
-            horizontalPrefetchAhead = 8,
-            horizontalPrefetchBehind = 2
+            catalogConcurrency = 5,
+            eagerCatalogRows = 5,
+            dripAheadRows = 5,
+            lazyPrefetchAheadModern = 4,
+            lazyPrefetchAheadClassic = 3,
+            verticalPrefetchRows = 3,
+            verticalPrefetchItems = 8,
+            horizontalPrefetchAhead = 10,
+            horizontalPrefetchBehind = 3
         )
 
         val inputs = listOf(
@@ -49,19 +49,19 @@ class HomePosterLoadingTest {
     fun `forDevice returns standard profile for 3_0GB and 4_0GB plus`() {
         val expectedStandard = HomeImageLoadingProfile(
             isLowRam = false,
-            okHttpMaxRequests = 48,
-            okHttpMaxRequestsPerHost = 32,
-            connectionPoolMaxIdle = 20,
-            bitmapDecodeParallelism = 6,
-            catalogConcurrency = 6,
-            eagerCatalogRows = 6,
-            dripAheadRows = 6,
-            lazyPrefetchAheadModern = 4,
-            lazyPrefetchAheadClassic = 3,
-            verticalPrefetchRows = 3,
-            verticalPrefetchItems = 8,
-            horizontalPrefetchAhead = 12,
-            horizontalPrefetchBehind = 2
+            okHttpMaxRequests = 64,
+            okHttpMaxRequestsPerHost = 40,
+            connectionPoolMaxIdle = 28,
+            bitmapDecodeParallelism = 8,
+            catalogConcurrency = 8,
+            eagerCatalogRows = 8,
+            dripAheadRows = 8,
+            lazyPrefetchAheadModern = 6,
+            lazyPrefetchAheadClassic = 4,
+            verticalPrefetchRows = 4,
+            verticalPrefetchItems = 10,
+            horizontalPrefetchAhead = 16,
+            horizontalPrefetchBehind = 4
         )
 
         val inputs = listOf(
@@ -104,5 +104,7 @@ class HomePosterLoadingTest {
             sizedHomeArtworkUrl("https://image.tmdb.org/t/p/original/poster.jpg", width = 240, height = 360)
         )
         assertEquals(10L * 1024 * 1024, homeArtworkMemoryCacheBytes(10L * 1024 * 1024, 2L * gib))
+        assertEquals(208L * 1024 * 1024, homeArtworkMemoryCacheBytes(64L * 1024 * 1024, 4L * gib))
+        assertEquals(48L * 1024 * 1024, pictureMemoryCacheBytes(80L * 1024 * 1024, 2L * gib))
     }
 }

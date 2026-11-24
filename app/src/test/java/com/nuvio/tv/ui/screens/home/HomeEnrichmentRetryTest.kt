@@ -230,10 +230,10 @@ class HomeEnrichmentRetryTest {
         )
 
         // One past the bound: the oldest entry is dropped, the newest is kept.
-        repeat(65) { viewModel.markEnrichmentFailed("id-$it") }
-        assertEquals(64, viewModel.failedEnrichmentIds.value.size)
+        repeat(97) { viewModel.markEnrichmentFailed("id-$it") }
+        assertEquals(96, viewModel.failedEnrichmentIds.value.size)
         assertTrue("the oldest entry should be evicted", "id-0" !in viewModel.failedEnrichmentIds.value)
-        assertTrue("the newest entry should be kept", "id-64" in viewModel.failedEnrichmentIds.value)
+        assertTrue("the newest entry should be kept", "id-96" in viewModel.failedEnrichmentIds.value)
 
         viewModel.clearEnrichmentFailures()
         assertTrue("a reset should empty the set", viewModel.failedEnrichmentIds.value.isEmpty())

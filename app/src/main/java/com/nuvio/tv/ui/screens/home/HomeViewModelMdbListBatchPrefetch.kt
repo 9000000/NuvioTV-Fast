@@ -13,8 +13,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-private const val ROW_FOCUS_DEBOUNCE_MS = 250L
-private val mdbFetchSemaphore = Semaphore(3)
+private const val ROW_FOCUS_DEBOUNCE_MS = 180L
+private val mdbFetchSemaphore = Semaphore(4)
 
 internal fun HomeViewModel.onFocusedRowChangedForMdbBatch(rowKey: String?) {
     if (rowKey == null) return
@@ -37,7 +37,7 @@ internal fun HomeViewModel.onCatalogRowItemsChanged(rowKey: String) {
         // Only prefetch the head 12 items of a newly loaded catalog to avoid overwhelming
         // the network and causing state update storms. Further items are prefetched on demand
         // when rows/items are focused.
-        val newItems = row.items.take(12).filter { it.mdbListRatings == null && it.id !in mdbBatchNegativeIds }
+        val newItems = row.items.take(16).filter { it.mdbListRatings == null && it.id !in mdbBatchNegativeIds }
         if (newItems.isEmpty()) return@launch
         batchFetchRatingsForItems(newItems)
     }
