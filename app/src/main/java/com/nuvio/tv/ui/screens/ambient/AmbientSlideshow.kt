@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -289,7 +290,7 @@ fun AmbientSlideshow(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    alpha = backdropAlpha.value
+                    alpha = backdropAlpha.value * (1f - videoAlpha.value)
                     applyAmbientMotion(motion, motionProgress.value)
                 }
         )
@@ -312,14 +313,17 @@ fun AmbientSlideshow(
                         trailerSession.firstFrameReady.complete(false)
                         trailerSession.outcome.complete(AmbientTrailerOutcome.FAILED)
                     },
-                    cropToFill = true,
-                    autoCropLetterbox = true,
-                    detectLetterbox = true,
+                    // Preserve native 1:1 1080p pixel sharpness in full-screen Ambient Mode instead of
+                    // upscaling widescreen/letterboxed trailers 1.35x-2x through TextureView scaling.
+                    cropToFill = false,
+                    autoCropLetterbox = false,
+                    detectLetterbox = false,
                     showSubtitles = false,
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
                             alpha = videoAlpha.value * backdropAlpha.value
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
                         }
                 )
             }

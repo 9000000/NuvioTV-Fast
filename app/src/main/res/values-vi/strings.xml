@@ -1216,7 +1216,7 @@
     <string name="layout_trailer_pause_on_scroll">Tạm dừng khi cuộn</string>
     <string name="layout_trailer_pause_on_scroll_sub">Tạm dừng trailer khi cuộn xuống và tiếp tục phát khi quay lại đầu trang.</string>
     <string name="layout_trailer_4k">Trailer 4K</string>
-    <string name="layout_trailer_4k_sub">Phát trailer trên 1080p khi có thể. Tùy chọn này sử dụng nhiều bộ nhớ hơn; mặc định tắt trên các thiết bị có 2 GB RAM trở xuống.</string>
+    <string name="layout_trailer_4k_sub">Phát trailer trên 1080p khi có sẵn. Mặc định trailer luôn ưu tiên 1080p để sắc nét, tải nhanh và tiết kiệm bộ nhớ.</string>
     <string name="layout_trailer_subtitles">Phụ đề trailer</string>
     <string name="layout_trailer_subtitles_sub">Hiển thị phụ đề trên trailer bằng ngôn ngữ ưu tiên của bạn khi có sẵn.</string>
     <string name="layout_detail_group_episodes">Tập phim</string>

@@ -85,7 +85,7 @@ data class LayoutSettingsUiState(
     val detailPageTrailerAutoplayDelaySeconds: Int = 7,
     val detailPageTrailerPlayInBackground: Boolean = false,
     val detailPageTrailerPauseOnScroll: Boolean = true,
-    val trailer4kEnabled: Boolean = true,
+    val trailer4kEnabled: Boolean = false,
     val trailerSubtitlesEnabled: Boolean = false,
     val preferExternalMetaAddonDetail: Boolean = false,
     val hideUnreleasedContent: Boolean = false,

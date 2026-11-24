@@ -24,12 +24,16 @@ class YoutubeChunkedDataSourceFactory(
 
     companion object {
         private const val TAG = "YTChunkedDS"
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
         /** 10 MB chunks – large enough to avoid too many requests, small enough to dodge throttle. */
         private const val CHUNK_SIZE = 10L * 1024 * 1024
     }
 
     override fun createDataSource(): DataSource {
         val upstream = DefaultHttpDataSource.Factory()
+            .setUserAgent(USER_AGENT)
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)
@@ -91,7 +95,12 @@ class YoutubeChunkedDataSourceFactory(
                 .build()
 
             bytesReadInChunk = 0
-            upstream.open(chunkedSpec)
+            try {
+                upstream.open(chunkedSpec)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to open YouTube chunk [$currentChunkStart-$currentChunkEnd]: ${e.message}")
+                throw e
+            }
             return if (totalContentLength != C.LENGTH_UNSET.toLong()) totalContentLength else C.LENGTH_UNSET.toLong()
         }
 

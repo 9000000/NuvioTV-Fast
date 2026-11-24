@@ -156,7 +156,7 @@ class HomeCatalogLazyPipelineTest {
     }
 
     @Test
-    fun `eager catalog flush is not blocked by a slower sibling eager catalog`(): Unit = runBlocking {
+    fun `eager catalog flush is not blocked by a slower sibling eager catalog`() = runBlocking {
         val addon = testAddon(listOf("eager_0", "eager_1", "eager_slow"))
         val slowGate = CompletableDeferred<Unit>()
         val firstGate = CompletableDeferred<Unit>()

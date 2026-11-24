@@ -30,7 +30,7 @@ private const val MAX_YOUTUBE_CANDIDATES = 3
 
 // Top level so the lambda doesn't capture the TrailerService instance from its constructor call.
 private fun trailerHeightCap(trailerSettingsDataStore: TrailerSettingsDataStore): suspend () -> Int = {
-    val allow4k = runCatching { trailerSettingsDataStore.settings.first().allow4k }.getOrDefault(true)
+    val allow4k = runCatching { trailerSettingsDataStore.settings.first().allow4k }.getOrDefault(false)
     TrailerVideoPolicy.maxTrailerVideoHeight(allow4k)
 }
 

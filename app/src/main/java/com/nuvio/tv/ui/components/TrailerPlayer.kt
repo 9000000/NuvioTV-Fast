@@ -30,11 +30,14 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
+import com.nuvio.tv.BuildConfig
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
@@ -287,6 +290,12 @@ fun TrailerPlayer(
             override fun onRenderedFirstFrame() {
                 currentHasRenderedFirstFrameState.value = true
                 currentOnFirstFrameRendered()
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (BuildConfig.DEBUG && videoSize.width > 0 && videoSize.height > 0) {
+                    Log.d("TrailerPlayer", "Playing trailer video size: ${videoSize.width}x${videoSize.height}")
+                }
             }
 
             // A trailer that fails to load or decode never renders a frame, so without this the

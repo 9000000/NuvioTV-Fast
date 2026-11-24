@@ -108,8 +108,14 @@ class TrailerPlayerPool @Inject constructor(
         settingsScope.launch {
             runCatching {
                 trailerSettingsDataStore.settings.collect {
+                    val allow4kChanged = cachedAllow4k != it.allow4k
                     cachedAllow4k = it.allow4k
                     cachedPlayInBackground = it.playInBackground
+                    if (allow4kChanged) {
+                        mainScope.launch {
+                            _player?.let(::applyVideoSizeCap)
+                        }
+                    }
                 }
             }
         }
@@ -165,12 +171,27 @@ class TrailerPlayerPool @Inject constructor(
     private fun applyVideoSizeCap(player: ExoPlayer) {
         val maxHeight = TrailerVideoPolicy.maxTrailerVideoHeight(cachedAllow4k)
         if (appliedMaxHeight == maxHeight) return
-        val maxWidth = if (maxHeight == Int.MAX_VALUE) Int.MAX_VALUE else maxHeight * 16 / 9
-        player.trackSelectionParameters = player.trackSelectionParameters
-            .buildUpon()
-            .setMaxVideoSize(maxWidth, maxHeight)
-            .build()
+        val maxWidth = TrailerVideoPolicy.maxTrailerVideoWidth(maxHeight)
+        val selector = player.trackSelector as? DefaultTrackSelector
+        if (selector != null) {
+            selector.setParameters(
+                selector.buildUponParameters()
+                    .clearViewportSizeConstraints()
+                    .setMaxVideoSize(maxWidth, maxHeight)
+                    .setForceHighestSupportedBitrate(true)
+                    .setExceedVideoConstraintsIfNecessary(true)
+                    .setExceedRendererCapabilitiesIfNecessary(false)
+            )
+        } else {
+            player.trackSelectionParameters = player.trackSelectionParameters
+                .buildUpon()
+                .clearViewportSizeConstraints()
+                .setMaxVideoSize(maxWidth, maxHeight)
+                .setForceHighestSupportedBitrate(true)
+                .build()
+        }
         appliedMaxHeight = maxHeight
+        Log.d(TAG, "Applied trailer video cap: max=${maxWidth}x${maxHeight} (allow4k=$cachedAllow4k)")
     }
 
     /**
@@ -354,13 +375,17 @@ class TrailerPlayerPool @Inject constructor(
             loadControlBuilder.setAllocator(allocator)
         }
         val loadControl = loadControlBuilder.build()
+        val initialMaxHeight = TrailerVideoPolicy.maxTrailerVideoHeight(cachedAllow4k)
+        val initialMaxWidth = TrailerVideoPolicy.maxTrailerVideoWidth(initialMaxHeight)
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
-                    .setMaxVideoSizeSd()
                     .clearVideoSizeConstraints()
+                    .clearViewportSizeConstraints()
                     .setForceHighestSupportedBitrate(true)
-                    .setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE)
+                    .setMaxVideoSize(initialMaxWidth, initialMaxHeight)
+                    .setExceedVideoConstraintsIfNecessary(true)
+                    .setExceedRendererCapabilitiesIfNecessary(false)
             )
         }
         val renderersFactory = object : DefaultRenderersFactory(context) {

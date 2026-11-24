@@ -1,5 +1,39 @@
 # Error Log
 
+## [2026-11-24 17:20] - Trailer Trong Chế Độ Môi Trường Xung Quanh (Ambient Mode) Bị Mờ Do cropToFill, autoCropLetterbox Phóng Đại TextureView & Pha Trộn Backdrop Alpha
+
+- **Type**: Logic
+- **Severity**: Medium
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/ambient/AmbientSlideshow.kt:318`
+- **Agent**: mon
+- **Root Cause**: Trong `AmbientSlideshow.kt`, `TrailerPlayer` bật `cropToFill = true` và `autoCropLetterbox = true`. Khi phát các trailer điện ảnh tỉ lệ widescreen 21:9 (2.35:1 hoặc 2.39:1 ví dụ 1920x804 trong khung 1080p), `LetterboxDetector` và `AspectRatioFrameLayout.RESIZE_MODE_ZOOM` phóng đại hình ảnh lên ~1.35x - 1.5x trên `TextureView` (vốn dùng nội suy tuyến tính bilinear), làm vỡ điểm ảnh và mờ nhòe rõ rệt; ngoài ra ảnh nền backdrop tĩnh giữ alpha 1.0 bên dưới khiến video fade-in bị pha trộn đục màu.
+- **Error Message**:
+  ```
+  User report: chế độ môi trường xung quanh khi phát trailer vẫn bị mờ
+  ```
+- **Fix Applied**: Đổi sang `cropToFill = false`, `autoCropLetterbox = false`, `detectLetterbox = false` để giữ trọn vẹn độ phân giải native 1:1 pixel 1080p sắc nét của YouTube mà không phóng to; đồng thời tinh chỉnh alpha của backdrop tĩnh `backdropAlpha.value * (1f - videoAlpha.value)` và thêm `CompositingStrategy.ModulateAlpha` cho layer video để tách biệt hoàn toàn video với nền đen.
+- **Prevention**: Trên màn hình toàn màn hình (như Ambient Mode hay Fullscreen Trailer), luôn ưu tiên hiển thị 1:1 pixel (`cropToFill = false`, `autoCropLetterbox = false`) thay vì kéo dãn nội suy làm mờ TextureView; khi chồng video lên ảnh tĩnh, phải modulate alpha để ảnh nền không làm đục màu video.
+- **Status**: Fixed
+
+---
+
+## [2026-11-24 16:50] - Trailer Bị Tụt Xuống 360p Do OkHttp `.headers()` Xóa Mất `Range: bytes=0-0` & Cache `visitorData = null` Suốt 3 Giờ
+
+- **Type**: Integration
+- **Severity**: High
+- **File**: `app/src/main/java/com/nuvio/tv/data/trailer/InAppYouTubeExtractor.kt:1027`, `app/src/main/java/com/nuvio/tv/core/player/TrailerPlayerPool.kt:166`
+- **Agent**: mon
+- **Root Cause**: (1) Trong `isUrlReachable()`, gọi `.headers(buildHeaders(DEFAULT_HEADERS))` sau `.header("Range", "bytes=0-0")` làm OkHttp ghi đè mất header `Range`, khiến luồng Adaptive 1080p của client `android`/`ios` bị HTTP 403 và rơi thẳng xuống `PROGRESSIVE` 360p (`itag=18`). (2) Khi trang `youtube.com/watch` trả về HTML thiếu `VISITOR_DATA`, `ensureWatchConfig()` cache `visitorData = null` suốt 3 giờ khiến client chính `visionos` thất bại. (3) `pickBestForClient()` chỉ thử 1 URL Adaptive duy nhất và kẹt vào `visionos` khi retry.
+- **Error Message**:
+  ```
+  User report: tôi thấy độ phân giải của trailer thấp quá có thể luôn set 1080p không
+  ```
+- **Fix Applied**: (1) Đảo thứ tự đặt `.header("Range", "bytes=0-$probeEndByte")` sau `.headers(...)` (`0-0` cho video, `0-1023` cho audio). (2) Bổ sung `fetchVisitorData()` gọi `/youtubei/v1/visitor_id` và chỉ cache ngắn 10 phút nếu `visitorData` vẫn null. (3) Nâng cấp chọn đa ứng viên Adaptive (`rankAdaptiveVideos`/`rankAdaptiveAudios` với `failedUrls`), áp trần `maxVideoHeight` cho `HLS_MANIFEST`, đổi mặc định `TrailerVideoPolicy` sang 1080p (`allow4k = false`) và siết `DefaultTrackSelector` với `clearViewportSizeConstraints()` trên `TrailerPlayerPool`.
+- **Prevention**: Luôn gọi `.header(...)` sau `.headers(...)` trong OkHttp `Request.Builder`; kiểm chứng bằng `MockWebServer` trong `InAppYouTubeExtractorProbeAndVisitorTest`.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-23 19:45] - Đóng Băng Main Thread Gây Lag UI Player & Chậm Thuyết Minh Do Biên Dịch 160 Unicode Regex/Câu Trong `EnglishToVietnameseTransliterator`
 
 - **Type**: Logic

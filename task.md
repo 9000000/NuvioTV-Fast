@@ -1,3 +1,52 @@
+# Danh Sách Task - Mặc Định Phát Trailer 1080p & Khắc Phục Lỗi Tụt Độ Phân Giải Thấp (`trailer-default-1080p`)
+
+> **Kế hoạch tương ứng**: [PLAN-trailer-default-1080p.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-trailer-default-1080p.md)
+> **Phạm vi**: Khóa mặc định độ phân giải trailer ở **1080p** (giữ công tắc **Trailer 4K** mặc định **Tắt**), khắc phục triệt để các lỗi khiến trailer tụt xuống 360p/480p trong `InAppYouTubeExtractor`, gia cố `TrailerPlayerPool` & `YoutubeChunkedDataSourceFactory`, áp dụng đồng bộ cho mọi khu vực (Home, Chi tiết, Ambient Mode, Toàn màn hình).
+
+---
+
+## 📋 Task Breakdown (`TR1080`)
+
+### Phase 1: Chính Sách Mặc Định 1080p, DataStore & Giao Diện Cài Đặt
+- [x] **TR1080-01**: Đặt mặc định **1080p** trong `TrailerVideoPolicy`, `TrailerSettingsDataStore`, `TrailerService`, `LayoutSettingsViewModel` và cập nhật chuỗi mô tả EN/VI
+  - **Vai trò**: Core Policy & Settings Engineer
+  - **Mô tả**: Đổi `TrailerVideoPolicy.default4kTrailers(context)` mặc định trả về `false`, thêm helper `maxTrailerVideoWidth(maxHeight)`; đồng bộ mặc định `allow4k = false` ở `TrailerSettings`, `TrailerService.trailerHeightCap()` (`.getOrDefault(false)`) và `LayoutSettingsUiState.trailer4kEnabled = false`; cập nhật `layout_trailer_4k_sub` trong `values/strings.xml` & `values-vi/strings.xml`.
+  - **File**: [TrailerVideoPolicy.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/player/TrailerVideoPolicy.kt), [TrailerSettingsDataStore.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/data/local/TrailerSettingsDataStore.kt), [TrailerService.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/data/trailer/TrailerService.kt), [LayoutSettingsViewModel.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/LayoutSettingsViewModel.kt), [strings.xml](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values/strings.xml), [strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/strings.xml)
+
+### Phase 2: Sửa Gốc Rễ Trích Xuất YouTube 1080p (`InAppYouTubeExtractor`)
+- [x] **TR1080-02**: Sửa bug mất header `Range` trong `isUrlReachable()` và bổ sung khôi phục `visitorData` qua `/youtubei/v1/visitor_id`
+  - **Vai trò**: YouTube Extractor & Networking Engineer
+  - **Mô tả**: Sửa thứ tự gán header `Range` sau `.headers(buildHeaders(...))` (dùng `bytes=0-0` cho video và `bytes=0-1023` cho audio để chặn sớm audio 403 giả); tăng timeout `resolveReachableUrl()` lên `3_500ms`; gọi `POST /youtubei/v1/visitor_id` khi watch page thiếu `VISITOR_DATA` và không bao giờ cache `visitorData = null` với TTL 3 giờ.
+  - **File**: [InAppYouTubeExtractor.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/data/trailer/InAppYouTubeExtractor.kt)
+
+- [x] **TR1080-03**: Nâng cấp chọn đa ứng viên Adaptive 1080p (chống kẹt client cũ, chống video câm) & áp trần `maxVideoHeight` cho HLS Manifest
+  - **Vai trò**: YouTube Extractor & Media Selection Engineer
+  - **Mô tả**: Thêm `rankAdaptiveVideos`/`rankAdaptiveAudios` theo trần `maxVideoHeight` (`1080p → 720p → 480p → 360p`), theo dõi `failedUrls` để thử lần lượt tối đa 3 ứng viên video + 2 audio mà không kẹt vào URL `visionos` đã chết; chỉ chấp nhận nguồn Adaptive khi cả video và audio đều reachable (nếu không thì ưu tiên `HLS_MANIFEST` 1080p trước `PROGRESSIVE`); truyền `maxVideoHeight` vào `pickBestManifest()` và thêm log chẩn đoán nguồn/độ phân giải.
+  - **File**: [InAppYouTubeExtractor.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/data/trailer/InAppYouTubeExtractor.kt)
+
+### Phase 3: Khóa Track Selection 1080p Trên Trình Phát, Gia Cố DataSource & Khắc Phục Mờ Ambient Mode
+- [x] **TR1080-04**: Siết chặt `DefaultTrackSelector` 1080p trong `TrailerPlayerPool`, gắn User-Agent cho `YoutubeChunkedDataSourceFactory` & thêm debug log kích thước video
+  - **Vai trò**: Media3 / ExoPlayer Playback Engineer
+  - **Mô tả**: Xóa `.setMaxVideoSizeSd()` thừa trong `TrailerPlayerPool`, áp dụng `clearViewportSizeConstraints()`, `setForceHighestSupportedBitrate(true)`, `setMaxVideoSize(maxWidth, maxHeight)`, `setExceedVideoConstraintsIfNecessary(true)`, `setExceedRendererCapabilitiesIfNecessary(false)` và cập nhật động khi đổi cài đặt `allow4k`; đặt User-Agent chuẩn + log lỗi HTTP trong `YoutubeChunkedDataSourceFactory`; thêm debug log `onVideoSizeChanged` trong `TrailerPlayer` (`BuildConfig.DEBUG`).
+  - **File**: [TrailerPlayerPool.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/player/TrailerPlayerPool.kt), [YoutubeChunkedDataSourceFactory.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/data/trailer/YoutubeChunkedDataSourceFactory.kt), [TrailerPlayer.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/components/TrailerPlayer.kt)
+
+- [x] **TR1080-05**: Khắc phục triệt để mờ trailer trong Ambient Mode (`cropToFill = false`, `autoCropLetterbox = false`, compositing ModulateAlpha)
+  - **Vai trò**: TV Display & Ambient Mode Graphics Engineer
+  - **Mô tả**: Vô hiệu hóa việc phóng to ảnh nội suy trên `TextureView` trong `AmbientSlideshow` bằng cách tắt `cropToFill` và `autoCropLetterbox`, giữ nguyên độ phân giải 1:1 pixel native 1080p; tách biệt lớp video với ảnh nền tĩnh bằng công thức alpha `backdropAlpha.value * (1f - videoAlpha.value)` và `CompositingStrategy.ModulateAlpha` tránh làm đục màu video.
+  - **File**: [AmbientSlideshow.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/ambient/AmbientSlideshow.kt)
+
+### Phase 4: Kiểm Thử Tự Động & Xác Minh
+- [x] **TR1080-06**: Viết & mở rộng bộ Unit Tests (`TrailerVideoPolicyTest`, `InAppYouTubeExtractorProbeAndVisitorTest`, `InAppYouTubeExtractorVideoCapTest`)
+  - **Vai trò**: QA / Automated Test Engineer
+  - **Mô tả**: Kiểm thử chính sách mặc định 1080p, xác minh `MockWebServer` gửi đúng header `Range` và gọi `/youtubei/v1/visitor_id`, xác minh chọn đa ứng viên 1080p → 720p → 480p → 360p và bỏ qua URL lỗi.
+  - **File**: [TrailerVideoPolicyTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/core/player/TrailerVideoPolicyTest.kt), [InAppYouTubeExtractorProbeAndVisitorTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/data/trailer/InAppYouTubeExtractorProbeAndVisitorTest.kt), [InAppYouTubeExtractorVideoCapTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/data/trailer/InAppYouTubeExtractorVideoCapTest.kt)
+
+- [x] **TR1080-07**: Chạy Unit Tests toàn hệ thống trailer & xác minh biên dịch cả 2 flavor (`full` & `playstore`)
+  - **Vai trò**: Release / Verification Engineer
+  - **Mô tả**: Chạy `testFullDebugUnitTest` cho `data.trailer.*`, `TrailerVideoPolicyTest`, `YouTubeStreamResolverTest`, `ProfileSettingsCredentialPolicyTest`, `AmbientTrailerResolverTest` và chạy `compileFullDebugKotlin :app:compilePlaystoreDebugKotlin`.
+
+---
+
 # Danh Sách Task - Tối Ưu Độ Mượt Khi Bấm Giữ Di Chuyển Trái / Phải (Phạm Vi Thuần Leanback) (`home-horizontal-hold-smoothness`)
 
 > **Kế hoạch tương ứng**: [PLAN-home-horizontal-hold-smoothness.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-home-horizontal-hold-smoothness.md)

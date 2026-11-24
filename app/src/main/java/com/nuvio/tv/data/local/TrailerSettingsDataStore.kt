@@ -78,6 +78,6 @@ data class TrailerSettings(
     val delaySeconds: Int = 7,
     val playInBackground: Boolean = false,
     val pauseOnScroll: Boolean = true,
-    val allow4k: Boolean = true,
+    val allow4k: Boolean = false,
     val subtitlesEnabled: Boolean = false
 )
