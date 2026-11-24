@@ -375,6 +375,7 @@ class LeanbackCardViewHolder(
                     widthPx = wPx,
                     heightPx = hPx,
                     blurred = shouldBlur,
+                    isCollectionCover = item.payload is ModernPayload.CollectionFolder,
                     isStillBound = { currentItem?.key == boundKey },
                     onCacheHit = { result ->
                         cardContainer.background = null
@@ -1120,6 +1121,7 @@ class LeanbackRowAdapter(
             widthPx = wPx,
             heightPx = hPx,
             blurred = shouldBlur,
+            isCollectionCover = nextItem.payload is ModernPayload.CollectionFolder,
             prefetchedKeysTracker = prefetchedKeys
         )
     }

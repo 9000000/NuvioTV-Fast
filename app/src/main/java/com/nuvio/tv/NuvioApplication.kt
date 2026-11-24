@@ -7,6 +7,9 @@ import android.content.Context
 import android.os.Build
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import coil3.network.NetworkFetcher
+import coil3.network.okhttp.asNetworkClient
+import com.nuvio.tv.core.image.CollectionCoverNetworkClient
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
 import com.nuvio.tv.core.image.HardwareBitmapSettingInterceptor
 import coil3.disk.DiskCache
@@ -26,7 +29,7 @@ import com.nuvio.tv.core.runtime.PluginRuntimeHooks
 import com.nuvio.tv.core.sync.androidtv.AndroidTvChannelSyncService
 import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.network.NoDelaySocketFactory
-import com.nuvio.tv.core.network.imageNetworkFetcherFactory
+import com.nuvio.tv.core.network.imageConnectivityChecker
 import com.nuvio.tv.data.local.ImagePerformancePreferences
 import com.nuvio.tv.data.local.SentrySettingsDataStore
 import com.nuvio.tv.data.mediaserver.ServerUserStateProjection
@@ -185,9 +188,10 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 add(SvgDecoder.Factory())
                 add(
                     com.nuvio.tv.core.image.SavedCopyOnErrorFetcher.Factory(
-                        imageNetworkFetcherFactory(
-                            callFactory = { imageOkHttpClient },
+                        NetworkFetcher.Factory(
+                            networkClient = { CollectionCoverNetworkClient(imageOkHttpClient.asNetworkClient()) },
                             cacheStrategy = { com.nuvio.tv.core.image.imageCacheStrategy },
+                            connectivityChecker = ::imageConnectivityChecker,
                         )
                     )
                 )

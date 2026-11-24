@@ -65,6 +65,7 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil3.Image
 import coil3.compose.AsyncImage
 import com.nuvio.tv.domain.model.Collection
 import com.nuvio.tv.domain.model.CardDepthSurface
@@ -264,8 +265,11 @@ private fun FolderCard(
         imageUrl = activeImageUrl ?: folder.coverImageUrl,
         isFocused = isFocused
     )
+    val coverRequest = rememberCollectionFolderCover(activeImageUrl)
+    val loadedCover = remember(activeImageUrl) { mutableStateOf<Image?>(null) }
     val cardGlow = rememberArtworkBackedCardGlow(
-        imageUrl = folder.coverImageUrl,
+        cover = loadedCover.value,
+        isFocused = isFocused,
         fallbackSeed = "${collection.title}:${folder.title}:${folder.coverEmoji.orEmpty()}",
         enabled = collection.focusGlowEnabled
     )
@@ -304,14 +308,15 @@ private fun FolderCard(
                     style = cardDepthStyle
                 )
         ) {
-            if (!activeImageUrl.isNullOrBlank()) {
+            if (coverRequest != null) {
                 AsyncImage(
-                    model = activeImageUrl,
+                    model = coverRequest,
                     contentDescription = if (folder.hideTitle) folder.title else null,
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(shape),
-                    contentScale = ContentScale.FillBounds
+                    contentScale = ContentScale.FillBounds,
+                    onSuccess = { loadedCover.value = it.result.image }
                 )
             } else if (!folder.coverEmoji.isNullOrBlank()) {
                 Box(

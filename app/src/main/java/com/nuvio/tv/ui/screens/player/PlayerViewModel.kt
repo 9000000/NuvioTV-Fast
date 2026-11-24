@@ -235,6 +235,14 @@ class PlayerViewModel @Inject constructor(
 
     fun getCurrentHeaders(): Map<String, String> = controller.getCurrentHeaders()
 
+    internal fun getStreamTypeLabel(): String {
+        val type = controller.currentStreamType()
+        if (type == PlayerStreamType.P2P && uiState.value.isTorrServerStream) {
+            return "${type.label} · TorrServer"
+        }
+        return streamTypeLabel(type, uiState.value.currentStreamAddonName)
+    }
+
     fun getCurrentFileSizeBytes(): Long? = controller.currentVideoSize
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)

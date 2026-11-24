@@ -123,7 +123,9 @@ fun TrailerPlayer(
     val seamlessHandoff = remember(incomingHandoff, rootView) {
         incomingHandoff?.sourceBounds?.coversView(rootView.width, rootView.height) == true
     }
-    var hasRenderedFirstFrame by remember(trailerUrl) { mutableStateOf(seamlessHandoff) }
+    val hasRenderedFirstFrameState = remember(trailerUrl) { mutableStateOf(seamlessHandoff) }
+    var hasRenderedFirstFrame by hasRenderedFirstFrameState
+    val currentHasRenderedFirstFrameState by rememberUpdatedState(hasRenderedFirstFrameState)
     val playerAlpha = if (isPlaying && hasRenderedFirstFrame) 1f else 0f
     var subtitleTrack by remember(trailerUrl) { mutableStateOf<TrailerSubtitleTrack?>(null) }
     val currentSubtitleTrack by rememberUpdatedState(subtitleTrack)
@@ -283,7 +285,7 @@ fun TrailerPlayer(
             }
 
             override fun onRenderedFirstFrame() {
-                hasRenderedFirstFrame = true
+                currentHasRenderedFirstFrameState.value = true
                 currentOnFirstFrameRendered()
             }
 

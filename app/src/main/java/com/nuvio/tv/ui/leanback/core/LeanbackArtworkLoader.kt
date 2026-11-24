@@ -17,6 +17,7 @@ import coil3.request.transformations
 import coil3.target.Target
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
 import com.nuvio.tv.core.image.HomeImageLoadingProfile
+import com.nuvio.tv.core.image.collectionCover
 import com.nuvio.tv.core.image.sizedHomeArtworkUrl
 import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.util.BlurTransformation
@@ -214,6 +215,7 @@ object LeanbackArtworkLoader {
         widthPx: Int,
         heightPx: Int,
         blurred: Boolean = false,
+        isCollectionCover: Boolean = false,
         isStillBound: () -> Boolean,
         onCacheHit: (Image) -> Unit,
         onAsyncSuccess: (Image) -> Unit,
@@ -249,6 +251,9 @@ object LeanbackArtworkLoader {
                     memoryCacheKeyExtras(
                         mapOf(CustomPosterFallbackInterceptor.FALLBACK_URL_KEY to normalizedFallback)
                     )
+                }
+                if (isCollectionCover) {
+                    collectionCover()
                 }
                 if (blurred) {
                     allowHardware(false)
@@ -288,6 +293,7 @@ object LeanbackArtworkLoader {
         widthPx: Int,
         heightPx: Int,
         blurred: Boolean = false,
+        isCollectionCover: Boolean = false,
         prefetchedKeysTracker: LinkedHashSet<String>? = null
     ) {
         if (isHoldScrolling) return
@@ -325,6 +331,9 @@ object LeanbackArtworkLoader {
                     memoryCacheKeyExtras(
                         mapOf(CustomPosterFallbackInterceptor.FALLBACK_URL_KEY to normalizedFallback)
                     )
+                }
+                if (isCollectionCover) {
+                    collectionCover()
                 }
                 if (blurred) {
                     allowHardware(false)
