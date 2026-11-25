@@ -125,6 +125,7 @@ class PlayerRuntimeController(
     internal val context: Context = context.withAppLocale()
 
     internal var ttsSessionToken: Long? = null
+    internal var preserveTtsSpokenHistoryOnNextInit: Boolean = false
 
     companion object {
         private val CONVERTIBLE_DV_PROFILES = setOf("5", "7")

@@ -17,8 +17,12 @@ internal fun PlayerRuntimeController.refreshStyledSubtitles() {
 internal fun PlayerRuntimeController.syncMpvStyledSubtitles() {
     val view = mpvView ?: return
     styledSubtitles.showMpvText(view.syncStyledSubtitles(_uiState.value.subtitleStyle.usesStyledRenderer))
+    if (!view.isPositionFromRequestedMedia()) {
+        subtitleCueTracker.updateTextWithTiming(null, null)
+        return
+    }
     val subText = view.currentSubtitleText()
-    val timingContext = if (!subText.isNullOrBlank()) {
+    val timingContext = if (_uiState.value.ttsConfig.enabled && !subText.isNullOrBlank()) {
         view.getSubtitleCueTimingContext(
             rawText = subText,
             playbackSpeed = _uiState.value.playbackSpeed

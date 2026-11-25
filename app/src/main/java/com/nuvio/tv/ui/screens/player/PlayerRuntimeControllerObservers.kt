@@ -746,10 +746,13 @@ internal fun PlayerRuntimeController.tryApplyPendingResumeProgress(player: Playe
     }
 
     if (target > 0L) {
+        subtitleCueTracker.reset()
+        subtitleTtsCoordinator.clearBufferedCue()
         player.seekTo(target)
     }
     _uiState.update { it.copy(pendingSeekPosition = null) }
     pendingResumeProgress = null
+    syncTtsPlaybackActive()
 }
 
 internal fun PlayerRuntimeController.resolvePendingInitialResumePosition(): Long {
@@ -1520,4 +1523,64 @@ internal fun PlayerRuntimeController.observeSubtitleTts() {
             mpvView?.setTtsHideSubtitles(shouldHide)
         }
     }
+}
+
+/**
+ * Pure playback-readiness gate for subtitle TTS so narration never speaks while the stream is
+ * still loading, buffering, priming its first frame, paused, backgrounded, or waiting on a seek.
+ */
+internal fun shouldAllowTtsPlayback(
+    isPlaying: Boolean,
+    isBuffering: Boolean,
+    hasRenderedFirstFrame: Boolean,
+    hasVideoTrackOrUnknown: Boolean,
+    hasPendingSeek: Boolean,
+    isPositionFromRequestedMedia: Boolean,
+    isReleasingPlayer: Boolean,
+    isInBackground: Boolean,
+): Boolean {
+    if (isReleasingPlayer || isInBackground) return false
+    if (!isPlaying || isBuffering) return false
+    if (hasPendingSeek) return false
+    if (!isPositionFromRequestedMedia) return false
+    if (hasVideoTrackOrUnknown && !hasRenderedFirstFrame) return false
+    return true
+}
+
+internal fun PlayerRuntimeController.syncTtsPlaybackActive() {
+    val hasPendingSeek = _uiState.value.pendingSeekPosition != null || pendingResumeProgress != null
+    val active = if (isUsingMpvEngine()) {
+        val view = mpvView
+        if (view == null) {
+            false
+        } else {
+            shouldAllowTtsPlayback(
+                isPlaying = view.isPlayingNow(),
+                isBuffering = view.isPausedForCacheNow() || view.isCoreIdleNow(),
+                hasRenderedFirstFrame = hasRenderedFirstFrame,
+                hasVideoTrackOrUnknown = true,
+                hasPendingSeek = hasPendingSeek,
+                isPositionFromRequestedMedia = view.isPositionFromRequestedMedia(),
+                isReleasingPlayer = isReleasingPlayer,
+                isInBackground = isInBackground,
+            )
+        }
+    } else {
+        val player = _exoPlayer
+        if (player == null) {
+            false
+        } else {
+            shouldAllowTtsPlayback(
+                isPlaying = player.isPlaying,
+                isBuffering = player.playbackState != androidx.media3.common.Player.STATE_READY,
+                hasRenderedFirstFrame = hasRenderedFirstFrame,
+                hasVideoTrackOrUnknown = player.currentTracks.groups.isEmpty() || currentStreamHasVideoTrack,
+                hasPendingSeek = hasPendingSeek,
+                isPositionFromRequestedMedia = true,
+                isReleasingPlayer = isReleasingPlayer,
+                isInBackground = isInBackground,
+            )
+        }
+    }
+    subtitleTtsCoordinator.setPlaybackActive(active)
 }

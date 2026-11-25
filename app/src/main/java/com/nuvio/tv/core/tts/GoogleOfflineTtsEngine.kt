@@ -37,10 +37,12 @@ class GoogleOfflineTtsEngine @Inject constructor(
         private const val UTTERANCE_ID_PREFIX = "nuvio_tv_cue_"
         private const val TAG = "GoogleOfflineTtsEngine"
 
-        private val SPEECH_AUDIO_ATTRIBUTES: AudioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
+        private val SPEECH_AUDIO_ATTRIBUTES: AudioAttributes by lazy {
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        }
     }
 
     private data class PendingUtterance(
@@ -197,6 +199,7 @@ class GoogleOfflineTtsEngine @Inject constructor(
                     pendingUtterance = null
                     val id = "$UTTERANCE_ID_PREFIX${utteranceSeq.incrementAndGet()}"
                     activeUtteranceId.set(id)
+                    activeUtteranceStarted = false
                     activeOnCompleted = onCompleted
                     utteranceIdToSpeak = id
                     tts
@@ -211,7 +214,6 @@ class GoogleOfflineTtsEngine @Inject constructor(
 
         val targetId = utteranceIdToSpeak
         if (readyInstance != null && targetId != null) {
-            activeUtteranceStarted = false
             ttsExecutor.execute {
                 speakInternal(readyInstance, utterance, targetId)
             }
@@ -397,6 +399,7 @@ class GoogleOfflineTtsEngine @Inject constructor(
                         preferredLanguageCode = pending.preferredLanguageCode
                         val id = "$UTTERANCE_ID_PREFIX${utteranceSeq.incrementAndGet()}"
                         activeUtteranceId.set(id)
+                        activeUtteranceStarted = false
                         activeOnCompleted = pending.onCompleted
                         pendingUtteranceId = id
                     }
@@ -416,7 +419,6 @@ class GoogleOfflineTtsEngine @Inject constructor(
                 val pending = pendingToSpeak
                 val utteranceId = pendingUtteranceId
                 if (pending != null && utteranceId != null) {
-                    activeUtteranceStarted = false
                     speakInternal(active, pending, utteranceId)
                 }
             }
@@ -428,9 +430,12 @@ class GoogleOfflineTtsEngine @Inject constructor(
             instance.setOnUtteranceProgressListener(
                 object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
-                        if (utteranceId != null && activeUtteranceId.get() == utteranceId) {
-                            activeUtteranceStarted = true
-                            _isSpeaking.value = true
+                        if (utteranceId == null) return
+                        synchronized(ttsLock) {
+                            if (activeUtteranceId.get() == utteranceId) {
+                                activeUtteranceStarted = true
+                                _isSpeaking.value = true
+                            }
                         }
                     }
 

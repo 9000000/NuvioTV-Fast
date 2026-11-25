@@ -297,7 +297,12 @@ internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
     val merged = PlayerSubtitleUtils.mergeOverlappingCues(filtered)
     // Skip timing-context & next-cue scan entirely when subtitle TTS is disabled.
     val timingContext = if (_uiState.value.ttsConfig.enabled) {
-        val activeTimed = collectActiveSidecarTimedCues(cues, positionUs, prefixMaxEndUs)
+        val activeTimed = collectSpeakableSidecarTimedCues(
+            cues = cues,
+            positionUs = positionUs,
+            stripSdh = stripSdh,
+            prefixMaxEndUs = prefixMaxEndUs,
+        )
         if (activeTimed.isNotEmpty()) {
             val earliestStartUs = activeTimed.minOf { it.startTimeUs }
             val earliestStartMs = earliestStartUs / 1_000L
@@ -539,6 +544,28 @@ internal fun findNextSidecarCueStartMs(
         }
     }
     return null
+}
+
+/**
+ * Collects active sidecar timed cues that still carry speakable text after SDH filtering and TTS
+ * text cleaning so ending SDH/music cues never shift [TimedSpeechCue.startMs] for ongoing dialogue.
+ */
+internal fun collectSpeakableSidecarTimedCues(
+    cues: List<CuesWithTiming>,
+    positionUs: Long,
+    stripSdh: Boolean,
+    prefixMaxEndUs: LongArray? = null,
+): List<CuesWithTiming> {
+    val active = collectActiveSidecarTimedCues(cues, positionUs, prefixMaxEndUs)
+    if (active.isEmpty()) return emptyList()
+    return active.filter { entry ->
+        val sanitized = entry.cues.map { SubtitleMojibakeSanitizer.sanitizeCue(it) }
+        val filtered = if (stripSdh) SubtitleSdhFilter.filterCues(sanitized) else sanitized
+        filtered.any { cue ->
+            val raw = cue.text?.toString().orEmpty()
+            raw.isNotBlank() && com.nuvio.tv.core.tts.SubtitleTtsTextCleaner.clean(raw).isNotBlank()
+        }
+    }
 }
 
 /** [cues] must be ordered by [CuesWithTiming.startTimeUs]. Uses O(log N) binary search when [prefixMaxEndUs] is provided. */

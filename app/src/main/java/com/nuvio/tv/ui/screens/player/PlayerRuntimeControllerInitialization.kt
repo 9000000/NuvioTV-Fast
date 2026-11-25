@@ -194,7 +194,14 @@ internal fun PlayerRuntimeController.initializePlayer(
     mpvMediaLoadPrepared = false
     styledSubtitles.clear()
     if (ttsSessionToken == null) {
-        ttsSessionToken = subtitleTtsCoordinator.startSession()
+        val preserveHistory = preserveTtsSpokenHistoryOnNextInit
+        preserveTtsSpokenHistoryOnNextInit = false
+        ttsSessionToken = subtitleTtsCoordinator.startSession(
+            initiallyPlaying = false,
+            preserveSpokenHistory = preserveHistory,
+        )
+    } else {
+        subtitleTtsCoordinator.setPlaybackActive(false)
     }
     val afrPreflightToken = afrPreflightGate.token()
 
@@ -1429,6 +1436,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                             tryApplyPendingResumeProgress(this@apply)
                             _uiState.value.pendingSeekPosition?.let { position ->
+                                subtitleCueTracker.reset()
+                                subtitleTtsCoordinator.clearBufferedCue()
                                 seekTo(position)
                                 if (NuvioExoPlayerPerformanceHelper.enabled) {
                                     seekBufferingUiDeferred = true
@@ -1478,6 +1487,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         }
 
                         refreshStableProgressResetGate()
+                        syncTtsPlaybackActive()
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1513,10 +1523,12 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                         }
                         refreshStableProgressResetGate()
+                        syncTtsPlaybackActive()
                     }
 
                     override fun onTracksChanged(tracks: Tracks) {
                         updateAvailableTracks(tracks)
+                        syncTtsPlaybackActive()
                     }
 
                     override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
@@ -1543,6 +1555,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                             playWhenReady = true
                             play()
                         }
+                        syncTtsPlaybackActive()
                         refreshStableProgressResetGate()
                         cancelFirstFrameWatchdog()
                         _uiState.update {

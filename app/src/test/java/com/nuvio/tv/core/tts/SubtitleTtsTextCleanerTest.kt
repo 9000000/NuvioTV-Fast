@@ -172,4 +172,27 @@ class SubtitleTtsTextCleanerTest {
         assertEquals("Nghe xong.", SubtitleTtsTextCleaner.ensureSentenceEndingPunctuation("Nghe xong.  "))
         assertEquals("", SubtitleTtsTextCleaner.ensureSentenceEndingPunctuation("   "))
     }
+
+    @Test
+    fun cleanLinesDeduplicatesRepeatedStyledLinesInSingleCueFrame() {
+        val raw = "<i>Xin chào</i>\n<i>Xin chào</i>\n-   xin   chào  \nHẹn gặp lại"
+        assertEquals(listOf("Xin chào", "Hẹn gặp lại"), SubtitleTtsTextCleaner.cleanLines(raw))
+        assertEquals("Xin chào Hẹn gặp lại", SubtitleTtsTextCleaner.clean(raw))
+    }
+
+    @Test
+    fun extractAppendedSuffixRespectsWordBoundariesAndPunctuation() {
+        assertEquals(
+            SubtitleTtsTextCleaner.PrefixExtensionResult.Appended("đi ra ngoài"),
+            SubtitleTtsTextCleaner.extractAppendedSuffix("Tôi đang", "Tôi đang đi ra ngoài"),
+        )
+        assertEquals(
+            SubtitleTtsTextCleaner.PrefixExtensionResult.PunctuationOnly,
+            SubtitleTtsTextCleaner.extractAppendedSuffix("Xin chào", "Xin chào!"),
+        )
+        assertEquals(
+            SubtitleTtsTextCleaner.PrefixExtensionResult.NotExtension,
+            SubtitleTtsTextCleaner.extractAppendedSuffix("An", "Anh ấy đi rồi"),
+        )
+    }
 }

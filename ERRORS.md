@@ -1,5 +1,23 @@
 # Error Log
 
+## [2026-11-25 21:52] - Lỗi JVM Unit Test Stub Cho `AudioAttributes.Builder` Trong `GoogleOfflineTtsEngine` & `Spanned` Trong `Cue.Builder`
+
+- **Type**: Process
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/core/tts/GoogleOfflineTtsEngine.kt:40`, `app/src/test/java/com/nuvio/tv/core/tts/SubtitleTtsCoordinatorLifecycleTest.kt:163`, `app/src/test/java/com/nuvio/tv/ui/screens/player/PlayerSubtitleUtilsMergeTest.kt:63`
+- **Agent**: mon
+- **Root Cause**: Trong môi trường JVM unit test (`isReturnDefaultValues = true`, không có Robolectric), (1) `GoogleOfflineTtsEngine.SPEECH_AUDIO_ATTRIBUTES` khởi tạo tĩnh ngay lúc nạp class nên `AudioAttributes.Builder().setUsage(...)` trả `null` gây `ExceptionInInitializerError` khi MockK mock engine; (2) `Cue.Builder().setText(fakeSpanned)` gọi `SpannableString.valueOf()` bị stub trả về rỗng khiến `mergeOverlappingCues` nhận danh sách rỗng.
+- **Error Message**:
+  ```
+  SubtitleTtsCoordinatorLifecycleTest > ... FAILED: java.lang.ExceptionInInitializerError (Caused by: NullPointerException)
+  PlayerSubtitleUtilsMergeTest > identical overlapping spanned cues are deduplicated into a single line FAILED: java.util.NoSuchElementException
+  ```
+- **Fix Applied**: (1) Chuyển `SPEECH_AUDIO_ATTRIBUTES` sang `by lazy` trong `GoogleOfflineTtsEngine.kt` (giảm chi phí khởi tạo tĩnh khi không dùng TTS và cho phép mock sạch trên JVM). (2) Tách helper thuần `PlayerSubtitleUtils.mergeOverlappingCueTexts(validTexts)` và kiểm thử trực tiếp nhánh `Spanned` trên helper này (trả thẳng phần tử duy nhất khi khử trùng còn 1 dòng, tránh cấp phát `SpannableStringBuilder`).
+- **Prevention**: Không khởi tạo Android framework builder (`AudioAttributes.Builder`, `SpannableStringBuilder`, v.v.) trực tiếp trong `companion object` / static initializer; luôn dùng `by lazy` và tách logic thuần để unit test trên JVM không phụ thuộc stub Android.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-25 11:10] - Lỗi Biên Dịch `Unresolved reference 'AUDIO_MLP'` & Khóa Cache Kotlin IC Khi Build Song Song 2 Flavor
 
 - **Type**: Syntax

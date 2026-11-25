@@ -1,3 +1,49 @@
+# Danh Sách Task - Khắc Phục Triệt Để Lỗi Đọc Thuyết Minh (TTS) Bị Lặp Lại & Đọc Trước Khi Phim Chưa Play (`fix-tts-repeated-narration`)
+
+> **Kế hoạch tương ứng**: [PLAN-fix-tts-repeated-narration.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-fix-tts-repeated-narration.md)
+> **Phạm vi**: Khắc phục toàn bộ 7 nguyên nhân gốc rễ gây lặp giọng thuyết minh và đọc phụ đề trước khi phim chạy trên ExoPlayer (Sidecar + Built-in) và MPV: chồng lấn phụ đề `A → A+B → B`, khử trùng `cueStartMs` quá chặt (SDH/ASS tách khung/AutoSync/`null ↔ non-null`/lịch sử 1 câu), thiếu kết nối vòng đời Playback & cổng chặn đọc sớm trước khung hình đầu tiên (`hasRenderedFirstFrame`/`ColdStartPrime`/`Buffering`/`pendingSeekPosition`), thiếu khử trùng nhánh `Spanned` trong `mergeOverlappingCues`, race condition `activeUtteranceStarted` & `previewVoice`, và gọi đôi `CueTrackingTextOutput`.
+
+---
+
+## 📋 Task Breakdown (`TTSDUP`)
+
+### Phase 1: Lõi Làm Sạch Dòng & Máy Trạng Thái Chống Lặp Thông Minh
+- [x] **TTSDUP-01**: Nâng cấp `SubtitleTtsTextCleaner.kt` thêm `cleanLines()` (khử trùng dòng trong cùng 1 cue) và `extractAppendedSuffix()` cho rolling captions
+  - **Vai trò**: Core TTS Text Processing Engineer
+  - **Mô tả**: Tách bước làm sạch thành danh sách dòng đã khử trùng lặp (bảo toàn thứ tự xuất hiện đầu tiên), giữ `clean(rawText)` tương thích ngược 100%, và thêm helper cắt phần nối tiếp theo ranh giới từ chuẩn xác.
+  - **File**: [SubtitleTtsTextCleaner.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/tts/SubtitleTtsTextCleaner.kt)
+
+- [x] **TTSDUP-02**: Nâng cấp `SubtitleTtsCueQueueState.kt` theo dõi delta dòng đang hiện, cửa sổ lịch sử 12 câu gần nhất & cấp phát `playbackGen` nguyên tử
+  - **Vai trò**: TTS State Machine Engineer
+  - **Mô tả**: Lọc dòng đã nằm trên màn hình (`activeScreenLineKeys`) để xử lý triệt để `A → A+B → B` & bảng hiệu dài; thay `lastSpokenText` đơn bằng `recentSpokenLines` (12 mục) kèm dung sai chồng lấn/ASS tách khung/AutoSync/`null ↔ non-null`; giữ nguyên hỗ trợ lặp hợp lệ khi có khoảng nghỉ; gộp cấp phát `playbackGen` + `isSpeechActive = true` nguyên tử trong `synchronized(lock)`.
+  - **File**: [SubtitleTtsCueQueueState.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/tts/SubtitleTtsCueQueueState.kt)
+
+### Phase 2: Đồng Bộ Hóa Engine & Coordinator
+- [x] **TTSDUP-03**: Vá race condition `activeUtteranceStarted` trong `GoogleOfflineTtsEngine.kt`, mặc định `startSession(initiallyPlaying = false)` & tách `previewVoice` / `preserveSpokenHistory` trong `SubtitleTtsCoordinator.kt`
+  - **Vai trò**: Android TTS & Concurrency Engineer
+  - **Mô tả**: Đưa toàn bộ đọc/ghi `activeUtteranceStarted` vào bên trong `synchronized(ttsLock)`; cập nhật `startSpeakingCue` nhận `playbackGen` nguyên tử từ `queueState`; tách `previewVoice` khỏi hàng đợi cue phim; mặc định `startSession(initiallyPlaying = false)` để chặn đọc sớm trước khi play và kích hoạt đọc 1 lần câu đang chờ (nếu chưa đọc) khi `setPlaybackActive` chuyển `false → true`; hỗ trợ `preserveSpokenHistory` cho rebuild tại chỗ.
+  - **File**: [GoogleOfflineTtsEngine.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/tts/GoogleOfflineTtsEngine.kt), [SubtitleTtsCoordinator.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/tts/SubtitleTtsCoordinator.kt)
+
+### Phase 3: Vá Nguồn Phát Phụ Đề ExoPlayer, Sidecar & MPV
+- [x] **TTSDUP-04**: Khử trùng `Spanned` trong `PlayerSubtitleUtils`, lọc SDH/clean trước khi tính `earliestStartMs` trên Sidecar, tối ưu `SubtitleCueTracker` và đồng nhất timing MPV
+  - **Vai trò**: Subtitle Pipeline Engineer
+  - **Mô tả**: Thêm `distinctBy { it.toString() }` cho nhánh `hasSpanned` trong `mergeOverlappingCues`; lọc `activeTimed` chỉ giữ cue còn text đọc được trong `PlayerSidecarSubtitles`; thêm `SubtitleCueTracker.reset()`, chuẩn hóa key text và bỏ gọi đôi `onCuesShown` ở hàm deprecated `CueTrackingTextOutput.onCues(List)`; đồng nhất điều kiện `ttsConfig.enabled` trong `syncMpvStyledSubtitles` và chặn đẩy `sub-text` khi MPV chưa sang đúng luồng media mới.
+  - **File**: [PlayerSubtitleUtils.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerSubtitleUtils.kt), [PlayerSidecarSubtitles.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerSidecarSubtitles.kt), [SubtitleCueTracker.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/SubtitleCueTracker.kt), [PlayerRuntimeControllerStyledSubtitles.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerStyledSubtitles.kt)
+
+### Phase 4: Nối Dây Đầy Đủ Vòng Đời Player & Cổng Chặn Đọc Sớm
+- [x] **TTSDUP-05**: Tạo `syncTtsPlaybackActive()` chặn đọc trước khi phim thực sự Play, nối dây `onSeek`, `onSubtitleTrackChanged`, `subtitleCueTracker.reset()` và `preserveSpokenHistory` xuyên suốt ExoPlayer & MPV
+  - **Vai trò**: Player Runtime Lifecycle Engineer
+  - **Mô tả**: Tạo cổng tập trung `syncTtsPlaybackActive()` chỉ cho phép TTS chạy khi `isPlaying && hasRenderedFirstFrame && !buffering && pendingSeekPosition == null && !isInBackground` (trên cả ExoPlayer & MPV); quét cue `00:00` trước khi áp dụng resume seek; đồng bộ Pause/Resume/Buffering/Background; gọi `onSeek()` khi user tua, `onSubtitleTrackChanged()` khi đổi/tắt phụ đề; reset `subtitleCueTracker` và bảo toàn lịch sử chống lặp khi rebuild tại chỗ (`flushPlaybackState = false`).
+  - **File**: [PlayerRuntimeController.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeController.kt), [PlayerRuntimeControllerInitialization.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerInitialization.kt), [PlayerRuntimeControllerLifecycle.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerLifecycle.kt), [PlayerRuntimeControllerMpv.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerMpv.kt), [PlayerRuntimeControllerPlaybackEvents.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerPlaybackEvents.kt), [PlayerRuntimeControllerTrackSelection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerTrackSelection.kt)
+
+### Phase 5: Kiểm Thử Tự Động & Nghiệm Thu
+- [x] **TTSDUP-06**: Bổ sung Unit Test bao phủ toàn bộ 7 kịch bản lặp & đọc sớm trước khi play, chạy test suite và xác minh biên dịch 2 flavor (`full`, `playstore`)
+  - **Vai trò**: QA & Verification Engineer
+  - **Mô tả**: Mở rộng `SubtitleTtsCueQueueStateTest`, `SubtitleTtsTextCleanerTest`, `PlayerSubtitleUtilsMergeTest` và bổ sung test cho cổng chặn trước khi play (`startSession(initiallyPlaying = false)` → `setPlaybackActive(true)`), `SubtitleCueTracker` và `PlayerSidecarSubtitles`; chạy Gradle Unit Test & compile kiểm chứng không có hồi quy.
+  - **File**: [SubtitleTtsCueQueueStateTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/core/tts/SubtitleTtsCueQueueStateTest.kt), [SubtitleTtsTextCleanerTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/core/tts/SubtitleTtsTextCleanerTest.kt), [PlayerSubtitleUtilsMergeTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/player/PlayerSubtitleUtilsMergeTest.kt)
+
+---
+
 # Danh Sách Task - Tự Động Chuyển Kênh Âm Thanh Về Stereo 2.0 Khi Bật Thuyết Minh (`tts-auto-stereo-2-0`)
 
 > **Kế hoạch tương ứng**: [PLAN-tts-auto-stereo-2-0.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-tts-auto-stereo-2-0.md)

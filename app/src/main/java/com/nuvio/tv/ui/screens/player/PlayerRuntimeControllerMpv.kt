@@ -255,6 +255,7 @@ internal fun PlayerRuntimeController.pauseForLifecycle() {
     }
     // Mark we're in background so onPlayerError can defer recovery to onResume.
     isInBackground = true
+    syncTtsPlaybackActive()
 
     // Release the session while backgrounded so Bluetooth controls cannot resume playback.
     releaseMediaSession()
@@ -333,6 +334,7 @@ internal fun PlayerRuntimeController.resumeForLifecycle() {
 
     if (isUsingMpvEngine()) {
         installMpvMediaSession()
+        syncTtsPlaybackActive()
         return
     }
 
@@ -345,6 +347,7 @@ internal fun PlayerRuntimeController.resumeForLifecycle() {
         if (currentMediaSession == null) runCatching { installExoMediaSession(player) }
             .onFailure { it.printStackTrace() }
     }
+    syncTtsPlaybackActive()
 }
 
 /** Makes the next progress tick re-read the mpv track list. Safe to call from any thread. */
@@ -586,6 +589,7 @@ internal fun PlayerRuntimeController.applyPendingMpvSeekIfNeeded(
         if (state.pendingSeekPosition != null || savedResume != null) {
             _uiState.update { it.copy(pendingSeekPosition = null) }
             pendingResumeProgress = null
+            syncTtsPlaybackActive()
         }
         return
     }
@@ -593,6 +597,8 @@ internal fun PlayerRuntimeController.applyPendingMpvSeekIfNeeded(
     val canSeekNow = durationMs > 0L || currentPositionMs > 0L || hasRenderedFirstFrame
     if (!canSeekNow) return
 
+    subtitleCueTracker.reset()
+    subtitleTtsCoordinator.clearBufferedCue()
     view.seekToMs(target)
     view.setSubtitleDelayMs(mpvSubtitleDelayMs(state.subtitleDelayMs))
     view.setAudioDelayMs(state.audioDelayMs)
@@ -650,6 +656,8 @@ internal fun PlayerRuntimeController.seekPlaybackTo(
     seekParameters: SeekParameters = SeekParameters.CLOSEST_SYNC,
     exact: Boolean = false
 ) {
+    subtitleCueTracker.reset()
+    subtitleTtsCoordinator.onSeek()
     if (isUsingMpvEngine()) {
         mpvView?.let { view ->
             if (exact) view.seekToMsExact(positionMs) else view.seekToMs(positionMs)
@@ -698,10 +706,12 @@ internal fun PlayerRuntimeController.setPlaybackPaused(paused: Boolean) {
         mpvView?.setPaused(paused)
         _uiState.update { it.copy(isPlaying = !paused) }
         refreshMpvMediaSession()
+        syncTtsPlaybackActive()
     } else {
         _exoPlayer?.let { player ->
             if (paused) player.pause() else player.play()
         }
+        syncTtsPlaybackActive()
     }
 }
 

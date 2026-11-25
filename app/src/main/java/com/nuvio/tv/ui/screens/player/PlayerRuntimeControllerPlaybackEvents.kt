@@ -377,16 +377,20 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         durationMs = playerDuration
                     )
                     val playingNow = view.isPlayingNow()
-                    val mpvSubText = view.currentSubtitleText()
-                    val mpvSubTiming = if (_uiState.value.ttsConfig.enabled && !mpvSubText.isNullOrBlank()) {
-                        view.getSubtitleCueTimingContext(
-                            rawText = mpvSubText,
-                            playbackSpeed = _uiState.value.playbackSpeed
-                        )
+                    if (view.isPositionFromRequestedMedia()) {
+                        val mpvSubText = view.currentSubtitleText()
+                        val mpvSubTiming = if (_uiState.value.ttsConfig.enabled && !mpvSubText.isNullOrBlank()) {
+                            view.getSubtitleCueTimingContext(
+                                rawText = mpvSubText,
+                                playbackSpeed = _uiState.value.playbackSpeed
+                            )
+                        } else {
+                            null
+                        }
+                        subtitleCueTracker.updateTextWithTiming(mpvSubText, mpvSubTiming)
                     } else {
-                        null
+                        subtitleCueTracker.updateTextWithTiming(null, null)
                     }
-                    subtitleCueTracker.updateTextWithTiming(mpvSubText, mpvSubTiming)
                     val cacheBuffering = view.isPausedForCacheNow() || view.isCoreIdleNow()
                     var firstFrameReady = hasRenderedFirstFrame
                         if (!firstFrameReady) {
@@ -420,6 +424,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     }
                     val displayPosition = pendingPreviewSeekPosition ?: pos
                     val playingForWatchClock = playingNow && !cacheBuffering
+                    syncTtsPlaybackActive()
                     mpvDurationGrowth = LivePlaybackUiPolicy.nextDurationGrowth(
                         previous = mpvDurationGrowth,
                         mediaKey = currentStreamUrl,

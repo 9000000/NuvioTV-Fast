@@ -103,14 +103,26 @@ class SubtitleTtsCoordinator internal constructor(
         }
     }
 
-    /** Starts an active playback TTS session and returns its ownership token. */
-    fun startSession(): Long {
+    /**
+     * Starts an active playback TTS session and returns its ownership token.
+     *
+     * Defaults to [initiallyPlaying] = `false` so subtitles are never spoken while the player is
+     * still loading, buffering, priming its first frame, or waiting for a startup resume seek.
+     */
+    fun startSession(
+        initiallyPlaying: Boolean = false,
+        preserveSpokenHistory: Boolean = false,
+    ): Long {
         val token = sessionSeq.incrementAndGet()
         currentSessionToken = token
         isSessionActive = true
-        isPlaybackActive = true
+        isPlaybackActive = initiallyPlaying
         cancelCarryOverTimer()
-        queueState.resetAllHistory()
+        if (preserveSpokenHistory) {
+            queueState.resetActivePlayback()
+        } else {
+            queueState.resetAllHistory()
+        }
         val currentConfig = _config.value
         if (currentConfig.enabled) {
             transliterator?.preloadAsync()
@@ -123,22 +135,35 @@ class SubtitleTtsCoordinator internal constructor(
     }
 
     /** Stops the session matching [token], cancelling pending timers and stopping speech. */
-    fun stopSession(token: Long) {
+    fun stopSession(
+        token: Long,
+        preserveSpokenHistory: Boolean = false,
+    ) {
         if (token != currentSessionToken || !isSessionActive) return
-        releaseSessionInternal()
+        releaseSessionInternal(preserveSpokenHistory = preserveSpokenHistory)
     }
 
     /** Unconditionally releases whichever playback TTS session is currently active. */
     fun releaseSession() {
-        releaseSessionInternal()
+        releaseSessionInternal(preserveSpokenHistory = false)
     }
 
-    /** Updates whether media playback is actively advancing (pauses speech immediately when `false`). */
+    /**
+     * Updates whether media playback is actively advancing (pauses speech immediately when `false`).
+     * When transitioning `false -> true` during an active session, evaluates the currently buffered
+     * subtitle cue once so an un-spoken cue at startup/resume starts cleanly while already-spoken
+     * cues remain deduplicated.
+     */
     fun setPlaybackActive(active: Boolean) {
         if (isPlaybackActive == active) return
         isPlaybackActive = active
         if (!active) {
             stopSpeaking()
+        } else if (isSessionActive && _config.value.enabled) {
+            val (activeRaw, activeContext) = queueState.snapshotActiveCue()
+            if (activeRaw.isNotBlank()) {
+                onSubtitleCueChanged(activeRaw, activeContext)
+            }
         }
     }
 
@@ -170,6 +195,16 @@ class SubtitleTtsCoordinator internal constructor(
     fun stopSpeaking() {
         cancelCarryOverTimer()
         queueState.resetActivePlayback()
+        engine.stop()
+    }
+
+    /**
+     * Clears any buffered pre-playback cue snapshot (e.g. a `00:00` cue seen before a startup
+     * resume seek) while preserving recent spoken history for seamless in-place player rebuilds.
+     */
+    fun clearBufferedCue() {
+        cancelCarryOverTimer()
+        queueState.clearBufferedActiveCue()
         engine.stop()
     }
 
@@ -212,8 +247,8 @@ class SubtitleTtsCoordinator internal constructor(
             is CueDispatchDecision.SpeakNow -> {
                 cancelCarryOverTimer()
                 startSpeakingCue(
+                    playbackGen = decision.playbackGen,
                     cleanText = decision.cleanText,
-                    speechText = decision.speechText,
                     budgetMs = decision.budgetMs,
                     config = currentConfig,
                 )
@@ -244,11 +279,12 @@ class SubtitleTtsCoordinator internal constructor(
             clampedVolume
         }
         val cleanText = SubtitleTtsTextCleaner.clean(sampleText).ifBlank { sampleText.trim() }
-        val (spokenCleanText, finalSpeechText) = prepareSpeechText(cleanText, effectiveConfig)
+        val (_, finalSpeechText) = prepareSpeechText(cleanText, effectiveConfig)
         if (finalSpeechText.isBlank()) return
 
         _statusMessage.value = null
-        val playbackGen = queueState.beginPlayback()
+        // Keep preview playback isolated from the movie cue queue so previewing a voice inside
+        // the player overlay never latches isSpeechActive or triggers queued playback advances.
         engine.speak(
             text = finalSpeechText,
             voiceName = effectiveConfig.voiceName,
@@ -257,7 +293,7 @@ class SubtitleTtsCoordinator internal constructor(
             volume = previewVolume,
             allowNetworkVoiceFallback = effectiveConfig.allowNetworkVoiceFallback,
             preferredLanguageCode = effectiveConfig.preferredLanguageCode,
-            onCompleted = { dispatchPlaybackCompleted(playbackGen) },
+            onCompleted = null,
         )
     }
 
@@ -315,11 +351,15 @@ class SubtitleTtsCoordinator internal constructor(
         }
     }
 
-    private fun releaseSessionInternal() {
+    private fun releaseSessionInternal(preserveSpokenHistory: Boolean = false) {
         isSessionActive = false
         isPlaybackActive = false
         cancelCarryOverTimer()
-        queueState.resetAllHistory()
+        if (preserveSpokenHistory) {
+            queueState.resetActivePlayback()
+        } else {
+            queueState.resetAllHistory()
+        }
         engine.stop()
     }
 
@@ -339,13 +379,12 @@ class SubtitleTtsCoordinator internal constructor(
     }
 
     private fun startSpeakingCue(
+        playbackGen: Long,
         cleanText: String,
-        speechText: String,
         budgetMs: Long?,
         config: SubtitleTtsConfig,
     ) {
         val (spokenCleanText, finalSpeechText) = prepareSpeechText(cleanText, config)
-        val playbackGen = queueState.beginPlayback()
         val targetSpeed = SubtitleTtsTimingCalculator.calculateTimingAwareSpeed(
             cleanText = spokenCleanText,
             budgetMs = budgetMs,
@@ -435,10 +474,13 @@ class SubtitleTtsCoordinator internal constructor(
             is CompletionAdvanceDecision.SpeakQueued -> {
                 cancelCarryOverTimer()
                 val currentConfig = _config.value
-                if (!currentConfig.enabled || !isSessionActive || !isPlaybackActive) return
+                if (!currentConfig.enabled || !isSessionActive || !isPlaybackActive) {
+                    queueState.clearActiveIfGen(decision.playbackGen)
+                    return
+                }
                 startSpeakingCue(
+                    playbackGen = decision.playbackGen,
                     cleanText = decision.request.cleanText,
-                    speechText = SubtitleTtsTextCleaner.ensureSentenceEndingPunctuation(decision.request.cleanText),
                     budgetMs = decision.adjustedBudgetMs,
                     config = currentConfig,
                 )
@@ -501,12 +543,13 @@ class SubtitleTtsCoordinator internal constructor(
                         cancelSpeechWatchdog()
                         val currentConfig = _config.value
                         if (!currentConfig.enabled || !isSessionActive || !isPlaybackActive) {
+                            queueState.clearActiveIfGen(decision.playbackGen)
                             engine.stop()
                             return@launch
                         }
                         startSpeakingCue(
+                            playbackGen = decision.playbackGen,
                             cleanText = decision.request.cleanText,
-                            speechText = SubtitleTtsTextCleaner.ensureSentenceEndingPunctuation(decision.request.cleanText),
                             budgetMs = decision.adjustedBudgetMs,
                             config = currentConfig,
                         )

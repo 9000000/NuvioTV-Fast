@@ -31,12 +31,22 @@ internal class SubtitleCueTracker {
 
     fun updateWithTiming(cues: List<Cue>, timingContext: SubtitleCuePlaybackContext? = null) {
         val hasBitmap = cues.any { it.bitmap != null }
+        val text = cues.mapNotNull { it.text?.toString()?.trim()?.takeIf(String::isNotBlank) }.joinToString("\n")
+        val key = buildString {
+            append(text)
+            if (hasBitmap) {
+                for (cue in cues) {
+                    cue.bitmap?.let {
+                        append('\u0001')
+                        append(System.identityHashCode(it))
+                    }
+                }
+            }
+        }
         publish(
-            key = cues.joinToString("\u0000") { cue ->
-                cue.bitmap?.let { "\u0001${System.identityHashCode(it)}" } ?: cue.text?.toString().orEmpty()
-            },
-            visible = cues.any { !it.text.isNullOrBlank() || it.bitmap != null },
-            text = cues.mapNotNull { it.text?.toString()?.takeIf(String::isNotBlank) }.joinToString("\n"),
+            key = key,
+            visible = text.isNotBlank() || hasBitmap,
+            text = text,
             hasBitmap = hasBitmap,
             timingContext = timingContext
         )
@@ -47,11 +57,11 @@ internal class SubtitleCueTracker {
     }
 
     fun updateTextWithTiming(text: String?, timingContext: SubtitleCuePlaybackContext? = null) {
-        val key = text.orEmpty()
+        val normalized = text?.trim().orEmpty()
         publish(
-            key = key,
-            visible = key.isNotBlank(),
-            text = key,
+            key = normalized,
+            visible = normalized.isNotBlank(),
+            text = normalized,
             hasBitmap = false,
             timingContext = timingContext
         )
@@ -59,6 +69,15 @@ internal class SubtitleCueTracker {
 
     fun setPrescannedTexts(texts: List<String>) {
         mutablePrescannedTexts.value = texts
+    }
+
+    @Synchronized
+    fun reset() {
+        lastKey = null
+        val current = mutableState.value
+        if (current.visible || current.text.isNotEmpty() || current.hasBitmap || current.timingContext != null) {
+            mutableState.value = SubtitleCueState(version = current.version + 1)
+        }
     }
 
     @Synchronized
@@ -92,8 +111,9 @@ internal class CueTrackingTextOutput(
 
     @Deprecated("Uses the deprecated Media3 callback for text outputs.")
     override fun onCues(cues: List<Cue>) {
+        // Media3 TextRenderer invokes both deprecated onCues(List) and onCues(CueGroup) for every
+        // cue update; forward to delegate for compatibility without firing onCuesShown twice.
         @Suppress("DEPRECATION")
         delegate.onCues(cues)
-        onCuesShown(cues)
     }
 }

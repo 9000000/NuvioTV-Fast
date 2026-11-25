@@ -270,17 +270,7 @@ internal object PlayerSubtitleUtils {
         val validTexts = cues.mapNotNull { it.text }.filter { it.isNotBlank() }
         if (validTexts.isEmpty()) return emptyList()
 
-        val hasSpanned = validTexts.any { it is Spanned }
-        val mergedText: CharSequence = if (hasSpanned) {
-            val builder = SpannableStringBuilder()
-            for (i in validTexts.indices) {
-                if (i > 0) builder.append('\n')
-                builder.append(validTexts[i])
-            }
-            builder
-        } else {
-            validTexts.distinct().joinToString("\n")
-        }
+        val mergedText = mergeOverlappingCueTexts(validTexts)
         val first = cues[0]
         val sharesPosition = cues.all { it.position == first.position && it.positionAnchor == first.positionAnchor }
         val base = when {
@@ -293,6 +283,25 @@ internal object PlayerSubtitleUtils {
                     .build()
         }
         return listOf(base.buildUpon().setText(mergedText).build())
+    }
+
+    internal fun mergeOverlappingCueTexts(validTexts: List<CharSequence>): CharSequence {
+        val hasSpanned = validTexts.any { it is Spanned }
+        return if (hasSpanned) {
+            val deduplicated = validTexts.distinctBy { it.toString() }
+            if (deduplicated.size == 1) {
+                deduplicated[0]
+            } else {
+                val builder = SpannableStringBuilder()
+                for (i in deduplicated.indices) {
+                    if (i > 0) builder.append('\n')
+                    builder.append(deduplicated[i])
+                }
+                builder
+            }
+        } else {
+            validTexts.distinct().joinToString("\n")
+        }
     }
 
     fun normalizeBottomCuePosition(cue: Cue): Cue {

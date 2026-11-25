@@ -121,8 +121,13 @@ internal fun PlayerRuntimeController.releasePlayer(
     updateAudioControlAvailability()
     playbackSpeedAwareAudioSink = null
     resetPlaybackTimeline()
+    subtitleCueTracker.reset()
+    preserveTtsSpokenHistoryOnNextInit = !flushPlaybackState
     ttsSessionToken?.let { token ->
-        subtitleTtsCoordinator.stopSession(token)
+        subtitleTtsCoordinator.stopSession(
+            token = token,
+            preserveSpokenHistory = !flushPlaybackState,
+        )
         ttsSessionToken = null
     }
     isReleasingPlayer = false

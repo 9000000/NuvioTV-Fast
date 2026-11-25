@@ -179,6 +179,7 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
         val trackId = track?.trackId?.toIntOrNull()
         val changed = trackId != null && mpvView?.selectSubtitleTrackById(trackId) == true
         if (changed) {
+            subtitleTtsCoordinator.onSubtitleTrackChanged()
             pendingAddonSubtitleLanguage = null
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
@@ -190,6 +191,7 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
 
     _exoPlayer?.let { player ->
         Log.d(PlayerRuntimeController.TAG, "Selecting INTERNAL subtitle trackIndex=$trackIndex")
+        subtitleTtsCoordinator.onSubtitleTrackChanged()
         stopSidecarAddonSubtitle(clearView = true)
         val tracks = player.currentTracks
         var currentSubIndex = 0
@@ -263,6 +265,7 @@ internal fun PlayerRuntimeController.rememberInternalSubtitleSelection(trackInde
 
 internal fun PlayerRuntimeController.disableSubtitles() {
     resetSubtitleAutoSyncState()
+    subtitleTtsCoordinator.onSubtitleTrackChanged()
     logSwitchTrace(
         stage = "disable-subtitles",
         message = "usingMpv=${isUsingMpvEngine()} selectedSubtitleIndex=${_uiState.value.selectedSubtitleTrackIndex}"
@@ -478,6 +481,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
             ) == true
             if (!added) return@launch
 
+            subtitleTtsCoordinator.onSubtitleTrackChanged()
             pendingAddonSubtitleLanguage = null
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
@@ -547,6 +551,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
                 "Switching ADDON subtitle without media reload addon=${subtitle.addonName} id=${subtitle.id} " +
                     "trackId=$addonTrackId"
             )
+            subtitleTtsCoordinator.onSubtitleTrackChanged()
             stopSidecarAddonSubtitle(clearView = true)
             pendingAddonSubtitleLanguage = null
             pendingAddonSubtitleTrackId = null

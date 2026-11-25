@@ -44,4 +44,22 @@ class PlayerSubtitleUtilsMergeTest {
     fun `a side cue shown alone keeps its side`() {
         assertEquals(listOf(bottomLeftSign), PlayerSubtitleUtils.mergeOverlappingCues(listOf(bottomLeftSign)))
     }
+
+    @Test
+    fun `identical overlapping spanned cues are deduplicated into a single line`() {
+        fun fakeSpanned(value: String): android.text.Spanned = object : android.text.Spanned, CharSequence by value {
+            override fun <T : Any?> getSpans(start: Int, end: Int, type: Class<T>?): Array<T> =
+                @Suppress("UNCHECKED_CAST") (emptyArray<Any>() as Array<T>)
+            override fun getSpanStart(tag: Any?): Int = -1
+            override fun getSpanEnd(tag: Any?): Int = -1
+            override fun getSpanFlags(tag: Any?): Int = 0
+            override fun nextSpanTransition(start: Int, limit: Int, type: Class<*>?): Int = limit
+            override fun toString(): String = value
+        }
+
+        val merged = PlayerSubtitleUtils.mergeOverlappingCueTexts(
+            listOf(fakeSpanned("Xin chào"), fakeSpanned("Xin chào")),
+        )
+        assertEquals("Xin chào", merged.toString())
+    }
 }
