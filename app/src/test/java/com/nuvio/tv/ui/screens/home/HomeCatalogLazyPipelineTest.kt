@@ -156,7 +156,7 @@ class HomeCatalogLazyPipelineTest {
     }
 
     @Test
-    fun `eager catalog flush is not blocked by a slower sibling eager catalog`() = runBlocking {
+    fun `eager catalog flush is not blocked by a slower sibling eager catalog`(): Unit = runBlocking {
         val addon = testAddon(listOf("eager_0", "eager_1", "eager_slow"))
         val slowGate = CompletableDeferred<Unit>()
         val firstGate = CompletableDeferred<Unit>()
@@ -464,6 +464,8 @@ class HomeCatalogLazyPipelineTest {
             cwEnrichmentCache = cwEnrichmentCache,
             profileManager = profileManager,
             tvRecommendationManager = mockk(relaxed = true),
+            simklSyncRepository = mockk(relaxed = true),
+            simklRewatchWriter = mockk(relaxed = true),
             serverCatalog = mockk(relaxed = true),
             trailerPlayerPool = mockk(relaxed = true),
             backgroundTrailerController = mockk(relaxed = true)

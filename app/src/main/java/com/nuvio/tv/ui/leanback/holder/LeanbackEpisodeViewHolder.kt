@@ -36,6 +36,7 @@ class LeanbackEpisodeViewHolder(
     val thumbnailImage: ImageView,
     val episodeBadge: TextView,
     val watchedBadgeView: TextView?,
+    val rewatchBadgeView: TextView? = null,
     val titleText: TextView,
     val descriptionText: TextView?,
     val dateText: TextView?,
@@ -236,18 +237,27 @@ class LeanbackEpisodeViewHolder(
             progressBar?.visibility = View.GONE
         }
 
-        // Watched indicator badge (top-end)
-        if (epItem?.isWatched == true && watchedBadgeView != null) {
+        // Watched & rewatch indicator badges (top-end)
+        val isWatched = epItem?.isWatched == true
+        val isRewatched = isWatched && epItem?.isRewatched == true
+        if (isWatched && watchedBadgeView != null) {
             watchedBadgeView.visibility = View.VISIBLE
         } else {
             watchedBadgeView?.visibility = View.GONE
         }
+        if (isRewatched && rewatchBadgeView != null) {
+            (rewatchBadgeView.background as? GradientDrawable)?.setColor(accentColor)
+            rewatchBadgeView.visibility = View.VISIBLE
+        } else {
+            rewatchBadgeView?.visibility = View.GONE
+        }
 
         // Accessibility content description
-        val descParts = ArrayList<String>(3)
+        val descParts = ArrayList<String>(4)
         if (!badge.isNullOrBlank()) descParts.add(badge)
         if (item.title.isNotBlank()) descParts.add(item.title)
-        if (epItem?.isWatched == true) descParts.add("Watched")
+        if (isWatched) descParts.add(root.context.getString(R.string.episodes_cd_watched))
+        if (isRewatched) descParts.add(root.context.getString(R.string.episodes_cd_rewatched))
         root.contentDescription = descParts.joinToString(", ").ifEmpty { null }
 
         // Coil image loading with MemoryCache fast-path
@@ -346,6 +356,7 @@ class LeanbackEpisodeViewHolder(
         titleText.isSelected = false
         episodeBadge.visibility = View.GONE
         watchedBadgeView?.visibility = View.GONE
+        rewatchBadgeView?.visibility = View.GONE
         progressBar?.visibility = View.GONE
         dateText?.visibility = View.GONE
         root.contentDescription = null
@@ -526,7 +537,7 @@ class LeanbackEpisodeViewHolder(
                 ).apply {
                     gravity = Gravity.TOP or Gravity.START
                     marginStart = (8f * dp).toInt()
-                    marginEnd = (38f * dp).toInt()
+                    marginEnd = (64f * dp).toInt()
                     topMargin = (8f * dp).toInt()
                 }
                 setPadding((6f * dp).toInt(), (2f * dp).toInt(), (6f * dp).toInt(), (2f * dp).toInt())
@@ -543,14 +554,16 @@ class LeanbackEpisodeViewHolder(
             cardContainer.addView(dateText)
 
             val watchedSizePx = (22f * dp).toInt()
+            val badgeInsetPx = (8f * dp).toInt()
+            val badgeGapPx = (4f * dp).toInt()
             val watchedBadgeView = TextView(context).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     watchedSizePx,
                     watchedSizePx
                 ).apply {
                     gravity = Gravity.TOP or Gravity.END
-                    topMargin = (8f * dp).toInt()
-                    marginEnd = (8f * dp).toInt()
+                    topMargin = badgeInsetPx
+                    marginEnd = badgeInsetPx
                 }
                 gravity = Gravity.CENTER
                 background = GradientDrawable().apply {
@@ -564,6 +577,28 @@ class LeanbackEpisodeViewHolder(
             }
             cardContainer.addView(watchedBadgeView)
 
+            val rewatchBadgeView = TextView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    watchedSizePx,
+                    watchedSizePx
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.END
+                    topMargin = badgeInsetPx
+                    marginEnd = badgeInsetPx + watchedSizePx + badgeGapPx
+                }
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(themeAccentColor)
+                }
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                text = "↻"
+                visibility = View.GONE
+            }
+            cardContainer.addView(rewatchBadgeView)
+
             root.addView(cardContainer)
 
             return LeanbackEpisodeViewHolder(
@@ -573,6 +608,7 @@ class LeanbackEpisodeViewHolder(
                 thumbnailImage = thumbnailImage,
                 episodeBadge = episodeBadge,
                 watchedBadgeView = watchedBadgeView,
+                rewatchBadgeView = rewatchBadgeView,
                 titleText = titleText,
                 descriptionText = descriptionText,
                 dateText = dateText,

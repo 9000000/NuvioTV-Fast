@@ -43,6 +43,7 @@ sealed interface LeanbackCardItem {
         val runtimeMinutes: Int? = null,
         val progressPercent: Int? = null,
         val isWatched: Boolean = false,
+        val isRewatched: Boolean = false,
         val releaseDate: String? = null,
         val imdbRating: String? = null,
         val isAvailable: Boolean = true,

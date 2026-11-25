@@ -150,6 +150,7 @@ import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.MemberAccessRepository
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
+import com.nuvio.tv.data.simkl.SimklRewatchConsentRepository
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.CustomThemeColors
@@ -173,6 +174,8 @@ import com.nuvio.tv.ui.components.LocalCardDepthStyle
 import com.nuvio.tv.ui.components.LocalLandscapePosterMode
 import com.nuvio.tv.ui.components.LocalAlwaysBackdropWithLogo
 import com.nuvio.tv.ui.components.LocalGpuOffscreenCompositing
+import com.nuvio.tv.ui.components.ProfileAvatarCircle
+import com.nuvio.tv.ui.components.RewatchPromptOverlay
 import com.nuvio.tv.ui.navigation.LocalNavViewModelStoreOwner
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
@@ -334,6 +337,14 @@ open class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var partyRepository: PartyRepository
+
+    /*
+     * Held in the activity, not in the player screen: the rewatch question has to survive navigation,
+     * the way mobile holds it in `MainAppContent.kt`. `SimklRewatchConsentRepository` is a `@Singleton`
+     * and not a `@HiltViewModel`, so it is injected into the activity, not taken from `hiltViewModel`.
+     */
+    @Inject
+    lateinit var rewatchConsentRepository: SimklRewatchConsentRepository
 
     private val pendingDeepLinkUrl = MutableStateFlow<String?>(null)
     private val pendingLaunchIntent = MutableStateFlow<Intent?>(null)
@@ -1330,6 +1341,7 @@ open class MainActivity : ComponentActivity() {
                                 )
                             }
 
+
                             val isTrailerPlaying by trailerPlayerPool.isTrailerPlaying.collectAsState()
                             val isAmbientShowing by ambientIdleController.isShowing.collectAsState()
                             LaunchedEffect(isTrailerPlaying, isAmbientShowing) {
@@ -1340,11 +1352,21 @@ open class MainActivity : ComponentActivity() {
                             val isPlayerActive = currentRoute?.startsWith("player/") == true
                             val isLiveTvActive = currentRoute == Screen.LiveTv.route ||
                                 currentRoute?.startsWith("${Screen.LiveTv.route}/") == true
+                            val rewatchPromptQuestion by rewatchConsentRepository.question.collectAsState()
+                            /*
+                             * The rewatch question belongs at the same layer as `NuvioNavHost`, above
+                             * the screens and next to the other app wide overlays. Hanging it in
+                             * `PlayerScreen` alone would drop it when moving to another screen, even
+                             * though the answer is still being written. Mobile has it in
+                             * `MainAppContent.kt` at the same level.
+                             */
+                            RewatchPromptOverlay(repository = rewatchConsentRepository)
                             AmbientModeHost(
                                 controller = ambientIdleController,
                                 allowed = !isPlayerActive &&
                                     !isLiveTvActive &&
                                     autoNextOverlay == null &&
+                                    rewatchPromptQuestion == null &&
                                     (!isTrailerPlaying || isAmbientShowing),
                                 onShown = { trailerPlayerPool.stop() }
                             )

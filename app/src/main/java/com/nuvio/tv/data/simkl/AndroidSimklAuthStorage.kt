@@ -89,6 +89,7 @@ class AndroidSimklAuthStorage @Inject constructor(
     override fun saveIdentity(
         username: String?,
         accountId: Long?,
+        accountType: String?,
         settingsActivityWatermark: String?,
         scope: SimklAuthScope
     ): Boolean = mutate(scope) { current ->
@@ -96,6 +97,7 @@ class AndroidSimklAuthStorage @Inject constructor(
         val metadata = stored.copy(
             username = username,
             accountId = accountId,
+            accountType = accountType ?: stored.accountType,
             hasFetchedUserSettings = true,
             settingsActivityWatermark = settingsActivityWatermark ?: stored.settingsActivityWatermark
         )
@@ -173,6 +175,7 @@ class AndroidSimklAuthStorage @Inject constructor(
     private fun metadata(): SimklStoredAuthMetadata = SimklStoredAuthMetadata(
         username = _state.value.username,
         accountId = _state.value.accountId,
+        accountType = _state.value.accountType,
         hasFetchedUserSettings = _state.value.hasFetchedUserSettings,
         settingsActivityWatermark = _state.value.settingsActivityWatermark,
         pinSession = _state.value.pinSession
@@ -186,6 +189,7 @@ class AndroidSimklAuthStorage @Inject constructor(
             isAuthenticated = !activeCredentials.accessToken.isNullOrBlank(),
             username = metadata.username,
             accountId = metadata.accountId,
+            accountType = metadata.accountType,
             hasFetchedUserSettings = metadata.hasFetchedUserSettings,
             settingsActivityWatermark = metadata.settingsActivityWatermark,
             pinSession = metadata.pinSession,
