@@ -167,7 +167,8 @@ class LeanbackCardViewHolder(
                 val shouldAnimateCollapse = adapter.animationsEnabled() &&
                     gridView?.isAttachedToWindow == true &&
                     gridView.mayTakeFocus() &&
-                    !gridView.isHoldingHorizontalKey
+                    !gridView.isHoldingHorizontalKey &&
+                    gridView.scrollState == RecyclerView.SCROLL_STATE_IDLE
                 if (shouldAnimateCollapse) {
                     collapseToBaseWidth(animated = true)
                 } else {
@@ -1201,6 +1202,15 @@ class LeanbackRowAdapter(
             return false
         }
 
+    fun findExpandedOrAnimatingHolder(): LeanbackCardViewHolder? {
+        val rv = attachedRecyclerView ?: return null
+        for (i in 0 until rv.childCount) {
+            val vh = rv.getChildViewHolder(rv.getChildAt(i)) as? LeanbackCardViewHolder ?: continue
+            if (vh.isBackdropExpanded || vh.isAnimatingWidth) return vh
+        }
+        return null
+    }
+
     fun updateExpandedCardState(
         expandedFocusKey: String?,
         trailerUrl: String?,
@@ -1212,6 +1222,10 @@ class LeanbackRowAdapter(
 
         val rv = attachedRecyclerView ?: return
         val targetKey = expandedCatalogFocusKey
+        val grid = rv as? ModernInteropHorizontalGridView
+        val allowAnimatedCollapse = animationsEnabled() &&
+            grid?.isHoldingHorizontalKey != true &&
+            (grid == null || grid.scrollState == RecyclerView.SCROLL_STATE_IDLE)
         for (i in 0 until rv.childCount) {
             val child = rv.getChildAt(i) ?: continue
             val vh = rv.getChildViewHolder(child) as? LeanbackCardViewHolder ?: continue
@@ -1230,14 +1244,12 @@ class LeanbackRowAdapter(
                     trailerAudioUrl = expandedTrailerAudioUrl
                 )
             } else if (vh.isBackdropExpanded) {
-                val animateCollapse = animationsEnabled() &&
-                    (rv as? ModernInteropHorizontalGridView)?.isHoldingHorizontalKey != true
-                vh.applyExpandedState(expanded = false, animated = animateCollapse)
+                vh.applyExpandedState(expanded = false, animated = allowAnimatedCollapse)
             }
         }
     }
 
-    fun collapseExpandedCard(animated: Boolean) {
+    fun collapseExpandedCard(animated: Boolean, notifyRing: Boolean = true) {
         val prevKey = expandedCatalogFocusKey
         expandedCatalogFocusKey = null
         expandedTrailerUrl = null
@@ -1254,7 +1266,7 @@ class LeanbackRowAdapter(
                     vh.collapseToBaseWidth(animated = true)
                 } else {
                     vh.resetExpandedStateImmediate()
-                    if (vh.root.hasFocus()) {
+                    if (notifyRing && vh.root.hasFocus()) {
                         val baseW = vh.currentEffectiveCardWidthPx()
                         val baseH = vh.currentEffectiveCardHeightPx()
                         (rv as? ModernInteropHorizontalGridView)?.notifyFocusedCardBoundsChanged(
@@ -1272,8 +1284,8 @@ class LeanbackRowAdapter(
         }
     }
 
-    fun collapseExpandedCardImmediate() {
-        collapseExpandedCard(animated = false)
+    fun collapseExpandedCardImmediate(notifyRing: Boolean = true) {
+        collapseExpandedCard(animated = false, notifyRing = notifyRing)
     }
 
     fun getItem(position: Int): ModernCarouselItem? = items.getOrNull(position)

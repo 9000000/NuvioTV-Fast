@@ -133,7 +133,8 @@ class LeanbackPosterViewHolder(
             val shouldAnimateCollapse = adapter.animationsEnabled() &&
                 gridView?.isAttachedToWindow == true &&
                 gridView.mayTakeFocus() &&
-                !isHoldingHorizontal
+                !isHoldingHorizontal &&
+                gridView.scrollState == androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE
             if (shouldAnimateCollapse) {
                 collapseToBaseWidth(animated = true)
             } else {

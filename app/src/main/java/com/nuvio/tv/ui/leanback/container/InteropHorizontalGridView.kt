@@ -13,6 +13,7 @@ import androidx.leanback.widget.OnChildViewHolderSelectedListener
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.core.LeanbackCardExpandSpec
+import com.nuvio.tv.ui.leanback.core.LeanbackCollapseTransitionHelper
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition
 
@@ -39,6 +40,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var animationsEnabled: Boolean = true
 
     private val expandBoundsTempRect = Rect()
+    private val collapseTransitionHelper = LeanbackCollapseTransitionHelper(this)
 
     fun ensureExpandedCardVisible(cardContainer: View) {
         if (!isAttachedToWindow || !cardContainer.isAttachedToWindow || width <= 0) return
@@ -115,6 +117,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var restoredPosition: Int = 0
 
     fun prepareForRowChange() {
+        collapseTransitionHelper.cancel(resetTranslations = true)
         universalAdapter?.collapseExpandedCardImmediate()
         val wasHolding = isHoldingHorizontalKey
         isHoldingHorizontalKey = false
@@ -122,6 +125,11 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         if (wasHolding) {
             universalAdapter?.flushPendingFocusedItem()
         }
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        collapseTransitionHelper.cancel(resetTranslations = true)
     }
 
     private val universalAdapter: LeanbackUniversalAdapter?
@@ -133,6 +141,13 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         layoutManager?.isItemPrefetchEnabled = true
         setHasFixedSize(true)
         setItemViewCacheSize(8)
+
+        addOnChildAttachStateChangeListener(object : OnChildAttachStateChangeListener {
+            override fun onChildViewAttachedToWindow(view: View) {}
+            override fun onChildViewDetachedFromWindow(view: View) {
+                collapseTransitionHelper.onChildDetached(view)
+            }
+        })
 
         addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -434,6 +449,11 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                         universalAdapter?.flushPendingFocusedItem()
                         return true
                     }
+                    // Keep pendingTargetPosition intact until the FLIP collapse pre-draw
+                    // dispatches setSelectedPositionSmooth on the normalized grid layout.
+                    if (collapseTransitionHelper.isAwaitingLayout) {
+                        return true
+                    }
                     val total = universalAdapter?.itemCount ?: 0
                     val currentSelected = selectedPosition.coerceIn(0, (total - 1).coerceAtLeast(0))
                     val target = if (pendingTargetPosition != RecyclerView.NO_POSITION) {
@@ -479,19 +499,8 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
-            if (LeanbackCardExpandSpec.shouldResetExpandTimerOnKey(event.keyCode)) {
-                val adapterRef = universalAdapter
-                if (adapterRef?.hasExpandedCard == true || (event.repeatCount > 0 && adapterRef?.hasAnimatingWidthCard == true)) {
-                    val shouldAnimateCollapse = LeanbackCardExpandSpec.shouldAnimateCollapseOnKey(
-                        keyCode = event.keyCode,
-                        repeatCount = event.repeatCount,
-                        animationsEnabled = animationsEnabled
-                    )
-                    adapterRef.collapseExpandedCard(animated = shouldAnimateCollapse)
-                }
-                onBackdropInteraction?.invoke()
-            }
             val now = SystemClock.uptimeMillis()
+            val adapterRef = universalAdapter
             val focusedChild = findFocus()
             val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null
             val resolvedHolderPos = holder?.bindingAdapterPosition?.takeIf { it != RecyclerView.NO_POSITION }
@@ -506,11 +515,90 @@ class InteropHorizontalGridView @JvmOverloads constructor(
             } else {
                 anchorPos
             }
-            val total = universalAdapter?.itemCount ?: 0
+            val total = adapterRef?.itemCount ?: 0
+            val expandedOrAnimatingHolder = adapterRef?.findExpandedOrAnimatingHolder()
+            val hasExpandedOrAnimating = expandedOrAnimatingHolder != null
+
+            fun dispatchHorizontalMove(target: Int, focusDir: Int) {
+                pendingTargetPosition = target
+                val useFlipTransition = LeanbackCardExpandSpec.shouldUseNavigationCollapseTransition(
+                    currentPos = actualPos,
+                    targetPos = target,
+                    hasExpandedOrAnimatingCard = hasExpandedOrAnimating,
+                    repeatCount = event.repeatCount,
+                    animationsEnabled = animationsEnabled
+                )
+                if (useFlipTransition) {
+                    collapseTransitionHelper.runNavigationCollapseTransition(
+                        expandedItemView = expandedOrAnimatingHolder?.itemView,
+                        animated = true,
+                        collapseLayoutAction = {
+                            adapterRef?.collapseExpandedCardImmediate()
+                            onBackdropInteraction?.invoke()
+                        },
+                        onLayoutReady = {
+                            if (!isAttachedToWindow || !mayTakeFocus()) return@runNavigationCollapseTransition
+                            val itemCount = universalAdapter?.itemCount ?: 0
+                            if (itemCount <= 0) return@runNavigationCollapseTransition
+                            val resolvedTarget = pendingTargetPosition
+                                .takeIf { it in 0 until itemCount }
+                                ?: target.coerceIn(0, itemCount - 1)
+                            setSelectedPositionSmooth(resolvedTarget)
+                            if (!isHoldingHorizontalKey) {
+                                val nextVh = findViewHolderForAdapterPosition(resolvedTarget)
+                                if (nextVh != null) {
+                                    if (!nextVh.itemView.hasFocus()) {
+                                        nextVh.itemView.requestFocus(focusDir)
+                                    }
+                                } else {
+                                    ensureTargetChildFocused(resolvedTarget, focusDir)
+                                }
+                            }
+                        }
+                    )
+                    return
+                }
+
+                if (hasExpandedOrAnimating) {
+                    collapseTransitionHelper.cancel(resetTranslations = true)
+                    adapterRef.collapseExpandedCardImmediate()
+                }
+                onBackdropInteraction?.invoke()
+
+                if (!animationsEnabled) {
+                    val nextVh = findViewHolderForAdapterPosition(target)
+                    setSelectedPosition(target)
+                    if (nextVh != null) {
+                        nextVh.itemView.requestFocus(focusDir)
+                    } else {
+                        ensureTargetChildFocused(target, focusDir)
+                    }
+                    return
+                }
+                setSelectedPositionSmooth(target)
+                if (!isHoldingHorizontalKey) {
+                    val nextVh = findViewHolderForAdapterPosition(target)
+                    if (nextVh != null) {
+                        if (!nextVh.itemView.hasFocus()) {
+                            nextVh.itemView.requestFocus(focusDir)
+                        }
+                    } else {
+                        ensureTargetChildFocused(target, focusDir)
+                    }
+                }
+            }
 
             when (event.keyCode) {
                 towardStartKey -> {
                     if (actualPos <= 0 || total <= 0) {
+                        if (hasExpandedOrAnimating) {
+                            collapseTransitionHelper.cancel(resetTranslations = true)
+                            val animateInPlace = animationsEnabled &&
+                                event.repeatCount == 0 &&
+                                scrollState == RecyclerView.SCROLL_STATE_IDLE
+                            adapterRef.collapseExpandedCard(animated = animateInPlace)
+                        }
+                        onBackdropInteraction?.invoke()
                         pendingTargetPosition = 0
                         if (selectedPosition != 0 && total > 0) {
                             if (animationsEnabled) {
@@ -520,7 +608,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                             }
                         }
                         if (isHoldingHorizontalKey) {
-                            universalAdapter?.flushPendingFocusedItem()
+                            adapterRef?.flushPendingFocusedItem()
                         }
                         val arrivedRecently = arrivedAt0FromEnd && (now - arrivalAt0Time < 300L)
                         if (!arrivedRecently && event.repeatCount == 0 && hasReleasedKeyAfterArrivingAt0) {
@@ -538,6 +626,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
 
                     if (event.repeatCount > 0) {
                         isHoldingHorizontalKey = true
+                        collapseTransitionHelper.cancel(resetTranslations = true)
                         if (now - lastHorizontalKeyTime < HORIZONTAL_REPEAT_INTERVAL_MS) {
                             return true
                         }
@@ -557,32 +646,19 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     if (isScrolling && target == pendingTargetPosition) {
                         return true
                     }
-                    pendingTargetPosition = target
-                    if (!animationsEnabled) {
-                        val nextVh = findViewHolderForAdapterPosition(target)
-                        setSelectedPosition(target)
-                        if (nextVh != null) {
-                            nextVh.itemView.requestFocus(towardStartFocusDir)
-                        } else {
-                            ensureTargetChildFocused(target, towardStartFocusDir)
-                        }
-                        return true
-                    }
-                    setSelectedPositionSmooth(target)
-                    if (!isHoldingHorizontalKey) {
-                        val nextVh = findViewHolderForAdapterPosition(target)
-                        if (nextVh != null) {
-                            if (!nextVh.itemView.hasFocus()) {
-                                nextVh.itemView.requestFocus(towardStartFocusDir)
-                            }
-                        } else {
-                            ensureTargetChildFocused(target, towardStartFocusDir)
-                        }
-                    }
+                    dispatchHorizontalMove(target = target, focusDir = towardStartFocusDir)
                     return true
                 }
                 towardEndKey -> {
                     if (total <= 0 || actualPos >= total - 1) {
+                        if (hasExpandedOrAnimating) {
+                            collapseTransitionHelper.cancel(resetTranslations = true)
+                            val animateInPlace = animationsEnabled &&
+                                event.repeatCount == 0 &&
+                                scrollState == RecyclerView.SCROLL_STATE_IDLE
+                            adapterRef.collapseExpandedCard(animated = animateInPlace)
+                        }
+                        onBackdropInteraction?.invoke()
                         val lastIdx = (total - 1).coerceAtLeast(0)
                         pendingTargetPosition = lastIdx
                         if (selectedPosition != lastIdx && total > 0) {
@@ -593,13 +669,14 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                             }
                         }
                         if (isHoldingHorizontalKey) {
-                            universalAdapter?.flushPendingFocusedItem()
+                            adapterRef?.flushPendingFocusedItem()
                         }
                         return true
                     }
 
                     if (event.repeatCount > 0) {
                         isHoldingHorizontalKey = true
+                        collapseTransitionHelper.cancel(resetTranslations = true)
                         if (now - lastHorizontalKeyTime < HORIZONTAL_REPEAT_INTERVAL_MS) {
                             return true
                         }
@@ -619,36 +696,20 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     if (isScrolling && target == pendingTargetPosition) {
                         return true
                     }
-                    pendingTargetPosition = target
-                    if (!animationsEnabled) {
-                        val nextVh = findViewHolderForAdapterPosition(target)
-                        setSelectedPosition(target)
-                        if (nextVh != null) {
-                            nextVh.itemView.requestFocus(towardEndFocusDir)
-                        } else {
-                            ensureTargetChildFocused(target, towardEndFocusDir)
-                        }
-                        return true
-                    }
-                    setSelectedPositionSmooth(target)
-                    if (!isHoldingHorizontalKey) {
-                        val nextVh = findViewHolderForAdapterPosition(target)
-                        if (nextVh != null) {
-                            if (!nextVh.itemView.hasFocus()) {
-                                nextVh.itemView.requestFocus(towardEndFocusDir)
-                            }
-                        } else {
-                            ensureTargetChildFocused(target, towardEndFocusDir)
-                        }
-                    }
+                    dispatchHorizontalMove(target = target, focusDir = towardEndFocusDir)
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (hasExpandedOrAnimating) {
+                        collapseTransitionHelper.cancel(resetTranslations = true)
+                        adapterRef.collapseExpandedCardImmediate()
+                    }
+                    onBackdropInteraction?.invoke()
                     val wasHolding = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
                     if (wasHolding) {
-                        universalAdapter?.flushPendingFocusedItem()
+                        adapterRef?.flushPendingFocusedItem()
                     }
                     if (event.repeatCount > 0 && now - lastVerticalKeyTime < 115L) {
                         return true
@@ -660,11 +721,16 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     }
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (hasExpandedOrAnimating) {
+                        collapseTransitionHelper.cancel(resetTranslations = true)
+                        adapterRef.collapseExpandedCardImmediate()
+                    }
+                    onBackdropInteraction?.invoke()
                     val wasHolding = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
                     if (wasHolding) {
-                        universalAdapter?.flushPendingFocusedItem()
+                        adapterRef?.flushPendingFocusedItem()
                     }
                     if (event.repeatCount > 0 && now - lastVerticalKeyTime < 115L) {
                         return true
@@ -676,11 +742,16 @@ class InteropHorizontalGridView @JvmOverloads constructor(
                     }
                 }
                 KeyEvent.KEYCODE_BACK -> {
+                    if (hasExpandedOrAnimating) {
+                        collapseTransitionHelper.cancel(resetTranslations = true)
+                        adapterRef.collapseExpandedCardImmediate()
+                    }
+                    onBackdropInteraction?.invoke()
                     val wasHolding = isHoldingHorizontalKey
                     isHoldingHorizontalKey = false
                     pendingTargetPosition = RecyclerView.NO_POSITION
                     if (wasHolding) {
-                        universalAdapter?.flushPendingFocusedItem()
+                        adapterRef?.flushPendingFocusedItem()
                     }
                     if (onNavigateBack?.invoke() == true) return true
                 }

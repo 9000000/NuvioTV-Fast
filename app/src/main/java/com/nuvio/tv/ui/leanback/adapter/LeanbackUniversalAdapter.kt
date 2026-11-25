@@ -87,6 +87,15 @@ class LeanbackUniversalAdapter(
             return false
         }
 
+    fun findExpandedOrAnimatingHolder(): LeanbackPosterViewHolder? {
+        val rv = attachedRecyclerView ?: return null
+        for (i in 0 until rv.childCount) {
+            val vh = rv.getChildViewHolder(rv.getChildAt(i)) as? LeanbackPosterViewHolder ?: continue
+            if (vh.isBackdropExpanded || vh.isAnimatingWidth) return vh
+        }
+        return null
+    }
+
     fun updateExpandedCardState(
         expandedKey: String?,
         trailerUrl: String?,
@@ -98,6 +107,10 @@ class LeanbackUniversalAdapter(
 
         val rv = attachedRecyclerView ?: return
         val targetKey = expandedItemKey
+        val grid = rv as? InteropHorizontalGridView
+        val allowAnimatedCollapse = animationsEnabled() &&
+            grid?.isHoldingHorizontalKey != true &&
+            (grid == null || grid.scrollState == RecyclerView.SCROLL_STATE_IDLE)
         for (i in 0 until rv.childCount) {
             val child = rv.getChildAt(i) ?: continue
             val vh = rv.getChildViewHolder(child) as? LeanbackPosterViewHolder ?: continue
@@ -117,9 +130,7 @@ class LeanbackUniversalAdapter(
                     trailerAudioUrl = expandedTrailerAudioUrl
                 )
             } else if (vh.isBackdropExpanded) {
-                val animateCollapse = animationsEnabled() &&
-                    (rv as? InteropHorizontalGridView)?.isHoldingHorizontalKey != true
-                vh.applyExpandedState(expanded = false, animated = animateCollapse)
+                vh.applyExpandedState(expanded = false, animated = allowAnimatedCollapse)
             }
         }
     }

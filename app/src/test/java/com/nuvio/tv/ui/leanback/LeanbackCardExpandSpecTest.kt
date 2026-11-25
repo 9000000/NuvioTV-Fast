@@ -323,6 +323,102 @@ class LeanbackCardExpandSpecTest {
     fun `expand and collapse durations provide visible smooth transitions`() {
         assertEquals(280L, LeanbackCardExpandSpec.CARD_EXPAND_ANIMATION_DURATION_MS)
         assertEquals(200L, LeanbackCardExpandSpec.CARD_COLLAPSE_ANIMATION_DURATION_MS)
+        assertEquals(220L, LeanbackCardExpandSpec.CARD_COLLAPSE_SLIDE_DURATION_MS)
+        assertEquals(180L, LeanbackCardExpandSpec.RING_COLLAPSE_MORPH_DURATION_MS)
         assertEquals(180L, LeanbackCardExpandSpec.BACKDROP_FADE_IN_DURATION_MS)
+    }
+
+    @Test
+    fun `computeSiblingFlipDeltaPx keeps sibling visually stationary across collapse layout`() {
+        // LTR: sibling sat at left=348 before collapse, layout shifted it to left=173 -> +175f compensation
+        assertEquals(
+            175f,
+            LeanbackCardExpandSpec.computeSiblingFlipDeltaPx(
+                oldLeftPx = 348,
+                oldTranslationXPx = 0f,
+                newLeftPx = 173
+            ),
+            0.001f
+        )
+        // RTL: sibling sat at left=120 before collapse, layout shifted it to left=295 -> -175f compensation
+        assertEquals(
+            -175f,
+            LeanbackCardExpandSpec.computeSiblingFlipDeltaPx(
+                oldLeftPx = 120,
+                oldTranslationXPx = 0f,
+                newLeftPx = 295
+            ),
+            0.001f
+        )
+        // Preserves any in-flight GPU translation offset during chained transitions
+        assertEquals(
+            100f,
+            LeanbackCardExpandSpec.computeSiblingFlipDeltaPx(
+                oldLeftPx = 200,
+                oldTranslationXPx = 50f,
+                newLeftPx = 150
+            ),
+            0.001f
+        )
+    }
+
+    @Test
+    fun `shouldUseNavigationCollapseTransition activates only for single animated horizontal steps away from expanded card`() {
+        assertTrue(
+            LeanbackCardExpandSpec.shouldUseNavigationCollapseTransition(
+                currentPos = 2,
+                targetPos = 1,
+                hasExpandedOrAnimatingCard = true,
+                repeatCount = 0,
+                animationsEnabled = true
+            )
+        )
+        assertTrue(
+            LeanbackCardExpandSpec.shouldUseNavigationCollapseTransition(
+                currentPos = 2,
+                targetPos = 3,
+                hasExpandedOrAnimatingCard = true,
+                repeatCount = 0,
+                animationsEnabled = true
+            )
+        )
+        // Staying on the same item uses in-place collapse instead of navigation transition
+        assertFalse(
+            LeanbackCardExpandSpec.shouldUseNavigationCollapseTransition(
+                currentPos = 0,
+                targetPos = 0,
+                hasExpandedOrAnimatingCard = true,
+                repeatCount = 0,
+                animationsEnabled = true
+            )
+        )
+        // Holding key, no expanded card, or animations disabled -> bypass FLIP transition
+        assertFalse(
+            LeanbackCardExpandSpec.shouldUseNavigationCollapseTransition(
+                currentPos = 2,
+                targetPos = 1,
+                hasExpandedOrAnimatingCard = true,
+                repeatCount = 1,
+                animationsEnabled = true
+            )
+        )
+        assertFalse(
+            LeanbackCardExpandSpec.shouldUseNavigationCollapseTransition(
+                currentPos = 2,
+                targetPos = 1,
+                hasExpandedOrAnimatingCard = false,
+                repeatCount = 0,
+                animationsEnabled = true
+            )
+        )
+        assertFalse(
+            LeanbackCardExpandSpec.shouldUseNavigationCollapseTransition(
+                currentPos = 2,
+                targetPos = 1,
+                hasExpandedOrAnimatingCard = true,
+                repeatCount = 0,
+                animationsEnabled = false
+            )
+        )
     }
 }

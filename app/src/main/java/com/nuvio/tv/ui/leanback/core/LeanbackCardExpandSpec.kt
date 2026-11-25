@@ -17,6 +17,8 @@ object LeanbackCardExpandSpec {
     const val EXPANDED_BACKDROP_ASPECT_RATIO: Float = 16f / 9f
     const val CARD_EXPAND_ANIMATION_DURATION_MS: Long = 280L
     const val CARD_COLLAPSE_ANIMATION_DURATION_MS: Long = 200L
+    const val CARD_COLLAPSE_SLIDE_DURATION_MS: Long = 220L
+    const val RING_COLLAPSE_MORPH_DURATION_MS: Long = 180L
     const val BACKDROP_FADE_IN_DURATION_MS: Long = 180L
     const val TRAILER_COVER_FADE_OUT_DURATION_MS: Long = 220L
     const val MIN_MODERN_EXPAND_DELAY_MS: Long = 150L
@@ -247,5 +249,34 @@ object LeanbackCardExpandSpec {
         desiredTargetWidthPx: Int
     ): Boolean {
         return isRunning && animatingTargetWidthPx > 0 && animatingTargetWidthPx == desiredTargetWidthPx
+    }
+
+    /**
+     * Computes the horizontal FLIP compensation offset needed to keep a sibling card visually
+     * stationary on the frame an expanded neighbor collapses back to portrait width.
+     */
+    fun computeSiblingFlipDeltaPx(
+        oldLeftPx: Int,
+        oldTranslationXPx: Float,
+        newLeftPx: Int
+    ): Float {
+        return (oldLeftPx + oldTranslationXPx) - newLeftPx
+    }
+
+    /**
+     * Returns true when horizontal navigation away from an expanded card should use the
+     * single-layout FLIP slide transition instead of a concurrent layout-mutating width tween.
+     */
+    fun shouldUseNavigationCollapseTransition(
+        currentPos: Int,
+        targetPos: Int,
+        hasExpandedOrAnimatingCard: Boolean,
+        repeatCount: Int,
+        animationsEnabled: Boolean
+    ): Boolean {
+        return animationsEnabled &&
+            repeatCount == 0 &&
+            hasExpandedOrAnimatingCard &&
+            targetPos != currentPos
     }
 }
