@@ -3859,6 +3859,8 @@
     <string name="tts_transliterate_names_subtitle">Pronounce English character names, places, and terms naturally in Vietnamese</string>
     <string name="tts_hide_subtitles_title">Hide Visual Subtitles</string>
     <string name="tts_hide_subtitles_subtitle">Only hear voice without displaying text on screen</string>
+    <string name="tts_auto_stereo_title">Auto switch audio to 2.0 Stereo</string>
+    <string name="tts_auto_stereo_subtitle">Temporarily disable passthrough and downmix to 2.0 PCM while TTS is active; restore original channels when off</string>
     <string name="tts_install_voice_title">Install Offline Voice Data</string>
     <string name="tts_install_voice_subtitle">Open system settings to download offline voice pack</string>
     <string name="tts_preview_button">Preview Voice</string>

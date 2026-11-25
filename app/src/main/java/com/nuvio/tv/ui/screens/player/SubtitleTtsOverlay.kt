@@ -70,6 +70,7 @@ internal fun SubtitleTtsOverlay(
     onWaitForCueCompletionChange: (Boolean) -> Unit,
     onTransliterateEnglishNamesChange: (Boolean) -> Unit,
     onHideSubtitlesChange: (Boolean) -> Unit,
+    onAutoStereoDownmixChange: (Boolean) -> Unit,
     onPreviewVoice: () -> Unit,
     onOpenVoiceInstaller: () -> Unit,
     onDismiss: () -> Unit,
@@ -367,6 +368,16 @@ internal fun SubtitleTtsOverlay(
                                 value = if (config.hideSubtitlesWhenEnabled) onText else offText,
                                 isChecked = config.hideSubtitlesWhenEnabled,
                                 onClick = { onHideSubtitlesChange(!config.hideSubtitlesWhenEnabled) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        item(key = "tts_auto_stereo_downmix") {
+                            TtsActionCard(
+                                title = stringResource(R.string.tts_auto_stereo_title),
+                                value = if (config.autoStereoDownmix) onText else offText,
+                                isChecked = config.autoStereoDownmix,
+                                onClick = { onAutoStereoDownmixChange(!config.autoStereoDownmix) },
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }

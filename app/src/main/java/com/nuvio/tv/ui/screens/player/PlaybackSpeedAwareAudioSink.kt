@@ -28,6 +28,7 @@ internal class PlaybackSpeedAwareAudioSink(
     sink: AudioSink,
     initialForcePcm: Boolean = false,
     forcePcmForBluetooth: Boolean = false,
+    forcePcmForTts: Boolean = false,
     passthroughPolicy: AudioPassthroughPolicy = AudioPassthroughPolicy.ALLOW_ALL,
     private val onDiagnosticEvent: ((String) -> Unit)? = null,
     // Claims AC-3 up to 5.1 whatever the platform reports, for Force AC-3 and for
@@ -54,6 +55,9 @@ internal class PlaybackSpeedAwareAudioSink(
     private var bluetoothForcePcm: Boolean = forcePcmForBluetooth
 
     @Volatile
+    private var ttsForceStereoPcm: Boolean = forcePcmForTts
+
+    @Volatile
     private var passthroughPolicy: AudioPassthroughPolicy = passthroughPolicy
 
     @Volatile
@@ -75,6 +79,16 @@ internal class PlaybackSpeedAwareAudioSink(
 
     @Volatile
     private var isCurrentlyPassthrough: Boolean = false
+
+    @Volatile
+    private var pendingPcmReconfigure: Boolean = false
+
+    @Volatile
+    private var sinkPlaying: Boolean = false
+
+    private var lastConfiguredInputFormat: Format? = null
+    private var lastConfiguredBufferSize: Int = 0
+    private var lastConfiguredOutputChannels: IntArray? = null
 
     private var faultInjectFiredForCurrentConfig: Boolean = false
 
@@ -103,7 +117,7 @@ internal class PlaybackSpeedAwareAudioSink(
         bluetoothForcePcm = enabled
         if (enabled) {
             forcePcmForCurrentSession = true
-        } else if (!startedWithForcedPcm && playbackSpeed == 1f) {
+        } else if (!startedWithForcedPcm && !ttsForceStereoPcm && playbackSpeed == 1f) {
             // Session was not built as PCM-only; leaving Bluetooth can restore passthrough.
             forcePcmForCurrentSession = false
         }
@@ -111,6 +125,28 @@ internal class PlaybackSpeedAwareAudioSink(
     }
 
     fun isBluetoothForcePcm(): Boolean = bluetoothForcePcm
+
+    /**
+     * Update subtitle TTS auto-stereo PCM policy without rebuilding the player.
+     * Call [notifyAudioProcessingRequirementChanged] after a change so Media3 reselects
+     * decode-to-PCM vs passthrough on the live renderer.
+     *
+     * @return true when the effective PCM/passthrough policy changed.
+     */
+    fun setTtsForceStereoPcm(enabled: Boolean): Boolean {
+        val wasTtsForce = ttsForceStereoPcm
+        val wasSessionForce = forcePcmForCurrentSession
+        ttsForceStereoPcm = enabled
+        if (enabled) {
+            forcePcmForCurrentSession = true
+        } else if (!startedWithForcedPcm && !bluetoothForcePcm && playbackSpeed == 1f) {
+            // Session was not built as PCM-only; disabling TTS can restore original passthrough.
+            forcePcmForCurrentSession = false
+        }
+        return wasTtsForce != ttsForceStereoPcm || wasSessionForce != forcePcmForCurrentSession
+    }
+
+    fun isTtsForceStereoPcm(): Boolean = ttsForceStereoPcm
 
     fun setPassthroughPolicy(policy: AudioPassthroughPolicy): Boolean {
         if (policy == passthroughPolicy) return false
@@ -154,6 +190,10 @@ internal class PlaybackSpeedAwareAudioSink(
 
     override fun configure(inputFormat: Format, specifiedBufferSize: Int, outputChannels: IntArray?) {
         currentInputFormat = inputFormat
+        lastConfiguredInputFormat = inputFormat
+        lastConfiguredBufferSize = specifiedBufferSize
+        lastConfiguredOutputChannels = outputChannels?.copyOf()
+        pendingPcmReconfigure = false
         passthroughPacer.onFormat(inputFormat, nowMs())
         markPcmFallbackIfNeeded(inputFormat, playbackSpeed)
         currentTunnelAudioClass = tunnelAudioClass(inputFormat)
@@ -167,11 +207,13 @@ internal class PlaybackSpeedAwareAudioSink(
     }
 
     override fun play() {
+        sinkPlaying = true
         passthroughPacer.onPlay(nowMs())
         super.play()
     }
 
     override fun pause() {
+        sinkPlaying = false
         passthroughPacer.onPause(nowMs())
         super.pause()
     }
@@ -184,6 +226,10 @@ internal class PlaybackSpeedAwareAudioSink(
     }
 
     override fun reset() {
+        sinkPlaying = false
+        pendingPcmReconfigure = false
+        lastConfiguredInputFormat = null
+        lastConfiguredOutputChannels = null
         passthroughPacer.onReset()
         super.reset()
     }
@@ -204,6 +250,25 @@ internal class PlaybackSpeedAwareAudioSink(
         presentationTimeUs: Long,
         encodedAccessUnitCount: Int
     ): Boolean {
+        if (pendingPcmReconfigure) {
+            pendingPcmReconfigure = false
+            val fmt = lastConfiguredInputFormat
+            if (fmt != null &&
+                !isCurrentlyPassthrough &&
+                fmt.sampleMimeType == MimeTypes.AUDIO_RAW &&
+                fmt.channelCount > TtsStereoDownmixAudioProcessor.STEREO_CHANNELS
+            ) {
+                runCatching {
+                    super.flush()
+                    super.configure(fmt, lastConfiguredBufferSize, lastConfiguredOutputChannels)
+                    if (sinkPlaying) {
+                        super.play()
+                    }
+                }.onFailure {
+                    Log.w(TAG, "Failed to reconfigure PCM AudioSink in place for TTS stereo toggle: ${it.message}")
+                }
+            }
+        }
         if (isCurrentlyPassthrough) {
             monitor.maybeApplyStartThreshold()
             maybeInjectOpenFailure()
@@ -248,8 +313,13 @@ internal class PlaybackSpeedAwareAudioSink(
         playbackSpeed = normalizeSpeed(playbackParameters.speed)
         var shouldNotify = markPcmFallbackIfNeeded(currentInputFormat, playbackSpeed)
         // Going above 1x latches forcePcm for the session. Clear it when back at 1.0x
-        // so passthrough can recover (unless recovery built us with forcePcm).
-        if (playbackSpeed == 1f && forcePcmForCurrentSession && !startedWithForcedPcm) {
+        // so passthrough can recover (unless recovery, Bluetooth, or TTS stereo requires PCM).
+        if (playbackSpeed == 1f &&
+            forcePcmForCurrentSession &&
+            !startedWithForcedPcm &&
+            !bluetoothForcePcm &&
+            !ttsForceStereoPcm
+        ) {
             forcePcmForCurrentSession = false
             shouldNotify = true
         }
@@ -262,6 +332,15 @@ internal class PlaybackSpeedAwareAudioSink(
 
     fun notifyAudioProcessingRequirementChanged() {
         listener?.onAudioCapabilitiesChanged()
+    }
+
+    /**
+     * Marks an already-configured multichannel PCM sink for in-place reconfiguration on the next
+     * audio buffer, so [TtsStereoDownmixAudioProcessor] toggles take effect on non-passthrough
+     * 5.1/7.1 tracks (e.g., AAC 5.1, FLAC 5.1, FFmpeg PCM) without restarting video playback.
+     */
+    fun requestPcmReconfigureForAudioProcessorChange() {
+        pendingPcmReconfigure = true
     }
 
     override fun getFormatSupport(format: Format): Int {
@@ -294,8 +373,8 @@ internal class PlaybackSpeedAwareAudioSink(
         if (!isEncodedPassthroughCandidate(format)) {
             return false
         }
-        // Bluetooth: always decode to PCM (Media3 DEFAULT_AUDIO_CAPABILITIES policy).
-        if (bluetoothForcePcm || forcePcmForCurrentSession) {
+        // Bluetooth and subtitle TTS auto-stereo: always decode to PCM so AudioFlinger can mix.
+        if (bluetoothForcePcm || ttsForceStereoPcm || forcePcmForCurrentSession) {
             return true
         }
         // Non-1x speed cannot be applied to bitstream passthrough tracks.
@@ -313,7 +392,7 @@ internal class PlaybackSpeedAwareAudioSink(
         if (format == null || !isEncodedPassthroughCandidate(format)) {
             return false
         }
-        if (bluetoothForcePcm) {
+        if (bluetoothForcePcm || ttsForceStereoPcm) {
             val wasForcingPcm = forcePcmForCurrentSession
             forcePcmForCurrentSession = true
             return !wasForcingPcm

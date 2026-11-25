@@ -2535,6 +2535,9 @@ fun PlayerRuntimeController.onEvent(
         is PlayerEvent.OnSetTtsHideSubtitlesWhenEnabled -> {
             scope.launch { playerSettingsDataStore.setTtsHideSubtitlesWhenEnabled(event.hideSubtitles) }
         }
+        is PlayerEvent.OnSetTtsAutoStereoDownmix -> {
+            scope.launch { playerSettingsDataStore.setTtsAutoStereoDownmix(event.enabled) }
+        }
         is PlayerEvent.OnPreviewTtsVoice -> {
             if (event.sampleText != null) {
                 subtitleTtsCoordinator.previewVoice(sampleText = event.sampleText)

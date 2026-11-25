@@ -5,10 +5,11 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
 import android.util.Log
-import com.nuvio.tv.data.local.AudioOutputChannels
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import com.nuvio.tv.ui.screens.player.iec.LiveDirectAudioPlayback
 import com.nuvio.tv.ui.screens.player.iec.PlatformIecAudioTrackFactory
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Debounce window so flapping add/remove events coalesce into one route decision. */
@@ -110,7 +111,11 @@ internal fun PlayerRuntimeController.registerAudioDelayRouteCallback() {
                     PlayerRuntimeController.TAG,
                     "Audio device added (count=${addedDevices.size}, outputs already connected); output findings kept"
                 )
-                if (!isReleasingPlayer && _exoPlayer != null && currentAudioOutputRoute?.isBluetooth != true) {
+                if (!isReleasingPlayer &&
+                    _exoPlayer != null &&
+                    currentAudioOutputRoute?.isBluetooth != true &&
+                    !isTtsStereoForceActive()
+                ) {
                     schedulePassthroughReturnCheck("player start")
                 }
                 return
@@ -212,7 +217,9 @@ private fun PlayerRuntimeController.onAudioOutputRouteMaybeChanged(
                     PlayerRuntimeController.TAG,
                     "Audio route after device $reason: bluetooth=$isBluetooth (was=$wasBluetooth); player stays running"
                 )
-                if (reason == "added" && !isBluetooth) schedulePassthroughReturnCheck("device added")
+                if (reason == "added" && !isBluetooth && !isTtsStereoForceActive()) {
+                    schedulePassthroughReturnCheck("device added")
+                }
             }
             BluetoothRoutePlaybackAction.UPDATE_SINK_IN_PLACE -> {
                 if (_exoPlayer == null) return@launch
@@ -253,6 +260,7 @@ internal fun PlayerRuntimeController.schedulePassthroughReturnCheck(reason: Stri
 private fun PlayerRuntimeController.rebuildForReturnedPassthroughIfNeeded(reason: String): Boolean {
     if (isReleasingPlayer || isInBackground || playbackRecoveryJob?.isActive == true) return false
     if (isUsingMpvEngine()) return false
+    if (isTtsStereoForceActive()) return false
     val player = _exoPlayer ?: return false
     val sink = playbackSpeedAwareAudioSink ?: return false
     val format = player.audioFormat ?: return false
@@ -283,68 +291,145 @@ private fun PlayerRuntimeController.rebuildForReturnedPassthroughIfNeeded(reason
     return true
 }
 
-internal fun PlayerRuntimeController.applyBluetoothAudioRouteInPlace(isBluetooth: Boolean) {
-    val wasPlaying = hasActivePlayIntent() && !userPausedManually
+internal fun PlayerRuntimeController.isTtsStereoForceActive(): Boolean =
+    _uiState.value.ttsConfig.shouldForceStereoDownmix
+
+internal fun PlayerRuntimeController.applyEffectiveAudioStereoModeInPlace(reason: String) {
+    val player = _exoPlayer ?: return
     val sink = playbackSpeedAwareAudioSink
-    if (sink != null && sink.isBluetoothForcePcm() == isBluetooth) {
-        Log.d(
+    val isBluetooth = currentAudioOutputRoute?.isBluetooth == true
+    val ttsConfig = _uiState.value.ttsConfig
+    val settings = currentPlayerSettingsForReport
+    val effectiveCachedDecoderPriority = if (ffmpegAudioRenderer != null) {
+        DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+    } else {
+        cachedDecoderPriority
+    }
+    val config = TtsAudioStereoPolicy.resolveEffectiveOutput(
+        isBluetooth = isBluetooth,
+        ttsEnabled = ttsConfig.enabled,
+        ttsAutoStereoDownmix = ttsConfig.autoStereoDownmix,
+        settings = settings,
+        lastSurround = lastAppliedSurroundResolve,
+        cachedDecoderPriority = effectiveCachedDecoderPriority,
+        activeAudioMimeType = player.audioFormat?.sampleMimeType
+    )
+
+    if (config.requiresRebuildForSoftwareDecoder) {
+        Log.i(
             PlayerRuntimeController.TAG,
-            "Bluetooth PCM policy already $isBluetooth; " +
-                if (wasPlaying) "player keeps running" else "player stays paused"
+            "TTS auto-stereo ($reason) needs software audio decoder for ${player.audioFormat?.sampleMimeType}; " +
+                "rebuilding ExoPlayer at current position"
         )
-        if (!wasPlaying || userPausedManually) {
-            _exoPlayer?.let { player ->
-                player.playWhenReady = false
-                player.pause()
-            }
-        }
+        ttsStereoDownmixAudioProcessor.setEnabled(config.forceStereoForTts)
+        sink?.setTtsForceStereoPcm(config.forceStereoForTts)
+        scheduleOwnedPlaybackRecovery(player.currentPosition, 0L)
         return
     }
 
-    sink?.setBluetoothForcePcm(isBluetooth)
+    val wasPlaying = hasActivePlayIntent() && !userPausedManually
+    val btChanged = sink?.setBluetoothForcePcm(isBluetooth) == true
+    val ttsSinkChanged = sink?.setTtsForceStereoPcm(config.forceStereoForTts) == true
+    val processorChanged = ttsStereoDownmixAudioProcessor.setEnabled(config.forceStereoForTts)
 
-    val settings = currentPlayerSettingsForReport
-    val forceOptical = !isBluetooth &&
-        settings.forceOpticalPassthrough &&
-        settings.decoderPriority != 0
-    val downmixEnabled = settings.effectiveDownmixEnabled || isBluetooth
-    val outputChannels = if (isBluetooth) {
-        AudioOutputChannels.CHANNELS_2_0
-    } else {
-        settings.audioOutputChannels
-    }
-    ffmpegAudioRenderer?.setForceOpticalPassthrough(forceOptical)
-    if (downmixEnabled) {
-        ffmpegAudioRenderer?.setAudioOutputChannels(
-            outputChannels.ffmpegLayoutName,
-            outputChannels.channelCount
+    ffmpegAudioRenderer?.applyDownmixSettings(
+        downmixEnabled = config.ffmpegDownmixEnabled,
+        audioOutputChannels = config.ffmpegAudioOutputChannels,
+        downmixNormalizationEnabled = !settings.maintainOriginalAudioOnDownmix,
+        lfeMixLevel = settings.downmixLfeLevel.level,
+        forceOpticalPassthrough = config.forceOpticalPassthrough,
+        deniedTranscodeMimes = config.deniedTranscodeMimes
+    )
+
+    val desiredTunneling = baseTunnelingActiveForCurrentPlayback &&
+        !isSafeAudioModeActiveForCurrentPlayback &&
+        !config.disableTunneling
+    val selector = trackSelector
+    val tunnelingChanged = selector != null && selector.parameters.tunnelingEnabled != desiredTunneling
+    if (tunnelingChanged && selector != null) {
+        selector.setParameters(
+            selector.buildUponParameters().setTunnelingEnabled(desiredTunneling)
         )
-        ffmpegAudioRenderer?.setDownmixNormalizationEnabled(!settings.maintainOriginalAudioOnDownmix)
-        ffmpegAudioRenderer?.setLfeMixLevel(settings.downmixLfeLevel.level)
-    } else {
-        ffmpegAudioRenderer?.setAudioOutputChannels(null, 0)
-        ffmpegAudioRenderer?.setDownmixNormalizationEnabled(false)
-        ffmpegAudioRenderer?.setLfeMixLevel(0f)
     }
 
-    sink?.notifyAudioProcessingRequirementChanged()
-    _exoPlayer?.let { player ->
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().build()
+    val anyChanged = btChanged || ttsSinkChanged || processorChanged || tunnelingChanged
+    if (!anyChanged) {
+        Log.d(
+            PlayerRuntimeController.TAG,
+            "Effective audio stereo policy already in sync (reason=$reason, bt=$isBluetooth, " +
+                "ttsForceStereo=${config.forceStereoForTts}); " +
+                if (wasPlaying) "player keeps running" else "player stays paused"
+        )
         if (!wasPlaying || userPausedManually) {
             player.playWhenReady = false
             player.pause()
         }
+        return
+    }
+
+    Log.i(
+        PlayerRuntimeController.TAG,
+        "Applying effective audio stereo mode in place (reason=$reason, bt=$isBluetooth, " +
+            "ttsForceStereo=${config.forceStereoForTts}, optical=${config.forceOpticalPassthrough}, " +
+            "tunneling=$desiredTunneling)"
+    )
+
+    if (processorChanged) {
+        sink?.requestPcmReconfigureForAudioProcessorChange()
+    }
+    sink?.notifyAudioProcessingRequirementChanged()
+    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().build()
+    if (!wasPlaying || userPausedManually) {
+        player.playWhenReady = false
+        player.pause()
+    }
+
+    val isPassthroughNow = if (config.forceStereoPcm) {
+        false
+    } else {
+        sink?.let { s -> s.isDirectPlaybackActive() || s.isIecHbrActive() } == true
+    }
+    if (_uiState.value.isDirectPassthroughActive != isPassthroughNow) {
+        _uiState.update { it.copy(isDirectPassthroughActive = isPassthroughNow) }
+    }
+    val duckingScale = PlayerTtsVolumeDuckingPolicy.resolveDuckingVolumeScale(
+        isSpeaking = subtitleTtsCoordinator.isSpeaking.value,
+        isDirectPassthroughActive = isPassthroughNow,
+        configuredMovieVolume = ttsConfig.movieVolume
+    )
+    player.volume = duckingScale
+
+    if (!config.forceStereoPcm && reason == "tts_toggle") {
+        schedulePassthroughReturnCheck("tts disabled")
     }
 }
 
-internal fun PlayerRuntimeController.applyMpvBluetoothAudioRouteInPlace(isBluetooth: Boolean) {
+internal fun PlayerRuntimeController.applyBluetoothAudioRouteInPlace(isBluetooth: Boolean) {
+    applyEffectiveAudioStereoModeInPlace("bluetooth_route")
+}
+
+internal fun PlayerRuntimeController.applyEffectiveMpvAudioStereoModeInPlace(reason: String) {
     val view = mpvView ?: return
     val wasPlaying = hasActivePlayIntent() && !userPausedManually
-    view.applyBluetoothAudioRoute(isBluetooth, reloadOutput = true)
-    // ao-reload can drop live properties; re-pin the current per-route delay.
+    val ttsConfig = _uiState.value.ttsConfig
+    val forceStereo = TtsAudioStereoPolicy.shouldForceStereoPcm(
+        isBluetooth = currentAudioOutputRoute?.isBluetooth == true,
+        ttsEnabled = ttsConfig.enabled,
+        ttsAutoStereoDownmix = ttsConfig.autoStereoDownmix
+    )
+    Log.i(
+        PlayerRuntimeController.TAG,
+        "Applying effective MPV audio stereo mode in place (reason=$reason, forceStereo=$forceStereo)"
+    )
+    view.applyStereoPcmOverride(forceStereo = forceStereo, reloadOutput = true)
+    // ao-reload can drop live properties; re-pin the current per-route delay and gain/ducking level.
     view.setAudioDelayMs(_uiState.value.audioDelayMs)
     view.applyAudioAmplificationDb(_uiState.value.audioAmplificationDb)
     if (!wasPlaying || userPausedManually) {
         view.setPaused(true)
     }
+}
+
+internal fun PlayerRuntimeController.applyMpvBluetoothAudioRouteInPlace(isBluetooth: Boolean) {
+    applyEffectiveMpvAudioStereoModeInPlace("bluetooth_route")
 }

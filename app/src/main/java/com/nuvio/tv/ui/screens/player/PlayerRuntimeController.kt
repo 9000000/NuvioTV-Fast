@@ -666,6 +666,7 @@ class PlayerRuntimeController(
     internal var currentAudioOutputRoute: AudioOutputRoute? = null
     /** USB audio has no hardware A/V sync output, so tunneled playback is skipped while it plays. */
     internal var tunnelingBlockedByUsbAudio: Boolean = false
+    internal var baseTunnelingActiveForCurrentPlayback: Boolean = false
     internal var audioOutputRouteCallback: AudioDeviceCallback? = null
     internal var audioRouteChangeJob: Job? = null
 
@@ -684,6 +685,7 @@ class PlayerRuntimeController(
     internal var lastSkipIntervalEvaluationUptimeMs: Long = 0L
     internal var lastNextEpisodeEvaluationUptimeMs: Long = 0L
     internal var bufferLogJob: Job? = null
+    internal val ttsStereoDownmixAudioProcessor = TtsStereoDownmixAudioProcessor()
     internal val gainAudioProcessor = GainAudioProcessor()
     internal val nightModeAudioProcessor = NightModeAudioProcessor()
     internal var loudnessEnhancer: LoudnessEnhancer? = null

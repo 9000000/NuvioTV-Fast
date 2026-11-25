@@ -93,7 +93,7 @@ internal fun resolveSurroundForRoute(
 internal suspend fun PlayerRuntimeController.applySurroundResolutionInPlace(reason: String) {
     if (_exoPlayer == null || isUsingMpvEngine()) return
     val inputs = surroundResolveInputs ?: return
-    if (inputs.isBluetooth || currentAudioOutputRoute?.isBluetooth == true) return
+    if (inputs.isBluetooth || currentAudioOutputRoute?.isBluetooth == true || isTtsStereoForceActive()) return
     val settings = currentPlayerSettingsForReport
     val player = _exoPlayer
     var surround = readSurroundInPlace(inputs, settings)
@@ -125,7 +125,11 @@ internal suspend fun PlayerRuntimeController.applySurroundResolutionInPlace(reas
                 delayMs = SurroundRecheckGuard.CONFIRM_DELAY_MS
             }
         )
-        if (isReleasingPlayer || _exoPlayer !== player || currentAudioOutputRoute?.isBluetooth == true) {
+        if (isReleasingPlayer ||
+            _exoPlayer !== player ||
+            currentAudioOutputRoute?.isBluetooth == true ||
+            isTtsStereoForceActive()
+        ) {
             AudioChainProbe.invalidate()
             return
         }

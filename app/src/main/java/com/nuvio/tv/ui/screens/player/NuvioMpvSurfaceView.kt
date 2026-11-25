@@ -72,6 +72,9 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
     private var appliedAssBold: Boolean? = null
     private var appliedSubPos: Double? = null
     private var appliedSubMarginY: Int? = null
+    private var originalAudioChannels: String? = null
+    private var originalAudioSpdif: String? = null
+    private var stereoPcmOverrideActive: Boolean = false
     private val aspectReapplyRunnable = Runnable {
         applyAspectModeInternal(currentAspectMode, allowRetry = true)
     }
@@ -502,13 +505,38 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
      * without restarting video.
      */
     fun applyBluetoothAudioRoute(isBluetooth: Boolean, reloadOutput: Boolean = false) {
+        applyStereoPcmOverride(forceStereo = isBluetooth, reloadOutput = reloadOutput)
+    }
+
+    /**
+     * Forces stereo 2.0 PCM output (disabling encoded S/PDIF passthrough) when Bluetooth audio
+     * or subtitle TTS auto-stereo mode is active, and restores the original MPV channel/S/PDIF
+     * properties when deactivated. Mid-session toggles pass [reloadOutput] so AudioTrack
+     * reconfigures without restarting video playback.
+     */
+    fun applyStereoPcmOverride(forceStereo: Boolean, reloadOutput: Boolean = false) {
         if (!initialized) return
+        if (forceStereo == stereoPcmOverrideActive && !reloadOutput) return
         val wasPaused = !isPlayingNow()
         runCatching {
-            mpv.setPropertyString("audio-channels", MpvBluetoothAudioPolicy.audioChannels(isBluetooth))
-            if (MpvBluetoothAudioPolicy.shouldClearAudioSpdif(isBluetooth)) {
+            if (forceStereo) {
+                if (!stereoPcmOverrideActive) {
+                    originalAudioChannels = mpv.getPropertyString("audio-channels")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: MpvBluetoothAudioPolicy.AUTO_CHANNELS
+                    originalAudioSpdif = mpv.getPropertyString("audio-spdif") ?: ""
+                }
+                mpv.setPropertyString("audio-channels", MpvBluetoothAudioPolicy.STEREO_CHANNELS)
                 mpv.setPropertyString("audio-spdif", "")
+            } else {
+                val restoreChannels = originalAudioChannels
+                    ?.takeIf { it.isNotBlank() }
+                    ?: MpvBluetoothAudioPolicy.AUTO_CHANNELS
+                val restoreSpdif = originalAudioSpdif ?: ""
+                mpv.setPropertyString("audio-channels", restoreChannels)
+                mpv.setPropertyString("audio-spdif", restoreSpdif)
             }
+            stereoPcmOverrideActive = forceStereo
             if (reloadOutput) {
                 reloadAudioOutput()
                 if (wasPaused) {
@@ -516,7 +544,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                 }
             }
         }.onFailure {
-            Log.w(TAG, "Failed to apply bluetooth audio route on mpv (bt=$isBluetooth): ${it.message}")
+            Log.w(TAG, "Failed to apply stereo PCM override on mpv (forceStereo=$forceStereo): ${it.message}")
         }
     }
 
@@ -1019,6 +1047,9 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         appliedAssBold = null
         appliedSubPos = null
         appliedSubMarginY = null
+        originalAudioChannels = null
+        originalAudioSpdif = null
+        stereoPcmOverrideActive = false
     }
 
     override fun initOptions() {

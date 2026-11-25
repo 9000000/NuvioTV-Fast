@@ -58,12 +58,17 @@ data class SubtitleTtsConfig(
     val maxAutoSpeed: Float = SubtitleTtsTimingCalculator.DEFAULT_MAX_AUTO_SPEED,
     val waitForCueCompletion: Boolean = false,
     val hideSubtitlesWhenEnabled: Boolean = false,
+    val autoStereoDownmix: Boolean = true,
     val transliterateEnglishNames: Boolean = true,
     val preferredLanguageCode: String = GoogleOfflineTtsVoiceSelector.DEFAULT_LANGUAGE,
 ) {
     /** Whether visual subtitles should be suppressed while subtitle TTS is reading. */
     val shouldHideVisualSubtitles: Boolean
         get() = enabled && hideSubtitlesWhenEnabled
+
+    /** Whether playback audio should be temporarily forced to 2.0 Stereo PCM while TTS is active. */
+    val shouldForceStereoDownmix: Boolean
+        get() = enabled && autoStereoDownmix
 }
 
 /**
@@ -87,6 +92,7 @@ fun PlayerSettings.toSubtitleTtsConfig(): SubtitleTtsConfig = SubtitleTtsConfig(
     maxAutoSpeed = SubtitleTtsTimingCalculator.clampMaxAutoSpeed(ttsMaxAutoSpeed),
     waitForCueCompletion = ttsWaitForCueCompletion,
     hideSubtitlesWhenEnabled = ttsHideSubtitlesWhenEnabled,
+    autoStereoDownmix = ttsAutoStereoDownmix,
     transliterateEnglishNames = ttsTransliterateEnglishNames,
     preferredLanguageCode = GoogleOfflineTtsVoiceSelector.resolvePreferredLanguageCode(
         preferredSubtitleLanguage = subtitleStyle.preferredLanguage,

@@ -3764,6 +3764,8 @@
     <string name="tts_transliterate_names_subtitle">Đọc tự nhiên tên nhân vật, địa danh và thuật ngữ tiếng Anh theo ngữ âm tiếng Việt</string>
     <string name="tts_hide_subtitles_title">Ẩn chữ phụ đề trên màn hình</string>
     <string name="tts_hide_subtitles_subtitle">Chỉ nghe thuyết minh, không hiện chữ phụ đề trên màn hình</string>
+    <string name="tts_auto_stereo_title">Tự động chuyển âm thanh về 2.0</string>
+    <string name="tts_auto_stereo_subtitle">Tạm tắt passthrough và trộn về 2.0 Stereo để nghe rõ thuyết minh; tự trả lại kênh gốc khi tắt</string>
     <string name="tts_install_voice_title">Cài đặt dữ liệu giọng đọc ngoại tuyến</string>
     <string name="tts_install_voice_subtitle">Mở cài đặt hệ thống để tải gói giọng đọc ngoại tuyến</string>
     <string name="tts_preview_button">Nghe thử giọng đọc</string>

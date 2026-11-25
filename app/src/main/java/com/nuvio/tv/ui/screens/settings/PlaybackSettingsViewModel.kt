@@ -825,6 +825,7 @@ suspend fun setSubtitleFontId(fontId: String) {
     suspend fun setTtsWaitForCueCompletion(waitForCue: Boolean) = playerSettingsDataStore.setTtsWaitForCueCompletion(waitForCue)
     suspend fun setTtsTransliterateEnglishNames(enabled: Boolean) = playerSettingsDataStore.setTtsTransliterateEnglishNames(enabled)
     suspend fun setTtsHideSubtitlesWhenEnabled(hideSubtitles: Boolean) = playerSettingsDataStore.setTtsHideSubtitlesWhenEnabled(hideSubtitles)
+    suspend fun setTtsAutoStereoDownmix(enabled: Boolean) = playerSettingsDataStore.setTtsAutoStereoDownmix(enabled)
 
     fun previewTtsVoice(sampleText: String? = null) {
         if (sampleText != null) {

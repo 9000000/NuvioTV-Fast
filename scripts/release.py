@@ -141,8 +141,8 @@ def read_token():
     token = read_config_property("GITHUB_TOKEN") or read_config_property("GH_TOKEN")
     return token if token else None
 
-def build_apk():
-    print("\n[1/3] Dang dong goi ban Release APK...")
+def build_apk(total_steps=3):
+    print(f"\n[1/{total_steps}] Dang dong goi ban Release APK...")
     gradle_cmd = "gradlew.bat" if os.name == "nt" else "./gradlew"
     cmd = [str(ROOT / gradle_cmd), ":app:assembleFullRelease"]
     res = subprocess.run(cmd, cwd=ROOT)
@@ -738,8 +738,22 @@ def parse_arguments():
     parser.add_argument(
         "--publish",
         action="store_true",
-        default=True,
-        help="Đóng gói APK Release và phát hành lên GitHub Releases (mặc định luôn bật khi chạy lệnh)."
+        default=False,
+        help="Tự động push/phát hành APK Release lên GitHub Releases (tương đương --push)."
+    )
+    push_group = parser.add_mutually_exclusive_group()
+    push_group.add_argument(
+        "--push",
+        action="store_true",
+        dest="push_github",
+        default=None,
+        help="Push/phát hành APK Release lên GitHub Releases (bỏ qua câu hỏi xác nhận)."
+    )
+    push_group.add_argument(
+        "--no-push",
+        action="store_false",
+        dest="push_github",
+        help="Chỉ build APK cục bộ, không push/phát hành lên GitHub Releases (mặc định)."
     )
     parser.add_argument(
         "-i", "--interactive",
@@ -906,12 +920,30 @@ def main():
     else:
         notes = get_default_release_notes(version)
 
-    # Xác định prerelease flag
+    # Xác định có push/phát hành lên GitHub hay không (mặc định: KHÔNG push)
+    if args.push_github is not None:
+        should_push = args.push_github
+    elif args.publish:
+        should_push = True
+    elif not args.yes:
+        try:
+            push_prompt = "Push/Phát hành bản Release lên GitHub? [y/N] (Enter = Không): "
+            push_input = input(push_prompt).strip().lower()
+            should_push = push_input in ("y", "yes", "c", "co", "có")
+        except EOFError:
+            should_push = False
+        except KeyboardInterrupt:
+            print("\n[INFO] Đã hủy thao tác.")
+            sys.exit(0)
+    else:
+        should_push = False
+
+    # Xác định prerelease flag (chỉ hỏi khi có push lên GitHub)
     if args.release:
         is_prerelease = False
     elif args.prerelease is not None:
         is_prerelease = args.prerelease
-    elif not args.yes:
+    elif should_push and not args.yes:
         default_is_pre = is_prerelease_version(version)
         default_choice = "2" if default_is_pre else "1"
         try:
@@ -929,26 +961,29 @@ def main():
         is_prerelease = is_prerelease_version(version)
 
     print(f"\n==================================================")
-    print(f"Nuvio TV - Tu dong phat hanh ban Release")
+    print(f"Nuvio TV - Tu dong dong goi & phat hanh ban Release")
     print(f"Phien ban: {tag} ({title})")
     if target_code:
         print(f"Version Code: {target_code}")
-    print(f"Pre-release: {'Co' if is_prerelease else 'Khong'} | Draft: {'Co' if args.draft else 'Khong'}")
-    print(f"Nhanh nguon (Target Branch): {TARGET_BRANCH}")
-    print(f"Kho chua (Repository): {GITHUB_OWNER}/{GITHUB_REPO}")
-    if args.keep_releases > 0:
-        print(f"Don dep release cu: Giu lai {args.keep_releases} ban moi nhat ({'xoa ca git tag' if args.cleanup_tags else 'giu git tag'})")
-    else:
-        print("Don dep release cu: Da tat (--keep-releases 0)")
+    print(f"Push len GitHub: {'Co' if should_push else 'Khong (chi build APK cuc bo)'}")
+    if should_push:
+        print(f"Pre-release: {'Co' if is_prerelease else 'Khong'} | Draft: {'Co' if args.draft else 'Khong'}")
+        print(f"Nhanh nguon (Target Branch): {TARGET_BRANCH}")
+        print(f"Kho chua (Repository): {GITHUB_OWNER}/{GITHUB_REPO}")
+        if args.keep_releases > 0:
+            print(f"Don dep release cu: Giu lai {args.keep_releases} ban moi nhat ({'xoa ca git tag' if args.cleanup_tags else 'giu git tag'})")
+        else:
+            print("Don dep release cu: Da tat (--keep-releases 0)")
     if args.dry_run:
         print(f"Che do: DRY-RUN (Kiem tra thu nghiem, khong upload)")
     print(f"==================================================")
 
     # 1. Build
+    total_steps = 3 if should_push else 2
     if args.skip_build or args.dry_run:
-        print("\n[1/3] Bo qua buoc dong goi APK. Su dung cac file APK da co san.")
+        print(f"\n[1/{total_steps}] Bo qua buoc dong goi APK. Su dung cac file APK da co san.")
     else:
-        build_apk()
+        build_apk(total_steps=total_steps)
 
     # 2. Collect APKs
     apks = get_release_apks(version)
@@ -957,13 +992,18 @@ def main():
         print(f"Vui long build truoc: ./gradlew :app:assembleFullRelease")
         sys.exit(1)
 
-    print(f"\n[2/3] Danh sach file APK Release ({len(apks)} tep):")
+    print(f"\n[2/{total_steps}] Danh sach file APK Release ({len(apks)} tep):")
     total_size = 0
     for a in apks:
         size_mb = a.stat().st_size / (1024 * 1024)
         total_size += size_mb
         print(f"   - {a.name} ({size_mb:.2f} MB)")
     print(f"   => Tong dung luong: {total_size:.2f} MB")
+    print(f"   => Thu muc APK: {apks[0].parent}")
+
+    if not should_push:
+        print("\n[DONE] Da hoan tat dong goi APK cuc bo (khong push len GitHub).")
+        return
 
     # Dry-run check
     if args.dry_run:

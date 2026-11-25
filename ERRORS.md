@@ -1,5 +1,23 @@
 # Error Log
 
+## [2026-11-25 11:10] - Lỗi Biên Dịch `Unresolved reference 'AUDIO_MLP'` & Khóa Cache Kotlin IC Khi Build Song Song 2 Flavor
+
+- **Type**: Syntax
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/player/TtsAudioStereoPolicy.kt:33`
+- **Agent**: mon
+- **Root Cause**: Media3 1.8.0 `MimeTypes` không có hằng số `AUDIO_MLP` (dùng chuỗi `"audio/mlp"` hoặc `AUDIO_TRUEHD`), đồng thời chạy song song `compileFullDebugKotlin` và `compilePlaystoreDebugKotlin` trên Windows gặp lỗi khóa tệp `lookups.tab is already registered` của Kotlin Incremental Compilation.
+- **Error Message**:
+  ```
+  e: file:///F:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/TtsAudioStereoPolicy.kt:33:19 Unresolved reference 'AUDIO_MLP'.
+  e: Incremental compilation failed: Storage for [...\compileFullDebugKotlin\cacheable\caches-jvm\lookups\lookups.tab] is already registered
+  ```
+- **Fix Applied**: Thay `MimeTypes.AUDIO_MLP` bằng chuỗi MIME `"audio/mlp"` (cùng `"audio/vnd.dts.hd"`, `"audio/vnd.dts.uhd"`) trong `SOFTWARE_ONLY_SURROUND_MIMES`, và chạy biên dịch kiểm chứng 2 flavor tuần tự không đụng lock cache IC.
+- **Prevention**: Luôn đối chiếu hằng số `MimeTypes` của Media3 1.8.0 trong codebase (hoặc kiểm tra với các test hiện có) và dùng `--no-parallel` khi chạy nhiều task Kotlin compile đa flavor cùng lúc trên Windows.
+- **Status**: Fixed
+
+---
+
 ## [2026-11-24 17:20] - Trailer Trong Chế Độ Môi Trường Xung Quanh (Ambient Mode) Bị Mờ Do cropToFill, autoCropLetterbox Phóng Đại TextureView & Pha Trộn Backdrop Alpha
 
 - **Type**: Logic
@@ -859,6 +877,43 @@
   ```
 - **Fix Applied**: Khai báo rõ kiểu trả về `: Unit = runBlocking` trong `HomeCatalogLazyPipelineTest.kt` và cập nhật giới hạn kiểm thử `96` (`repeat(97)`) trong `HomeEnrichmentRetryTest.kt`.
 - **Prevention**: Luôn ghi rõ `: Unit = runBlocking` cho các hàm JUnit 4 dùng expression body và quét các test giới hạn kích thước LRU khi nâng hằng số cache.
+- **Status**: Fixed
+
+---
+
+
+## [2026-11-25 09:49] - HomeCatalogLazyPipelineTest báo InvalidTestClassError (non-void @Test method)
+
+- **Type**: Process / Logic
+- **Severity**: Low
+- **File**: `app/src/test/java/com/nuvio/tv/ui/screens/home/HomeCatalogLazyPipelineTest.kt:159`
+- **Agent**: mon
+- **Root Cause**: Hàm `@Test fun \`eager catalog flush is not blocked by a slower sibling eager catalog\`() = runBlocking { ... }` (từ commit `08a27ec77`) kết thúc bằng `slowGate.complete(Unit)` trả về `Boolean`, khiến Kotlin suy luận kiểu trả về của hàm test là `Boolean` thay vì `Unit` (`void`), dẫn đến JUnit 4 từ chối khởi tạo class test.
+- **Error Message**:
+  ```
+  org.junit.runners.model.InvalidTestClassError: Invalid test class 'com.nuvio.tv.ui.screens.home.HomeCatalogLazyPipelineTest':
+    1. Method eager catalog flush is not blocked by a slower sibling eager catalog() should be void
+  ```
+- **Fix Applied**: Khai báo tường minh kiểu trả về `: Unit = runBlocking {` cho hàm test tại dòng 159.
+- **Prevention**: Khi viết `@Test` dạng expression-body `= runBlocking { ... }`, luôn khai báo tường minh `: Unit` nếu dòng cuối có thể trả về giá trị khác `Unit` (như `CompletableDeferred.complete`).
+- **Status**: Fixed
+
+---
+
+## [2026-11-25 11:10] - Lỗi biên dịch `MimeTypes.AUDIO_MLP` không tồn tại trong Media3 và xung đột Gradle Daemon
+
+- **Type**: Process
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/ui/screens/player/TtsAudioStereoPolicy.kt:33`
+- **Agent**: mon
+- **Root Cause**: Media3 `MimeTypes` không định nghĩa hằng số `AUDIO_MLP`; đồng thời lần build trước bị ngắt do server restart để lại Gradle daemon giữ khóa thư mục `app/build/tmp/kotlin-classes/playstoreDebug`.
+- **Error Message**:
+  ```
+  TtsAudioStereoPolicy.kt:33:19: error: unresolved reference 'AUDIO_MLP'.
+  Unable to delete directory 'app\build\tmp\kotlin-classes\playstoreDebug'
+  ```
+- **Fix Applied**: Thay `MimeTypes.AUDIO_MLP` bằng literal `"audio/mlp"` (bổ sung `"audio/vnd.dts.hd"`, `"audio/vnd.dts.uhd"` khớp chuẩn HBR của codebase) và chạy `.\gradlew.bat --stop` trước khi biên dịch lại.
+- **Prevention**: Kiểm tra định nghĩa hằng số MIME trong Media3 hoặc đối chiếu với `HBR_MIMES` của repo trước khi viết code; luôn chạy `--stop` nếu một phiên Gradle trước bị ngắt giữa chừng trên Windows.
 - **Status**: Fixed
 
 ---

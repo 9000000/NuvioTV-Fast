@@ -65,6 +65,7 @@ import com.nuvio.tv.core.player.DolbyVisionExtractorsFactory
 import com.nuvio.tv.core.player.DoviBridge
 import com.nuvio.tv.core.player.LastPlaybackDiagnostics
 import com.nuvio.tv.core.tracking.TrackingScrobbleAction
+import com.nuvio.tv.core.tts.toSubtitleTtsConfig
 import com.nuvio.tv.core.util.findCause
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import com.nuvio.tv.data.local.AudioLanguageOption
@@ -236,6 +237,11 @@ internal fun PlayerRuntimeController.initializePlayer(
 
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             currentPlayerSettingsForReport = playerSettings
+            _uiState.update { it.copy(ttsConfig = playerSettings.toSubtitleTtsConfig()) }
+            val forceStereoForTts = TtsAudioStereoPolicy.shouldForceStereoForTts(
+                ttsEnabled = playerSettings.ttsEnabled,
+                ttsAutoStereoDownmix = playerSettings.ttsAutoStereoDownmix
+            )
             rememberAudioDelayPerDeviceEnabled = playerSettings.rememberAudioDelayPerDevice
             // Always watch output-device changes so Bluetooth connect/disconnect can switch
             // PCM/passthrough policy in place (Media3 1.8.0 BT semantics; do not rebuild).
@@ -250,6 +256,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                 )
             }
             val tunnelingActive = playerSettings.effectiveTunnelingEnabled && !tunnelingBlockedByUsbAudio
+            baseTunnelingActiveForCurrentPlayback = tunnelingActive
             if (rememberAudioDelayPerDeviceEnabled) {
                 applyStoredAudioDelayForCurrentRouteIfEnabled()
             }
@@ -810,10 +817,12 @@ internal fun PlayerRuntimeController.initializePlayer(
                 }
             }.apply {
                 setParameters(buildUponParameters().setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true))
-                if (tunnelingActive && !safeAudioModeEnabled) {
+                if (tunnelingActive && !safeAudioModeEnabled && !forceStereoForTts) {
                     setParameters(buildUponParameters().setTunnelingEnabled(true))
                 } else if (safeAudioModeEnabled) {
                     setParameters(buildUponParameters().setTunnelingEnabled(false).setConstrainAudioChannelCountToDeviceCapabilities(true))
+                } else if (tunnelingActive && forceStereoForTts) {
+                    setParameters(buildUponParameters().setTunnelingEnabled(false))
                 }
                 if (audioDisabledForStream) {
                     setParameters(buildUponParameters().setDisabledTrackTypes(setOf(C.TRACK_TYPE_AUDIO)))
@@ -917,39 +926,45 @@ internal fun PlayerRuntimeController.initializePlayer(
                     dv7AutoResult?.decision == DolbyVisionBaseLayerPolicy.Decision.CONVERT_TO_DV81
             val codecSelector = createDolbyVisionFallbackCodecSelector(convertToDv81Active = convertToDv81Active)
             scope.launch(kotlinx.coroutines.Dispatchers.Default) { softwareOnlyDecoderNames }
-            // Bluetooth media sink (A2DP / LE Audio): Media3 only advertises PCM. Do not attempt
-            // optical/HDMI passthrough — decode to PCM and let the BT stack encode SBC/AAC/aptX/LDAC.
+            // Bluetooth media sink (A2DP / LE Audio) and subtitle TTS auto-stereo:
+            // decode to 2.0 Stereo PCM so AudioFlinger can mix speech or the BT stack can encode.
             val isBluetoothAudioOutput = currentAudioOutputRoute?.isBluetooth == true ||
                 AudioOutputRouteDetector.isBluetoothMediaOutput(context)
-            // Force-optical must never win over Bluetooth: AC3/DTS AudioTrack to A2DP fails hard.
-            val isForcePassthroughActive = !isBluetoothAudioOutput &&
+            val effectiveStereoConfig = TtsAudioStereoPolicy.resolveEffectiveOutput(
+                isBluetooth = isBluetoothAudioOutput,
+                ttsEnabled = playerSettings.ttsEnabled,
+                ttsAutoStereoDownmix = playerSettings.ttsAutoStereoDownmix,
+                settings = playerSettings
+            )
+            // Force-optical must never win over Bluetooth or TTS auto-stereo.
+            val isForcePassthroughActive = effectiveStereoConfig.forceOpticalPassthrough
+            val pinOpticalCapabilitiesForRestore = !isBluetoothAudioOutput &&
                 playerSettings.forceOpticalPassthrough &&
                 playerSettings.decoderPriority != 0
-            // Prefer FFmpeg/extension audio decoder on BT so multi-channel TrueHD/DTS always
-            // decode to stereo PCM even when the platform MediaCodec path is flaky.
-            val effectiveDecoderPriority = if (
+            // Prefer FFmpeg/extension audio decoder on BT/force-optical/fallback, and ensure FFmpeg
+            // is available as fallback when TTS auto-stereo starts with decoderPriority == 0.
+            val effectiveDecoderPriority = when {
                 hasTriedAudioPcmFallback ||
-                isForcePassthroughActive ||
-                isBluetoothAudioOutput
-            ) {
-                DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-            } else {
-                playerSettings.decoderPriority
+                    isForcePassthroughActive ||
+                    isBluetoothAudioOutput -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                effectiveStereoConfig.forceStereoForTts && playerSettings.decoderPriority == 0 ->
+                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                else -> playerSettings.decoderPriority
             }
-            // A2DP is stereo; force a clean 2.0 downmix so surround content is audible and balanced.
-            val bluetoothStereoDownmix = isBluetoothAudioOutput
-            val effectiveDownmixEnabled = playerSettings.effectiveDownmixEnabled || bluetoothStereoDownmix
-            val effectiveAudioOutputChannels = if (bluetoothStereoDownmix) {
-                com.nuvio.tv.data.local.AudioOutputChannels.CHANNELS_2_0
-            } else {
-                playerSettings.audioOutputChannels
-            }
+            val effectiveDownmixEnabled = effectiveStereoConfig.ffmpegDownmixEnabled
+            val effectiveAudioOutputChannels = effectiveStereoConfig.ffmpegAudioOutputChannels
+            ttsStereoDownmixAudioProcessor.setEnabled(effectiveStereoConfig.forceStereoForTts)
             nightModeAudioProcessor.setMode(playerSettings.nightMode)
             if (isBluetoothAudioOutput) {
                 Log.i(
                     PlayerRuntimeController.TAG,
                     "Bluetooth media output active (route=${currentAudioOutputRoute?.key}): " +
                         "PCM-only sink, stereo downmix, no optical passthrough"
+                )
+            } else if (effectiveStereoConfig.forceStereoForTts) {
+                Log.i(
+                    PlayerRuntimeController.TAG,
+                    "Subtitle TTS auto-stereo active: forcing 2.0 Stereo PCM in place (passthrough temporarily paused)"
                 )
             }
 
@@ -972,6 +987,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     val pv = exoPlayerView
                     if (pv != null) pv.videoBoundsFraction(videoAspectRatio) else null
                 },
+                ttsStereoDownmixAudioProcessor = ttsStereoDownmixAudioProcessor,
                 gainAudioProcessor = gainAudioProcessor,
                 nightModeAudioProcessor = nightModeAudioProcessor,
                 downmixEnabled = effectiveDownmixEnabled,
@@ -979,10 +995,12 @@ internal fun PlayerRuntimeController.initializePlayer(
                 downmixNormalizationEnabled = !playerSettings.maintainOriginalAudioOnDownmix,
                 downmixLfeLevel = playerSettings.downmixLfeLevel.level,
                 forceOpticalPassthrough = isForcePassthroughActive,
+                pinOpticalCapabilitiesForRestore = pinOpticalCapabilitiesForRestore,
                 bluetoothForcePcm = isBluetoothAudioOutput,
+                ttsForceStereoPcm = effectiveStereoConfig.forceStereoForTts,
                 playbackSpeedProvider = { _uiState.value.playbackSpeed },
                 initialForcePcm = hasTriedAudioPcmFallback || isBluetoothAudioOutput,
-                preferSoftwareAudioOnly = isBluetoothAudioOutput,
+                preferSoftwareAudioOnly = isBluetoothAudioOutput || effectiveStereoConfig.forceStereoForTts,
                 mapDv7ToHevc = mapDv7ToHevcEnabled,
                 onPlaybackSpeedAwareAudioSinkCreated = { playbackSpeedAwareAudioSink = it },
                 onFfmpegAudioRendererChanged = { renderer ->
@@ -1197,7 +1215,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     phase = "starting_stream",
                     message = context.getString(R.string.player_loading_starting)
                 )
-                val isTunneledPlayback = tunnelingActive
+                val isTunneledPlayback = tunnelingActive && !safeAudioModeEnabled && !forceStereoForTts
                 // Hold playWhenReady=false through prepare() so audio does not race ahead
                 // while the video decoder is still opening. The first STATE_READY primes the
                 // pipeline (ColdStartPrime); synchronized play() begins in onRenderedFirstFrame().
@@ -2275,6 +2293,7 @@ private class SubtitleOffsetRenderersFactory(
     private val isBuiltInSubtitleProvider: () -> Boolean,
     private val isSidecarAddonSubtitleActiveProvider: () -> Boolean = { false },
     private val videoBoundsFractionProvider: () -> RectF?,
+    private val ttsStereoDownmixAudioProcessor: TtsStereoDownmixAudioProcessor,
     private val gainAudioProcessor: GainAudioProcessor,
     private val nightModeAudioProcessor: NightModeAudioProcessor,
     private val downmixEnabled: Boolean,
@@ -2282,7 +2301,9 @@ private class SubtitleOffsetRenderersFactory(
     private val downmixNormalizationEnabled: Boolean,
     private val downmixLfeLevel: Float,
     private val forceOpticalPassthrough: Boolean,
+    private val pinOpticalCapabilitiesForRestore: Boolean = false,
     private val bluetoothForcePcm: Boolean = false,
+    private val ttsForceStereoPcm: Boolean = false,
     private val playbackSpeedProvider: () -> Float,
     private val initialForcePcm: Boolean = false,
     /**
@@ -2349,13 +2370,15 @@ private class SubtitleOffsetRenderersFactory(
     ): AudioSink {
         // Bluetooth: pin Media3-equivalent DEFAULT (PCM-only) so TV HDMI profiles / force-optical
         // cannot advertise AC3/DTS passthrough while audio is routed to A2DP.
-        // Non-BT optical: pin expanded capabilities. Otherwise keep live Builder(context).
+        // For TTS auto-stereo on HDMI/Optical, keep real output capabilities on DefaultAudioSink
+        // and gate passthrough in PlaybackSpeedAwareAudioSink so turning TTS off restores
+        // original passthrough in place without rebuilding the player.
         val builder = when {
             bluetoothForcePcm -> {
                 DefaultAudioSink.Builder()
                     .setAudioCapabilities(AudioOutputRouteDetector.bluetoothPcmOnlyCapabilities())
             }
-            forceOpticalPassthrough -> {
+            forceOpticalPassthrough || pinOpticalCapabilitiesForRestore -> {
                 @Suppress("DEPRECATION")
                 DefaultAudioSink.Builder()
                     .setAudioCapabilities(buildStableAudioCapabilities(context, true))
@@ -2364,7 +2387,13 @@ private class SubtitleOffsetRenderersFactory(
         }
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            .setAudioProcessors(arrayOf(gainAudioProcessor, nightModeAudioProcessor))
+            .setAudioProcessors(
+                arrayOf(
+                    ttsStereoDownmixAudioProcessor,
+                    gainAudioProcessor,
+                    nightModeAudioProcessor
+                )
+            )
         val baseAudioSink = builder.build()
         // Audio sync hook: only wrap the audio sink when AutoSync + AudioSync fallback are active.
         val audioSinkForPlayback = if (
@@ -2378,7 +2407,8 @@ private class SubtitleOffsetRenderersFactory(
         val playbackSpeedAwareAudioSink = PlaybackSpeedAwareAudioSink(
             sink = audioSinkForPlayback,
             initialForcePcm = initialForcePcm,
-            forcePcmForBluetooth = bluetoothForcePcm
+            forcePcmForBluetooth = bluetoothForcePcm,
+            forcePcmForTts = ttsForceStereoPcm
         )
         playbackSpeedAwareAudioSink.setInitialPlaybackSpeed(playbackSpeedProvider())
         onPlaybackSpeedAwareAudioSinkCreated(playbackSpeedAwareAudioSink)

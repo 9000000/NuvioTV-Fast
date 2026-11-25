@@ -1,3 +1,161 @@
+# Danh Sách Task - Tự Động Chuyển Kênh Âm Thanh Về Stereo 2.0 Khi Bật Thuyết Minh (`tts-auto-stereo-2-0`)
+
+> **Kế hoạch tương ứng**: [PLAN-tts-auto-stereo-2-0.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-tts-auto-stereo-2-0.md)
+> **Phạm vi**: Khi bật thuyết minh Google TTS (`ttsEnabled && ttsAutoStereoDownmix`), tự động tắt Passthrough và trộn âm thanh về PCM Stereo 2.0 tại chỗ trên cả **ExoPlayer** (mọi bộ giải mã MediaCodec/FFmpeg) lẫn **MPV** để nghe rõ thuyết minh + hoạt động Audio Ducking; khi tắt thuyết minh thì tự động khôi phục nguyên trạng 100% kênh âm thanh gốc mà không ghi đè cài đặt người dùng.
+
+---
+
+## 📋 Task Breakdown (`TTS20`)
+
+### Phase 1: Chính Sách Hợp Nhất & Bộ Trộn DSP Stereo 2.0
+- [x] **TTS20-01**: Tạo `TtsAudioStereoPolicy.kt` hợp nhất logic ép Stereo 2.0 cho TTS & Bluetooth cùng toàn bộ quy tắc khôi phục kênh gốc
+  - **Vai trò**: Media3 Audio Architecture Engineer
+  - **Mô tả**: Xây dựng pure-function policy tính toán cấu hình đầu ra hiệu lực (`forcePcm`, `forceStereoDownmix`, `audioOutputChannels`, `forceOpticalPassthrough`, `disableTunneling`, `requiresRebuildForSoftwareDecoder`) dựa trên trạng thái TTS, Bluetooth, `SurroundResolveResult` và `PlayerSettings`.
+  - **File**: [TtsAudioStereoPolicy.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/TtsAudioStereoPolicy.kt)
+
+- [x] **TTS20-02**: Tạo `TtsStereoDownmixAudioProcessor.kt` (ITU-R BS.775 PCM 16-bit/Float → Stereo 2.0, zero-overhead khi tắt)
+  - **Vai trò**: Android Audio DSP Engineer
+  - **Mô tả**: Kế thừa `BaseAudioProcessor`, chỉ kích hoạt khi `enabled && channelCount > 2`; trộn chuẩn xác 3ch/4ch/5ch/5.1/7.1 xuống 2.0 có chống clipping và 0 cấp phát rác trong `queueInput`.
+  - **File**: [TtsStereoDownmixAudioProcessor.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/TtsStereoDownmixAudioProcessor.kt)
+
+### Phase 2: Tích Hợp ExoPlayer Hot-Switch & Khôi Phục Kênh Gốc
+- [x] **TTS20-03**: Nâng cấp `PlaybackSpeedAwareAudioSink.kt` thêm cờ `ttsForceStereoPcm` độc lập với Bluetooth & tốc độ phát
+  - **Vai trò**: ExoPlayer AudioSink Engineer
+  - **Mô tả**: Bổ sung `setTtsForceStereoPcm(enabled)` / `isTtsForceStereoPcm()`, chặn passthrough khi TTS yêu cầu 2.0 và mở khóa lại passthrough gốc khi tắt TTS (nếu Bluetooth tắt và speed = 1.0x).
+  - **File**: [PlaybackSpeedAwareAudioSink.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlaybackSpeedAwareAudioSink.kt)
+
+- [x] **TTS20-04**: Nối dây `ttsStereoDownmixAudioProcessor`, `applyEffectiveAudioStereoModeInPlace`, guard Tunneling/SurroundResolve & `observeSubtitleTts` trên ExoPlayer
+  - **Vai trò**: ExoPlayer Runtime Controller Engineer
+  - **Mô tả**: Gắn `ttsStereoDownmixAudioProcessor` vào `SubtitleOffsetRenderersFactory.buildAudioSink`, giữ nguyên `AudioCapabilities` thật của HDMI/TV khi mở phim lúc TTS bật để khôi phục passthrough tức thì khi tắt; đồng bộ `isDirectPassthroughActive` cho ducking và chặn bộ tự dò HDMI phá ngang khi TTS đang bật.
+  - **File**: [PlayerRuntimeController.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeController.kt), [PlayerRuntimeControllerInitialization.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerInitialization.kt), [PlayerRuntimeControllerAudioDelayRoutes.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerAudioDelayRoutes.kt), [PlayerRuntimeControllerSurroundResolve.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerSurroundResolve.kt), [PlayerRuntimeControllerObservers.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerObservers.kt)
+
+### Phase 3: Tích Hợp MPV Hot-Switch & Khôi Phục Kênh Gốc
+- [x] **TTS20-05**: Nâng cấp `NuvioMpvSurfaceView.kt` & `PlayerRuntimeControllerMpv.kt` lưu/khôi phục `audio-channels` & `audio-spdif` cho TTS + Bluetooth
+  - **Vai trò**: libmpv Playback Engineer
+  - **Mô tả**: Lưu giá trị `audio-channels` và `audio-spdif` gốc trước khi ép `"stereo"` / `""`, thực hiện `ao-reload` giữ nguyên pause/delay/gain/ducking, và khôi phục chính xác kênh gốc khi tắt TTS (và không có Bluetooth).
+  - **File**: [NuvioMpvSurfaceView.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/NuvioMpvSurfaceView.kt), [PlayerRuntimeControllerMpv.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerMpv.kt)
+
+### Phase 4: Cài Đặt Tùy Chọn & Giao Diện Người Dùng (Mặc Định Bật)
+- [x] **TTS20-06**: Thêm `ttsAutoStereoDownmix` (mặc định `true`) vào DataStore, Model, Overlay TTS, Cài đặt Phát lại và chuỗi EN/VI
+  - **Vai trò**: Settings & Compose TV UI Engineer
+  - **Mô tả**: Bổ sung công tắc *"Tự động chuyển âm thanh về 2.0"* trong `SubtitleTtsOverlay` và `PlaybackAudioSettings`, không làm thay đổi cài đặt 5.1/7.1 gốc đã lưu trong `PlayerSettingsDataStore`.
+  - **File**: [SubtitleTtsModels.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/core/tts/SubtitleTtsModels.kt), [PlayerSettingsDataStore.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/data/local/PlayerSettingsDataStore.kt), [PlayerUiState.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerUiState.kt), [PlayerRuntimeControllerPlaybackEvents.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerPlaybackEvents.kt), [PlayerScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerScreen.kt), [SubtitleTtsOverlay.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/SubtitleTtsOverlay.kt), [PlaybackAudioSettings.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackAudioSettings.kt), [PlaybackSettingsViewModel.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsViewModel.kt), [strings.xml](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values/strings.xml), [strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/strings.xml)
+
+### Phase 5: Kiểm Thử Tự Động & Nghiệm Thu
+- [x] **TTS20-07**: Viết Unit Tests (`TtsStereoDownmixAudioProcessorTest`, `TtsAudioStereoPolicyTest`, `PlaybackSpeedAwareAudioSinkTtsTest`) và xác minh biên dịch cả 2 flavor
+  - **Vai trò**: QA & Verification Engineer
+  - **Mô tả**: Kiểm chứng toàn bộ ma trận downmix DSP, chuyển đổi nóng TTS/Bluetooth/Tunneling/Surround, khôi phục kênh gốc khi tắt TTS, và biên dịch sạch `compileFullDebugKotlin` + `compilePlaystoreDebugKotlin`.
+
+---
+
+# Danh Sách Task - Đồng Bộ Nhánh `upstream/dev` → `tet2` Ngày 25-11-2026 (`sync-dev-2026-11-25`)
+
+> **Kế hoạch tương ứng**: [PLAN-sync-dev-2026-11-25.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-sync-dev-2026-11-25.md)
+> **Phạm vi**: Hợp nhất 209 commit (9 PR + 1 version bump: `11859c5d9` → `77cc0bb5f`) từ `upstream/dev` sang `tet2`, giải quyết 8 file `CONFLICT`, bảo toàn 100% tùy chỉnh riêng trên `tet2`, nâng cấp huy hiệu Rewatch lên Leanback Episode Card, đồng bộ Rewatch Prompt cho TorrServer, sửa test độc quyền `HomeCatalogLazyPipelineTest` và bổ sung bản dịch Tiếng Việt cho Simkl Rewatch.
+
+---
+
+## 📋 Task Breakdown (`SYNC1125`)
+
+### Phase 1: Sao Lưu An Toàn & Đồng Bộ Nhánh Cơ Sở
+- [x] **SYNC1125-01**: Tạo nhánh dự phòng `backup-tet2-before-merge-20261125` và fast-forward nhánh `dev` cục bộ lên `upstream/dev` (`77cc0bb5f`)
+  - **Vai trò**: Git Release Architect
+  - **Mô tả**: Đảm bảo điểm khôi phục tức thì tại `88c11eb98` trước khi chạy `git merge --no-ff upstream/dev`, đồng thời đồng bộ nhánh `dev` local khớp 100% với `origin/dev` và `upstream/dev`.
+
+### Phase 2: Giải Quyết Phẫu Thuật 8 Tệp Xung Đột (`CONFLICT`)
+- [x] **SYNC1125-02**: Hợp nhất nhóm cấu hình Build, Activity & Luồng phát (`app/build.gradle.kts`, `MainActivity.kt`, `PlayerRuntimeControllerPlaybackEvents.kt`, `StreamScreen.kt`)
+  - **Vai trò**: Android Core & Playback Integration Engineer
+  - **Mô tả**: Giữ `applicationId = "com.nuvio.tv.fast"` & `versionCode = 1218` (`1.7.6`); gộp import và đặt `RewatchPromptOverlay` cạnh `AmbientModeHost` (chặn Ambient bật đè khi đang hiện câu hỏi Rewatch); thay `80f` bằng `TRACKING_COMPLETION_BAR_PERCENT` kết hợp giữ `|| isLiveTv`; giữ nhánh `isTorrServerStream` cùng `progressPercent` và `RewatchPromptOverlay(isLocalHost = true)`.
+  - **File**: [app/build.gradle.kts](file:///f:/MyGithub/NuvioTV-Fast/app/build.gradle.kts), [MainActivity.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/MainActivity.kt), [PlayerRuntimeControllerPlaybackEvents.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerPlaybackEvents.kt), [StreamScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/stream/StreamScreen.kt)
+
+- [x] **SYNC1125-03**: Hợp nhất `EpisodesSection.kt` (giữ `LeanbackNativeRow` 60fps + nối dây Rewatch) và `SimklAuthRepositoryTest.kt` (giữ cả OAuth2 v2 PIN tests & Account Plan tests)
+  - **Vai trò**: TV UI & Data Sync Engineer
+  - **Mô tả**: Loại bỏ `EpisodeCard` Compose chết trong `EpisodesSection.kt`, giữ nguyên `LeanbackNativeRow` của `tet2`, đưa `rewatchedEpisodes` vào `remember(...)` của `leanbackEpisodes` và giữ trọn kết nối tới `EpisodeOptionsOverlay`; gộp đầy đủ 2 bộ test trong `SimklAuthRepositoryTest.kt`.
+  - **File**: [EpisodesSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/EpisodesSection.kt), [SimklAuthRepositoryTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/data/simkl/SimklAuthRepositoryTest.kt)
+
+- [x] **SYNC1125-04**: Hợp nhất tài nguyên ngôn ngữ `values-hu/strings.xml` (theo chuẩn hóa PR #4806) và `values-vi/strings.xml` (giữ 100% chuỗi TorrServer/TTS/LiveTV/Ambient + nhận chuỗi Usenet & Blu-ray disc titles)
+  - **Vai trò**: Localization & Resource Specialist
+  - **Mô tả**: Áp dụng bản chuẩn hóa Tiếng Hungary của upstream (khôi phục `p2p_consent_*` và xóa lỗi gõ nhầm từ cũ); nối đầy đủ các chuỗi mới của upstream vào `values-vi/strings.xml` mà không làm mất bất kỳ chuỗi tùy chỉnh nào của `tet2`.
+  - **File**: [strings.xml (hu)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-hu/strings.xml), [strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/strings.xml)
+
+### Phase 3: Nâng Cấp Đồng Bộ Kiến Trúc & Vá Lỗi Ngữ Nghĩa Chủ Động
+- [x] **SYNC1125-05**: Nâng cấp `LeanbackCardItem.Episode` & `LeanbackEpisodeViewHolder` hiển thị huy hiệu Rewatch (`↻`) và tích hợp `preparePlaybackForStream` vào `TorrServer`
+  - **Vai trò**: Android Leanback & TorrServer Engineer
+  - **Mô tả**: Thêm `isRewatched: Boolean = false` vào `LeanbackCardItem.Episode` và vẽ `rewatchBadgeView` cạnh `watchedBadgeView` trong `LeanbackEpisodeViewHolder`; truyền `progressPercent` vào `StreamScreenViewModel.resolveTorrServerPlayback` để hỗ trợ câu hỏi Simkl Rewatch khi phát qua TorrServer.
+  - **File**: [LeanbackCardItem.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/model/LeanbackCardItem.kt), [LeanbackEpisodeViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackEpisodeViewHolder.kt), [StreamScreenViewModel.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/stream/StreamScreenViewModel.kt)
+
+- [x] **SYNC1125-06**: Cập nhật constructor `HomeViewModel` trong `HomeCatalogLazyPipelineTest.kt` và bổ sung bản dịch Tiếng Việt cho 28 chuỗi Simkl Rewatch & Watched Threshold mới
+  - **Vai trò**: QA & Localization Engineer
+  - **Mô tả**: Truyền `simklSyncRepository = mockk(relaxed = true)` và `simklRewatchWriter = mockk(relaxed = true)` vào `HomeCatalogLazyPipelineTest.kt`; dịch đầy đủ 28 chuỗi mới của PR #3653 sang Tiếng Việt trong `values-vi/strings.xml` và quét xác nhận 0 trùng lặp khóa XML.
+  - **File**: [HomeCatalogLazyPipelineTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/home/HomeCatalogLazyPipelineTest.kt), [strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/strings.xml)
+
+### Phase 4: Kiểm Thử Tự Động, Nghiệm Thu & Hoàn Tất Commit Merge
+- [x] **SYNC1125-07**: Biên dịch xác minh toàn diện (`full`, `playstore`, `unitTest`, `androidTest`) và chạy toàn bộ Unit Test Suite mới + tùy chỉnh
+  - **Vai trò**: Quality Inspector & Verification Engineer
+  - **Mô tả**: Chạy `:app:compileFullDebugKotlin :app:compilePlaystoreDebugKotlin :app:compileFullDebugUnitTestKotlin :app:compileFullDebugAndroidTestKotlin` và `:app:testFullDebugUnitTest` cho Simkl/Rewatch, Tracking, Debrid, Usenet, Blu-ray DTS-HD, Home, Leanback, Trailer 1080p, TTS và Live TV.
+
+- [x] **SYNC1125-08**: Tạo commit merge sạch và lập báo cáo nghiệm thu chi tiết từng file xung đột & nâng cấp
+  - **Vai trò**: Release Coordinator
+  - **Mô tả**: Commit kết quả hợp nhất với thông điệp chuẩn hóa và xuất báo cáo đầy đủ gửi người dùng.
+
+---
+
+# Danh Sách Task - Đồng Bộ Nhánh `upstream/dev` → `tet2` (24-11-2026 Đến 25-11-2026) (`sync-dev-2026-11-25`)
+
+> **Kế hoạch tương ứng**: [PLAN-sync-dev-2026-11-25.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-sync-dev-2026-11-25.md)
+> **Phạm vi**: Hợp nhất 209 commit (9 PR + 1 version bump: `11859c5d9` → `77cc0bb5f`) từ `upstream/dev` sang `tet2`; giải quyết 8 file `CONFLICT`; bảo toàn 100% tùy chỉnh riêng trên `tet2` (Trailer 1080p, Home Loading Boost, Leanback Native 60fps, Ambient Mode, Live TV, Google TTS, TorrServer) và nâng cấp đồng bộ huy hiệu Rewatch lên Leanback + TorrServer + Tiếng Việt.
+
+---
+
+## 📋 Task Breakdown (`SYNC1125`)
+
+### Phase 1: Sao Lưu An Toàn & Khởi Chạy Merge
+- [ ] **SYNC1125-01**: Tạo nhánh dự phòng `backup-tet2-before-merge-20261125` và đồng bộ nhánh `dev` cục bộ lên `77cc0bb5f`
+  - **Vai trò**: Git Release Architect
+  - **Mô tả**: Đảm bảo có điểm khôi phục tức thì tại `88c11eb98` trước khi can thiệp và cập nhật tham chiếu nhánh `dev` cục bộ khớp với `upstream/dev` (`77cc0bb5f`).
+
+- [ ] **SYNC1125-02**: Thực thi lệnh hợp nhất `git merge --no-ff upstream/dev` vào nhánh `tet2`
+  - **Vai trò**: Git Release Architect
+  - **Mô tả**: Khởi chạy merge không fast-forward và đối chiếu danh sách 8 file `CONFLICT` thực tế với kết quả mô phỏng `git merge-tree`.
+
+### Phase 2: Phẫu Thuật Giải Quyết 8 File Xung Đột Trực Tiếp (`CONFLICT`)
+- [ ] **SYNC1125-03**: Giải quyết xung đột nhóm Cấu hình, Màn hình & Trình phát (`build.gradle.kts`, `MainActivity.kt`, `EpisodesSection.kt`, `PlayerRuntimeControllerPlaybackEvents.kt`, `StreamScreen.kt`)
+  - **Vai trò**: Core Android & Playback Integration Engineer
+  - **Mô tả**: Giữ `versionCode = 1218` / `1.7.6` cho `com.nuvio.tv.fast`; tích hợp `RewatchPromptOverlay` cùng bảo vệ `AmbientModeHost` trong `MainActivity.kt`; giữ `LeanbackNativeRow` trong `EpisodesSection.kt` kèm dữ liệu `rewatchedEpisodes`; kết hợp `TRACKING_COMPLETION_BAR_PERCENT` với cờ bảo vệ `|| isLiveTv` trong `PlayerRuntimeControllerPlaybackEvents.kt`; hợp nhất nhánh `TorrServer` với `progressPercent` trong `StreamScreen.kt`.
+  - **File**: [build.gradle.kts](file:///f:/MyGithub/NuvioTV-Fast/app/build.gradle.kts), [MainActivity.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/MainActivity.kt), [EpisodesSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/EpisodesSection.kt), [PlayerRuntimeControllerPlaybackEvents.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerRuntimeControllerPlaybackEvents.kt), [StreamScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/stream/StreamScreen.kt)
+
+- [ ] **SYNC1125-04**: Giải quyết xung đột nhóm Tài nguyên Đa ngôn ngữ & Unit Test (`values-hu/strings.xml`, `values-vi/strings.xml`, `SimklAuthRepositoryTest.kt`)
+  - **Vai trò**: Localization & QA Integration Engineer
+  - **Mô tả**: Áp dụng trọn vẹn bản hiệu đính Tiếng Hungary PR #4806 trong `values-hu/strings.xml`; gộp đầy đủ các khối chuỗi `TorrServer`, `TTS` của `tet2` với khối `Usenet`, `Disc Titles` của upstream trong `values-vi/strings.xml`; giữ nối tiếp cả 4 bài test OAuth2 v2 của `tet2` lẫn 9 bài test Rewatch Plan của upstream trong `SimklAuthRepositoryTest.kt`.
+  - **File**: [strings.xml (hu)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-hu/strings.xml), [strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/strings.xml), [SimklAuthRepositoryTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/data/simkl/SimklAuthRepositoryTest.kt)
+
+### Phase 3: Nâng Cấp Tương Thích Kiến Trúc Tùy Chỉnh `tet2` & Bản Địa Hóa
+- [ ] **SYNC1125-05**: Bổ sung huy hiệu Đã Xem Lại (`isRewatched` / Refresh Icon) cho thẻ tập phim Android Leanback Native
+  - **Vai trò**: Android TV Leanback UI Engineer
+  - **Mô tả**: Thêm thuộc tính `isRewatched: Boolean = false` vào `LeanbackCardItem.Episode` và dựng `rewatchBadgeView` (biểu tượng xoay tròn đặt bên trái dấu tích `watchedBadgeView`) trong `LeanbackEpisodeViewHolder.kt` để đồng bộ tính năng PR #3653 lên hàng tập phim Leanback 60fps của `tet2`.
+  - **File**: [LeanbackCardItem.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/model/LeanbackCardItem.kt), [LeanbackEpisodeViewHolder.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/leanback/holder/LeanbackEpisodeViewHolder.kt), [EpisodesSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/EpisodesSection.kt)
+
+- [ ] **SYNC1125-06**: Hỗ trợ hộp thoại Simkl Rewatch khi phát qua TorrServer & Cập nhật constructor `HomeViewModel` trong `HomeCatalogLazyPipelineTest`
+  - **Vai trò**: Playback & Test Architecture Engineer
+  - **Mô tả**: Truyền `progressPercent` và gọi `preparePlaybackForStream(progressPercent)` trong `StreamScreenViewModel.resolveTorrServerPlayback`; bổ sung `simklSyncRepository` và `simklRewatchWriter` vào lời gọi khởi tạo `HomeViewModel` trong bài test riêng `HomeCatalogLazyPipelineTest.kt`.
+  - **File**: [StreamScreenViewModel.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/stream/StreamScreenViewModel.kt), [StreamScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/stream/StreamScreen.kt), [HomeCatalogLazyPipelineTest.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/test/java/com/nuvio/tv/ui/screens/home/HomeCatalogLazyPipelineTest.kt)
+
+- [ ] **SYNC1125-07**: Dịch bổ sung 28 chuỗi Tiếng Việt cho tính năng Simkl Rewatch & Watched Threshold và quét trùng lặp khóa XML
+  - **Vai trò**: Vietnamese Localization Specialist
+  - **Mô tả**: Bổ sung bản dịch Tiếng Việt tự nhiên cho 28 chuỗi mới của PR #3653 trong `values-vi/strings.xml` và xác minh không có bất kỳ khóa `<string>` / `<plurals>` nào bị trùng tên.
+  - **File**: [strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/strings.xml)
+
+### Phase 4: Kiểm Chứng Toàn Diện & Đóng Gói Commit Merge
+- [ ] **SYNC1125-08**: Biên dịch kiểm tra cả `full`, `playstore`, `androidTest`, AAPT2 resources và chạy bộ Unit Tests toàn hệ thống
+  - **Vai trò**: QA & Verification Inspector
+  - **Mô tả**: Chạy `:app:compileFullDebugKotlin :app:compilePlaystoreDebugKotlin :app:compileFullDebugAndroidTestKotlin :app:mergeFullDebugResources` và chạy `testFullDebugUnitTest` cho toàn bộ suite Simkl Rewatch, Tracking, Home, Player BDAV/Scrobble, Usenet, Debrid, Trailer 1080p, Leanback, TTS, Live TV.
+
+- [ ] **SYNC1125-09**: Hoàn tất Commit Merge sạch và xuất báo cáo nghiệm thu chi tiết
+  - **Vai trò**: Release Coordinator
+  - **Mô tả**: Tạo commit merge rõ ràng và báo cáo chi tiết từng file xung đột, từng điểm thay thế/nâng cấp cùng bằng chứng kiểm thử cho người dùng.
+
+---
+
 # Danh Sách Task - Mặc Định Phát Trailer 1080p & Khắc Phục Lỗi Tụt Độ Phân Giải Thấp (`trailer-default-1080p`)
 
 > **Kế hoạch tương ứng**: [PLAN-trailer-default-1080p.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-trailer-default-1080p.md)

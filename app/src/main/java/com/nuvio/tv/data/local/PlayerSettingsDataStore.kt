@@ -458,7 +458,8 @@ data class PlayerSettings(
     val ttsMaxAutoSpeed: Float = SubtitleTtsTimingCalculator.DEFAULT_MAX_AUTO_SPEED,
     val ttsWaitForCueCompletion: Boolean = false,
     val ttsTransliterateEnglishNames: Boolean = true,
-    val ttsHideSubtitlesWhenEnabled: Boolean = false
+    val ttsHideSubtitlesWhenEnabled: Boolean = false,
+    val ttsAutoStereoDownmix: Boolean = true
 ) {
     /** Prefer FFmpeg/extension audio decoder (EXTENSION_RENDERER_MODE_PREFER). */
     val isPreferAppDecoder: Boolean
@@ -989,6 +990,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val ttsWaitForCueCompletionKey = booleanPreferencesKey("tts_wait_for_cue_completion")
     private val ttsTransliterateEnglishNamesKey = booleanPreferencesKey("tts_transliterate_english_names")
     private val ttsHideSubtitlesWhenEnabledKey = booleanPreferencesKey("tts_hide_subtitles_when_enabled")
+    private val ttsAutoStereoDownmixKey = booleanPreferencesKey("tts_auto_stereo_downmix")
 
     private val migrationLoadControlDefaultsAlignedDoneKey = booleanPreferencesKey("migration_load_control_defaults_aligned_done")
     private val migrationLoadControlDefaultsRetunedDoneKey = booleanPreferencesKey("migration_load_control_defaults_retuned_done")
@@ -1511,7 +1513,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 ttsWaitForCueCompletion = prefs[ttsWaitForCueCompletionKey] ?: false,
                 ttsTransliterateEnglishNames = prefs[ttsTransliterateEnglishNamesKey] ?: true,
-                ttsHideSubtitlesWhenEnabled = prefs[ttsHideSubtitlesWhenEnabledKey] ?: false
+                ttsHideSubtitlesWhenEnabled = prefs[ttsHideSubtitlesWhenEnabledKey] ?: false,
+                ttsAutoStereoDownmix = prefs[ttsAutoStereoDownmixKey] ?: true
             ).withAssSubtitleStyle(prefs)
         } catch (e: ClassCastException) {
             Log.w("PlayerSettingsDataStore", "Corrupt preference value, using defaults", e)
@@ -1938,6 +1941,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setTtsHideSubtitlesWhenEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[ttsHideSubtitlesWhenEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setTtsAutoStereoDownmix(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[ttsAutoStereoDownmixKey] = enabled
         }
     }
 

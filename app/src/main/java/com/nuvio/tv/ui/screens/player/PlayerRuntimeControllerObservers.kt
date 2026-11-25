@@ -1438,11 +1438,27 @@ internal fun PlayerRuntimeController.observeDeviceLocalReleaseDecoderOnBackgroun
 
 internal fun PlayerRuntimeController.observeSubtitleTts() {
     scope.launch {
+        var previousForceStereoForTts: Boolean? = null
         playerSettingsDataStore.playerSettings
             .map { it.toSubtitleTtsConfig() }
             .distinctUntilChanged()
             .collect { config ->
                 _uiState.update { it.copy(ttsConfig = config) }
+                val forceStereoForTts = config.shouldForceStereoDownmix
+                val changed = previousForceStereoForTts != null &&
+                    previousForceStereoForTts != forceStereoForTts
+                val sinkDesynced = _exoPlayer != null &&
+                    (playbackSpeedAwareAudioSink?.isTtsForceStereoPcm() != forceStereoForTts ||
+                        ttsStereoDownmixAudioProcessor.isEnabled() != forceStereoForTts)
+                previousForceStereoForTts = forceStereoForTts
+                if (isReleasingPlayer) return@collect
+                if (changed || sinkDesynced) {
+                    if (isUsingMpvEngine()) {
+                        applyEffectiveMpvAudioStereoModeInPlace("tts_toggle")
+                    } else if (_exoPlayer != null) {
+                        applyEffectiveAudioStereoModeInPlace("tts_toggle")
+                    }
+                }
             }
     }
 
@@ -1478,7 +1494,16 @@ internal fun PlayerRuntimeController.observeSubtitleTts() {
     scope.launch {
         subtitleTtsCoordinator.isSpeaking.collect { isSpeaking ->
             val ttsConfig = _uiState.value.ttsConfig
-            val isPassthrough = _uiState.value.isDirectPassthroughActive
+            val isPassthrough = if (isUsingMpvEngine()) {
+                false
+            } else {
+                playbackSpeedAwareAudioSink?.let { sink ->
+                    sink.isDirectPlaybackActive() || sink.isIecHbrActive()
+                } ?: _uiState.value.isDirectPassthroughActive
+            }
+            if (_uiState.value.isDirectPassthroughActive != isPassthrough) {
+                _uiState.update { it.copy(isDirectPassthroughActive = isPassthrough) }
+            }
             val duckingScale = PlayerTtsVolumeDuckingPolicy.resolveDuckingVolumeScale(
                 isSpeaking = isSpeaking,
                 isDirectPassthroughActive = isPassthrough,

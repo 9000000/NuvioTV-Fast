@@ -229,6 +229,14 @@ internal fun PlaybackAudioSection(
             enabled = enabled
         )
 
+        SettingsToggleRow(
+            title = stringResource(R.string.tts_auto_stereo_title),
+            subtitle = stringResource(R.string.tts_auto_stereo_subtitle),
+            checked = settings.ttsAutoStereoDownmix,
+            onToggle = { onUpdate { setTtsAutoStereoDownmix(!settings.ttsAutoStereoDownmix) } },
+            enabled = enabled
+        )
+
         val context = LocalContext.current
         SettingsActionRow(
             title = stringResource(R.string.tts_preview_button),

@@ -2107,6 +2107,7 @@ fun PlayerScreen(
             onWaitForCueCompletionChange = { viewModel.onEvent(PlayerEvent.OnSetTtsWaitForCueCompletion(it)) },
             onTransliterateEnglishNamesChange = { viewModel.onEvent(PlayerEvent.OnSetTtsTransliterateEnglishNames(it)) },
             onHideSubtitlesChange = { viewModel.onEvent(PlayerEvent.OnSetTtsHideSubtitlesWhenEnabled(it)) },
+            onAutoStereoDownmixChange = { viewModel.onEvent(PlayerEvent.OnSetTtsAutoStereoDownmix(it)) },
             onPreviewVoice = { viewModel.onEvent(PlayerEvent.OnPreviewTtsVoice()) },
             onOpenVoiceInstaller = { viewModel.onEvent(PlayerEvent.OnOpenTtsVoiceInstaller) },
             onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissTransientOverlay) },

@@ -37,7 +37,14 @@ internal fun PlayerRuntimeController.attachMpvView(view: NuvioMpvSurfaceView?) {
         )
         view.applySubtitleStyle(_uiState.value.effectiveSubtitleStyle, _uiState.value.effectiveAssSubtitleStyle)
         view.setSubtitleDelayMs(mpvSubtitleDelayMs(_uiState.value.subtitleDelayMs))
-        view.applyBluetoothAudioRoute(currentAudioOutputRoute?.isBluetooth == true)
+        view.applyStereoPcmOverride(
+            forceStereo = TtsAudioStereoPolicy.shouldForceStereoPcm(
+                isBluetooth = currentAudioOutputRoute?.isBluetooth == true,
+                ttsEnabled = _uiState.value.ttsConfig.enabled,
+                ttsAutoStereoDownmix = _uiState.value.ttsConfig.autoStereoDownmix
+            ),
+            reloadOutput = false
+        )
         view.setAudioDelayMs(_uiState.value.audioDelayMs)
         view.applyAspectMode(_uiState.value.aspectMode)
         view.setPaused(streamFallbackResumePosition != null && userPausedManually)
@@ -155,7 +162,14 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
         )
         view.applySubtitleStyle(_uiState.value.effectiveSubtitleStyle, _uiState.value.effectiveAssSubtitleStyle)
         view.setSubtitleDelayMs(mpvSubtitleDelayMs(_uiState.value.subtitleDelayMs))
-        view.applyBluetoothAudioRoute(currentAudioOutputRoute?.isBluetooth == true)
+        view.applyStereoPcmOverride(
+            forceStereo = TtsAudioStereoPolicy.shouldForceStereoPcm(
+                isBluetooth = currentAudioOutputRoute?.isBluetooth == true,
+                ttsEnabled = _uiState.value.ttsConfig.enabled,
+                ttsAutoStereoDownmix = _uiState.value.ttsConfig.autoStereoDownmix
+            ),
+            reloadOutput = false
+        )
         view.setAudioDelayMs(_uiState.value.audioDelayMs)
         view.applyAspectMode(_uiState.value.aspectMode)
         view.setPaused(streamFallbackResumePosition != null && userPausedManually)
