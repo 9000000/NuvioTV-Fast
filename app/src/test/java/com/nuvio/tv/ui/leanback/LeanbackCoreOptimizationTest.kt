@@ -1188,6 +1188,87 @@ class LeanbackCoreOptimizationTest {
         }
     }
 
+    @Test
+    fun `expanded poster state blocks trailer URLs whenever trailer autoplay is disabled`() {
+        val universalAdapter = createUniversalAdapter().apply {
+            backdropExpandEnabled = true
+            playTrailerInExpandedCard = false
+        }
+        universalAdapter.updateExpandedCardState(
+            expandedKey = "poster_1",
+            trailerUrl = "https://example.com/trailer.mp4",
+            trailerAudioUrl = "https://example.com/audio.m4a"
+        )
+        assertEquals("poster_1", universalAdapter.expandedItemKey)
+        assertNull(universalAdapter.expandedTrailerUrl)
+        assertNull(universalAdapter.expandedTrailerAudioUrl)
+
+        universalAdapter.playTrailerInExpandedCard = true
+        universalAdapter.updateExpandedCardState(
+            expandedKey = "poster_1",
+            trailerUrl = "https://example.com/trailer.mp4",
+            trailerAudioUrl = "https://example.com/audio.m4a"
+        )
+        assertEquals("https://example.com/trailer.mp4", universalAdapter.expandedTrailerUrl)
+        assertEquals("https://example.com/audio.m4a", universalAdapter.expandedTrailerAudioUrl)
+
+        val modernAdapter = LeanbackRowAdapter(
+            cardWidthPx = 240,
+            cardHeightPx = 360,
+            cornerRadiusPx = 12f,
+            showLabels = false,
+            animationsEnabled = { true },
+            onItemFocused = { _, _ -> },
+            onItemClick = {},
+            onItemLongClick = {},
+            onLoadMore = {}
+        ).apply {
+            backdropExpandEnabled = true
+            playTrailerInExpandedCard = false
+        }
+        modernAdapter.updateExpandedCardState(
+            expandedFocusKey = "row::item_1",
+            trailerUrl = "https://example.com/trailer.mp4",
+            trailerAudioUrl = "https://example.com/audio.m4a"
+        )
+        assertEquals("row::item_1", modernAdapter.expandedCatalogFocusKey)
+        assertNull(modernAdapter.expandedTrailerUrl)
+        assertNull(modernAdapter.expandedTrailerAudioUrl)
+    }
+
+    @Test
+    fun `universal adapter treats unchanged expanded poster metadata as no-op and detects backdrop change`() {
+        val baseItem = LeanbackCardItem.Poster(
+            key = "k1",
+            title = "Movie 1",
+            imageUrl = "https://example.com/p1.jpg",
+            backdropUrl = "https://example.com/b1.jpg",
+            logoUrl = "https://example.com/l1.png",
+            expandedMetaTokens = listOf("Movie", "Action", "2026"),
+            ageRating = "PG-13",
+            description = "Summary"
+        )
+        val rv = mockk<RecyclerView>(relaxed = true)
+        every { rv.isAttachedToWindow } returns true
+        every { rv.isComputingLayout } returns false
+        every { rv.isInLayout } returns false
+        every { rv.scrollState } returns RecyclerView.SCROLL_STATE_IDLE
+
+        val adapter = createUniversalAdapter().apply {
+            attachedRecyclerView = rv
+            submitItems(listOf(baseItem))
+        }
+
+        // Submitting an equal copy with identical expanded metadata should not change count or fail
+        adapter.submitItems(listOf(baseItem.copy()))
+        assertEquals(1, adapter.itemCount)
+        assertEquals("https://example.com/b1.jpg", (adapter.getItem(0) as LeanbackCardItem.Poster).backdropUrl)
+
+        // Updating backdropUrl updates the stored item cleanly
+        adapter.submitItems(listOf(baseItem.copy(backdropUrl = "https://example.com/b2.jpg")))
+        assertEquals("https://example.com/b2.jpg", (adapter.getItem(0) as LeanbackCardItem.Poster).backdropUrl)
+    }
+
     private fun createUniversalAdapter(): LeanbackUniversalAdapter = LeanbackUniversalAdapter(
         cardWidthPx = 240,
         cardHeightPx = 360,

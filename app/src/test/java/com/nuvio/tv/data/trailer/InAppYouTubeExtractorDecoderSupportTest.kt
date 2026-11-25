@@ -68,6 +68,56 @@ class InAppYouTubeExtractorDecoderSupportTest {
         assertTrue(extractor.playableVideo(streams).isEmpty())
     }
 
+    @Test
+    fun `rankAdaptiveVideos rejects software-only AV1 when hardware VP9 or H264 is available`() {
+        // Simulates Android 12+ TV box with bundled software AV1 (canDecode=true)
+        // but hardware decoding only for H.264 and VP9.
+        val boxExtractor = InAppYouTubeExtractor(
+            canDecodeVideo = { _, _, _, _ -> true },
+            canHardwareDecodeVideo = { codecs, _, _, _ ->
+                codecs.startsWith("avc1") || codecs.startsWith("vp9") || codecs.startsWith("vp09")
+            }
+        )
+        val streams = listOf(
+            video(url = "av1-sw-2160p", codecs = "av01.0.12M.08").copy(score = 2160_000_000_000.0 + 25_000_000.0),
+            video(url = "vp9-hw-2160p", codecs = "vp09.00.51.08").copy(ext = "webm", score = 2160_000_000_000.0 + 18_000_000.0),
+            video(url = "avc-hw-1080p", codecs = "avc1.640028").copy(width = 1920, height = 1080, score = 1080_000_000_000.0 + 4_000_000.0)
+        )
+
+        val ranked4k = boxExtractor.rankAdaptiveVideos(streams, maxVideoHeight = Int.MAX_VALUE)
+        assertEquals(listOf("vp9-hw-2160p", "avc-hw-1080p"), ranked4k.map { it.url })
+    }
+
+    @Test
+    fun `rankAdaptiveVideos prefers lighter hardware codecs H264 then VP9 then AV1 at same resolution and fps`() {
+        val hwAllExtractor = InAppYouTubeExtractor(
+            canDecodeVideo = { _, _, _, _ -> true },
+            canHardwareDecodeVideo = { _, _, _, _ -> true }
+        )
+        val streams = listOf(
+            video(url = "av1-1080p", codecs = "av01.0.08M.08").copy(width = 1920, height = 1080, score = 1080_000_000_000.0 + 5_000_000.0),
+            video(url = "vp9-1080p", codecs = "vp09.00.41.08").copy(width = 1920, height = 1080, ext = "webm", score = 1080_000_000_000.0 + 4_000_000.0),
+            video(url = "avc-1080p", codecs = "avc1.640028").copy(width = 1920, height = 1080, score = 1080_000_000_000.0 + 3_500_000.0)
+        )
+
+        val ranked = hwAllExtractor.rankAdaptiveVideos(streams, maxVideoHeight = 1080)
+        assertEquals(listOf("avc-1080p", "vp9-1080p", "av1-1080p"), ranked.map { it.url })
+    }
+
+    @Test
+    fun `rankAdaptiveVideos falls back to software-decodable streams only when no hardware stream exists`() {
+        val swOnlyExtractor = InAppYouTubeExtractor(
+            canDecodeVideo = { codecs, _, _, _ -> codecs.startsWith("av01") },
+            canHardwareDecodeVideo = { _, _, _, _ -> false }
+        )
+        val streams = listOf(
+            video(url = "av1-sw-1080p", codecs = "av01.0.08M.08").copy(width = 1920, height = 1080)
+        )
+
+        val ranked = swOnlyExtractor.rankAdaptiveVideos(streams, maxVideoHeight = 1080)
+        assertEquals(listOf("av1-sw-1080p"), ranked.map { it.url })
+    }
+
     private fun video(url: String, codecs: String?, isHdr: Boolean = false) = StreamCandidate(
         client = "visionos",
         priority = 0,

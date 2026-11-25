@@ -12,6 +12,7 @@ import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.OnChildViewHolderSelectedListener
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
+import com.nuvio.tv.ui.leanback.core.LeanbackCardExpandSpec
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.screens.home.computeNextHorizontalTargetPosition
 
@@ -34,13 +35,43 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var onNavigateUp: (() -> Boolean)? = null
     var onNavigateBack: (() -> Boolean)? = null
     var onNavigateLeftOnFirstItem: (() -> Boolean)? = null
+    var onBackdropInteraction: (() -> Unit)? = null
     var animationsEnabled: Boolean = true
+
+    private val expandBoundsTempRect = Rect()
+
+    fun ensureExpandedCardVisible(cardContainer: View) {
+        if (!isAttachedToWindow || !cardContainer.isAttachedToWindow || width <= 0) return
+        expandBoundsTempRect.set(0, 0, cardContainer.width, cardContainer.height)
+        val ok = try {
+            offsetDescendantRectToMyCoords(cardContainer, expandBoundsTempRect)
+            true
+        } catch (_: Exception) {
+            false
+        }
+        if (!ok) return
+        val isRtl = layoutDirection == LAYOUT_DIRECTION_RTL
+        if (!isRtl) {
+            val maxRight = width - paddingRight
+            val overflow = expandBoundsTempRect.right - maxRight
+            if (overflow > 0) {
+                smoothScrollBy(overflow, 0)
+            }
+        } else {
+            val minLeft = paddingLeft
+            val overflow = expandBoundsTempRect.left - minLeft
+            if (overflow < 0) {
+                smoothScrollBy(overflow, 0)
+            }
+        }
+    }
 
     internal var configuredRowHeightPx: Int = Int.MIN_VALUE
     internal var configuredSpacingPx: Int = Int.MIN_VALUE
     internal var configuredStartPaddingPx: Int = Int.MIN_VALUE
     internal var configuredVerticalPaddingPx: Int = Int.MIN_VALUE
     internal var configuredAnimationsEnabled: Boolean? = null
+    internal var configuredBackdropExpandEnabled: Boolean? = null
     internal var configuredFocusEnabled: Boolean? = null
 
     var canTakeFocus: (() -> Boolean)? = null
@@ -84,6 +115,7 @@ class InteropHorizontalGridView @JvmOverloads constructor(
     var restoredPosition: Int = 0
 
     fun prepareForRowChange() {
+        universalAdapter?.collapseExpandedCardImmediate()
         val wasHolding = isHoldingHorizontalKey
         isHoldingHorizontalKey = false
         pendingTargetPosition = RecyclerView.NO_POSITION
@@ -447,6 +479,18 @@ class InteropHorizontalGridView @JvmOverloads constructor(
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
+            if (LeanbackCardExpandSpec.shouldResetExpandTimerOnKey(event.keyCode)) {
+                val adapterRef = universalAdapter
+                if (adapterRef?.hasExpandedCard == true || (event.repeatCount > 0 && adapterRef?.hasAnimatingWidthCard == true)) {
+                    val shouldAnimateCollapse = LeanbackCardExpandSpec.shouldAnimateCollapseOnKey(
+                        keyCode = event.keyCode,
+                        repeatCount = event.repeatCount,
+                        animationsEnabled = animationsEnabled
+                    )
+                    adapterRef.collapseExpandedCard(animated = shouldAnimateCollapse)
+                }
+                onBackdropInteraction?.invoke()
+            }
             val now = SystemClock.uptimeMillis()
             val focusedChild = findFocus()
             val holder = if (focusedChild != null) findContainingViewHolder(focusedChild) else null

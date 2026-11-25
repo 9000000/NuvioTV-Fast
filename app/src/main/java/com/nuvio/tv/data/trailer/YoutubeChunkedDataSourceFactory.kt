@@ -6,14 +6,24 @@ import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.TransferListener
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.nuvio.tv.core.network.IPv4FirstDns
+import com.nuvio.tv.core.network.NoDelaySocketFactory
+import okhttp3.ConnectionPool
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 /**
- * A DataSource.Factory that wraps DefaultHttpDataSource and appends YouTube's
+ * A DataSource.Factory that wraps a pooled OkHttpDataSource and appends YouTube's
  * `&range=start-end` query parameter on each request. YouTube throttles (and
  * kills) connections that try to download full adaptive streams in one shot,
  * but honours chunked range-param requests at full speed.
+ *
+ * Reusing a single OkHttpClient with HTTP/2 keep-alive, IPv4-first DNS, and
+ * TCP_NODELAY eliminates TLS/TCP handshake stalls at 10 MB chunk boundaries
+ * during high-bitrate 1080p60/4K trailer playback.
  *
  * Only activates for googlevideo.com URLs; all other URLs pass through untouched.
  */
@@ -29,20 +39,29 @@ class YoutubeChunkedDataSourceFactory(
                 "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
         /** 10 MB chunks – large enough to avoid too many requests, small enough to dodge throttle. */
         private const val CHUNK_SIZE = 10L * 1024 * 1024
+
+        private val sharedOkHttpClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .dns(IPv4FirstDns())
+                .socketFactory(NoDelaySocketFactory)
+                .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .build()
+        }
     }
 
     override fun createDataSource(): DataSource {
-        val upstream = DefaultHttpDataSource.Factory()
+        val upstream = OkHttpDataSource.Factory(sharedOkHttpClient)
             .setUserAgent(USER_AGENT)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(15_000)
-            .setAllowCrossProtocolRedirects(true)
             .createDataSource()
         return YoutubeChunkedDataSource(upstream, chunkSizeBytes)
     }
 
     private class YoutubeChunkedDataSource(
-        private val upstream: DefaultHttpDataSource,
+        private val upstream: HttpDataSource,
         private val chunkSize: Long
     ) : DataSource {
 

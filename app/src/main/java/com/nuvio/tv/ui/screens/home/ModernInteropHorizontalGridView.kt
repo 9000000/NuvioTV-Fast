@@ -11,6 +11,7 @@ import android.view.animation.LinearInterpolator
 import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.OnChildViewHolderSelectedListener
 import androidx.recyclerview.widget.RecyclerView
+import com.nuvio.tv.ui.leanback.core.LeanbackCardExpandSpec
 
 internal const val MAX_HORIZONTAL_LOOKAHEAD = 2
 private const val HORIZONTAL_REPEAT_INTERVAL_MS = 85L
@@ -57,7 +58,10 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
     var onVerticalHoldRelease: (() -> Unit)? = null
     var isVerticalGlideActive: (() -> Boolean)? = null
     var onHorizontalInterrupt: (() -> Unit)? = null
+    var onBackdropInteraction: (() -> Unit)? = null
     var animationsEnabled: Boolean = true
+
+    private val expandBoundsTempRect = Rect()
 
     var floatingRingView: ModernRowFloatingFocusRingView? = null
     internal var configuredRowHeightPx: Int = Int.MIN_VALUE
@@ -65,6 +69,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
     internal var configuredStartPaddingPx: Int = Int.MIN_VALUE
     internal var configuredVerticalPaddingPx: Int = Int.MIN_VALUE
     internal var configuredAnimationsEnabled: Boolean? = null
+    internal var configuredBackdropExpandEnabled: Boolean? = null
 
     private var hadRowFocus: Boolean = false
 
@@ -105,7 +110,11 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                             target = holder.cardContainer,
                             dominantColor = holder.currentDominantColor,
                             animated = false,
-                            keepColorIfVisible = isHoldingHorizontalKey
+                            keepColorIfVisible = isHoldingHorizontalKey,
+                            isExpandedCard = holder.isBackdropExpanded,
+                            explicitCardWidthPx = holder.currentEffectiveCardWidthPx(),
+                            explicitCardHeightPx = holder.currentEffectiveCardHeightPx(),
+                            useLivePosition = rowAdapter?.hasAnimatingWidthCard == true
                         )
                     }
                 } else {
@@ -212,7 +221,13 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
     private val rowAdapter: LeanbackRowAdapter?
         get() = adapter as? LeanbackRowAdapter
 
-    fun notifyCardFocused(cardContainer: View, dominantColor: Int) {
+    fun notifyCardFocused(
+        cardContainer: View,
+        dominantColor: Int,
+        isExpandedCard: Boolean = false,
+        explicitCardWidthPx: Int? = null,
+        explicitCardHeightPx: Int? = null
+    ) {
         if (isOverlayRingActive || !mayTakeFocus()) {
             floatingRingView?.hideRing(true)
             return
@@ -221,11 +236,78 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             target = cardContainer,
             dominantColor = dominantColor,
             animated = animationsEnabled,
-            keepColorIfVisible = isHoldingHorizontalKey
+            keepColorIfVisible = isHoldingHorizontalKey,
+            isExpandedCard = isExpandedCard,
+            explicitCardWidthPx = explicitCardWidthPx,
+            explicitCardHeightPx = explicitCardHeightPx,
+            useLivePosition = rowAdapter?.hasAnimatingWidthCard == true
         )
     }
 
+    fun notifyFocusedCardBoundsChanged(
+        cardContainer: View,
+        isAnimatingWidth: Boolean,
+        isExpandedCard: Boolean,
+        dominantColor: Int,
+        explicitCardWidthPx: Int? = null,
+        explicitCardHeightPx: Int? = null,
+        bufferCardWidthPx: Int? = null
+    ) {
+        if (isOverlayRingActive || !mayTakeFocus()) {
+            floatingRingView?.hideRing(true)
+            return
+        }
+        floatingRingView?.syncToTargetBounds(
+            target = cardContainer,
+            isAnimatingWidth = isAnimatingWidth,
+            isExpandedCard = isExpandedCard,
+            dominantColor = dominantColor,
+            explicitCardWidthPx = explicitCardWidthPx,
+            explicitCardHeightPx = explicitCardHeightPx,
+            bufferCardWidthPx = bufferCardWidthPx
+        )
+        if (!isAnimatingWidth && isExpandedCard && isAttachedToWindow && cardContainer.isAttachedToWindow && width > 0) {
+            val resolvedW = explicitCardWidthPx ?: cardContainer.width
+            val resolvedH = explicitCardHeightPx ?: cardContainer.height
+            expandBoundsTempRect.set(0, 0, resolvedW, resolvedH)
+            val ok = try {
+                offsetDescendantRectToMyCoords(cardContainer, expandBoundsTempRect)
+                true
+            } catch (_: Exception) {
+                false
+            }
+            if (ok) {
+                val isRtl = layoutDirection == LAYOUT_DIRECTION_RTL
+                if (!isRtl) {
+                    val maxRight = width - paddingRight
+                    val overflow = expandBoundsTempRect.right - maxRight
+                    if (overflow > 0) {
+                        smoothScrollBy(overflow, 0)
+                    }
+                } else {
+                    val minLeft = paddingLeft
+                    val overflow = expandBoundsTempRect.left - minLeft
+                    if (overflow < 0) {
+                        smoothScrollBy(overflow, 0)
+                    }
+                }
+            }
+        }
+    }
+
+    fun onSiblingCardWidthAnimationFinished() {
+        if (!isAttachedToWindow || isOverlayRingActive || !mayTakeFocus()) return
+        if (scrollState == RecyclerView.SCROLL_STATE_IDLE) {
+            post {
+                if (isAttachedToWindow && !isOverlayRingActive && !isComputingLayout) {
+                    floatingRingView?.onScrollSettled()
+                }
+            }
+        }
+    }
+
     fun prepareForRowChange() {
+        rowAdapter?.collapseExpandedCardImmediate()
         val wasHolding = isHoldingHorizontalKey
         isHoldingHorizontalKey = false
         isHoldingVerticalKey = false
@@ -265,7 +347,11 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 target = vh.cardContainer,
                 dominantColor = vh.currentDominantColor,
                 animated = animated,
-                keepColorIfVisible = isHoldingHorizontalKey
+                keepColorIfVisible = isHoldingHorizontalKey,
+                isExpandedCard = vh.isBackdropExpanded,
+                explicitCardWidthPx = vh.currentEffectiveCardWidthPx(),
+                explicitCardHeightPx = vh.currentEffectiveCardHeightPx(),
+                useLivePosition = rowAdapter?.hasAnimatingWidthCard == true
             )
         } else if (retryCount < 8 && !isHoldingHorizontalKey) {
             post {
@@ -295,7 +381,11 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                 target = vh.cardContainer,
                 dominantColor = vh.currentDominantColor,
                 animated = animationsEnabled,
-                keepColorIfVisible = isHoldingHorizontalKey
+                keepColorIfVisible = isHoldingHorizontalKey,
+                isExpandedCard = vh.isBackdropExpanded,
+                explicitCardWidthPx = vh.currentEffectiveCardWidthPx(),
+                explicitCardHeightPx = vh.currentEffectiveCardHeightPx(),
+                useLivePosition = rowAdapter?.hasAnimatingWidthCard == true
             )
         } else if (retryCount < 10) {
             post {
@@ -367,7 +457,11 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                                 target = vh.cardContainer,
                                 dominantColor = vh.currentDominantColor,
                                 animated = animationsEnabled,
-                                keepColorIfVisible = isHoldingHorizontalKey
+                                keepColorIfVisible = isHoldingHorizontalKey,
+                                isExpandedCard = vh.isBackdropExpanded,
+                                explicitCardWidthPx = vh.currentEffectiveCardWidthPx(),
+                                explicitCardHeightPx = vh.currentEffectiveCardHeightPx(),
+                                useLivePosition = rowAdapter?.hasAnimatingWidthCard == true
                             )
                         } else {
                             floatingRingView?.hideRing(true)
@@ -423,7 +517,11 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                         target = vh.cardContainer,
                         dominantColor = vh.currentDominantColor,
                         animated = false,
-                        keepColorIfVisible = isHoldingHorizontalKey
+                        keepColorIfVisible = isHoldingHorizontalKey,
+                        isExpandedCard = vh.isBackdropExpanded,
+                        explicitCardWidthPx = vh.currentEffectiveCardWidthPx(),
+                        explicitCardHeightPx = vh.currentEffectiveCardHeightPx(),
+                        useLivePosition = rowAdapter?.hasAnimatingWidthCard == true
                     )
                 } else {
                     floatingRingView?.hideRing(true)
@@ -472,7 +570,11 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                         target = holder.cardContainer,
                         dominantColor = holder.currentDominantColor,
                         animated = false,
-                        keepColorIfVisible = isHoldingHorizontalKey
+                        keepColorIfVisible = isHoldingHorizontalKey,
+                        isExpandedCard = holder.isBackdropExpanded,
+                        explicitCardWidthPx = holder.currentEffectiveCardWidthPx(),
+                        explicitCardHeightPx = holder.currentEffectiveCardHeightPx(),
+                        useLivePosition = rowAdapter?.hasAnimatingWidthCard == true
                     )
                 } else {
                     floatingRingView?.hideRing(true)
@@ -632,6 +734,18 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
+            if (LeanbackCardExpandSpec.shouldResetExpandTimerOnKey(event.keyCode)) {
+                val adapterRef = rowAdapter
+                if (adapterRef?.hasExpandedCard == true || (event.repeatCount > 0 && adapterRef?.hasAnimatingWidthCard == true)) {
+                    val shouldAnimateCollapse = LeanbackCardExpandSpec.shouldAnimateCollapseOnKey(
+                        keyCode = event.keyCode,
+                        repeatCount = event.repeatCount,
+                        animationsEnabled = animationsEnabled
+                    )
+                    adapterRef.collapseExpandedCard(animated = shouldAnimateCollapse)
+                }
+                onBackdropInteraction?.invoke()
+            }
             val now = SystemClock.uptimeMillis()
             val total = rowAdapter?.itemCount ?: 0
             val focusedChild = findFocus()

@@ -24,10 +24,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.LocalOpenSidebar
+import com.nuvio.tv.LocalSidebarExpanded
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
@@ -36,10 +39,14 @@ import com.nuvio.tv.domain.model.stableItemKey
 import com.nuvio.tv.domain.model.stableItemKeys
 import com.nuvio.tv.domain.model.stableKey
 import com.nuvio.tv.ui.leanback.LeanbackNativeRow
+import com.nuvio.tv.ui.leanback.core.LeanbackCardExpandSpec
+import com.nuvio.tv.ui.leanback.core.rememberLeanbackExpandedTrailerHost
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.contentTextDirection
 import com.nuvio.tv.ui.util.localizedContentType
+import com.nuvio.tv.ui.util.localizedGenreLabel
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -54,13 +61,13 @@ fun CatalogRowSection(
     showImdbRatings: Boolean = true,
     showAddonName: Boolean = true,
     showCatalogTypeSuffix: Boolean = true,
-    @Suppress("UNUSED_PARAMETER") focusedPosterBackdropExpandEnabled: Boolean = false,
-    @Suppress("UNUSED_PARAMETER") focusedPosterBackdropExpandDelaySeconds: Int = 3,
-    @Suppress("UNUSED_PARAMETER") focusedPosterBackdropTrailerEnabled: Boolean = false,
-    @Suppress("UNUSED_PARAMETER") focusedPosterBackdropTrailerMuted: Boolean = true,
-    @Suppress("UNUSED_PARAMETER") trailerPreviewUrls: Map<String, String> = emptyMap(),
-    @Suppress("UNUSED_PARAMETER") trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
-    @Suppress("UNUSED_PARAMETER") onRequestTrailerPreview: (MetaPreview) -> Unit = {},
+    focusedPosterBackdropExpandEnabled: Boolean = false,
+    focusedPosterBackdropExpandDelaySeconds: Int = 3,
+    focusedPosterBackdropTrailerEnabled: Boolean = false,
+    focusedPosterBackdropTrailerMuted: Boolean = true,
+    trailerPreviewUrls: Map<String, String> = emptyMap(),
+    trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
+    onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     onItemFocus: (MetaPreview) -> Unit = {},
     isItemWatched: (MetaPreview) -> Boolean = { false },
     onItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
@@ -142,6 +149,72 @@ fun CatalogRowSection(
     val latestIsItemWatched by rememberUpdatedState(isItemWatched)
     val latestOnItemLongPress by rememberUpdatedState(onItemLongPress)
     val latestOnItemFocused by rememberUpdatedState(onItemFocused)
+    val latestOnRequestTrailerPreview by rememberUpdatedState(onRequestTrailerPreview)
+
+    val isSidebarExpanded = LocalSidebarExpanded.current
+    val alwaysShowLandscapeClearlogo = LocalAlwaysBackdropWithLogo.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val playTrailerInExpandedCard = focusedPosterBackdropExpandEnabled && focusedPosterBackdropTrailerEnabled
+    // Only instantiate the trailer host when expanded-card trailer autoplay is explicitly enabled.
+    val expandedTrailerHost = if (playTrailerInExpandedCard) rememberLeanbackExpandedTrailerHost() else null
+    val trailerPreviewUrlsState = remember { mutableStateOf(trailerPreviewUrls) }.apply { value = trailerPreviewUrls }
+    val trailerPreviewAudioUrlsState = remember { mutableStateOf(trailerPreviewAudioUrls) }.apply { value = trailerPreviewAudioUrls }
+    val focusedItemKeyForExpand = remember(catalogRowKey) { mutableStateOf<String?>(null) }
+    val focusedItemIdForExpand = remember(catalogRowKey) { mutableStateOf<String?>(null) }
+    val focusedMetaForExpand = remember(catalogRowKey) { mutableStateOf<MetaPreview?>(null) }
+    val expandedItemKeyState = remember(catalogRowKey) { mutableStateOf<String?>(null) }
+    val expandInteractionNonce = remember(catalogRowKey) { mutableIntStateOf(0) }
+
+    LaunchedEffect(
+        focusedPosterBackdropExpandEnabled,
+        focusedPosterBackdropExpandDelaySeconds,
+        focusedItemKeyForExpand.value,
+        rowHasFocusRef.value,
+        isSidebarExpanded,
+        expandInteractionNonce.intValue
+    ) {
+        expandedItemKeyState.value = null
+        if (!focusedPosterBackdropExpandEnabled || !rowHasFocusRef.value || isSidebarExpanded) {
+            return@LaunchedEffect
+        }
+        val targetKey = focusedItemKeyForExpand.value ?: return@LaunchedEffect
+        val targetId = focusedItemIdForExpand.value ?: return@LaunchedEffect
+        if (targetId.startsWith("__placeholder_")) return@LaunchedEffect
+
+        val delayMs = LeanbackCardExpandSpec.computeBackdropExpandDelayMs(
+            delaySeconds = focusedPosterBackdropExpandDelaySeconds,
+            minDelayMs = LeanbackCardExpandSpec.MIN_CLASSIC_EXPAND_DELAY_MS
+        )
+        delay(delayMs)
+        if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
+        if (focusedPosterBackdropExpandEnabled &&
+            rowHasFocusRef.value &&
+            !isSidebarExpanded &&
+            focusedItemKeyForExpand.value == targetKey
+        ) {
+            expandedItemKeyState.value = targetKey
+        }
+    }
+
+    LaunchedEffect(
+        playTrailerInExpandedCard,
+        focusedMetaForExpand.value?.id,
+        rowHasFocusRef.value,
+        isSidebarExpanded
+    ) {
+        if (!playTrailerInExpandedCard || !rowHasFocusRef.value || isSidebarExpanded) return@LaunchedEffect
+        val meta = focusedMetaForExpand.value ?: return@LaunchedEffect
+        if (meta.id.startsWith("__placeholder_")) return@LaunchedEffect
+        if (trailerPreviewUrlsState.value.containsKey(meta.id)) return@LaunchedEffect
+        delay(LeanbackCardExpandSpec.TRAILER_REQUEST_FOCUS_DEBOUNCE_MS)
+        if (playTrailerInExpandedCard &&
+            rowHasFocusRef.value &&
+            !isSidebarExpanded &&
+            focusedMetaForExpand.value?.id == meta.id
+        ) {
+            latestOnRequestTrailerPreview(meta)
+        }
+    }
 
     LaunchedEffect(focusedItemIndex) {
         if (focusedItemIndex >= 0 && catalogRow.items.isNotEmpty()) {
@@ -197,15 +270,39 @@ fun CatalogRowSection(
         for (i in catalogRow.items.indices) {
             watchedMaskHash = 31 * watchedMaskHash + if (latestIsItemWatched(catalogRow.items[i])) 1231 else 1237
         }
-        val leanbackItems = remember(catalogRow.items, showSeeAll, isLandscape, strSeeAll, showImdbRatings, watchedMaskHash) {
+        val leanbackItems = remember(
+            catalogRow.items,
+            showSeeAll,
+            isLandscape,
+            strSeeAll,
+            showImdbRatings,
+            watchedMaskHash,
+            focusedPosterBackdropExpandEnabled,
+            catalogContext
+        ) {
             val list = ArrayList<LeanbackCardItem>(catalogRow.items.size + if (showSeeAll) 1 else 0)
             catalogRow.items.forEachIndexed { index, item ->
-                val ratingBadge = if (showImdbRatings && !item.id.startsWith("__placeholder_")) {
+                val isPlaceholder = item.id.startsWith("__placeholder_")
+                val ratingBadge = if (showImdbRatings && !isPlaceholder) {
                     item.imdbRating?.let { rating ->
                         if (rating > 0f) String.format(java.util.Locale.US, "★ %.1f", rating) else null
                     }
                 } else {
                     null
+                }
+                val metaTokens = if (focusedPosterBackdropExpandEnabled && !isPlaceholder) {
+                    LeanbackCardExpandSpec.formatExpandedMetaTokens(
+                        apiType = item.apiType,
+                        contentType = item.type,
+                        genres = item.genres,
+                        seasonCount = item.seasonCount,
+                        releaseInfo = item.releaseInfo,
+                        imdbRating = item.imdbRating,
+                        showImdbRatings = showImdbRatings,
+                        localizeGenre = { genre -> localizedGenreLabel(catalogContext, genre) }
+                    )
+                } else {
+                    emptyList()
                 }
                 list.add(
                     LeanbackCardItem.Poster(
@@ -213,10 +310,17 @@ fun CatalogRowSection(
                         title = item.name,
                         imageUrl = if (isLandscape) (item.landscapePoster ?: item.backdropUrl ?: item.poster) else (item.poster ?: item.backdropUrl),
                         fallbackImageUrl = item.rawPosterUrl,
+                        subtitle = item.releaseInfo?.takeIf { it.isNotBlank() && !isPlaceholder },
                         isLandscape = isLandscape,
                         badgeText = ratingBadge,
                         isWatched = latestIsItemWatched(item),
-                        payload = item
+                        payload = item,
+                        backdropUrl = if (focusedPosterBackdropExpandEnabled && !isPlaceholder) item.backdropUrl else null,
+                        landscapePosterUrl = if (focusedPosterBackdropExpandEnabled && !isPlaceholder) item.landscapePoster else null,
+                        logoUrl = if (focusedPosterBackdropExpandEnabled && !isPlaceholder) item.logo else null,
+                        expandedMetaTokens = metaTokens,
+                        ageRating = if (focusedPosterBackdropExpandEnabled && !isPlaceholder) item.ageRating else null,
+                        description = if (focusedPosterBackdropExpandEnabled && !isPlaceholder) item.description else null
                     )
                 )
             }
@@ -250,7 +354,12 @@ fun CatalogRowSection(
 
         LeanbackNativeRow(
             modifier = Modifier
-                .onFocusChanged { rowHasFocusRef.value = it.hasFocus }
+                .onFocusChanged {
+                    rowHasFocusRef.value = it.hasFocus
+                    if (!it.hasFocus) {
+                        expandedItemKeyState.value = null
+                    }
+                }
                 .focusRequester(resolvedRowFocusRequester),
             entryFocusRequester = entryFocusRequester,
             rowKey = "catalog_row_${catalogRow.stableKey()}",
@@ -262,13 +371,43 @@ fun CatalogRowSection(
             animationsEnabled = NuvioTheme.animationsEnabled,
             startPadding = NuvioTheme.spacing.xxxl,
             spacing = NuvioTheme.spacing.lg,
+            focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
+            expandedItemKeyState = if (focusedPosterBackdropExpandEnabled) expandedItemKeyState else null,
+            alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
+            playTrailerInExpandedCard = playTrailerInExpandedCard,
+            trailerMuted = focusedPosterBackdropTrailerMuted,
+            expandedTrailerUrlProvider = {
+                val itemId = focusedItemIdForExpand.value
+                if (playTrailerInExpandedCard && itemId != null) trailerPreviewUrlsState.value[itemId] else null
+            },
+            expandedTrailerAudioUrlProvider = {
+                val itemId = focusedItemIdForExpand.value
+                if (playTrailerInExpandedCard && itemId != null) trailerPreviewAudioUrlsState.value[itemId] else null
+            },
+            expandedTrailerHost = expandedTrailerHost,
+            onBackdropInteraction = if (focusedPosterBackdropExpandEnabled) {
+                {
+                    expandedItemKeyState.value = null
+                    expandInteractionNonce.intValue++
+                }
+            } else null,
+            onExpandedTrailerEnded = {
+                expandedItemKeyState.value = null
+            },
             onItemFocused = { index, cardItem ->
                 if (cardItem.payload == "SEE_ALL") {
+                    focusedItemKeyForExpand.value = null
+                    focusedItemIdForExpand.value = null
+                    focusedMetaForExpand.value = null
+                    expandedItemKeyState.value = null
                     lastFocusedItemIndex.intValue = index
                     latestOnItemFocused(index)
                     return@LeanbackNativeRow
                 }
                 val item = cardItem.payload as? MetaPreview ?: return@LeanbackNativeRow
+                focusedItemKeyForExpand.value = cardItem.key
+                focusedItemIdForExpand.value = item.id
+                focusedMetaForExpand.value = item
                 latestOnItemFocus(item)
                 lastFocusedItemIndex.intValue = index
                 latestOnItemFocused(index)

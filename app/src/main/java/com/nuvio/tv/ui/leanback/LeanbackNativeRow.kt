@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -31,6 +34,8 @@ import androidx.leanback.widget.HorizontalGridView
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.adapter.LeanbackUniversalAdapter
 import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
+import com.nuvio.tv.ui.leanback.core.LeanbackCardExpandSpec
+import com.nuvio.tv.ui.leanback.core.LeanbackExpandedTrailerHost
 import com.nuvio.tv.ui.leanback.core.rememberLeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
 import com.nuvio.tv.ui.leanback.model.LeanbackCardItem
@@ -76,6 +81,16 @@ fun LeanbackNativeRow(
     paddingValues: PaddingValues? = null,
     itemSpacing: Dp? = null,
     isFocusEnabled: Boolean = true,
+    focusedPosterBackdropExpandEnabled: Boolean = false,
+    expandedItemKeyState: State<String?>? = null,
+    alwaysShowLandscapeClearlogo: Boolean = false,
+    playTrailerInExpandedCard: Boolean = false,
+    trailerMuted: Boolean = true,
+    expandedTrailerUrlProvider: () -> String? = { null },
+    expandedTrailerAudioUrlProvider: () -> String? = { null },
+    expandedTrailerHost: LeanbackExpandedTrailerHost? = null,
+    onBackdropInteraction: (() -> Unit)? = null,
+    onExpandedTrailerEnded: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -93,7 +108,12 @@ fun LeanbackNativeRow(
     val verticalPaddingPx = with(density) { verticalPadding.roundToPx() }
     val hasEpisodeItems = items.firstOrNull() is LeanbackCardItem.Episode
     val labelHeightDp = if (showLabels && !hasEpisodeItems) {
-        44.dp * density.fontScale.coerceIn(1f, 1.4f)
+        val baseLabelHeightDp = if (focusedPosterBackdropExpandEnabled) {
+            LeanbackCardExpandSpec.EXPANDED_LABEL_MIN_HEIGHT_DP.dp
+        } else {
+            44.dp
+        }
+        baseLabelHeightDp * density.fontScale.coerceIn(1f, 1.4f)
     } else {
         0.dp
     }
@@ -121,7 +141,55 @@ fun LeanbackNativeRow(
 
     DisposableEffect(rowKey) {
         onDispose {
+            adapter.collapseExpandedCardImmediate()
             rowGrids?.remove(rowKey)
+        }
+    }
+
+    val latestExpandedTrailerUrlProvider by rememberUpdatedState(expandedTrailerUrlProvider)
+    val latestExpandedTrailerAudioUrlProvider by rememberUpdatedState(expandedTrailerAudioUrlProvider)
+
+    LaunchedEffect(
+        rowKey,
+        adapter,
+        focusedPosterBackdropExpandEnabled,
+        alwaysShowLandscapeClearlogo,
+        playTrailerInExpandedCard,
+        trailerMuted,
+        expandedTrailerHost,
+        expandedItemKeyState
+    ) {
+        adapter.backdropExpandEnabled = focusedPosterBackdropExpandEnabled
+        adapter.alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo
+        adapter.playTrailerInExpandedCard = playTrailerInExpandedCard
+        adapter.trailerMuted = trailerMuted
+        adapter.expandedTrailerHost = if (playTrailerInExpandedCard) expandedTrailerHost else null
+        adapter.onExpandedTrailerEnded = onExpandedTrailerEnded
+
+        if (!focusedPosterBackdropExpandEnabled || expandedItemKeyState == null) {
+            adapter.collapseExpandedCardImmediate()
+            return@LaunchedEffect
+        }
+
+        snapshotFlow {
+            val key = expandedItemKeyState.value
+            val trailerUrl = if (key != null && playTrailerInExpandedCard) {
+                latestExpandedTrailerUrlProvider()
+            } else {
+                null
+            }
+            val trailerAudioUrl = if (key != null && playTrailerInExpandedCard) {
+                latestExpandedTrailerAudioUrlProvider()
+            } else {
+                null
+            }
+            Triple(key, trailerUrl, trailerAudioUrl)
+        }.collect { (key, trailerUrl, trailerAudioUrl) ->
+            adapter.updateExpandedCardState(
+                expandedKey = key,
+                trailerUrl = trailerUrl,
+                trailerAudioUrl = trailerAudioUrl
+            )
         }
     }
 
@@ -293,10 +361,12 @@ fun LeanbackNativeRow(
                 this.onNavigateUp = onNavigateUp
                 this.onNavigateBack = onNavigateBack
                 this.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
+                this.onBackdropInteraction = onBackdropInteraction
                 this.animationsEnabled = animationsEnabled
-                setAnimateChildLayout(animationsEnabled)
+                setAnimateChildLayout(animationsEnabled && !focusedPosterBackdropExpandEnabled)
                 configuredAnimationsEnabled = animationsEnabled
-                setHasFixedSize(true)
+                configuredBackdropExpandEnabled = focusedPosterBackdropExpandEnabled
+                setHasFixedSize(!focusedPosterBackdropExpandEnabled)
                 effectivePool?.let { setRecycledViewPool(it) }
                 if (!isFocusEnabled) {
                     descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -366,10 +436,15 @@ fun LeanbackNativeRow(
             gridView.onNavigateUp = onNavigateUp
             gridView.onNavigateBack = onNavigateBack
             gridView.onNavigateLeftOnFirstItem = onNavigateLeftOnFirstItem
-            if (gridView.configuredAnimationsEnabled != animationsEnabled) {
+            gridView.onBackdropInteraction = onBackdropInteraction
+            if (gridView.configuredAnimationsEnabled != animationsEnabled ||
+                gridView.configuredBackdropExpandEnabled != focusedPosterBackdropExpandEnabled
+            ) {
                 gridView.animationsEnabled = animationsEnabled
-                gridView.setAnimateChildLayout(animationsEnabled)
+                gridView.setAnimateChildLayout(animationsEnabled && !focusedPosterBackdropExpandEnabled)
+                gridView.setHasFixedSize(!focusedPosterBackdropExpandEnabled)
                 gridView.configuredAnimationsEnabled = animationsEnabled
+                gridView.configuredBackdropExpandEnabled = focusedPosterBackdropExpandEnabled
             }
             adapter.animationsEnabled = { animationsEnabled }
             adapter.onItemFocused = onItemFocused
@@ -399,6 +474,7 @@ fun LeanbackNativeRow(
             }
         },
         onRelease = { gridView ->
+            adapter.collapseExpandedCardImmediate()
             if (localGridViewRef === gridView) {
                 localGridViewRef = null
             }

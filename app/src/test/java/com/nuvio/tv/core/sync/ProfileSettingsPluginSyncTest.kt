@@ -86,23 +86,23 @@ class ProfileSettingsPluginSyncTest {
         val profileManager = mockk<ProfileManager>()
         every { profileManager.activeProfileId } returns harness.activeProfileId
         val ambient = AmbientModeDataStore(harness.factory, profileManager)
-        ambient.setTimeoutMinutes(1)
+        ambient.setTimeoutMinutes(10)
         ambient.setEnabled(false)
-        ambient.setDisplayMode(AmbientDisplayMode.TRAILER)
-        ambient.setTrailerAudioEnabled(true)
+        ambient.setDisplayMode(AmbientDisplayMode.BACKDROP)
+        ambient.setTrailerAudioEnabled(false)
         harness.service.pushCurrentProfileToRemote().getOrThrow()
         harness.factory.get(1, AmbientModeDataStore.FEATURE).edit { it.clear() }
         assertEquals(AmbientModeSettings.DEFAULT_TIMEOUT_MINUTES, ambient.settings.first().timeoutMinutes)
-        assertEquals(AmbientDisplayMode.BACKDROP, ambient.settings.first().displayMode)
-        assertFalse(ambient.settings.first().trailerAudioEnabled)
+        assertEquals(AmbientDisplayMode.TRAILER, ambient.settings.first().displayMode)
+        assertTrue(ambient.settings.first().trailerAudioEnabled)
 
         assertTrue(harness.service.pullCurrentProfileFromRemote().getOrThrow())
 
         val restored = ambient.settings.first()
-        assertEquals(1, restored.timeoutMinutes)
+        assertEquals(10, restored.timeoutMinutes)
         assertFalse(restored.enabled)
-        assertEquals(AmbientDisplayMode.TRAILER, restored.displayMode)
-        assertTrue(restored.trailerAudioEnabled)
+        assertEquals(AmbientDisplayMode.BACKDROP, restored.displayMode)
+        assertFalse(restored.trailerAudioEnabled)
     }
 
     @Test

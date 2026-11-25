@@ -196,10 +196,15 @@ private val CLIENTS = listOf(
 @Singleton
 class InAppYouTubeExtractor internal constructor(
     private val youtubeBaseUrl: String = YOUTUBE_BASE_URL,
+    private val canHardwareDecodeVideo: ((codecs: String, width: Int, height: Int, fps: Int) -> Boolean)? = null,
     private val canDecodeVideo: (codecs: String, width: Int, height: Int, fps: Int) -> Boolean = VideoDecoderSupport::canDecode
 ) {
     @Inject
-    constructor() : this(YOUTUBE_BASE_URL, VideoDecoderSupport::canDecode)
+    constructor() : this(
+        youtubeBaseUrl = YOUTUBE_BASE_URL,
+        canHardwareDecodeVideo = VideoDecoderSupport::canHardwareDecode,
+        canDecodeVideo = VideoDecoderSupport::canDecode
+    )
 
     private val gson = Gson()
 
@@ -1108,10 +1113,22 @@ class InAppYouTubeExtractor internal constructor(
         return items.filter { it.height <= maxHeight && it.width <= maxWidth }.ifEmpty { items }
     }
 
+    internal fun sortVideoCandidates(items: List<StreamCandidate>): List<StreamCandidate> {
+        return items.sortedWith(
+            compareByDescending<StreamCandidate> { it.height }
+                .thenByDescending { it.fps }
+                .thenBy { videoCodecPlaybackPriority(it.codecs) }
+                .thenByDescending { it.score }
+                .thenBy { if (it.hasN) 1 else 0 }
+                .thenBy { containerPreference(it.ext) }
+                .thenBy { it.priority }
+        )
+    }
+
     /**
-     * Ranks playable adaptive video streams within [maxVideoHeight], preferring [preferredClient]
-     * first (highest resolution down to lowest: e.g. 1080p -> 720p -> 480p -> 360p) and skipping
-     * URLs already known to fail reachability probes.
+     * Ranks playable adaptive video streams within [maxVideoHeight], strongly preferring
+     * hardware-decodable streams (to avoid CPU-decoded 1080p/4K AV1/VP9 frame drops) and
+     * [preferredClient] first, while skipping URLs already known to fail reachability probes.
      */
     internal fun rankAdaptiveVideos(
         items: List<StreamCandidate>,
@@ -1119,12 +1136,18 @@ class InAppYouTubeExtractor internal constructor(
         preferredClient: String = PREFERRED_SEPARATE_CLIENT,
         failedUrls: Set<String> = emptySet()
     ): List<StreamCandidate> {
-        val eligible = capVideoHeight(
+        val capped = capVideoHeight(
             playableVideo(items).filterNot { it.url in failedUrls },
             maxVideoHeight
         )
-        val preferred = sortCandidates(eligible.filter { it.client == preferredClient })
-        val others = sortCandidates(eligible.filter { it.client != preferredClient })
+        val hardwareCheck = canHardwareDecodeVideo ?: canDecodeVideo
+        val hardwareEligible = capped.filter { candidate ->
+            val codecs = candidate.codecs ?: return@filter true
+            hardwareCheck(codecs, candidate.width, candidate.height, candidate.fps)
+        }
+        val eligible = hardwareEligible.ifEmpty { capped }
+        val preferred = sortVideoCandidates(eligible.filter { it.client == preferredClient })
+        val others = sortVideoCandidates(eligible.filter { it.client != preferredClient })
         return preferred + others
     }
 

@@ -1,5 +1,8 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline
@@ -34,7 +37,9 @@ import com.nuvio.tv.ui.leanback.adapter.LeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.adapter.computeLeanbackUpdatePlan
 import com.nuvio.tv.ui.leanback.core.HorizontalPrefetchProfileCache
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
+import com.nuvio.tv.ui.leanback.core.LeanbackCardExpandSpec
 import com.nuvio.tv.ui.leanback.core.LeanbackColorEngine
+import com.nuvio.tv.ui.leanback.core.LeanbackExpandedTrailerHost
 import com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.core.PillProgressBarDrawable
 import com.nuvio.tv.ui.leanback.holder.FocusIsolatedRootLayout
@@ -51,7 +56,14 @@ class LeanbackCardViewHolder(
     val watchedBadgeView: TextView? = null,
     val emojiCoverView: TextView? = null,
     val fallbackTitleText: TextView? = null,
-    private val progressBarHeightPx: Float = 7f
+    private val progressBarHeightPx: Float = 7f,
+    val mediaClipContainer: FrameLayout? = null,
+    val backdropImage: ImageView? = null,
+    val trailerContainer: FrameLayout? = null,
+    val trailerCoverImage: ImageView? = null,
+    val expandedGradientView: View? = null,
+    val expandedLogoImage: ImageView? = null,
+    val expandedTitleFallback: TextView? = null
 ) : RecyclerView.ViewHolder(root) {
 
     internal var lastProgressAccentColor: Int = 0
@@ -76,6 +88,7 @@ class LeanbackCardViewHolder(
 
         placeholderBackgroundDrawable.cornerRadius = newRadiusPx
         (cardContainer.background as? GradientDrawable)?.cornerRadius = newRadiusPx
+        mediaClipContainer?.invalidateOutline()
         posterImage.invalidateOutline()
 
         val horizMargin = (newRadiusPx * 0.75f).toInt().coerceAtLeast(6)
@@ -102,12 +115,28 @@ class LeanbackCardViewHolder(
     private var boundBlurred: Boolean = false
     private var lastLoadedColorKey: String? = null
 
+    var isBackdropExpanded: Boolean = false
+        private set
+    private var widthAnimator: ValueAnimator? = null
+    private var animatingTargetWidthPx: Int = -1
+    val isAnimatingWidth: Boolean
+        get() = widthAnimator?.isRunning == true
+    private var backdropDisposable: Disposable? = null
+    private var logoDisposable: Disposable? = null
+    private var boundBackdropUrl: String? = null
+    private var boundLogoUrl: String? = null
+    private var logoLoadFailed: Boolean = false
+    private var trailerFirstFrameRendered: Boolean = false
+    private var activeTrailerOwnerKey: String? = null
+    private var lastBoundCardWidthPx: Int = 0
+    private var lastBoundCardHeightPx: Int = 0
+
     init {
         root.isFocusable = true
         root.isFocusableInTouchMode = true
         root.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
 
-        posterImage.outlineProvider = object : ViewOutlineProvider() {
+        val clipOutlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
                 if (cornerRadiusPx > 0f) {
                     outline.setRoundRect(0, 0, view.width, view.height, cornerRadiusPx)
@@ -116,7 +145,13 @@ class LeanbackCardViewHolder(
                 }
             }
         }
-        posterImage.clipToOutline = true
+        if (mediaClipContainer != null) {
+            mediaClipContainer.outlineProvider = clipOutlineProvider
+            mediaClipContainer.clipToOutline = true
+        } else {
+            posterImage.outlineProvider = clipOutlineProvider
+            posterImage.clipToOutline = true
+        }
 
         root.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
             val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
@@ -124,8 +159,20 @@ class LeanbackCardViewHolder(
                 // Reject stray focus on an inactive row
                 gridView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 root.clearFocus()
+                resetExpandedStateImmediate()
                 updateFocusVisual(false)
                 return@OnFocusChangeListener
+            }
+            if (!hasFocus && isBackdropExpanded) {
+                val shouldAnimateCollapse = adapter.animationsEnabled() &&
+                    gridView?.isAttachedToWindow == true &&
+                    gridView.mayTakeFocus() &&
+                    !gridView.isHoldingHorizontalKey
+                if (shouldAnimateCollapse) {
+                    collapseToBaseWidth(animated = true)
+                } else {
+                    resetExpandedStateImmediate()
+                }
             }
             updateFocusVisual(hasFocus)
             if (hasFocus) {
@@ -133,6 +180,9 @@ class LeanbackCardViewHolder(
                 val item = currentItem
                 if (pos != RecyclerView.NO_POSITION && item != null) {
                     adapter.dispatchItemFocused(pos, item)
+                    if (gridView?.isHoldingHorizontalKey != true) {
+                        prefetchExpandedBackdropIfNeeded(item)
+                    }
                 }
             }
         }
@@ -206,8 +256,555 @@ class LeanbackCardViewHolder(
         if (cardContainer.foreground != null) cardContainer.foreground = null
 
         if (hasFocus) {
-            gridView?.notifyCardFocused(cardContainer, currentDominantColor)
+            gridView?.notifyCardFocused(
+                cardContainer = cardContainer,
+                dominantColor = currentDominantColor,
+                isExpandedCard = isBackdropExpanded,
+                explicitCardWidthPx = currentEffectiveCardWidthPx(),
+                explicitCardHeightPx = currentEffectiveCardHeightPx()
+            )
         }
+    }
+
+    internal fun currentEffectiveCardWidthPx(): Int {
+        val baseW = lastBoundCardWidthPx.takeIf { it > 0 } ?: adapter.cardWidthPx
+        return LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+            explicitPx = null,
+            layoutParamPx = cardContainer.layoutParams?.width,
+            measuredPx = cardContainer.width,
+            isLayoutRequested = cardContainer.isLayoutRequested,
+            fallbackPx = baseW
+        )
+    }
+
+    internal fun currentEffectiveCardHeightPx(): Int {
+        val baseH = lastBoundCardHeightPx.takeIf { it > 0 } ?: adapter.cardHeightPx
+        return LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+            explicitPx = null,
+            layoutParamPx = cardContainer.layoutParams?.height,
+            measuredPx = cardContainer.height,
+            isLayoutRequested = cardContainer.isLayoutRequested,
+            fallbackPx = baseH
+        )
+    }
+
+    private fun applyWidthPx(widthPx: Int, heightPx: Int) {
+        val safeW = widthPx.coerceAtLeast(1)
+        val safeH = heightPx.coerceAtLeast(1)
+        var layoutMutated = false
+        val cardLp = cardContainer.layoutParams
+        if (cardLp != null && (cardLp.width != safeW || cardLp.height != safeH || cardContainer.width != safeW || cardContainer.height != safeH)) {
+            cardLp.width = safeW
+            cardLp.height = safeH
+            cardContainer.layoutParams = cardLp
+            layoutMutated = true
+        }
+        val rootLp = root.layoutParams
+        if (rootLp != null && (rootLp.width != safeW || root.width != safeW)) {
+            rootLp.width = safeW
+            root.layoutParams = rootLp
+            layoutMutated = true
+        }
+        mediaClipContainer?.invalidateOutline()
+        if (layoutMutated) {
+            val gridView = adapter.attachedRecyclerView
+            if (gridView != null && gridView.isAttachedToWindow && !gridView.isInLayout) {
+                gridView.requestLayout()
+            }
+        }
+    }
+
+    private fun resolveItemBackdropAndLogo(item: ModernCarouselItem): Triple<String?, String?, String?> {
+        val catalogPayload = item.payload as? ModernPayload.Catalog
+        val enriched = catalogPayload?.itemId?.let { adapter.enrichedPreviewsProvider()[it] }
+        val backdrop = enriched?.backdropUrl?.takeIf { it.isNotBlank() && !it.isPlaceholder() }
+            ?: item.heroPreview.backdrop?.takeIf { it.isNotBlank() && !it.isPlaceholder() }
+            ?: item.heroPreview.frozenBackdropUrl?.takeIf { it.isNotBlank() && !it.isPlaceholder() }
+        val landscapePoster = item.metaPreview?.landscapePoster?.takeIf { it.isNotBlank() && !it.isPlaceholder() }
+        val logo = enriched?.logo?.takeIf { it.isNotBlank() && !it.isPlaceholder() }
+            ?: item.heroPreview.logo?.takeIf { it.isNotBlank() && !it.isPlaceholder() }
+            ?: item.heroPreview.frozenLogoUrl?.takeIf { it.isNotBlank() && !it.isPlaceholder() }
+        return Triple(backdrop, landscapePoster, logo)
+    }
+
+    private fun prefetchExpandedBackdropIfNeeded(item: ModernCarouselItem) {
+        if (!adapter.backdropExpandEnabled) return
+        if (item.payload !is ModernPayload.Catalog) return
+        val baseW = lastBoundCardWidthPx.takeIf { it > 0 } ?: adapter.cardWidthPx
+        val baseH = lastBoundCardHeightPx.takeIf { it > 0 } ?: adapter.cardHeightPx
+        val expandedW = LeanbackCardExpandSpec.computeExpandedCardWidthPx(
+            baseWidthPx = baseW,
+            cardHeightPx = baseH,
+            isLandscape = adapter.useLandscapePosters
+        )
+        val (backdrop, landscapePoster, logo) = resolveItemBackdropAndLogo(item)
+        val resolution = LeanbackCardExpandSpec.resolveExpandedBackdropArtwork(
+            posterUrl = item.imageUrl ?: item.heroPreview.poster,
+            backdropUrl = backdrop,
+            landscapePosterUrl = landscapePoster,
+            rawPosterFallbackUrl = item.metaPreview?.rawPosterUrl,
+            alwaysShowLandscapeClearlogo = adapter.alwaysShowLandscapeClearlogo,
+            isLandscape = adapter.useLandscapePosters
+        )
+        val ctx = root.context
+        if (!resolution.imageUrl.isNullOrBlank()) {
+            LeanbackArtworkLoader.prefetch(
+                context = ctx,
+                imageUrl = resolution.imageUrl,
+                fallbackUrl = resolution.fallbackUrl,
+                widthPx = expandedW,
+                heightPx = baseH
+            )
+        }
+        if (resolution.showOverlay && !logo.isNullOrBlank()) {
+            val logoH = (baseH * LeanbackCardExpandSpec.EXPANDED_LOGO_HEIGHT_FRACTION).toInt().coerceAtLeast(1)
+            val logoW = (expandedW * LeanbackCardExpandSpec.EXPANDED_LOGO_WIDTH_FRACTION).toInt().coerceAtLeast(1)
+            LeanbackArtworkLoader.prefetch(
+                context = ctx,
+                imageUrl = logo,
+                widthPx = logoW,
+                heightPx = logoH
+            )
+        }
+    }
+
+    private fun updateExpandedOverlayVisibility(
+        item: ModernCarouselItem,
+        showOverlay: Boolean,
+        logoUrl: String?,
+        expandedWidthPx: Int,
+        cardHeightPx: Int
+    ) {
+        val grad = expandedGradientView
+        val logoView = expandedLogoImage
+        val fallbackTitle = expandedTitleFallback
+        if (!showOverlay) {
+            grad?.visibility = View.GONE
+            logoView?.visibility = View.GONE
+            fallbackTitle?.visibility = View.GONE
+            return
+        }
+        grad?.visibility = View.VISIBLE
+        val hasLogo = !logoUrl.isNullOrBlank() && !logoLoadFailed && logoView != null
+        if (hasLogo) {
+            fallbackTitle?.visibility = View.GONE
+            val logoH = (cardHeightPx * LeanbackCardExpandSpec.EXPANDED_LOGO_HEIGHT_FRACTION).toInt().coerceAtLeast(1)
+            val logoW = (expandedWidthPx * LeanbackCardExpandSpec.EXPANDED_LOGO_WIDTH_FRACTION).toInt().coerceAtLeast(1)
+            val lp = logoView.layoutParams as? FrameLayout.LayoutParams
+            if (lp != null && (lp.width != logoW || lp.height != logoH)) {
+                lp.width = logoW
+                lp.height = logoH
+                logoView.layoutParams = lp
+            }
+            logoView.visibility = View.VISIBLE
+            if (boundLogoUrl != logoUrl || logoView.drawable == null) {
+                boundLogoUrl = logoUrl
+                logoDisposable?.dispose()
+                val boundKey = item.key
+                logoDisposable = LeanbackArtworkLoader.loadIntoImageView(
+                    imageView = logoView,
+                    imageUrl = logoUrl,
+                    widthPx = logoW,
+                    heightPx = logoH,
+                    isStillBound = { currentItem?.key == boundKey && isBackdropExpanded },
+                    onCacheHit = {
+                        logoView.visibility = View.VISIBLE
+                        fallbackTitle?.visibility = View.GONE
+                    },
+                    onAsyncSuccess = {
+                        logoView.visibility = View.VISIBLE
+                        fallbackTitle?.visibility = View.GONE
+                    },
+                    onAsyncError = {
+                        logoLoadFailed = true
+                        logoView.visibility = View.GONE
+                        if (isBackdropExpanded && currentItem?.key == boundKey) {
+                            fallbackTitle?.text = item.title
+                            fallbackTitle?.visibility = if (item.title.isNotBlank()) View.VISIBLE else View.GONE
+                        }
+                    }
+                )
+            }
+        } else {
+            logoView?.visibility = View.GONE
+            if (fallbackTitle != null && item.title.isNotBlank()) {
+                val maxW = (expandedWidthPx * LeanbackCardExpandSpec.EXPANDED_LOGO_WIDTH_FRACTION).toInt().coerceAtLeast(1)
+                val lp = fallbackTitle.layoutParams
+                if (lp != null && lp.width != maxW) {
+                    lp.width = maxW
+                    fallbackTitle.layoutParams = lp
+                }
+                fallbackTitle.text = item.title
+                fallbackTitle.visibility = View.VISIBLE
+            } else {
+                fallbackTitle?.visibility = View.GONE
+            }
+        }
+    }
+
+    internal fun applyExpandedState(
+        expanded: Boolean,
+        animated: Boolean,
+        trailerUrl: String? = null,
+        trailerAudioUrl: String? = null
+    ) {
+        val item = currentItem
+        val catalogPayload = item?.payload as? ModernPayload.Catalog
+        val canExpand = expanded &&
+            item != null &&
+            catalogPayload != null &&
+            !catalogPayload.itemId.startsWith("__placeholder_") &&
+            adapter.backdropExpandEnabled &&
+            root.hasFocus()
+
+        if (!canExpand) {
+            if (isBackdropExpanded || widthAnimator != null || activeTrailerOwnerKey != null) {
+                collapseToBaseWidth(animated = animated)
+            }
+            return
+        }
+
+        val resolvedItem = item
+        val ownerKey = catalogPayload.focusKey
+        val baseW = lastBoundCardWidthPx.takeIf { it > 0 } ?: adapter.cardWidthPx
+        val baseH = lastBoundCardHeightPx.takeIf { it > 0 } ?: adapter.cardHeightPx
+        val targetW = LeanbackCardExpandSpec.computeExpandedCardWidthPx(
+            baseWidthPx = baseW,
+            cardHeightPx = baseH,
+            isLandscape = adapter.useLandscapePosters
+        )
+        val wasExpanded = isBackdropExpanded
+        isBackdropExpanded = true
+
+        val (backdrop, landscapePoster, logo) = resolveItemBackdropAndLogo(resolvedItem)
+        val resolution = LeanbackCardExpandSpec.resolveExpandedBackdropArtwork(
+            posterUrl = resolvedItem.imageUrl ?: resolvedItem.heroPreview.poster,
+            backdropUrl = backdrop,
+            landscapePosterUrl = landscapePoster,
+            rawPosterFallbackUrl = resolvedItem.metaPreview?.rawPosterUrl,
+            alwaysShowLandscapeClearlogo = adapter.alwaysShowLandscapeClearlogo,
+            isLandscape = adapter.useLandscapePosters,
+            trailerFirstFrameRendered = trailerFirstFrameRendered
+        )
+
+        val bdView = backdropImage
+        val resolvedArtworkUrl = resolution.imageUrl
+        if (bdView != null && !resolvedArtworkUrl.isNullOrBlank()) {
+            if (boundBackdropUrl != resolvedArtworkUrl || bdView.drawable == null) {
+                boundBackdropUrl = resolvedArtworkUrl
+                backdropDisposable?.dispose()
+                val boundKey = resolvedItem.key
+                backdropDisposable = LeanbackArtworkLoader.loadIntoImageView(
+                    imageView = bdView,
+                    imageUrl = resolvedArtworkUrl,
+                    fallbackUrl = resolution.fallbackUrl,
+                    widthPx = targetW,
+                    heightPx = baseH,
+                    isStillBound = { currentItem?.key == boundKey && isBackdropExpanded },
+                    onCacheHit = {
+                        bdView.animate().cancel()
+                        bdView.visibility = View.VISIBLE
+                        if (!wasExpanded && animated && adapter.animationsEnabled()) {
+                            bdView.alpha = 0f
+                            bdView.animate()
+                                .alpha(1f)
+                                .setDuration(LeanbackCardExpandSpec.BACKDROP_FADE_IN_DURATION_MS)
+                                .start()
+                        } else {
+                            bdView.alpha = 1f
+                        }
+                        if (trailerContainer?.visibility == View.VISIBLE && !trailerFirstFrameRendered) {
+                            trailerCoverImage?.setImageDrawable(bdView.drawable)
+                        }
+                    },
+                    onAsyncSuccess = {
+                        bdView.animate().cancel()
+                        bdView.visibility = View.VISIBLE
+                        if (adapter.animationsEnabled()) {
+                            bdView.alpha = 0f
+                            bdView.animate()
+                                .alpha(1f)
+                                .setDuration(LeanbackCardExpandSpec.BACKDROP_FADE_IN_DURATION_MS)
+                                .start()
+                        } else {
+                            bdView.alpha = 1f
+                        }
+                        if (trailerContainer?.visibility == View.VISIBLE && !trailerFirstFrameRendered) {
+                            trailerCoverImage?.setImageDrawable(bdView.drawable)
+                        }
+                    },
+                    onAsyncError = {
+                        bdView.visibility = View.GONE
+                    }
+                )
+            } else {
+                bdView.alpha = 1f
+                bdView.visibility = View.VISIBLE
+            }
+        } else {
+            bdView?.visibility = View.GONE
+        }
+
+        if (titleText != null) {
+            titleText.visibility = View.GONE
+        }
+
+        updateExpandedOverlayVisibility(
+            item = resolvedItem,
+            showOverlay = resolution.showOverlay,
+            logoUrl = logo,
+            expandedWidthPx = targetW,
+            cardHeightPx = baseH
+        )
+
+        val host = adapter.expandedTrailerHost
+        val container = trailerContainer
+        val shouldPlayTrailer = adapter.playTrailerInExpandedCard &&
+            !trailerUrl.isNullOrBlank() &&
+            host != null &&
+            container != null
+        if (shouldPlayTrailer) {
+            val cover = trailerCoverImage
+            if (!host.isPlayingFor(ownerKey)) {
+                trailerFirstFrameRendered = false
+                if (cover != null) {
+                    cover.animate().cancel()
+                    cover.setImageDrawable(backdropImage?.drawable ?: posterImage.drawable)
+                    cover.alpha = 1f
+                    cover.visibility = View.VISIBLE
+                }
+            }
+            activeTrailerOwnerKey = ownerKey
+            host.attachAndPlay(
+                container = container,
+                ownerKey = ownerKey,
+                videoUrl = trailerUrl,
+                audioUrl = trailerAudioUrl,
+                muted = adapter.trailerMuted,
+                cropToFill = true,
+                overscanZoom = LeanbackCardExpandSpec.MODERN_EXPANDED_TRAILER_OVERSCAN_ZOOM,
+                onFirstFrameRendered = {
+                    if (currentItem?.key != resolvedItem.key || !isBackdropExpanded) return@attachAndPlay
+                    trailerFirstFrameRendered = true
+                    cover?.let { coverView ->
+                        coverView.animate().cancel()
+                        if (adapter.animationsEnabled()) {
+                            coverView.animate()
+                                .alpha(0f)
+                                .setDuration(LeanbackCardExpandSpec.TRAILER_COVER_FADE_OUT_DURATION_MS)
+                                .withEndAction { coverView.visibility = View.GONE }
+                                .start()
+                        } else {
+                            coverView.alpha = 0f
+                            coverView.visibility = View.GONE
+                        }
+                    }
+                    val postFrameResolution = LeanbackCardExpandSpec.resolveExpandedBackdropArtwork(
+                        posterUrl = resolvedItem.imageUrl ?: resolvedItem.heroPreview.poster,
+                        backdropUrl = backdrop,
+                        landscapePosterUrl = landscapePoster,
+                        rawPosterFallbackUrl = resolvedItem.metaPreview?.rawPosterUrl,
+                        alwaysShowLandscapeClearlogo = adapter.alwaysShowLandscapeClearlogo,
+                        isLandscape = adapter.useLandscapePosters,
+                        trailerFirstFrameRendered = true
+                    )
+                    updateExpandedOverlayVisibility(
+                        item = resolvedItem,
+                        showOverlay = postFrameResolution.showOverlay,
+                        logoUrl = logo,
+                        expandedWidthPx = targetW,
+                        cardHeightPx = baseH
+                    )
+                },
+                onEnded = {
+                    if (activeTrailerOwnerKey == ownerKey) {
+                        activeTrailerOwnerKey = null
+                    }
+                    trailerFirstFrameRendered = false
+                    trailerCoverImage?.visibility = View.GONE
+                    adapter.onExpandedTrailerEnded()
+                },
+                onError = {
+                    if (activeTrailerOwnerKey == ownerKey) {
+                        activeTrailerOwnerKey = null
+                    }
+                    trailerFirstFrameRendered = false
+                    trailerCoverImage?.visibility = View.GONE
+                }
+            )
+        } else {
+            detachTrailerIfOwned()
+        }
+
+        val isAlreadyAnimatingToTarget = LeanbackCardExpandSpec.shouldRetainRunningWidthAnimation(
+            isRunning = widthAnimator?.isRunning == true,
+            animatingTargetWidthPx = animatingTargetWidthPx,
+            desiredTargetWidthPx = targetW
+        )
+        if (!isAlreadyAnimatingToTarget && (!wasExpanded || cardContainer.layoutParams?.width != targetW || cardContainer.width != targetW)) {
+            animateOrSnapWidth(targetWidthPx = targetW, heightPx = baseH, animated = animated, expanded = true)
+        }
+    }
+
+    private fun detachTrailerIfOwned() {
+        val owner = activeTrailerOwnerKey
+        if (owner != null) {
+            adapter.expandedTrailerHost?.detach(owner)
+            activeTrailerOwnerKey = null
+        }
+        trailerFirstFrameRendered = false
+        trailerContainer?.visibility = View.GONE
+        trailerCoverImage?.let {
+            it.animate().cancel()
+            it.setImageDrawable(null)
+            it.visibility = View.GONE
+        }
+    }
+
+    private fun hideExpandedVisuals() {
+        detachTrailerIfOwned()
+        backdropDisposable?.dispose()
+        backdropDisposable = null
+        logoDisposable?.dispose()
+        logoDisposable = null
+        boundBackdropUrl = null
+        boundLogoUrl = null
+        logoLoadFailed = false
+        backdropImage?.let {
+            it.animate().cancel()
+            it.setImageDrawable(null)
+            it.visibility = View.GONE
+        }
+        expandedGradientView?.visibility = View.GONE
+        expandedLogoImage?.let {
+            it.setImageDrawable(null)
+            it.visibility = View.GONE
+        }
+        expandedTitleFallback?.visibility = View.GONE
+        val item = currentItem
+        if (adapter.showLabels && titleText != null && item != null && item.title.isNotBlank()) {
+            titleText.visibility = View.VISIBLE
+        }
+    }
+
+    internal fun collapseToBaseWidth(animated: Boolean) {
+        isBackdropExpanded = false
+        hideExpandedVisuals()
+        val baseW = lastBoundCardWidthPx.takeIf { it > 0 } ?: adapter.cardWidthPx
+        val baseH = lastBoundCardHeightPx.takeIf { it > 0 } ?: adapter.cardHeightPx
+        if (baseW <= 0 || baseH <= 0) return
+        val isAlreadyCollapsingToBase = LeanbackCardExpandSpec.shouldRetainRunningWidthAnimation(
+            isRunning = widthAnimator?.isRunning == true,
+            animatingTargetWidthPx = animatingTargetWidthPx,
+            desiredTargetWidthPx = baseW
+        )
+        if (animated && isAlreadyCollapsingToBase) {
+            return
+        }
+        animateOrSnapWidth(targetWidthPx = baseW, heightPx = baseH, animated = animated, expanded = false)
+    }
+
+    internal fun resetExpandedStateImmediate() {
+        widthAnimator?.cancel()
+        widthAnimator = null
+        animatingTargetWidthPx = -1
+        isBackdropExpanded = false
+        hideExpandedVisuals()
+        val baseW = lastBoundCardWidthPx.takeIf { it > 0 } ?: adapter.cardWidthPx
+        val baseH = lastBoundCardHeightPx.takeIf { it > 0 } ?: adapter.cardHeightPx
+        if (baseW > 0 && baseH > 0) {
+            applyWidthPx(baseW, baseH)
+        }
+    }
+
+    private fun animateOrSnapWidth(
+        targetWidthPx: Int,
+        heightPx: Int,
+        animated: Boolean,
+        expanded: Boolean
+    ) {
+        widthAnimator?.cancel()
+        widthAnimator = null
+        animatingTargetWidthPx = -1
+        val startW = currentEffectiveCardWidthPx().takeIf { it > 0 } ?: targetWidthPx
+        val gridView = adapter.attachedRecyclerView as? ModernInteropHorizontalGridView
+
+        if (!animated || !adapter.animationsEnabled() || startW == targetWidthPx || !root.isAttachedToWindow) {
+            applyWidthPx(targetWidthPx, heightPx)
+            if (root.hasFocus() && cardContainer.isAttachedToWindow) {
+                gridView?.notifyFocusedCardBoundsChanged(
+                    cardContainer = cardContainer,
+                    isAnimatingWidth = false,
+                    isExpandedCard = isBackdropExpanded,
+                    dominantColor = currentDominantColor,
+                    explicitCardWidthPx = targetWidthPx,
+                    explicitCardHeightPx = heightPx,
+                    bufferCardWidthPx = targetWidthPx
+                )
+            }
+            return
+        }
+
+        val bufferW = maxOf(startW, targetWidthPx)
+        val durationMs = if (expanded) {
+            LeanbackCardExpandSpec.CARD_EXPAND_ANIMATION_DURATION_MS
+        } else {
+            LeanbackCardExpandSpec.CARD_COLLAPSE_ANIMATION_DURATION_MS
+        }
+        val animator = ValueAnimator.ofInt(startW, targetWidthPx).apply {
+            duration = durationMs
+            interpolator = LeanbackCardExpandSpec.createExpandInterpolator()
+            addUpdateListener { anim ->
+                val animatedW = anim.animatedValue as Int
+                applyWidthPx(animatedW, heightPx)
+                if (root.hasFocus()) {
+                    gridView?.notifyFocusedCardBoundsChanged(
+                        cardContainer = cardContainer,
+                        isAnimatingWidth = true,
+                        isExpandedCard = expanded,
+                        dominantColor = currentDominantColor,
+                        explicitCardWidthPx = animatedW,
+                        explicitCardHeightPx = heightPx,
+                        bufferCardWidthPx = bufferW
+                    )
+                }
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                private var isCancelled = false
+
+                override fun onAnimationCancel(animation: Animator) {
+                    isCancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    if (widthAnimator === animation) {
+                        widthAnimator = null
+                        animatingTargetWidthPx = -1
+                    }
+                    // Android always dispatches onAnimationEnd after cancel(); never overwrite
+                    // the caller's new target width when this tween was explicitly cancelled.
+                    if (isCancelled) return
+
+                    applyWidthPx(targetWidthPx, heightPx)
+                    if (root.hasFocus() && cardContainer.isAttachedToWindow) {
+                        gridView?.notifyFocusedCardBoundsChanged(
+                            cardContainer = cardContainer,
+                            isAnimatingWidth = false,
+                            isExpandedCard = isBackdropExpanded,
+                            dominantColor = currentDominantColor,
+                            explicitCardWidthPx = targetWidthPx,
+                            explicitCardHeightPx = heightPx,
+                            bufferCardWidthPx = targetWidthPx
+                        )
+                    } else {
+                        gridView?.onSiblingCardWidthAnimationFinished()
+                    }
+                }
+            })
+        }
+        widthAnimator = animator
+        animatingTargetWidthPx = targetWidthPx
+        animator.start()
     }
 
     private fun resolveCardColorFromImage(
@@ -270,6 +867,13 @@ class LeanbackCardViewHolder(
             boundBlurred == shouldBlur &&
             (posterImage.drawable != null || imageDisposable?.isDisposed == false)
 
+        val previousKey = currentItem?.key
+        if (previousKey != item.key && (isBackdropExpanded || widthAnimator != null || activeTrailerOwnerKey != null)) {
+            resetExpandedStateImmediate()
+        }
+        lastBoundCardWidthPx = cardWidthPx
+        lastBoundCardHeightPx = cardHeightPx
+
         currentItem = item
         updateCornerRadius(cornerRadiusPx)
 
@@ -282,19 +886,21 @@ class LeanbackCardViewHolder(
         val cachedColor = LeanbackColorEngine.getCachedColor(colorCacheKey)
         currentDominantColor = cachedColor ?: LeanbackColorEngine.defaultFallbackColor
 
-        // Set dimensions
-        val cardLp = cardContainer.layoutParams
-        if (cardLp.width != cardWidthPx || cardLp.height != cardHeightPx) {
-            cardLp.width = cardWidthPx
-            cardLp.height = cardHeightPx
-            cardContainer.layoutParams = cardLp
-
-            val rootLp = root.layoutParams
-            if (rootLp != null && rootLp.width != cardWidthPx) {
-                rootLp.width = cardWidthPx
-                root.layoutParams = rootLp
+        // Set dimensions (preserve expanded width if this exact focused item is expanded)
+        val catalogPayload = item.payload as? ModernPayload.Catalog
+        val shouldStayExpanded = isBackdropExpanded &&
+            adapter.backdropExpandEnabled &&
+            catalogPayload != null &&
+            catalogPayload.focusKey == adapter.expandedCatalogFocusKey
+        val desiredWidthPx = if (shouldStayExpanded) {
+            LeanbackCardExpandSpec.computeExpandedCardWidthPx(cardWidthPx, cardHeightPx, adapter.useLandscapePosters)
+        } else {
+            if (isBackdropExpanded) {
+                resetExpandedStateImmediate()
             }
+            cardWidthPx
         }
+        applyWidthPx(desiredWidthPx, cardHeightPx)
 
         // Title, typography & accessibility description
         val style = adapter.themeStyle
@@ -444,9 +1050,24 @@ class LeanbackCardViewHolder(
                 root.requestFocus()
             }
             updateFocusVisual(true)
+            val catalogFocusKey = (item.payload as? ModernPayload.Catalog)?.focusKey
+            if (adapter.backdropExpandEnabled &&
+                catalogFocusKey != null &&
+                catalogFocusKey == adapter.expandedCatalogFocusKey
+            ) {
+                applyExpandedState(
+                    expanded = true,
+                    animated = false,
+                    trailerUrl = adapter.expandedTrailerUrl,
+                    trailerAudioUrl = adapter.expandedTrailerAudioUrl
+                )
+            }
         } else {
             if (!mayTakeFocus && root.hasFocus()) {
                 root.clearFocus()
+            }
+            if (isBackdropExpanded) {
+                resetExpandedStateImmediate()
             }
             updateFocusVisual(false)
         }
@@ -475,6 +1096,7 @@ class LeanbackCardViewHolder(
     }
 
     fun unbind() {
+        resetExpandedStateImmediate()
         root.animate().cancel()
         root.scaleX = 1.0f
         root.scaleY = 1.0f
@@ -542,6 +1164,117 @@ class LeanbackRowAdapter(
     private var lastHorizontalPrefetchPosition: Int = RecyclerView.NO_POSITION
     var isSubmittingItems: Boolean = false
         private set
+
+    var backdropExpandEnabled: Boolean = false
+    var useLandscapePosters: Boolean = false
+    var alwaysShowLandscapeClearlogo: Boolean = false
+    var playTrailerInExpandedCard: Boolean = false
+    var trailerMuted: Boolean = true
+    var expandedTrailerHost: LeanbackExpandedTrailerHost? = null
+    var enrichedPreviewsProvider: () -> Map<String, MetaPreview> = { emptyMap() }
+    var onExpandedTrailerEnded: () -> Unit = {}
+
+    var expandedCatalogFocusKey: String? = null
+        private set
+    var expandedTrailerUrl: String? = null
+        private set
+    var expandedTrailerAudioUrl: String? = null
+        private set
+
+    val hasExpandedCard: Boolean
+        get() {
+            val rv = attachedRecyclerView ?: return false
+            for (i in 0 until rv.childCount) {
+                val vh = rv.getChildViewHolder(rv.getChildAt(i)) as? LeanbackCardViewHolder ?: continue
+                if (vh.isBackdropExpanded) return true
+            }
+            return false
+        }
+
+    val hasAnimatingWidthCard: Boolean
+        get() {
+            val rv = attachedRecyclerView ?: return false
+            for (i in 0 until rv.childCount) {
+                val vh = rv.getChildViewHolder(rv.getChildAt(i)) as? LeanbackCardViewHolder ?: continue
+                if (vh.isAnimatingWidth) return true
+            }
+            return false
+        }
+
+    fun updateExpandedCardState(
+        expandedFocusKey: String?,
+        trailerUrl: String?,
+        trailerAudioUrl: String?
+    ) {
+        expandedCatalogFocusKey = if (backdropExpandEnabled) expandedFocusKey else null
+        expandedTrailerUrl = if (playTrailerInExpandedCard) trailerUrl else null
+        expandedTrailerAudioUrl = if (playTrailerInExpandedCard) trailerAudioUrl else null
+
+        val rv = attachedRecyclerView ?: return
+        val targetKey = expandedCatalogFocusKey
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i) ?: continue
+            val vh = rv.getChildViewHolder(child) as? LeanbackCardViewHolder ?: continue
+            val pos = vh.bindingAdapterPosition
+            val item = if (pos in items.indices) items[pos] else null
+            val itemFocusKey = (item?.payload as? ModernPayload.Catalog)?.focusKey
+            val shouldExpand = targetKey != null &&
+                backdropExpandEnabled &&
+                itemFocusKey == targetKey &&
+                vh.root.hasFocus()
+            if (shouldExpand) {
+                vh.applyExpandedState(
+                    expanded = true,
+                    animated = true,
+                    trailerUrl = expandedTrailerUrl,
+                    trailerAudioUrl = expandedTrailerAudioUrl
+                )
+            } else if (vh.isBackdropExpanded) {
+                val animateCollapse = animationsEnabled() &&
+                    (rv as? ModernInteropHorizontalGridView)?.isHoldingHorizontalKey != true
+                vh.applyExpandedState(expanded = false, animated = animateCollapse)
+            }
+        }
+    }
+
+    fun collapseExpandedCard(animated: Boolean) {
+        val prevKey = expandedCatalogFocusKey
+        expandedCatalogFocusKey = null
+        expandedTrailerUrl = null
+        expandedTrailerAudioUrl = null
+        if (prevKey != null) {
+            expandedTrailerHost?.detach(prevKey)
+        }
+        val rv = attachedRecyclerView ?: return
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i) ?: continue
+            val vh = rv.getChildViewHolder(child) as? LeanbackCardViewHolder ?: continue
+            if (vh.isBackdropExpanded || (!animated && vh.isAnimatingWidth)) {
+                if (animated && animationsEnabled()) {
+                    vh.collapseToBaseWidth(animated = true)
+                } else {
+                    vh.resetExpandedStateImmediate()
+                    if (vh.root.hasFocus()) {
+                        val baseW = vh.currentEffectiveCardWidthPx()
+                        val baseH = vh.currentEffectiveCardHeightPx()
+                        (rv as? ModernInteropHorizontalGridView)?.notifyFocusedCardBoundsChanged(
+                            cardContainer = vh.cardContainer,
+                            isAnimatingWidth = false,
+                            isExpandedCard = false,
+                            dominantColor = vh.currentDominantColor,
+                            explicitCardWidthPx = baseW,
+                            explicitCardHeightPx = baseH,
+                            bufferCardWidthPx = baseW
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun collapseExpandedCardImmediate() {
+        collapseExpandedCard(animated = false)
+    }
 
     fun getItem(position: Int): ModernCarouselItem? = items.getOrNull(position)
 
@@ -694,6 +1427,7 @@ class LeanbackRowAdapter(
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        collapseExpandedCardImmediate()
         super.onDetachedFromRecyclerView(recyclerView)
         if (attachedRecyclerView === recyclerView) {
             attachedRecyclerView = null
@@ -940,15 +1674,104 @@ class LeanbackRowAdapter(
             clipChildren = false
         }
 
+        val mediaClipContainer = FrameLayout(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            clipChildren = true
+            clipToOutline = true
+        }
+
         val posterImage = ImageView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
             scaleType = ImageView.ScaleType.CENTER_CROP
-            clipToOutline = true
         }
-        cardContainer.addView(posterImage)
+        mediaClipContainer.addView(posterImage)
+
+        val backdropImage = ImageView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            visibility = View.GONE
+        }
+        mediaClipContainer.addView(backdropImage)
+
+        val trailerContainer = FrameLayout(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+        }
+        mediaClipContainer.addView(trailerContainer)
+
+        val trailerCoverImage = ImageView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            visibility = View.GONE
+        }
+        mediaClipContainer.addView(trailerCoverImage)
+
+        val expandedGradientView = View(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(Color.argb(194, 0, 0, 0), Color.argb(60, 0, 0, 0), Color.TRANSPARENT)
+            )
+            visibility = View.GONE
+        }
+        mediaClipContainer.addView(expandedGradientView)
+
+        val overlayHorizPadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 10f, metrics).toInt()
+        val overlayBottomPadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 8f, metrics).toInt()
+        val expandedLogoImage = ImageView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.START
+            ).apply {
+                marginStart = overlayHorizPadPx
+                marginEnd = overlayHorizPadPx
+                bottomMargin = overlayBottomPadPx
+            }
+            scaleType = ImageView.ScaleType.FIT_START
+            visibility = View.GONE
+        }
+        mediaClipContainer.addView(expandedLogoImage)
+
+        val expandedTitleFallback = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.START
+            ).apply {
+                marginStart = overlayHorizPadPx
+                marginEnd = overlayHorizPadPx
+                bottomMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 10f, metrics).toInt()
+            }
+            setTextColor(Color.WHITE)
+            themeStyle.typeface?.let { typeface = it }
+            setTypeface(typeface, Typeface.BOLD)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+            setShadowLayer(4f, 0f, 1f, Color.argb(180, 0, 0, 0))
+            visibility = View.GONE
+        }
+        mediaClipContainer.addView(expandedTitleFallback)
 
         val emojiCoverView = TextView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -960,7 +1783,7 @@ class LeanbackRowAdapter(
             gravity = Gravity.CENTER
             visibility = View.GONE
         }
-        cardContainer.addView(emojiCoverView)
+        mediaClipContainer.addView(emojiCoverView)
 
         val badgeSizePx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 22f, metrics).toInt()
         val badgeMarginPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, metrics).toInt()
@@ -982,7 +1805,7 @@ class LeanbackRowAdapter(
             gravity = Gravity.CENTER
             visibility = View.GONE
         }
-        cardContainer.addView(watchedBadgeView)
+        mediaClipContainer.addView(watchedBadgeView)
 
         val pbHeightPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3.5f, metrics)
         val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -1006,7 +1829,7 @@ class LeanbackRowAdapter(
             )
             visibility = View.GONE
         }
-        cardContainer.addView(progressBar)
+        mediaClipContainer.addView(progressBar)
 
         val fallbackPadPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 10f, metrics).toInt()
         val fallbackTitleText = TextView(context).apply {
@@ -1023,8 +1846,9 @@ class LeanbackRowAdapter(
             ellipsize = TextUtils.TruncateAt.END
             visibility = View.GONE
         }
-        cardContainer.addView(fallbackTitleText)
+        mediaClipContainer.addView(fallbackTitleText)
 
+        cardContainer.addView(mediaClipContainer)
         root.addView(cardContainer)
 
         val titleText = TextView(context).apply {
@@ -1055,7 +1879,14 @@ class LeanbackRowAdapter(
             watchedBadgeView = watchedBadgeView,
             emojiCoverView = emojiCoverView,
             fallbackTitleText = fallbackTitleText,
-            progressBarHeightPx = pbHeightPx
+            progressBarHeightPx = pbHeightPx,
+            mediaClipContainer = mediaClipContainer,
+            backdropImage = backdropImage,
+            trailerContainer = trailerContainer,
+            trailerCoverImage = trailerCoverImage,
+            expandedGradientView = expandedGradientView,
+            expandedLogoImage = expandedLogoImage,
+            expandedTitleFallback = expandedTitleFallback
         ).also {
             it.lastProgressAccentColor = themeStyle.accentColor
         }

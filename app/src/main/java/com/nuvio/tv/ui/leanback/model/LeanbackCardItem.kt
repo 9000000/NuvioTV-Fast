@@ -25,7 +25,13 @@ sealed interface LeanbackCardItem {
         val badgeText: String? = null,
         val isWatched: Boolean = false,
         override val payload: Any? = null,
-        val isSeeAll: Boolean = false
+        val isSeeAll: Boolean = false,
+        val backdropUrl: String? = null,
+        val landscapePosterUrl: String? = null,
+        val logoUrl: String? = null,
+        val expandedMetaTokens: List<String> = emptyList(),
+        val ageRating: String? = null,
+        val description: String? = null
     ) : LeanbackCardItem
 
     /**

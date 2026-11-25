@@ -917,3 +917,21 @@
 - **Status**: Fixed
 
 ---
+
+## [2026-11-25 20:23] - Lệch thứ tự tham số trailing-lambda khi thêm `canHardwareDecodeVideo` vào `InAppYouTubeExtractor`
+
+- **Type**: Process
+- **Severity**: Low
+- **File**: `app/src/main/java/com/nuvio/tv/data/trailer/InAppYouTubeExtractor.kt:197`
+- **Agent**: mon
+- **Root Cause**: Khi thêm tham số lambda tùy chọn `canHardwareDecodeVideo` vào vị trí cuối cùng của `internal constructor` trên `InAppYouTubeExtractor`, cú pháp trailing-lambda `InAppYouTubeExtractor { ... }` trong `InAppYouTubeExtractorDecoderSupportTest` bị Kotlin bind sang `canHardwareDecodeVideo` thay vì `canDecodeVideo`.
+- **Error Message**: 
+  ```
+  InAppYouTubeExtractorDecoderSupportTest > leaves nothing when no stream can be shown, so HLS is used instead FAILED
+  InAppYouTubeExtractorDecoderSupportTest > drops streams the device has no decoder for FAILED
+  ```
+- **Fix Applied**: Đặt `canHardwareDecodeVideo: ((...) -> Boolean)? = null` đứng trước `canDecodeVideo` (giữ `canDecodeVideo` ở vị trí tham số cuối cùng của primary constructor) và fallback `canHardwareDecodeVideo ?: canDecodeVideo`.
+- **Prevention**: Khi mở rộng constructor/hàm Kotlin có tham số lambda cuối cùng đang được caller gọi bằng cú pháp trailing-lambda, luôn chèn tham số tùy chọn mới vào trước tham số lambda cuối hoặc dùng secondary constructor riêng.
+- **Status**: Fixed
+
+---

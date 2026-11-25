@@ -1,6 +1,8 @@
 package com.nuvio.tv.core.player
 
 import android.content.Context
+import android.os.Build
+import android.os.Handler
 import android.text.Layout
 import android.util.Log
 import androidx.compose.ui.geometry.Rect
@@ -12,10 +14,13 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
+import androidx.media3.exoplayer.video.VideoRendererEventListener
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.SubtitleStyleSettings
@@ -23,6 +28,7 @@ import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.data.trailer.InAppYouTubeExtractor
 import com.nuvio.tv.data.trailer.TrailerSubtitleTrack
 import com.nuvio.tv.data.trailer.pickTrailerSubtitle
+import com.nuvio.tv.ui.screens.player.HardwareFirstVideoRenderer
 import com.nuvio.tv.ui.screens.player.SdhFilteringTextOutput
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -358,8 +364,8 @@ class TrailerPlayerPool @Inject constructor(
             .setBufferDurationsMs(
                 /* minBufferMs = */ 30_000,
                 /* maxBufferMs = */ 120_000,
-                /* bufferForPlaybackMs = */ 5_000,
-                /* bufferForPlaybackAfterRebufferMs = */ 10_000
+                /* bufferForPlaybackMs = */ 2_500,
+                /* bufferForPlaybackAfterRebufferMs = */ 5_000
             )
             .setTargetBufferBytes(targetBufferMb * 1024 * 1024)
             // The byte cap must hold even before minBufferMs is reached, or a high-bitrate
@@ -389,6 +395,44 @@ class TrailerPlayerPool @Inject constructor(
             )
         }
         val renderersFactory = object : DefaultRenderersFactory(context) {
+            override fun buildVideoRenderers(
+                context: Context,
+                extensionRendererMode: Int,
+                mediaCodecSelector: MediaCodecSelector,
+                enableDecoderFallback: Boolean,
+                eventHandler: Handler,
+                eventListener: VideoRendererEventListener,
+                allowedVideoJoiningTimeMs: Long,
+                out: ArrayList<Renderer>
+            ) {
+                val built = ArrayList<Renderer>()
+                super.buildVideoRenderers(
+                    context,
+                    extensionRendererMode,
+                    mediaCodecSelector,
+                    enableDecoderFallback,
+                    eventHandler,
+                    eventListener,
+                    allowedVideoJoiningTimeMs,
+                    built
+                )
+                for (renderer in built) {
+                    if (renderer::class.java == MediaCodecVideoRenderer::class.java) {
+                        val builder = MediaCodecVideoRenderer.Builder(context)
+                            .setCodecAdapterFactory(getCodecAdapterFactory())
+                            .setMediaCodecSelector(mediaCodecSelector)
+                            .setAllowedJoiningTimeMs(allowedVideoJoiningTimeMs)
+                            .setEnableDecoderFallback(enableDecoderFallback)
+                            .setEventHandler(eventHandler)
+                            .setEventListener(eventListener)
+                            .setMaxDroppedFramesToNotify(DefaultRenderersFactory.MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY)
+                        out.add(HardwareFirstVideoRenderer(builder))
+                    } else {
+                        out.add(renderer)
+                    }
+                }
+            }
+
             override fun buildTextRenderers(
                 context: Context,
                 output: TextOutput,
@@ -403,6 +447,11 @@ class TrailerPlayerPool @Inject constructor(
                     extensionRendererMode,
                     out
                 )
+            }
+        }.apply {
+            setEnableDecoderFallback(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                forceEnableMediaCodecAsynchronousQueueing()
             }
         }
         return ExoPlayer.Builder(context, renderersFactory)

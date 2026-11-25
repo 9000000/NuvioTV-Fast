@@ -37,11 +37,11 @@ class AmbientModeDataStore @Inject constructor(
     val settings: Flow<AmbientModeSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             AmbientModeSettings(
-                enabled = prefs[enabledKey] ?: true,
+                enabled = prefs[enabledKey] ?: AmbientModeSettings.DEFAULT_ENABLED,
                 timeoutMinutes = prefs[timeoutMinutesKey] ?: AmbientModeSettings.DEFAULT_TIMEOUT_MINUTES,
                 catalogKeys = decodeKeys(prefs[catalogKeysKey]),
                 displayMode = AmbientDisplayMode.fromStorage(prefs[displayModeKey]),
-                trailerAudioEnabled = prefs[trailerAudioEnabledKey] ?: false
+                trailerAudioEnabled = prefs[trailerAudioEnabledKey] ?: AmbientModeSettings.DEFAULT_TRAILER_AUDIO_ENABLED
             )
         }
     }.distinctUntilChanged()

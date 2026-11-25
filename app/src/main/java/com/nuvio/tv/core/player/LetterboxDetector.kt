@@ -6,7 +6,8 @@ import kotlin.math.abs
 
 object LetterboxDetector {
 
-    const val SAMPLE_INTERVAL_MS = 400L
+    const val SAMPLE_INTERVAL_MS = 750L
+    const val MAX_SAMPLE_VIDEO_HEIGHT = 1080
     private const val SAMPLE_WINDOW_FRACTION = 0.2f
 
     const val SAMPLE_WIDTH = 64
@@ -63,8 +64,17 @@ class LetterboxSampler {
     private val pixels = IntArray(LetterboxDetector.SAMPLE_WIDTH * LetterboxDetector.SAMPLE_HEIGHT)
 
     fun sample(textureView: TextureView): Float? {
-        if (!textureView.isAvailable) return null
+        if (!captureFrame(textureView)) return null
+        return analyzeCapturedFrame()
+    }
+
+    fun captureFrame(textureView: TextureView): Boolean {
+        if (!textureView.isAvailable) return false
         textureView.getBitmap(bitmap)
+        return true
+    }
+
+    fun analyzeCapturedFrame(): Float? {
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         return LetterboxDetector.detectBar(pixels, bitmap.width, bitmap.height)
     }

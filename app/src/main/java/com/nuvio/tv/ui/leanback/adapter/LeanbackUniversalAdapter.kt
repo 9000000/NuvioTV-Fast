@@ -12,6 +12,7 @@ import com.nuvio.tv.domain.model.isPlaceholder
 import com.nuvio.tv.ui.leanback.container.InteropHorizontalGridView
 import com.nuvio.tv.ui.leanback.core.HorizontalPrefetchProfileCache
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
+import com.nuvio.tv.ui.leanback.core.LeanbackExpandedTrailerHost
 import com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.holder.LeanbackAvatarViewHolder
 import com.nuvio.tv.ui.leanback.holder.LeanbackBaseViewHolder
@@ -51,6 +52,106 @@ class LeanbackUniversalAdapter(
     var attachedRecyclerView: RecyclerView? = null
     var isSubmittingItems: Boolean = false
         private set
+
+    var backdropExpandEnabled: Boolean = false
+    var alwaysShowLandscapeClearlogo: Boolean = false
+    var playTrailerInExpandedCard: Boolean = false
+    var trailerMuted: Boolean = true
+    var expandedTrailerHost: LeanbackExpandedTrailerHost? = null
+    var onExpandedTrailerEnded: () -> Unit = {}
+
+    var expandedItemKey: String? = null
+        private set
+    var expandedTrailerUrl: String? = null
+        private set
+    var expandedTrailerAudioUrl: String? = null
+        private set
+
+    val hasExpandedCard: Boolean
+        get() {
+            val rv = attachedRecyclerView ?: return false
+            for (i in 0 until rv.childCount) {
+                val vh = rv.getChildViewHolder(rv.getChildAt(i)) as? LeanbackPosterViewHolder ?: continue
+                if (vh.isBackdropExpanded) return true
+            }
+            return false
+        }
+
+    val hasAnimatingWidthCard: Boolean
+        get() {
+            val rv = attachedRecyclerView ?: return false
+            for (i in 0 until rv.childCount) {
+                val vh = rv.getChildViewHolder(rv.getChildAt(i)) as? LeanbackPosterViewHolder ?: continue
+                if (vh.isAnimatingWidth) return true
+            }
+            return false
+        }
+
+    fun updateExpandedCardState(
+        expandedKey: String?,
+        trailerUrl: String?,
+        trailerAudioUrl: String?
+    ) {
+        expandedItemKey = if (backdropExpandEnabled) expandedKey else null
+        expandedTrailerUrl = if (playTrailerInExpandedCard) trailerUrl else null
+        expandedTrailerAudioUrl = if (playTrailerInExpandedCard) trailerAudioUrl else null
+
+        val rv = attachedRecyclerView ?: return
+        val targetKey = expandedItemKey
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i) ?: continue
+            val vh = rv.getChildViewHolder(child) as? LeanbackPosterViewHolder ?: continue
+            val pos = vh.bindingAdapterPosition
+            val item = if (pos in items.indices) items[pos] as? LeanbackCardItem.Poster else null
+            val shouldExpand = targetKey != null &&
+                backdropExpandEnabled &&
+                item != null &&
+                !item.isSeeAll &&
+                item.key == targetKey &&
+                vh.root.hasFocus()
+            if (shouldExpand) {
+                vh.applyExpandedState(
+                    expanded = true,
+                    animated = true,
+                    trailerUrl = expandedTrailerUrl,
+                    trailerAudioUrl = expandedTrailerAudioUrl
+                )
+            } else if (vh.isBackdropExpanded) {
+                val animateCollapse = animationsEnabled() &&
+                    (rv as? InteropHorizontalGridView)?.isHoldingHorizontalKey != true
+                vh.applyExpandedState(expanded = false, animated = animateCollapse)
+            }
+        }
+    }
+
+    fun collapseExpandedCard(animated: Boolean) {
+        val prevKey = expandedItemKey
+        expandedItemKey = null
+        expandedTrailerUrl = null
+        expandedTrailerAudioUrl = null
+        if (prevKey != null) {
+            expandedTrailerHost?.detach(prevKey)
+        }
+        val rv = attachedRecyclerView ?: return
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i) ?: continue
+            val vh = rv.getChildViewHolder(child) as? LeanbackPosterViewHolder ?: continue
+            if (vh.isBackdropExpanded || (!animated && vh.isAnimatingWidth)) {
+                if (animated && animationsEnabled()) {
+                    vh.collapseToBaseWidth(animated = true)
+                } else {
+                    vh.resetExpandedStateImmediate()
+                    if (vh.root.hasFocus()) {
+                        vh.updateFocusVisual(true)
+                    }
+                }
+            }
+        }
+    }
+
+    fun collapseExpandedCardImmediate() {
+        collapseExpandedCard(animated = false)
+    }
 
     fun dispatchItemFocused(position: Int, item: LeanbackCardItem) {
         if (position !in items.indices) return
@@ -132,6 +233,7 @@ class LeanbackUniversalAdapter(
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        collapseExpandedCardImmediate()
         super.onDetachedFromRecyclerView(recyclerView)
         if (attachedRecyclerView === recyclerView) {
             attachedRecyclerView = null
@@ -217,7 +319,13 @@ class LeanbackUniversalAdapter(
                     a.progressPercent == b.progressPercent &&
                     a.badgeText == b.badgeText &&
                     a.isWatched == b.isWatched &&
-                    a.isSeeAll == b.isSeeAll
+                    a.isSeeAll == b.isSeeAll &&
+                    a.backdropUrl == b.backdropUrl &&
+                    a.landscapePosterUrl == b.landscapePosterUrl &&
+                    a.logoUrl == b.logoUrl &&
+                    a.expandedMetaTokens == b.expandedMetaTokens &&
+                    a.ageRating == b.ageRating &&
+                    a.description == b.description
             a is LeanbackCardItem.Episode && b is LeanbackCardItem.Episode ->
                 a.description == b.description &&
                     a.episodeNumber == b.episodeNumber &&

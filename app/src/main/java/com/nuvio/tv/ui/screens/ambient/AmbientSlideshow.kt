@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -51,6 +50,7 @@ import coil3.request.SuccessResult
 import coil3.toBitmap
 import com.nuvio.tv.data.trailer.TrailerPlaybackSource
 import com.nuvio.tv.domain.model.AmbientDisplayMode
+import com.nuvio.tv.domain.model.AmbientModeSettings
 import com.nuvio.tv.ui.components.TrailerPlayer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -75,6 +75,7 @@ private const val BACKDROP_FADE_OUT_MS = 700
 private const val TRAILER_FADE_IN_MS = 500
 private const val TRAILER_ERROR_FADE_OUT_MS = 300
 private const val TRAILER_FIRST_FRAME_TIMEOUT_MS = 8_000L
+private const val TRAILER_NEXT_PRELOAD_SETTLE_DELAY_MS = 3_000L
 private const val BLACK_HOLD_MS = 300L
 private const val ALL_FAILED_RETRY_MS = 15_000L
 private const val EMPTY_POLL_MS = 500L
@@ -103,8 +104,8 @@ private class LoadedSlide(
 @Composable
 fun AmbientSlideshow(
     slides: List<AmbientSlide>,
-    displayMode: AmbientDisplayMode = AmbientDisplayMode.BACKDROP,
-    trailerAudioEnabled: Boolean = false,
+    displayMode: AmbientDisplayMode = AmbientModeSettings.DEFAULT_DISPLAY_MODE,
+    trailerAudioEnabled: Boolean = AmbientModeSettings.DEFAULT_TRAILER_AUDIO_ENABLED,
     allowTrailerPlayback: Boolean = true,
     resolveTrailer: suspend (AmbientSlide) -> TrailerPlaybackSource? = { null },
     modifier: Modifier = Modifier
@@ -168,23 +169,31 @@ fun AmbientSlideshow(
                             resolveTrailer = latestResolveTrailer
                         )
                     }).await()
+                    pending = null
                     index += 1
-                    val upcoming = latestSlides
-                    pending = upcoming.takeIf { it.isNotEmpty() }?.let { list ->
-                        val next = list[index % list.size]
-                        async {
-                            loadSlide(
-                                scope = this@coroutineScope,
-                                context = context,
-                                slide = next,
-                                widthPx = screenWidthPx,
-                                heightPx = screenHeightPx,
-                                preloadTrailer = latestDisplayMode == AmbientDisplayMode.TRAILER,
-                                resolveTrailer = latestResolveTrailer
-                            )
+                    fun scheduleNextPreload() {
+                        if (pending != null) return
+                        val upcoming = latestSlides
+                        pending = upcoming.takeIf { it.isNotEmpty() }?.let { list ->
+                            val next = list[index % list.size]
+                            async {
+                                loadSlide(
+                                    scope = this@coroutineScope,
+                                    context = context,
+                                    slide = next,
+                                    widthPx = screenWidthPx,
+                                    heightPx = screenHeightPx,
+                                    preloadTrailer = latestDisplayMode == AmbientDisplayMode.TRAILER,
+                                    resolveTrailer = latestResolveTrailer
+                                )
+                            }
                         }
                     }
+                    if (!wantTrailer) {
+                        scheduleNextPreload()
+                    }
                     if (loaded == null) {
+                        scheduleNextPreload()
                         misses += 1
                         if (misses >= available.size) {
                             misses = 0
@@ -229,7 +238,15 @@ fun AmbientSlideshow(
                             if (renderedFirstFrame && latestAllowTrailer) {
                                 motionJob.cancel()
                                 videoAlpha.animateTo(1f, tween(TRAILER_FADE_IN_MS, easing = FastOutSlowInEasing))
+                                // Defer next slide bitmap decode & YouTube probe until playback has settled
+                                // so initial 1080p/4K video buffering never competes for CPU or bandwidth.
+                                val deferredPreloadJob = launch {
+                                    delay(TRAILER_NEXT_PRELOAD_SETTLE_DELAY_MS)
+                                    scheduleNextPreload()
+                                }
                                 val outcome = session.outcome.await()
+                                deferredPreloadJob.cancel()
+                                scheduleNextPreload()
                                 if (outcome == AmbientTrailerOutcome.FAILED && latestAllowTrailer) {
                                     videoAlpha.animateTo(
                                         0f,
@@ -246,11 +263,13 @@ fun AmbientSlideshow(
                                 }
                             } else {
                                 activeTrailer = null
+                                scheduleNextPreload()
                                 val elapsedMs = SystemClock.elapsedRealtime() - titleShownAtMs
                                 val remainingMs = (SLIDE_HOLD_MS - elapsedMs).coerceAtLeast(MIN_FALLBACK_HOLD_MS)
                                 delay(remainingMs)
                             }
                         } else {
+                            scheduleNextPreload()
                             val elapsedMs = SystemClock.elapsedRealtime() - titleShownAtMs
                             val remainingMs = (SLIDE_HOLD_MS - elapsedMs).coerceAtLeast(0L)
                             if (remainingMs > 0L) delay(remainingMs)
@@ -276,57 +295,68 @@ fun AmbientSlideshow(
         }
     }
 
+    val activeSession = if (allowTrailerPlayback && displayMode == AmbientDisplayMode.TRAILER) activeTrailer else null
     Box(
         modifier = modifier
             .fillMaxSize()
             .clipToBounds()
-            .background(Color.Black)
+            .then(if (activeSession != null) Modifier else Modifier.background(Color.Black))
     ) {
         val loaded = current ?: return@Box
-        Image(
-            bitmap = loaded.backdrop,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    alpha = backdropAlpha.value * (1f - videoAlpha.value)
-                    applyAmbientMotion(motion, motionProgress.value)
-                }
-        )
-        val trailerSession = activeTrailer
-        if (allowTrailerPlayback && displayMode == AmbientDisplayMode.TRAILER && trailerSession != null) {
-            key(trailerSession.token) {
+        if (activeSession != null) {
+            key(activeSession.token) {
                 TrailerPlayer(
-                    trailerUrl = trailerSession.source.videoUrl,
-                    trailerAudioUrl = trailerSession.source.audioUrl,
+                    trailerUrl = activeSession.source.videoUrl,
+                    trailerAudioUrl = activeSession.source.audioUrl,
                     isPlaying = true,
                     muted = !trailerAudioEnabled,
                     onFirstFrameRendered = {
-                        trailerSession.firstFrameReady.complete(true)
+                        activeSession.firstFrameReady.complete(true)
                     },
                     onEnded = {
-                        trailerSession.firstFrameReady.complete(true)
-                        trailerSession.outcome.complete(AmbientTrailerOutcome.COMPLETED)
+                        activeSession.firstFrameReady.complete(true)
+                        activeSession.outcome.complete(AmbientTrailerOutcome.COMPLETED)
                     },
                     onError = {
-                        trailerSession.firstFrameReady.complete(false)
-                        trailerSession.outcome.complete(AmbientTrailerOutcome.FAILED)
+                        activeSession.firstFrameReady.complete(false)
+                        activeSession.outcome.complete(AmbientTrailerOutcome.FAILED)
                     },
-                    // Preserve native 1:1 1080p pixel sharpness in full-screen Ambient Mode instead of
-                    // upscaling widescreen/letterboxed trailers 1.35x-2x through TextureView scaling.
+                    // Hardware Overlay zero-copy SurfaceView prevents GPU TextureView frame drops
+                    // during full-screen 1080p60/4K playback; fades are driven by the scrim above.
                     cropToFill = false,
                     autoCropLetterbox = false,
                     detectLetterbox = false,
                     showSubtitles = false,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            alpha = videoAlpha.value * backdropAlpha.value
-                            compositingStrategy = CompositingStrategy.ModulateAlpha
-                        }
+                    useSurfaceView = true,
+                    trackProgress = false,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
+            // Black scrim fades out once first frame renders and fades back in on slide exit,
+            // replacing TextureView ModulateAlpha with zero-copy SurfaceView composition.
+            val videoScrimAlpha = 1f - (videoAlpha.value * backdropAlpha.value)
+            if (videoScrimAlpha > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = videoScrimAlpha }
+                        .background(Color.Black)
+                )
+            }
+        }
+        val effectiveBackdropAlpha = backdropAlpha.value * (1f - videoAlpha.value)
+        if (effectiveBackdropAlpha > 0f) {
+            Image(
+                bitmap = loaded.backdrop,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = effectiveBackdropAlpha
+                        applyAmbientMotion(motion, motionProgress.value)
+                    }
+            )
         }
         Box(
             modifier = Modifier

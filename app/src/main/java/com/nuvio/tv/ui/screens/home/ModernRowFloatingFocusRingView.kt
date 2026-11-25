@@ -13,7 +13,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.graphics.ColorUtils
+import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.core.LeanbackBlurFilterCache
+import com.nuvio.tv.ui.leanback.core.LeanbackCardExpandSpec
 import com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle
 
 internal val DEFAULT_MODERN_FOCUS_COLOR: Int = Color.parseColor("#F59E0B")
@@ -118,6 +120,64 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
 
     var currentTargetView: View? = null
         private set
+    var drawnCardWidthPx: Int = 0
+        private set
+    var drawnCardHeightPx: Int = 0
+        private set
+    private var observedTargetView: View? = null
+    private var desiredViewWidthPx: Int = 0
+    private var desiredViewHeightPx: Int = 0
+    private var pendingBufferLayoutPosted: Boolean = false
+    private var isAnimatingTargetSize: Boolean = false
+    private var isTrackingExpandedTarget: Boolean = false
+
+    private val targetLayoutChangeListener = View.OnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+        if (view !== currentTargetView || !isAttachedToWindow || visibility != VISIBLE) return@OnLayoutChangeListener
+        val parentView = parent as? ViewGroup ?: return@OnLayoutChangeListener
+        if (!view.isAttachedToWindow || view.width <= 0 || view.height <= 0) return@OnLayoutChangeListener
+        val grid = (parentView as? ModernRowContainerLayout)?.gridView
+        val isRowAnimatingWidth = (grid?.adapter as? LeanbackRowAdapter)?.hasAnimatingWidthCard == true
+        val isGridIdle = grid == null ||
+            (!grid.isHoldingHorizontalKey && grid.scrollState == RecyclerView.SCROLL_STATE_IDLE)
+        if (!isAnimatingTargetSize) {
+            val resolvedW = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+                explicitPx = null,
+                layoutParamPx = view.layoutParams?.width,
+                measuredPx = view.width,
+                isLayoutRequested = view.isLayoutRequested,
+                fallbackPx = drawnCardWidthPx
+            )
+            val resolvedH = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+                explicitPx = null,
+                layoutParamPx = view.layoutParams?.height,
+                measuredPx = view.height,
+                isLayoutRequested = view.isLayoutRequested,
+                fallbackPx = drawnCardHeightPx
+            )
+            if (resolvedW > 0 && resolvedH > 0 && (drawnCardWidthPx != resolvedW || drawnCardHeightPx != resolvedH)) {
+                updateDrawnDimensions(
+                    cardWidthPx = resolvedW,
+                    cardHeightPx = resolvedH,
+                    bufferCardWidthPx = resolvedW,
+                    allowShrink = true
+                )
+            }
+        }
+        val activeCardW = drawnCardWidthPx.takeIf { it > 0 } ?: view.width
+        val useLiveX = isTrackingExpandedTarget || isAnimatingTargetSize || isRowAnimatingWidth || isGridIdle
+        val (targetX, targetY) = resolveTargetPositionInParent(
+            parent = parentView,
+            target = view,
+            cardWidthPx = activeCardW,
+            useLiveTargetX = useLiveX
+        )
+        if (kotlin.math.abs(translationX - targetX) >= 0.5f) {
+            translationX = targetX
+        }
+        if (kotlin.math.abs(translationY - targetY) >= 0.5f) {
+            translationY = targetY
+        }
+    }
 
     init {
         midPaint.maskFilter = LeanbackBlurFilterCache.get((glowSpreadPx * 0.35f).coerceAtLeast(1f))
@@ -128,6 +188,13 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         visibility = INVISIBLE
         isFocusable = false
         isFocusableInTouchMode = false
+    }
+
+    private fun attachTargetObserver(target: View?) {
+        if (observedTargetView === target) return
+        observedTargetView?.removeOnLayoutChangeListener(targetLayoutChangeListener)
+        observedTargetView = target
+        target?.addOnLayoutChangeListener(targetLayoutChangeListener)
     }
 
     override fun setVisibility(visibility: Int) {
@@ -142,6 +209,8 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        attachTargetObserver(null)
+        pendingBufferLayoutPosted = false
         if (layerType != LAYER_TYPE_NONE) {
             setLayerType(LAYER_TYPE_NONE, null)
         }
@@ -151,6 +220,7 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         val needsSoftware = isAttachedToWindow &&
             visibility == VISIBLE &&
             isGlowEnabled &&
+            !isAnimatingTargetSize &&
             !themeStyle.hideFocusBorder
         val desiredLayer = if (needsSoftware) LAYER_TYPE_SOFTWARE else LAYER_TYPE_NONE
         if (layerType != desiredLayer) {
@@ -172,20 +242,24 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         syncRainbowShader()
     }
 
-    private fun syncRainbowShader() {
+    private fun syncRainbowShader(drawWidthPx: Float = drawnCardWidthPx.toFloat(), drawHeightPx: Float = drawnCardHeightPx.toFloat()) {
         if (!themeStyle.isRainbowBorder) {
             borderPaint.shader = null
             cachedRainbowShader = null
             return
         }
         val colors = themeStyle.focusGradientColors
-        if (colors.size <= 1 || width <= 0 || height <= 0) {
+        val effectiveW = if (drawWidthPx > 0f) drawWidthPx else (width - glowMarginPx * 2f)
+        val effectiveH = if (drawHeightPx > 0f) drawHeightPx else (height - glowMarginPx * 2f)
+        val roundedW = effectiveW.toInt()
+        val roundedH = effectiveH.toInt()
+        if (colors.size <= 1 || roundedW <= 0 || roundedH <= 0) {
             borderPaint.shader = null
             return
         }
         if (cachedRainbowShader != null &&
-            cachedShaderWidth == width &&
-            cachedShaderHeight == height &&
+            cachedShaderWidth == roundedW &&
+            cachedShaderHeight == roundedH &&
             cachedShaderColors == colors
         ) {
             borderPaint.shader = cachedRainbowShader
@@ -195,15 +269,15 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         val shader = LinearGradient(
             pad,
             pad,
-            (width - pad).coerceAtLeast(pad + 1f),
-            (height - pad).coerceAtLeast(pad + 1f),
+            (pad + effectiveW).coerceAtLeast(pad + 1f),
+            (pad + effectiveH).coerceAtLeast(pad + 1f),
             colors.toIntArray(),
             null,
             Shader.TileMode.CLAMP
         )
         cachedRainbowShader = shader
-        cachedShaderWidth = width
-        cachedShaderHeight = height
+        cachedShaderWidth = roundedW
+        cachedShaderHeight = roundedH
         cachedShaderColors = colors
         borderPaint.shader = shader
     }
@@ -213,12 +287,80 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         auraPaint.color = ColorUtils.setAlphaComponent(glowColor, 85)
     }
 
+    private fun applyBufferLayoutParamsIfNeeded() {
+        val lp = layoutParams ?: return
+        val targetW = desiredViewWidthPx
+        val targetH = desiredViewHeightPx
+        if (targetW <= 0 || targetH <= 0) return
+        val needsUpdate = lp.width != targetW ||
+            lp.height != targetH ||
+            width != targetW ||
+            height != targetH ||
+            measuredWidth != targetW ||
+            measuredHeight != targetH
+        if (!needsUpdate) return
+
+        val parentInLayout = (parent as? View)?.isInLayout == true
+        if (isInLayout || parentInLayout) {
+            if (!pendingBufferLayoutPosted) {
+                pendingBufferLayoutPosted = true
+                post {
+                    pendingBufferLayoutPosted = false
+                    if (isAttachedToWindow) {
+                        applyBufferLayoutParamsIfNeeded()
+                    }
+                }
+            }
+            return
+        }
+
+        lp.width = targetW
+        lp.height = targetH
+        layoutParams = lp
+        requestLayout()
+    }
+
+    /**
+     * Updates the exact drawn card dimensions immediately via [invalidate], decoupling ring visuals
+     * from delayed/dropped Compose AndroidView layout passes while keeping the backing view buffer
+     * sized cleanly for software glow rendering.
+     */
+    private fun updateDrawnDimensions(
+        cardWidthPx: Int,
+        cardHeightPx: Int,
+        bufferCardWidthPx: Int = cardWidthPx,
+        allowShrink: Boolean
+    ) {
+        val safeW = cardWidthPx.coerceAtLeast(1)
+        val safeH = cardHeightPx.coerceAtLeast(1)
+        val dimsChanged = drawnCardWidthPx != safeW || drawnCardHeightPx != safeH
+        drawnCardWidthPx = safeW
+        drawnCardHeightPx = safeH
+
+        val margin = (glowMarginPx * 2).toInt()
+        val minViewW = maxOf(safeW, bufferCardWidthPx.coerceAtLeast(safeW)) + margin
+        val minViewH = safeH + margin
+        if (allowShrink) {
+            desiredViewWidthPx = minViewW
+            desiredViewHeightPx = minViewH
+        } else {
+            desiredViewWidthPx = maxOf(desiredViewWidthPx, width, minViewW)
+            desiredViewHeightPx = maxOf(desiredViewHeightPx, height, minViewH)
+        }
+        applyBufferLayoutParamsIfNeeded()
+        if (dimsChanged) {
+            invalidate()
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         if (themeStyle.hideFocusBorder) return
         val pad = glowMarginPx
-        val w = width - (pad * 2)
-        val h = height - (pad * 2)
-        if (w <= 0 || h <= 0) return
+        val availW = (width - (pad * 2)).coerceAtLeast(0f)
+        val availH = (height - (pad * 2)).coerceAtLeast(0f)
+        val w = if (drawnCardWidthPx > 0) minOf(drawnCardWidthPx.toFloat(), availW) else availW
+        val h = if (drawnCardHeightPx > 0) minOf(drawnCardHeightPx.toFloat(), availH) else availH
+        if (w <= 0f || h <= 0f) return
 
         ringPath.reset()
         if (cornerRadiusPx > 0f) {
@@ -227,13 +369,13 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             ringPath.addRect(pad, pad, pad + w, pad + h, Path.Direction.CW)
         }
 
-        if (isGlowEnabled) {
+        if (isGlowEnabled && !isAnimatingTargetSize) {
             canvas.drawPath(ringPath, auraPaint)
             canvas.drawPath(ringPath, midPaint)
         }
 
         if (strokeColor != Color.TRANSPARENT || themeStyle.isRainbowBorder) {
-            syncRainbowShader()
+            syncRainbowShader(w, h)
             borderPaint.strokeWidth = borderWidthPx
             canvas.drawPath(ringPath, borderPaint)
         }
@@ -251,41 +393,12 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         }
     }
 
-    fun moveToTarget(
+    private fun resolveTargetPositionInParent(
+        parent: ViewGroup,
         target: View,
-        dominantColor: Int,
-        animated: Boolean,
-        keepColorIfVisible: Boolean = false
-    ) {
-        currentTargetView = target
-        val parent = parent as? ViewGroup ?: return
-
-        if (!target.isAttachedToWindow || !parent.isAttachedToWindow || target.width <= 0 || target.height <= 0 || parent.width <= 0) {
-            target.post {
-                if (currentTargetView === target && isAttachedToWindow) {
-                    moveToTarget(target, dominantColor, animated, keepColorIfVisible)
-                }
-            }
-            return
-        }
-
-        val targetWidth = target.width + (glowMarginPx * 2).toInt()
-        val targetHeight = target.height + (glowMarginPx * 2).toInt()
-
-        // While holding horizontal D-pad, keep the anchored ring steady without re-rasterizing
-        // LAYER_TYPE_SOFTWARE blur filters on every passing card.
-        if (keepColorIfVisible &&
-            visibility == VISIBLE &&
-            alpha >= 1f &&
-            width == targetWidth &&
-            height == targetHeight
-        ) {
-            return
-        }
-
-        // Cancel previous animations to prevent old hideRing withEndAction from overriding visibility
-        animate().cancel()
-
+        cardWidthPx: Int,
+        useLiveTargetX: Boolean
+    ): Pair<Float, Float> {
         tempRect.set(0, 0, target.width, target.height)
         val success = try {
             parent.offsetDescendantRectToMyCoords(target, tempRect)
@@ -293,8 +406,11 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         } catch (_: Exception) {
             false
         }
-
-        val anchoredX = computeAnchoredRingX(parent, target.width)
+        val targetX = if (useLiveTargetX && success) {
+            tempRect.left.toFloat() - glowMarginPx
+        } else {
+            computeAnchoredRingX(parent, cardWidthPx)
+        }
         val targetY = if (success) {
             tempRect.top.toFloat() - glowMarginPx
         } else {
@@ -302,17 +418,103 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             target.getLocationInWindow(tempTargetLoc)
             (tempTargetLoc[1] - tempParentLoc[1]).toFloat() - glowMarginPx
         }
+        return targetX to targetY
+    }
 
-        applyThemeColors(dominantColor)
+    fun moveToTarget(
+        target: View,
+        dominantColor: Int,
+        animated: Boolean,
+        keepColorIfVisible: Boolean = false,
+        isExpandedCard: Boolean = false,
+        explicitCardWidthPx: Int? = null,
+        explicitCardHeightPx: Int? = null,
+        useLivePosition: Boolean = false
+    ) {
+        val targetChanged = currentTargetView !== target
+        currentTargetView = target
+        attachTargetObserver(target)
+        isTrackingExpandedTarget = isExpandedCard
+        if (isAnimatingTargetSize) {
+            isAnimatingTargetSize = false
+            syncSoftwareLayer()
+            invalidate()
+        }
+        val parent = parent as? ViewGroup ?: return
 
-        val lp = layoutParams
-        if (lp != null && (lp.width != targetWidth || lp.height != targetHeight)) {
-            lp.width = targetWidth
-            lp.height = targetHeight
-            layoutParams = lp
+        val resolvedCardW = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+            explicitPx = explicitCardWidthPx,
+            layoutParamPx = target.layoutParams?.width,
+            measuredPx = target.width,
+            isLayoutRequested = target.isLayoutRequested
+        )
+        val resolvedCardH = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+            explicitPx = explicitCardHeightPx,
+            layoutParamPx = target.layoutParams?.height,
+            measuredPx = target.height,
+            isLayoutRequested = target.isLayoutRequested
+        )
+
+        if (!target.isAttachedToWindow || !parent.isAttachedToWindow || resolvedCardW <= 0 || resolvedCardH <= 0 || parent.width <= 0) {
+            target.post {
+                if (currentTargetView === target && isAttachedToWindow) {
+                    moveToTarget(
+                        target = target,
+                        dominantColor = dominantColor,
+                        animated = animated,
+                        keepColorIfVisible = keepColorIfVisible,
+                        isExpandedCard = isExpandedCard,
+                        explicitCardWidthPx = explicitCardWidthPx,
+                        explicitCardHeightPx = explicitCardHeightPx,
+                        useLivePosition = useLivePosition
+                    )
+                }
+            }
+            return
         }
 
-        translationX = anchoredX
+        val margin = (glowMarginPx * 2).toInt()
+        val expectedViewW = resolvedCardW + margin
+        val expectedViewH = resolvedCardH + margin
+
+        // While holding horizontal D-pad on uniform-width cards, keep the anchored ring steady
+        // without re-rasterizing LAYER_TYPE_SOFTWARE blur filters on every passing card.
+        if (keepColorIfVisible &&
+            !isExpandedCard &&
+            !useLivePosition &&
+            visibility == VISIBLE &&
+            alpha >= 1f &&
+            drawnCardWidthPx == resolvedCardW &&
+            drawnCardHeightPx == resolvedCardH &&
+            width == expectedViewW &&
+            height == expectedViewH
+        ) {
+            return
+        }
+
+        // Cancel previous animations to prevent old hideRing withEndAction from overriding visibility
+        animate().cancel()
+
+        val grid = (parent as? ModernRowContainerLayout)?.gridView
+        val isRowAnimatingWidth = (grid?.adapter as? LeanbackRowAdapter)?.hasAnimatingWidthCard == true
+        val isGridIdle = grid == null ||
+            (!grid.isHoldingHorizontalKey && grid.scrollState == RecyclerView.SCROLL_STATE_IDLE)
+        val (resolvedX, targetY) = resolveTargetPositionInParent(
+            parent = parent,
+            target = target,
+            cardWidthPx = resolvedCardW,
+            useLiveTargetX = isExpandedCard || useLivePosition || isRowAnimatingWidth || isGridIdle
+        )
+
+        applyThemeColors(dominantColor)
+        updateDrawnDimensions(
+            cardWidthPx = resolvedCardW,
+            cardHeightPx = resolvedCardH,
+            bufferCardWidthPx = resolvedCardW,
+            allowShrink = true
+        )
+
+        translationX = resolvedX
         translationY = targetY
 
         if (!animated) {
@@ -326,12 +528,113 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             alpha = 1f
             visibility = VISIBLE
         }
+
+        if (targetChanged && target.isLayoutRequested) {
+            target.post {
+                if (currentTargetView === target && isAttachedToWindow && visibility == VISIBLE) {
+                    onScrollSettled()
+                }
+            }
+        }
+    }
+
+    /**
+     * Synchronizes ring size and position while a focused poster expands or collapses in place.
+     * Allocates the expanded view buffer once per tween and updates [drawnCardWidthPx] per frame
+     * with zero per-frame `requestLayout()` pressure on Compose AndroidView.
+     */
+    fun syncToTargetBounds(
+        target: View,
+        isAnimatingWidth: Boolean,
+        isExpandedCard: Boolean,
+        dominantColor: Int? = null,
+        explicitCardWidthPx: Int? = null,
+        explicitCardHeightPx: Int? = null,
+        bufferCardWidthPx: Int? = null
+    ) {
+        val parent = parent as? ViewGroup ?: return
+        if (!target.isAttachedToWindow || !parent.isAttachedToWindow) {
+            return
+        }
+        if (currentTargetView != null && currentTargetView !== target) {
+            return
+        }
+        val resolvedCardW = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+            explicitPx = explicitCardWidthPx,
+            layoutParamPx = target.layoutParams?.width,
+            measuredPx = target.width,
+            isLayoutRequested = target.isLayoutRequested,
+            fallbackPx = drawnCardWidthPx
+        )
+        val resolvedCardH = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+            explicitPx = explicitCardHeightPx,
+            layoutParamPx = target.layoutParams?.height,
+            measuredPx = target.height,
+            isLayoutRequested = target.isLayoutRequested,
+            fallbackPx = drawnCardHeightPx
+        )
+        if (resolvedCardW <= 0 || resolvedCardH <= 0) return
+
+        currentTargetView = target
+        attachTargetObserver(target)
+        isTrackingExpandedTarget = isExpandedCard
+
+        if (isAnimatingTargetSize != isAnimatingWidth) {
+            isAnimatingTargetSize = isAnimatingWidth
+            syncSoftwareLayer()
+            invalidate()
+        }
+        if (dominantColor != null && !isAnimatingWidth) {
+            applyThemeColors(dominantColor)
+        }
+
+        updateDrawnDimensions(
+            cardWidthPx = resolvedCardW,
+            cardHeightPx = resolvedCardH,
+            bufferCardWidthPx = bufferCardWidthPx ?: resolvedCardW,
+            allowShrink = !isAnimatingWidth
+        )
+
+        val (targetX, targetY) = resolveTargetPositionInParent(
+            parent = parent,
+            target = target,
+            cardWidthPx = resolvedCardW,
+            useLiveTargetX = true
+        )
+        translationX = targetX
+        translationY = targetY
+        if (visibility != VISIBLE) {
+            alpha = 1f
+            visibility = VISIBLE
+        }
     }
 
     fun onParentScrolled(dx: Int) {
         if (visibility != VISIBLE) return
         val parent = parent as? ViewGroup ?: return
-        val cardW = (width - (glowMarginPx * 2).toInt()).coerceAtLeast(0)
+        val target = currentTargetView
+        val grid = (parent as? ModernRowContainerLayout)?.gridView
+        val isRowAnimatingWidth = (grid?.adapter as? LeanbackRowAdapter)?.hasAnimatingWidthCard == true
+        val cardW = drawnCardWidthPx.takeIf { it > 0 } ?: (width - (glowMarginPx * 2).toInt()).coerceAtLeast(0)
+        if ((isTrackingExpandedTarget || isAnimatingTargetSize || isRowAnimatingWidth) &&
+            target != null &&
+            target.isAttachedToWindow &&
+            target.width > 0
+        ) {
+            val (targetX, targetY) = resolveTargetPositionInParent(
+                parent = parent,
+                target = target,
+                cardWidthPx = cardW,
+                useLiveTargetX = true
+            )
+            if (kotlin.math.abs(translationX - targetX) >= 0.5f) {
+                translationX = targetX
+            }
+            if (kotlin.math.abs(translationY - targetY) >= 0.5f) {
+                translationY = targetY
+            }
+            return
+        }
         val targetX = computeAnchoredRingX(parent, cardW)
         if (kotlin.math.abs(translationX - targetX) >= 0.5f) {
             translationX = targetX
@@ -341,7 +644,48 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     fun onScrollSettled() {
         if (visibility != VISIBLE) return
         val parent = parent as? ViewGroup ?: return
-        val cardW = (width - (glowMarginPx * 2).toInt()).coerceAtLeast(0)
+        val target = currentTargetView
+        if (target != null && target.isAttachedToWindow && target.width > 0 && target.height > 0) {
+            if (!isAnimatingTargetSize) {
+                val resolvedW = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+                    explicitPx = null,
+                    layoutParamPx = target.layoutParams?.width,
+                    measuredPx = target.width,
+                    isLayoutRequested = target.isLayoutRequested,
+                    fallbackPx = drawnCardWidthPx
+                )
+                val resolvedH = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
+                    explicitPx = null,
+                    layoutParamPx = target.layoutParams?.height,
+                    measuredPx = target.height,
+                    isLayoutRequested = target.isLayoutRequested,
+                    fallbackPx = drawnCardHeightPx
+                )
+                if (resolvedW > 0 && resolvedH > 0) {
+                    updateDrawnDimensions(
+                        cardWidthPx = resolvedW,
+                        cardHeightPx = resolvedH,
+                        bufferCardWidthPx = resolvedW,
+                        allowShrink = true
+                    )
+                }
+            }
+            val cardW = drawnCardWidthPx.takeIf { it > 0 } ?: target.width
+            val (targetX, targetY) = resolveTargetPositionInParent(
+                parent = parent,
+                target = target,
+                cardWidthPx = cardW,
+                useLiveTargetX = true
+            )
+            if (kotlin.math.abs(translationX - targetX) >= 0.5f) {
+                translationX = targetX
+            }
+            if (kotlin.math.abs(translationY - targetY) >= 0.5f) {
+                translationY = targetY
+            }
+            return
+        }
+        val cardW = drawnCardWidthPx.takeIf { it > 0 } ?: (width - (glowMarginPx * 2).toInt()).coerceAtLeast(0)
         val targetX = computeAnchoredRingX(parent, cardW)
         if (kotlin.math.abs(translationX - targetX) >= 0.5f) {
             translationX = targetX
@@ -358,14 +702,18 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     ) {
         animate().cancel()
         currentTargetView = null
-        val targetWidth = cardWidthPx + (glowMarginPx * 2).toInt()
-        val targetHeight = cardHeightPx + (glowMarginPx * 2).toInt()
-        val lp = layoutParams
-        if (lp != null && (lp.width != targetWidth || lp.height != targetHeight)) {
-            lp.width = targetWidth
-            lp.height = targetHeight
-            layoutParams = lp
+        attachTargetObserver(null)
+        isTrackingExpandedTarget = false
+        if (isAnimatingTargetSize) {
+            isAnimatingTargetSize = false
+            syncSoftwareLayer()
         }
+        updateDrawnDimensions(
+            cardWidthPx = cardWidthPx,
+            cardHeightPx = cardHeightPx,
+            bufferCardWidthPx = cardWidthPx,
+            allowShrink = true
+        )
         this.cornerRadiusPx = cornerRadiusPx
         applyThemeColors(dominantColor)
         translationX = xPx - glowMarginPx
@@ -379,6 +727,12 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
     fun hideRing(immediate: Boolean = false) {
         animate().cancel()
         currentTargetView = null
+        attachTargetObserver(null)
+        isTrackingExpandedTarget = false
+        if (isAnimatingTargetSize) {
+            isAnimatingTargetSize = false
+            syncSoftwareLayer()
+        }
         if (immediate) {
             visibility = INVISIBLE
             alpha = 0f

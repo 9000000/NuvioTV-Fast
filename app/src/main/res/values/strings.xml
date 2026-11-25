@@ -414,7 +414,7 @@
     <string name="ambient_mode_display_mode_trailer">Trailers</string>
     <string name="ambient_mode_display_mode_trailer_desc">Play full-screen trailers, falling back to backdrops when unavailable</string>
     <string name="ambient_mode_trailer_audio">Trailer Audio</string>
-    <string name="ambient_mode_trailer_audio_subtitle">Play sound during Ambient Mode trailers (muted by default)</string>
+    <string name="ambient_mode_trailer_audio_subtitle">Play sound during Ambient Mode trailers</string>
     <string name="appearance_app_icon_and_banner">App Icon &amp; Banner</string>
     <string name="appearance_app_icon_and_banner_subtitle">Change app icon and banner</string>
     <string name="appearance_app_icon_picker_title">Choose App Icon &amp; Banner</string>

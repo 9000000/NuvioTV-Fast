@@ -557,7 +557,8 @@ private fun RowsContent(
     focusedPosterBackdropTrailerEnabled: Boolean = false,
     focusedPosterBackdropTrailerMuted: Boolean = true,
     trailerPreviewUrls: Map<String, String> = emptyMap(),
-    trailerPreviewAudioUrls: Map<String, String> = emptyMap()
+    trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
+    onRequestTrailerPreview: (MetaPreview) -> Unit = {}
 ) {
     val sourceTabs = uiState.tabs.filter { tab ->
         if (tab.isAllTab) return@filter false
@@ -803,6 +804,7 @@ private fun RowsContent(
                             focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                             trailerPreviewUrls = trailerPreviewUrls,
                             trailerPreviewAudioUrls = trailerPreviewAudioUrls,
+                            onRequestTrailerPreview = onRequestTrailerPreview,
                             onSeeAll = {
                                 onLoadMoreCatalog(
                                     catalogRow.catalogId,
@@ -939,7 +941,10 @@ private fun FollowLayoutContent(
                     focusedPosterBackdropTrailerEnabled = homeState.focusedPosterBackdropTrailerEnabled,
                     focusedPosterBackdropTrailerMuted = homeState.focusedPosterBackdropTrailerMuted,
                     trailerPreviewUrls = trailerPreviewUrls,
-                    trailerPreviewAudioUrls = trailerPreviewAudioUrls
+                    trailerPreviewAudioUrls = trailerPreviewAudioUrls,
+                    onRequestTrailerPreview = { item ->
+                        onRequestTrailerPreview(item.id, item.name, item.releaseInfo, item.apiType)
+                    }
                 )
             }
         }

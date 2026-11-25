@@ -62,7 +62,9 @@ import androidx.media3.ui.SubtitleView
 import android.view.LayoutInflater
 import android.view.TextureView
 import com.nuvio.tv.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 private fun buildTrailerMediaItem(videoUrl: String, subtitle: TrailerSubtitleTrack?): MediaItem =
     MediaItem.Builder()
@@ -102,6 +104,8 @@ fun TrailerPlayer(
     autoCropLetterbox: Boolean = false,
     detectLetterbox: Boolean = false,
     showSubtitles: Boolean = true,
+    useSurfaceView: Boolean = false,
+    trackProgress: Boolean = true,
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500)),
@@ -225,21 +229,25 @@ fun TrailerPlayer(
         }
     }
 
-    val letterboxDetectionEnabled = autoCropLetterbox || detectLetterbox
+    val letterboxDetectionEnabled = !useSurfaceView && (autoCropLetterbox || detectLetterbox)
     LaunchedEffect(letterboxDetectionEnabled, hasRenderedFirstFrame, trailerPlayer) {
         if (letterboxZoomLocked) return@LaunchedEffect
         letterboxZoom = 1f
         if (!letterboxDetectionEnabled || !hasRenderedFirstFrame) return@LaunchedEffect
         val player = trailerPlayer ?: return@LaunchedEffect
+        // Skip synchronous GPU texture readbacks on >1080p streams to prevent 4K frame drops.
+        if (player.videoSize.height > LetterboxDetector.MAX_SAMPLE_VIDEO_HEIGHT) return@LaunchedEffect
         val tracker = LetterboxTracker()
         val sampler = LetterboxSampler()
         try {
             while (true) {
                 delay(LetterboxDetector.SAMPLE_INTERVAL_MS)
                 if (LetterboxDetector.isSampleWindowOver(player.currentPosition, player.duration)) break
+                if (player.videoSize.height > LetterboxDetector.MAX_SAMPLE_VIDEO_HEIGHT) break
                 if (!player.isPlaying) continue
                 val textureView = playerViewRef.value?.videoSurfaceView as? TextureView ?: continue
-                val bar = sampler.sample(textureView) ?: continue
+                if (!sampler.captureFrame(textureView)) continue
+                val bar = withContext(Dispatchers.Default) { sampler.analyzeCapturedFrame() } ?: continue
                 letterboxZoom = tracker.onSample(bar) ?: continue
                 resolvedPool?.onLetterboxZoomChanged(ownerToken, letterboxZoom)
                 break
@@ -264,7 +272,8 @@ fun TrailerPlayer(
         player.seekTo(target)
     }
 
-    LaunchedEffect(trailerPlayer, isPlaying) {
+    LaunchedEffect(trailerPlayer, isPlaying, trackProgress) {
+        if (!trackProgress) return@LaunchedEffect
         val player = trailerPlayer ?: return@LaunchedEffect
         while (isPlaying) {
             val position = player.currentPosition.coerceAtLeast(0L)
@@ -351,9 +360,14 @@ fun TrailerPlayer(
     }
 
     if (trailerPlayer != null && isPlaying) {
+        val playerLayoutRes = if (useSurfaceView) {
+            R.layout.trailer_player_surface_view
+        } else {
+            R.layout.trailer_player_view
+        }
         AndroidView(
             factory = { ctx ->
-                (LayoutInflater.from(ctx).inflate(R.layout.trailer_player_view, null) as PlayerView).apply {
+                (LayoutInflater.from(ctx).inflate(playerLayoutRes, null) as PlayerView).apply {
                     playerViewRef.value = this
                     player = trailerPlayer
                     isFocusable = false
@@ -401,11 +415,17 @@ fun TrailerPlayer(
                     resolvedPool?.onOwnerBounds(ownerToken, bounds)
                 }
                 .clipToBounds()
-                .graphicsLayer {
-                    alpha = playerAlpha
-                    scaleX = zoomScale * letterboxZoomState.value
-                    scaleY = zoomScale * letterboxZoomState.value
-                }
+                .then(
+                    if (useSurfaceView) {
+                        Modifier
+                    } else {
+                        Modifier.graphicsLayer {
+                            alpha = playerAlpha
+                            scaleX = zoomScale * letterboxZoomState.value
+                            scaleY = zoomScale * letterboxZoomState.value
+                        }
+                    }
+                )
         )
     }
 }

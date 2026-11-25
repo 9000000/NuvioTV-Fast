@@ -6,6 +6,8 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.ui.leanback.core.LeanbackArtworkLoader
+import com.nuvio.tv.ui.leanback.core.LeanbackCardExpandSpec
+import com.nuvio.tv.ui.leanback.core.rememberLeanbackExpandedTrailerHost
 import com.nuvio.tv.ui.leanback.core.rememberLeanbackThemeStyle
 import com.nuvio.tv.ui.leanback.pool.LeanbackPoolManager
 
@@ -504,6 +506,19 @@ internal fun ModernHomeRowsList(
     // Unwrap StableRef wrappers for internal use (not passed to child composables)
     val animationsEnabled = NuvioTheme.animationsEnabled
     val themeStyle = rememberLeanbackThemeStyle(borderWidthDp = 2.0f)
+    val effectiveCardExpandEnabled = effectiveExpandEnabled &&
+        !LeanbackCardExpandSpec.shouldSuppressModernCardExpand(
+            effectiveAutoplayEnabled = effectiveAutoplayEnabled,
+            trailerPlaybackTarget = trailerPlaybackTarget
+        )
+    val playTrailerInExpandedCard = effectiveAutoplayEnabled &&
+        trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD
+    // Only instantiate the shared trailer host when inline expanded-card trailer autoplay is enabled.
+    val expandedTrailerHost = if (playTrailerInExpandedCard) rememberLeanbackExpandedTrailerHost() else null
+    val latestOnExpandedCatalogFocusKeyChange = rememberUpdatedState(onExpandedCatalogFocusKeyChange)
+    val stableOnExpandedTrailerEnded = remember {
+        { latestOnExpandedCatalogFocusKeyChange.value(null) }
+    }
     val isSidebarExpanded = LocalSidebarExpanded.current
     val isSidebarExpandedState = rememberUpdatedState(isSidebarExpanded)
     val focusedItemByRowMap = focusedItemByRow.value
@@ -1333,9 +1348,16 @@ internal fun ModernHomeRowsList(
                 it.visibility == View.VISIBLE && it.width > 0 && it.height > 0
             }
             val currentKey = navTargetRowKey.get() ?: currentRowKeyTracker.get() ?: activeRowKey.value
+            val currentGrid = currentKey?.let { rowGrids[it] as? ModernInteropHorizontalGridView }
+            val currentRowWasExpanded = (currentGrid?.adapter as? LeanbackRowAdapter)?.let {
+                it.hasExpandedCard || it.hasAnimatingWidthCard
+            } == true
+            if (currentRowWasExpanded) {
+                currentGrid.prepareForRowChange()
+            }
             val (defaultW, defaultH, defaultR) = rowCardDimensionsPx(currentKey)
             val anchorY = cachedCardTopInRowRef.get()
-            val measuredRect = if (visibleRing != null) null else measureFocusedCardInOverlay(currentKey)
+            val measuredRect = if (visibleRing != null || currentRowWasExpanded) null else measureFocusedCardInOverlay(currentKey)
             val startX = when {
                 visibleRing != null -> visibleRing.translationX + visibleRing.glowMarginPx
                 measuredRect != null -> measuredRect[0]
@@ -1347,12 +1369,14 @@ internal fun ModernHomeRowsList(
                 else -> anchorY
             }
             val startW = when {
-                visibleRing != null -> (visibleRing.width - (visibleRing.glowMarginPx * 2f)).coerceAtLeast(1f)
+                visibleRing != null -> (visibleRing.drawnCardWidthPx.takeIf { it > 0 }?.toFloat()
+                    ?: (visibleRing.width - (visibleRing.glowMarginPx * 2f))).coerceAtLeast(1f)
                 measuredRect != null -> measuredRect[2]
                 else -> defaultW.toFloat()
             }
             val startH = when {
-                visibleRing != null -> (visibleRing.height - (visibleRing.glowMarginPx * 2f)).coerceAtLeast(1f)
+                visibleRing != null -> (visibleRing.drawnCardHeightPx.takeIf { it > 0 }?.toFloat()
+                    ?: (visibleRing.height - (visibleRing.glowMarginPx * 2f))).coerceAtLeast(1f)
                 measuredRect != null -> measuredRect[3]
                 else -> defaultH.toFloat()
             }
@@ -1810,13 +1834,13 @@ internal fun ModernHomeRowsList(
                         }
                         if (event.type == KeyEventType.KeyDown &&
                             event.key == Key.DirectionUp &&
-                            effectiveExpandEnabled &&
+                            effectiveCardExpandEnabled &&
                             expandedCatalogFocusKey.value != null &&
                             currentRowKey == firstRowKey
                         ) return@onPreviewKeyEvent true
                         if (event.type == KeyEventType.KeyDown &&
                             event.key == Key.DirectionDown &&
-                            effectiveExpandEnabled &&
+                            effectiveCardExpandEnabled &&
                             expandedCatalogFocusKey.value != null &&
                             currentRowKey == lastRowKey
                         ) return@onPreviewKeyEvent true
@@ -1841,7 +1865,7 @@ internal fun ModernHomeRowsList(
                         if (blockLeftOnFirstExpandedItem &&
                             event.type == KeyEventType.KeyDown &&
                             event.key == blockKey &&
-                            effectiveExpandEnabled &&
+                            effectiveCardExpandEnabled &&
                             expandedCatalogFocusKey.value != null &&
                             activeItemIndex.value == 0
                         ) return@onPreviewKeyEvent true
@@ -2118,7 +2142,18 @@ internal fun ModernHomeRowsList(
                     pendingFocusNonce = localPendingFocusNonce,
                     onClearPendingFocus = stableClearPendingFocus,
                     isCatalogItemWatched = isCatalogItemWatched,
-                    blurUnwatchedEpisodes = blurUnwatchedEpisodes
+                    blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                    backdropExpandEnabled = effectiveCardExpandEnabled,
+                    alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
+                    playTrailerInExpandedCard = playTrailerInExpandedCard,
+                    focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
+                    expandedCatalogFocusKeyState = expandedCatalogFocusKey,
+                    expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
+                    expandedTrailerPreviewAudioUrl = expandedTrailerPreviewAudioUrl,
+                    expandedTrailerHost = expandedTrailerHost,
+                    enrichedPreviews = enrichedPreviews,
+                    onBackdropInteraction = onBackdropInteraction,
+                    onExpandedTrailerEnded = stableOnExpandedTrailerEnded
                 )
             }
         }

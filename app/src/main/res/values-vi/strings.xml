@@ -407,7 +407,7 @@
     <string name="ambient_mode_display_mode_trailer">Trailer</string>
     <string name="ambient_mode_display_mode_trailer_desc">Phát trailer toàn màn hình, tự chuyển sang phông nền nếu phim không có trailer</string>
     <string name="ambient_mode_trailer_audio">Âm thanh trailer</string>
-    <string name="ambient_mode_trailer_audio_subtitle">Bật âm thanh khi phát trailer ở chế độ môi trường xung quanh (mặc định tắt tiếng)</string>
+    <string name="ambient_mode_trailer_audio_subtitle">Phát âm thanh khi chạy trailer ở chế độ môi trường xung quanh</string>
     <string name="appearance_app_icon_and_banner">Biểu tượng ứng dụng &amp; Ảnh biểu ngữ</string>
     <string name="appearance_app_icon_and_banner_subtitle">Thay đổi biểu tượng ứng dụng và ảnh biểu ngữ</string>
     <string name="appearance_app_icon_picker_title">Chọn Biểu tượng ứng dụng &amp; Ảnh biểu ngữ</string>

@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -23,7 +26,9 @@ import androidx.leanback.widget.BaseGridView
 import androidx.leanback.widget.HorizontalGridView
 import androidx.recyclerview.widget.RecyclerView
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.ui.leanback.core.LeanbackExpandedTrailerHost
 import com.nuvio.tv.ui.leanback.core.rememberLeanbackThemeStyle
+import com.nuvio.tv.ui.util.StableMap
 import kotlinx.coroutines.awaitCancellation
 
 @Composable
@@ -59,6 +64,18 @@ fun LeanbackModernRow(
     recycledViewPool: RecyclerView.RecycledViewPool? = null,
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     blurUnwatchedEpisodes: Boolean = false,
+    backdropExpandEnabled: Boolean = false,
+    useLandscapePosters: Boolean = false,
+    alwaysShowLandscapeClearlogo: Boolean = false,
+    playTrailerInExpandedCard: Boolean = false,
+    trailerMuted: Boolean = true,
+    expandedCatalogFocusKeyState: State<String?>? = null,
+    expandedTrailerPreviewUrl: () -> String? = { null },
+    expandedTrailerPreviewAudioUrl: () -> String? = { null },
+    expandedTrailerHost: LeanbackExpandedTrailerHost? = null,
+    enrichedPreviews: State<StableMap<String, MetaPreview>>? = null,
+    onBackdropInteraction: (() -> Unit)? = null,
+    onExpandedTrailerEnded: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -94,7 +111,62 @@ fun LeanbackModernRow(
 
     DisposableEffect(rowKey) {
         onDispose {
+            adapter.collapseExpandedCardImmediate()
             rowGrids?.remove(rowKey)
+        }
+    }
+
+    val latestExpandedTrailerPreviewUrl by rememberUpdatedState(expandedTrailerPreviewUrl)
+    val latestExpandedTrailerPreviewAudioUrl by rememberUpdatedState(expandedTrailerPreviewAudioUrl)
+    val latestEnrichedPreviews by rememberUpdatedState(enrichedPreviews)
+
+    // Observe focus-driven expansion state via snapshotFlow so changing the expanded card
+    // never recomposes ModernRowSection or sibling rows.
+    LaunchedEffect(
+        rowKey,
+        adapter,
+        backdropExpandEnabled,
+        useLandscapePosters,
+        alwaysShowLandscapeClearlogo,
+        playTrailerInExpandedCard,
+        trailerMuted,
+        expandedTrailerHost,
+        expandedCatalogFocusKeyState
+    ) {
+        adapter.backdropExpandEnabled = backdropExpandEnabled
+        adapter.useLandscapePosters = useLandscapePosters
+        adapter.alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo
+        adapter.playTrailerInExpandedCard = playTrailerInExpandedCard
+        adapter.trailerMuted = trailerMuted
+        adapter.expandedTrailerHost = if (playTrailerInExpandedCard) expandedTrailerHost else null
+        adapter.enrichedPreviewsProvider = { latestEnrichedPreviews?.value?.map ?: emptyMap() }
+        adapter.onExpandedTrailerEnded = onExpandedTrailerEnded
+
+        if (!backdropExpandEnabled || expandedCatalogFocusKeyState == null) {
+            adapter.collapseExpandedCardImmediate()
+            return@LaunchedEffect
+        }
+
+        snapshotFlow {
+            val focusKey = expandedCatalogFocusKeyState.value
+            val trailerUrl = if (focusKey != null && playTrailerInExpandedCard) {
+                latestExpandedTrailerPreviewUrl()
+            } else {
+                null
+            }
+            val trailerAudioUrl = if (focusKey != null && playTrailerInExpandedCard) {
+                latestExpandedTrailerPreviewAudioUrl()
+            } else {
+                null
+            }
+            val enrichedSnapshot = if (focusKey != null) latestEnrichedPreviews?.value?.map else null
+            Triple(focusKey, trailerUrl to trailerAudioUrl, enrichedSnapshot)
+        }.collect { (focusKey, trailerPair, _) ->
+            adapter.updateExpandedCardState(
+                expandedFocusKey = focusKey,
+                trailerUrl = trailerPair.first,
+                trailerAudioUrl = trailerPair.second
+            )
         }
     }
 
@@ -232,11 +304,13 @@ fun LeanbackModernRow(
                 this.onVerticalHoldRelease = onVerticalHoldRelease
                 this.isVerticalGlideActive = isVerticalGlideActive
                 this.onHorizontalInterrupt = onHorizontalInterrupt
+                this.onBackdropInteraction = onBackdropInteraction
                 this.canTakeFocus = canTakeFocus
                 this.animationsEnabled = animationsEnabled
-                setAnimateChildLayout(animationsEnabled)
+                setAnimateChildLayout(animationsEnabled && !backdropExpandEnabled)
                 configuredAnimationsEnabled = animationsEnabled
-                setHasFixedSize(true)
+                configuredBackdropExpandEnabled = backdropExpandEnabled
+                setHasFixedSize(!backdropExpandEnabled)
                 setItemViewCacheSize(8)
                 recycledViewPool?.let { setRecycledViewPool(it) }
                 localGridViewRef = this
@@ -318,11 +392,16 @@ fun LeanbackModernRow(
             gridView.onVerticalHoldRelease = onVerticalHoldRelease
             gridView.isVerticalGlideActive = isVerticalGlideActive
             gridView.onHorizontalInterrupt = onHorizontalInterrupt
+            gridView.onBackdropInteraction = onBackdropInteraction
             gridView.canTakeFocus = canTakeFocus
-            if (gridView.configuredAnimationsEnabled != animationsEnabled) {
+            if (gridView.configuredAnimationsEnabled != animationsEnabled ||
+                gridView.configuredBackdropExpandEnabled != backdropExpandEnabled
+            ) {
                 gridView.animationsEnabled = animationsEnabled
-                gridView.setAnimateChildLayout(animationsEnabled)
+                gridView.setAnimateChildLayout(animationsEnabled && !backdropExpandEnabled)
+                gridView.setHasFixedSize(!backdropExpandEnabled)
                 gridView.configuredAnimationsEnabled = animationsEnabled
+                gridView.configuredBackdropExpandEnabled = backdropExpandEnabled
             }
             adapter.animationsEnabled = { animationsEnabled }
             adapter.onItemFocused = onItemFocused
@@ -362,6 +441,7 @@ fun LeanbackModernRow(
             }
         },
         onRelease = { container ->
+            adapter.collapseExpandedCardImmediate()
             val gridView = container.gridView
             if (localGridViewRef === gridView) {
                 localGridViewRef = null

@@ -26,7 +26,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.isPlaceholder
+import com.nuvio.tv.ui.leanback.core.LeanbackExpandedTrailerHost
 import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.util.StableMap
 import com.nuvio.tv.ui.util.StableRef
 import com.nuvio.tv.ui.util.contentTextDirection
 
@@ -86,7 +88,18 @@ internal fun ModernRowSection(
     pendingFocusNonce: Int = 0,
     onClearPendingFocus: () -> Unit = {},
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
-    blurUnwatchedEpisodes: Boolean = false
+    blurUnwatchedEpisodes: Boolean = false,
+    backdropExpandEnabled: Boolean = false,
+    alwaysShowLandscapeClearlogo: Boolean = false,
+    playTrailerInExpandedCard: Boolean = false,
+    focusedPosterBackdropTrailerMuted: Boolean = true,
+    expandedCatalogFocusKeyState: State<String?>? = null,
+    expandedTrailerPreviewUrl: () -> String? = { null },
+    expandedTrailerPreviewAudioUrl: () -> String? = { null },
+    expandedTrailerHost: LeanbackExpandedTrailerHost? = null,
+    enrichedPreviews: State<StableMap<String, MetaPreview>>? = null,
+    onBackdropInteraction: (() -> Unit)? = null,
+    onExpandedTrailerEnded: () -> Unit = {}
 ) {
     @Suppress("NAME_SHADOWING") val focusedItemByRow = focusedItemByRow.value
     @Suppress("NAME_SHADOWING") val loadMoreRequestedTotals = loadMoreRequestedTotals.value
@@ -296,6 +309,18 @@ internal fun ModernRowSection(
             canTakeFocus = isActiveRow,
             isCatalogItemWatched = isCatalogItemWatched,
             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+            backdropExpandEnabled = backdropExpandEnabled && !isContinueWatchingRow,
+            useLandscapePosters = useLandscapePosters && !isContinueWatchingRow,
+            alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
+            playTrailerInExpandedCard = playTrailerInExpandedCard && !isContinueWatchingRow,
+            trailerMuted = focusedPosterBackdropTrailerMuted,
+            expandedCatalogFocusKeyState = if (!isContinueWatchingRow) expandedCatalogFocusKeyState else null,
+            expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
+            expandedTrailerPreviewAudioUrl = expandedTrailerPreviewAudioUrl,
+            expandedTrailerHost = if (playTrailerInExpandedCard && !isContinueWatchingRow) expandedTrailerHost else null,
+            enrichedPreviews = enrichedPreviews,
+            onBackdropInteraction = if (backdropExpandEnabled && !isContinueWatchingRow) onBackdropInteraction else null,
+            onExpandedTrailerEnded = onExpandedTrailerEnded,
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(rowFocusRequester)
