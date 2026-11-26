@@ -1,3 +1,53 @@
+# Danh Sách Task - Đồng Bộ Nhánh `upstream/dev` → `tet2` (25-11-2026 Đến 26-11-2026) (`sync-dev-2026-11-26`)
+
+> **Kế hoạch tương ứng**: [PLAN-sync-dev-2026-11-26.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-sync-dev-2026-11-26.md)
+> **Phạm vi**: Hợp nhất 47 commit (19 PRs: `77cc0bb5f` → `9eb83996f`) từ `upstream/dev` sang `tet2`; giải quyết 7 file `CONFLICT`; bảo toàn 100% tùy chỉnh riêng trên `tet2` (TTS Auto Stereo 2.0, chống lặp/chặn đọc sớm TTS, Modern Home Leanback 60fps, Ambient Mode, Trailer 1080p, Native Sidebar, TorrServer, Live TV DRM, AutoSync TV-safe); port fix blur sidebar PR #4833, áp dụng `SkeletonShimmer` pha Draw PR #4826, kết hợp khung gộp SeasonTabs+EpisodesRow PR #4825 và khử 28 khóa XML trùng lặp + dịch 2 chuỗi DV L5 trong `values-vi/strings.xml`.
+
+---
+
+## 📋 Task Breakdown (`SYNC1126`)
+
+### Phase 1: Sao Lưu An Toàn & Khởi Chạy Merge
+- [x] **SYNC1126-01**: Tạo nhánh dự phòng `backup-tet2-before-merge-20261126` và fast-forward nhánh `dev` cục bộ lên `9eb83996f`
+  - **Vai trò**: Git Release Architect
+  - **Mô tả**: Đảm bảo điểm khôi phục tức thì tại `6fa0e9ba1` trước khi merge và đồng bộ nhánh `dev` cục bộ khớp 100% với `upstream/dev` và `origin/dev`.
+
+- [x] **SYNC1126-02**: Thực thi lệnh hợp nhất `git merge --no-ff upstream/dev` vào nhánh `tet2`
+  - **Vai trò**: Git Release Architect
+  - **Mô tả**: Chạy merge không fast-forward và đối chiếu chính xác 7 file `CONFLICT` với kết quả mô phỏng `git merge-tree`.
+
+### Phase 2: Phẫu Thuật Giải Quyết 7 File Xung Đột Trực Tiếp (`CONFLICT`)
+- [x] **SYNC1126-03**: Giải quyết xung đột nhóm UI & Điều hướng (`ModernSidebarBlurPanel.kt`, `MainActivity.kt`, `Skeletons.kt`, `MetaDetailsScreen.kt`)
+  - **Vai trò**: TV UI, Focus & Performance Engineer
+  - **Mô tả**: Giữ `ModernSidebarBlurPanel.kt` đã xóa (`git rm`); giữ Native Sidebar + Legacy Blur Android <12 trong `MainActivity.kt` và port fix `showRealtimePanelBlur = useRealtimeHazeBlur && delayedBlurProgress > 0f` (PR #4833); nâng cấp `MetaDetailsSkeleton` dùng `SkeletonShimmer` `drawBehind` 0 recompose (PR #4826) trong khi giữ `SolidColor` tĩnh cho `rememberShimmerBrush()`; hợp nhất `MetaDetailsScreen.kt` giữ `detailRowBringIntoViewResponder = Rect.Zero` + `episodesFullyVisible` và kết hợp khung gộp `seasonTabsHeightPx`/`episodesRowHeightPx` (PR #4825).
+  - **File**: [MainActivity.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/MainActivity.kt), [Skeletons.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/components/Skeletons.kt), [MetaDetailsScreen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/MetaDetailsScreen.kt)
+
+- [x] **SYNC1126-04**: Giải quyết xung đột nhóm Phát lại, Điều hướng & Cài đặt (`Screen.kt`, `PlayerMediaSourceFactory.kt`, `PlaybackSettingsSections.kt`)
+  - **Vai trò**: Playback & Navigation Integration Engineer
+  - **Mô tả**: Giữ `drmType`/`drmKey` (Live TV) và thêm `streamType` (PR #4844) trong `Screen.kt`; giữ `isTorrServerUrl` và bảo vệ `isPresignedOrR2Url` cùng `createHttpClient(defaultHeaders = effectiveHeaders)` (PR #4845) + `mimeTypeFromDeclaredType` (PR #4844) trong `PlayerMediaSourceFactory.kt`; giữ `customFontName` ở `PlaybackSubtitlesSection` và thêm `zeroDoviLevel5` ở `PlaybackVideoSection` trong `PlaybackSettingsSections.kt`.
+  - **File**: [Screen.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/navigation/Screen.kt), [PlayerMediaSourceFactory.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/player/PlayerMediaSourceFactory.kt), [PlaybackSettingsSections.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsSections.kt)
+
+### Phase 3: Vá Lỗi Ẩn Auto-Merge & Hoàn Thiện Bản Địa Hóa Tiếng Việt
+- [x] **SYNC1126-05**: Khử 28 khóa XML trùng lặp, bổ sung 2 chuỗi Tiếng Việt Dolby Vision L5 trong `values-vi/strings.xml` và rà soát `HeroSection.kt`
+  - **Vai trò**: Localization & Resource Specialist
+  - **Mô tả**: Xóa khối 28 chuỗi Simkl Rewatch trùng lặp ở cuối `values-vi/strings.xml` (giữ bản dịch PR #4828 đúng vị trí và giữ 100% chuỗi tùy chỉnh `tet2`), thêm `audio_zero_dovi_l5_title` & `audio_zero_dovi_l5_sub` bằng Tiếng Việt, chạy script kiểm tra 0 khóa XML trùng trên toàn bộ tệp `values*/strings*.xml`, và chỉnh sửa khoảng trắng `val logoModel = remember(...)` trong `HeroSection.kt`.
+  - **File**: [strings.xml (vi)](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/res/values-vi/strings.xml), [HeroSection.kt](file:///f:/MyGithub/NuvioTV-Fast/app/src/main/java/com/nuvio/tv/ui/screens/detail/HeroSection.kt)
+
+### Phase 4: Kiểm Chứng Toàn Diện & Đóng Gói Commit Merge
+- [x] **SYNC1126-06**: Biên dịch kiểm tra đa biến thể (`full`, `playstore`, `androidTest`), AAPT2 resources và native CMake `dovi_bridge`
+  - **Vai trò**: Build & Native Verification Inspector
+  - **Mô tả**: Chạy `:app:compileFullDebugKotlin :app:compilePlaystoreDebugKotlin :app:compileFullDebugAndroidTestKotlin :app:mergeFullDebugResources :app:mergeFullDebugNativeLibs` và kiểm tra biên dịch C++17 `dovi_bridge.cpp` với NDK 29 `aarch64-linux-android24-clang++` (`-DDOVI_REAL_LINKED=1` + `DV7/libdovi`), xác nhận 0 lỗi.
+
+- [x] **SYNC1126-07**: Chạy bộ Unit Tests cho 19 PRs mới từ upstream và toàn bộ tính năng tùy chỉnh cốt lõi của `tet2`
+  - **Vai trò**: QA & Verification Engineer
+  - **Mô tả**: Chạy `testFullDebugUnitTest` trên 59 test suites / 492 unit tests (DolbyVision Level 5, DeviceLocalPlayerPreferences, Usenet Release Labels, ProfileSettingsSync, PlayerMediaSourceFactory, AudioSync, TTS Stereo/Queue/Cleaner, Leanback, Trailer 1080p, Ambient Mode, TorrServer) → 492/492 PASS (0 lỗi).
+
+- [x] **SYNC1126-08**: Tạo commit merge sạch và xuất báo cáo nghiệm thu chi tiết từng file xung đột & thay thế
+  - **Vai trò**: Release Coordinator
+  - **Mô tả**: Đóng gói commit merge chuẩn trên `tet2`, báo cáo đầy đủ mọi tệp đã hợp nhất, mọi thay thế bằng code tốt hơn của upstream và bằng chứng kiểm thử.
+
+---
+
 # Danh Sách Task - Khắc Phục Triệt Để Lỗi Đọc Thuyết Minh (TTS) Bị Lặp Lại & Đọc Trước Khi Phim Chưa Play (`fix-tts-repeated-narration`)
 
 > **Kế hoạch tương ứng**: [PLAN-fix-tts-repeated-narration.md](file:///f:/MyGithub/NuvioTV-Fast/PLAN-fix-tts-repeated-narration.md)
