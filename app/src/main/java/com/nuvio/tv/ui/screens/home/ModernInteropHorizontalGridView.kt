@@ -179,6 +179,9 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
             pendingTargetPosition != RecyclerView.NO_POSITION ||
             scrollState != RecyclerView.SCROLL_STATE_IDLE
 
+    val isCollapseTransitionActive: Boolean
+        get() = collapseTransitionHelper.isActive
+
     val isSubmittingItems: Boolean
         get() = rowAdapter?.isSubmittingItems == true
 
@@ -420,7 +423,7 @@ class ModernInteropHorizontalGridView(context: Context) : HorizontalGridView(con
                     pendingTargetPosition = RecyclerView.NO_POSITION
                     rowAdapter?.flushPendingFocusedItem()
                     post {
-                        if (!isComputingLayout) {
+                        if (!isComputingLayout && !hasPendingHorizontalNavigation && !isCollapseTransitionActive) {
                             ensureChildFocusAndRing(animated = false)
                             rowAdapter?.onScrollSettled()
                             floatingRingView?.onScrollSettled()

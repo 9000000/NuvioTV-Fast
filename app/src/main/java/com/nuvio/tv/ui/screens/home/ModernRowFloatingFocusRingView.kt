@@ -24,6 +24,31 @@ import com.nuvio.tv.ui.leanback.core.LeanbackThemeStyle
 internal val DEFAULT_MODERN_FOCUS_COLOR: Int = Color.parseColor("#F59E0B")
 
 /**
+ * Modern Home rows use [androidx.leanback.widget.BaseGridView.WINDOW_ALIGN_NO_EDGE], so every
+ * normal focused card settles at the anchored start keyline. Reading live `target.left` merely
+ * because `scrollState == SCROLL_STATE_IDLE` causes the ring to jump onto the previous or next
+ * poster during synchronous focus callbacks before Leanback's SmoothScroller starts ticking.
+ *
+ * Only follow live target X when the focused card is expanded or animating its width in place
+ * while no horizontal navigation, ring morph, or collapse transition is in flight.
+ */
+internal fun shouldUseLiveFocusRingTargetX(
+    isExpandedCard: Boolean,
+    isAnimatingTargetSize: Boolean,
+    isRowAnimatingWidth: Boolean,
+    explicitUseLivePosition: Boolean,
+    isMorphingSize: Boolean,
+    isHoldingHorizontalKey: Boolean,
+    hasPendingHorizontalNavigation: Boolean,
+    isCollapseTransitionActive: Boolean
+): Boolean {
+    if (isMorphingSize || isHoldingHorizontalKey || hasPendingHorizontalNavigation || isCollapseTransitionActive) {
+        return false
+    }
+    return isExpandedCard || isAnimatingTargetSize || isRowAnimatingWidth || explicitUseLivePosition
+}
+
+/**
  * Single floating focus ring per Modern Home row.
  * Stays anchored at the leading keyline (left in LTR, right in RTL) while poster cards scroll
  * underneath it. Allocates a `LAYER_TYPE_SOFTWARE` buffer ONLY while `visibility == VISIBLE`.
@@ -147,8 +172,6 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
         if (!view.isAttachedToWindow || view.width <= 0 || view.height <= 0) return@OnLayoutChangeListener
         val grid = (parentView as? ModernRowContainerLayout)?.gridView
         val isRowAnimatingWidth = (grid?.adapter as? LeanbackRowAdapter)?.hasAnimatingWidthCard == true
-        val isGridIdle = grid == null ||
-            (!grid.isHoldingHorizontalKey && grid.scrollState == RecyclerView.SCROLL_STATE_IDLE)
         if (!isAnimatingTargetSize) {
             val resolvedW = LeanbackCardExpandSpec.resolveEffectiveCardDimensionPx(
                 explicitPx = null,
@@ -174,7 +197,16 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             }
         }
         val activeCardW = drawnCardWidthPx.takeIf { it > 0 } ?: view.width
-        val useLiveX = isTrackingExpandedTarget || isAnimatingTargetSize || isRowAnimatingWidth || isGridIdle
+        val useLiveX = shouldUseLiveFocusRingTargetX(
+            isExpandedCard = isTrackingExpandedTarget,
+            isAnimatingTargetSize = isAnimatingTargetSize,
+            isRowAnimatingWidth = isRowAnimatingWidth,
+            explicitUseLivePosition = false,
+            isMorphingSize = isMorphingSize,
+            isHoldingHorizontalKey = grid?.isHoldingHorizontalKey == true,
+            hasPendingHorizontalNavigation = grid?.hasPendingHorizontalNavigation == true,
+            isCollapseTransitionActive = grid?.isCollapseTransitionActive == true
+        )
         val (targetX, targetY) = resolveTargetPositionInParent(
             parent = parentView,
             target = view,
@@ -290,21 +322,7 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
                     bufferCardWidthPx = bufferW,
                     allowShrink = false
                 )
-                val grid = (parentView as? ModernRowContainerLayout)?.gridView
-                val isIdleAtEdge = grid != null &&
-                    !grid.isHoldingHorizontalKey &&
-                    grid.scrollState == RecyclerView.SCROLL_STATE_IDLE
-                val target = currentTargetView
-                val anchoredX = if (isIdleAtEdge && target != null && target.isAttachedToWindow && target.width > 0) {
-                    resolveTargetPositionInParent(
-                        parent = parentView,
-                        target = target,
-                        cardWidthPx = animatedW,
-                        useLiveTargetX = true
-                    ).first
-                } else {
-                    computeAnchoredRingX(parentView, animatedW)
-                }
+                val anchoredX = computeAnchoredRingX(parentView, animatedW)
                 if (kotlin.math.abs(translationX - anchoredX) >= 0.5f) {
                     translationX = anchoredX
                 }
@@ -642,13 +660,21 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
 
         val grid = (parent as? ModernRowContainerLayout)?.gridView
         val isRowAnimatingWidth = (grid?.adapter as? LeanbackRowAdapter)?.hasAnimatingWidthCard == true
-        val isGridIdle = grid == null ||
-            (!grid.isHoldingHorizontalKey && grid.scrollState == RecyclerView.SCROLL_STATE_IDLE)
+        val useLiveTargetX = shouldUseLiveFocusRingTargetX(
+            isExpandedCard = isExpandedCard,
+            isAnimatingTargetSize = isAnimatingTargetSize,
+            isRowAnimatingWidth = isRowAnimatingWidth,
+            explicitUseLivePosition = useLivePosition,
+            isMorphingSize = isMorphingSize,
+            isHoldingHorizontalKey = grid?.isHoldingHorizontalKey == true,
+            hasPendingHorizontalNavigation = grid?.hasPendingHorizontalNavigation == true,
+            isCollapseTransitionActive = grid?.isCollapseTransitionActive == true
+        )
         val (resolvedX, targetY) = resolveTargetPositionInParent(
             parent = parent,
             target = target,
             cardWidthPx = resolvedCardW,
-            useLiveTargetX = isExpandedCard || useLivePosition || isRowAnimatingWidth || isGridIdle
+            useLiveTargetX = useLiveTargetX
         )
 
         applyThemeColors(dominantColor)
@@ -741,11 +767,23 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
             allowShrink = !isAnimatingWidth
         )
 
+        val grid = (parent as? ModernRowContainerLayout)?.gridView
+        val isRowAnimatingWidth = (grid?.adapter as? LeanbackRowAdapter)?.hasAnimatingWidthCard == true
+        val useLiveTargetX = shouldUseLiveFocusRingTargetX(
+            isExpandedCard = isExpandedCard,
+            isAnimatingTargetSize = isAnimatingWidth,
+            isRowAnimatingWidth = isRowAnimatingWidth,
+            explicitUseLivePosition = true,
+            isMorphingSize = isMorphingSize,
+            isHoldingHorizontalKey = grid?.isHoldingHorizontalKey == true,
+            hasPendingHorizontalNavigation = grid?.hasPendingHorizontalNavigation == true,
+            isCollapseTransitionActive = grid?.isCollapseTransitionActive == true
+        )
         val (targetX, targetY) = resolveTargetPositionInParent(
             parent = parent,
             target = target,
             cardWidthPx = resolvedCardW,
-            useLiveTargetX = true
+            useLiveTargetX = useLiveTargetX
         )
         translationX = targetX
         translationY = targetY
@@ -817,12 +855,24 @@ class ModernRowFloatingFocusRingView(context: Context) : View(context) {
                     )
                 }
             }
+            val grid = (parent as? ModernRowContainerLayout)?.gridView
+            val isRowAnimatingWidth = (grid?.adapter as? LeanbackRowAdapter)?.hasAnimatingWidthCard == true
             val cardW = drawnCardWidthPx.takeIf { it > 0 } ?: target.width
+            val useLiveTargetX = shouldUseLiveFocusRingTargetX(
+                isExpandedCard = isTrackingExpandedTarget,
+                isAnimatingTargetSize = isAnimatingTargetSize,
+                isRowAnimatingWidth = isRowAnimatingWidth,
+                explicitUseLivePosition = false,
+                isMorphingSize = isMorphingSize,
+                isHoldingHorizontalKey = grid?.isHoldingHorizontalKey == true,
+                hasPendingHorizontalNavigation = grid?.hasPendingHorizontalNavigation == true,
+                isCollapseTransitionActive = grid?.isCollapseTransitionActive == true
+            )
             val (targetX, targetY) = resolveTargetPositionInParent(
                 parent = parent,
                 target = target,
                 cardWidthPx = cardW,
-                useLiveTargetX = true
+                useLiveTargetX = useLiveTargetX
             )
             if (kotlin.math.abs(translationX - targetX) >= 0.5f) {
                 translationX = targetX
