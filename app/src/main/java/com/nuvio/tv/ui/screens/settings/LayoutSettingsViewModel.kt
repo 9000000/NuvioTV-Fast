@@ -54,6 +54,7 @@ data class LayoutSettingsUiState(
     val modernSidebarBlurEnabled: Boolean = false,
     val modernLandscapePostersEnabled: Boolean = false,
     val modernHeroFullScreenBackdropEnabled: Boolean = false,
+    val modernSingleRowEnabled: Boolean = false,
     val heroSectionEnabled: Boolean = true,
     val discoverLocation: DiscoverLocation = DiscoverLocation.IN_SEARCH,
     val lastNonOffDiscoverLocation: DiscoverLocation = DiscoverLocation.IN_SEARCH,
@@ -117,6 +118,7 @@ sealed class LayoutSettingsEvent {
     data class SetModernSidebarBlurEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernLandscapePostersEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernHeroFullScreenBackdropEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetModernSingleRowEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHeroSectionEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetDiscoverLocation(val location: DiscoverLocation) : LayoutSettingsEvent()
     data class SetPosterLabelsEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -255,6 +257,11 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(modernHeroFullScreenBackdropEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.modernSingleRowEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(modernSingleRowEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -494,6 +501,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetModernSidebarBlurEnabled -> setModernSidebarBlurEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernLandscapePostersEnabled -> setModernLandscapePostersEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernHeroFullScreenBackdropEnabled -> setModernHeroFullScreenBackdropEnabled(event.enabled)
+            is LayoutSettingsEvent.SetModernSingleRowEnabled -> setModernSingleRowEnabled(event.enabled)
             is LayoutSettingsEvent.SetHeroSectionEnabled -> setHeroSectionEnabled(event.enabled)
             is LayoutSettingsEvent.SetDiscoverLocation -> setDiscoverLocation(event.location)
             is LayoutSettingsEvent.SetPosterLabelsEnabled -> setPosterLabelsEnabled(event.enabled)
@@ -672,6 +680,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.modernHeroFullScreenBackdropEnabled == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setModernHeroFullScreenBackdropEnabled(enabled)
+        }
+    }
+
+    private fun setModernSingleRowEnabled(enabled: Boolean) {
+        if (_uiState.value.modernSingleRowEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setModernSingleRowEnabled(enabled)
         }
     }
 

@@ -65,6 +65,7 @@ private data class LayoutUiPrefs(
     val alwaysShowLandscapeClearlogo: Boolean = false,
     val heroDescriptionAutoScrollEnabled: Boolean = false,
     val modernHeroFullScreenBackdropEnabled: Boolean,
+    val modernSingleRowEnabled: Boolean = false,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility,
     val detailImdbRatingsVisibility: DetailImdbRatingsVisibility = DetailImdbRatingsVisibility.SHOW_ALL,
     val focusedBackdropExpandEnabled: Boolean,
@@ -80,6 +81,7 @@ private data class LayoutUiPrefs(
 private data class ModernLayoutPrefs(
     val landscapePosters: Boolean,
     val fullScreenBackdrop: Boolean,
+    val singleRowEnabled: Boolean = false,
     val homeImdbRatingsVisibility: HomeImdbRatingsVisibility,
     val alwaysShowLandscapeClearlogo: Boolean,
     val detailImdbRatingsVisibility: DetailImdbRatingsVisibility = DetailImdbRatingsVisibility.SHOW_ALL,
@@ -137,15 +139,21 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
     }
 
     val modernLayoutPrefsFlow = combine(
-        layoutPreferenceDataStore.modernLandscapePostersEnabled,
-        layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled,
+        combine(
+            layoutPreferenceDataStore.modernLandscapePostersEnabled,
+            layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled,
+            layoutPreferenceDataStore.modernSingleRowEnabled
+        ) { landscapePosters, fullScreenBackdrop, singleRowEnabled ->
+            Triple(landscapePosters, fullScreenBackdrop, singleRowEnabled)
+        },
         layoutPreferenceDataStore.homeImdbRatingsVisibility,
         layoutPreferenceDataStore.alwaysShowLandscapeClearlogo,
         layoutPreferenceDataStore.detailImdbRatingsVisibility
-    ) { landscapePosters, fullScreenBackdrop, homeImdbRatingsVisibility, alwaysShowLandscapeClearlogo, detailImdbRatingsVisibility ->
+    ) { (landscapePosters, fullScreenBackdrop, singleRowEnabled), homeImdbRatingsVisibility, alwaysShowLandscapeClearlogo, detailImdbRatingsVisibility ->
         ModernLayoutPrefs(
             landscapePosters = landscapePosters,
             fullScreenBackdrop = fullScreenBackdrop,
+            singleRowEnabled = singleRowEnabled,
             homeImdbRatingsVisibility = homeImdbRatingsVisibility,
             alwaysShowLandscapeClearlogo = alwaysShowLandscapeClearlogo,
             detailImdbRatingsVisibility = detailImdbRatingsVisibility,
@@ -193,6 +201,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             basePrefs.copy(
                 modernLandscapePostersEnabled = modernPrefs.landscapePosters,
                 modernHeroFullScreenBackdropEnabled = modernPrefs.fullScreenBackdrop,
+                modernSingleRowEnabled = modernPrefs.singleRowEnabled,
                 homeImdbRatingsVisibility = modernPrefs.homeImdbRatingsVisibility,
                 alwaysShowLandscapeClearlogo = modernPrefs.alwaysShowLandscapeClearlogo,
                 detailImdbRatingsVisibility = modernPrefs.detailImdbRatingsVisibility,
@@ -243,6 +252,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         alwaysShowLandscapeClearlogo = prefs.alwaysShowLandscapeClearlogo,
                         heroDescriptionAutoScrollEnabled = prefs.heroDescriptionAutoScrollEnabled,
                         modernHeroFullScreenBackdropEnabled = prefs.modernHeroFullScreenBackdropEnabled,
+                        modernSingleRowEnabled = prefs.modernSingleRowEnabled,
                         homeImdbRatingsVisibility = prefs.homeImdbRatingsVisibility,
                         detailImdbRatingsVisibility = prefs.detailImdbRatingsVisibility,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,

@@ -125,6 +125,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val detailPageTrailerButtonEnabledKey = booleanPreferencesKey("detail_page_trailer_button_enabled")
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
     private val modernHeroFullScreenBackdropKey = booleanPreferencesKey("modern_hero_full_screen_backdrop")
+    private val modernSingleRowEnabledKey = booleanPreferencesKey("modern_single_row_enabled")
     private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
     private val showFullReleaseDateKey = booleanPreferencesKey("show_full_release_date")
     private val memoryOnlyVerticalScrollKey = booleanPreferencesKey("memory_only_vertical_scroll")
@@ -252,6 +253,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val modernHeroFullScreenBackdropEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[modernHeroFullScreenBackdropKey] ?: false
+    }
+
+    val modernSingleRowEnabled: Flow<Boolean> = profileFlow { prefs ->
+        prefs[modernSingleRowEnabledKey] ?: false
     }
 
     val heroSectionEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -618,6 +623,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setModernHeroFullScreenBackdropEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[modernHeroFullScreenBackdropKey] = enabled
+        }
+    }
+
+    suspend fun setModernSingleRowEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[modernSingleRowEnabledKey] = enabled
         }
     }
 

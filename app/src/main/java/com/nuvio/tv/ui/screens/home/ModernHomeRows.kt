@@ -5,6 +5,7 @@ package com.nuvio.tv.ui.screens.home
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,6 +53,7 @@ internal fun ModernRowSection(
     isActiveRow: () -> Boolean,
     rowFocusRequester: FocusRequester,
     rowTitleBottom: Dp,
+    minRowHeight: Dp = Dp.Unspecified,
     focusedItemByRow: StableRef<MutableMap<String, Int>>,
     loadMoreRequestedTotals: StableRef<MutableMap<String, Int>>,
     onRowItemFocused: (String, Int, Boolean) -> Unit,
@@ -111,14 +113,22 @@ internal fun ModernRowSection(
     val blockingFocusExit = remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.then(
-            if (blockingFocusExit.value) {
-                Modifier.focusProperties {
-                    up = FocusRequester.Cancel
-                    down = FocusRequester.Cancel
+        modifier = Modifier
+            .then(
+                if (minRowHeight != Dp.Unspecified) {
+                    Modifier.heightIn(min = minRowHeight)
+                } else {
+                    Modifier
                 }
-            } else Modifier
-        )
+            )
+            .then(
+                if (blockingFocusExit.value) {
+                    Modifier.focusProperties {
+                        up = FocusRequester.Cancel
+                        down = FocusRequester.Cancel
+                    }
+                } else Modifier
+            )
     ) {
         val titleMediumStyle = MaterialTheme.typography.titleMedium
         val rowTitleStyle = remember(titleMediumStyle) {

@@ -1126,6 +1126,8 @@
     <string name="layout_modern_sidebar_blur_sub">Bật/tắt hiệu ứng làm mờ thanh bên trong giao diện Hiện đại.</string>
     <string name="layout_fullscreen_hero_backdrop">Phông nền Khu vực Nổi bật toàn màn hình</string>
     <string name="layout_fullscreen_hero_backdrop_sub">Mở rộng phông nền Khu vực Nổi bật để lấp đầy toàn bộ màn hình.</string>
+    <string name="layout_modern_single_row">Chỉ hiển thị 1 hàng poster</string>
+    <string name="layout_modern_single_row_sub">Hạ hàng poster xuống sát đáy màn hình để chỉ thấy 1 hàng và mở rộng khu vực nổi bật.</string>
     <string name="layout_classic_focus_gradient">Dải màu chuyển tiếp mục đang chọn</string>
     <string name="layout_classic_focus_gradient_sub">Hoà trộn màu ảnh hiển thị vào phần bên phải của Trang chủ Cổ điển.</string>
     <string name="layout_show_hero">Hiển thị Khu vực Nổi bật</string>

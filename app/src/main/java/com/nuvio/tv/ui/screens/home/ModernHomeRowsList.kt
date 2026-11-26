@@ -444,6 +444,7 @@ internal fun ModernHomeRowsList(
     onFastScrollingChanged: (Boolean) -> Unit,
     contentFocusRequester: FocusRequester,
     rowsViewportHeight: Dp,
+    singleRowMode: Boolean = false,
     catalogBottomPadding: Dp,
     verticalRowBringIntoViewSpec: BringIntoViewSpec,
     onRowItemFocusedInternal: (String, Int, Boolean) -> Unit,
@@ -708,7 +709,7 @@ internal fun ModernHomeRowsList(
     val titleLineHeight = MaterialTheme.typography.titleMedium.lineHeight
     val defaultCardTopInRowPx = with(density) {
         val titleHeightDp = runCatching { titleLineHeight.toDp() }.getOrDefault(24.dp)
-        (titleHeightDp + 4.dp + 6.dp).toPx()
+        (titleHeightDp + MODERN_ROW_TITLE_BOTTOM_SPACING + MODERN_ROW_CARD_VERTICAL_PADDING).toPx()
     }
     val cachedCardTopInRowRef = remember(defaultCardTopInRowPx) {
         AtomicReference(defaultCardTopInRowPx)
@@ -2105,7 +2106,8 @@ internal fun ModernHomeRowsList(
                     row = row,
                     isActiveRow = isActiveRowLambda,
                     rowFocusRequester = rowFocusRequesters.getOrPut(row.key) { FocusRequester() },
-                    rowTitleBottom = 4.dp, // rowTitleBottom sát poster
+                    rowTitleBottom = MODERN_ROW_TITLE_BOTTOM_SPACING,
+                    minRowHeight = if (singleRowMode) rowsViewportHeight else Dp.Unspecified,
                     focusedItemByRow = focusedItemByRow,
                     loadMoreRequestedTotals = loadMoreRequestedTotals,
                     onRowItemFocused = stableOnRowItemFocused,

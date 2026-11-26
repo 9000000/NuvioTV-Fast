@@ -85,7 +85,7 @@ fun LeanbackModernRow(
     val cornerRadiusPx = with(density) { cornerRadius.toPx() }
     val startPaddingPx = with(density) { startPadding.roundToPx() }
     val spacingPx = with(density) { spacing.roundToPx() }
-    val verticalPaddingDp = 6.dp
+    val verticalPaddingDp = MODERN_ROW_CARD_VERTICAL_PADDING
     val verticalPaddingPx = with(density) { verticalPaddingDp.roundToPx() }
     val labelHeightDp = if (showLabels) (26f * density.fontScale.coerceIn(1f, 1.4f)).dp else 0.dp
     val labelHeightPx = if (showLabels) with(density) { labelHeightDp.roundToPx() } else 0

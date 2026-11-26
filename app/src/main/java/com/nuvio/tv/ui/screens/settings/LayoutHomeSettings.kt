@@ -83,6 +83,14 @@ internal fun LayoutHomeLayoutSection(
                 onEvent(LayoutSettingsEvent.SetModernHeroFullScreenBackdropEnabled(!uiState.modernHeroFullScreenBackdropEnabled))
             }
         )
+        SettingsToggleRow(
+            title = stringResource(R.string.layout_modern_single_row),
+            subtitle = stringResource(R.string.layout_modern_single_row_sub),
+            checked = uiState.modernSingleRowEnabled,
+            onToggle = {
+                onEvent(LayoutSettingsEvent.SetModernSingleRowEnabled(!uiState.modernSingleRowEnabled))
+            }
+        )
     }
 
     if (uiState.selectedLayout == HomeLayout.CLASSIC) {

@@ -32,11 +32,41 @@ internal const val MODERN_HERO_MEDIA_WIDTH_FRACTION = 0.72f
 internal const val MODERN_TRAILER_OVERSCAN_ZOOM = 1.35f
 internal const val MODERN_HERO_FOCUS_DEBOUNCE_MS = 450L
 internal val MODERN_ROW_HEADER_FOCUS_INSET = 40.dp
+internal val MODERN_ROW_TITLE_BOTTOM_SPACING = 4.dp
+internal val MODERN_ROW_CARD_VERTICAL_PADDING = 6.dp
+internal val MODERN_SINGLE_ROW_BOTTOM_INSET = 10.dp
 private const val MODERN_ROWS_VIEWPORT_MAX_FRACTION = 0.6f
 
-/** Rows keep their share of the screen, matching the original project ratio. */
-internal fun modernRowsViewportHeight(screenHeight: Dp, fraction: Float, tallestCardHeight: Dp): Dp {
-    return screenHeight * fraction
+/**
+ * Computes the height of the Modern Home rows viewport.
+ * When [singleRowEnabled] is true, lowers the viewport to the bottom of the screen sized to fit
+ * one row using [catalogCardHeight] (expanding only when a visible Continue Watching row uses
+ * taller cards so it is never clipped), plus a safe bottom inset for the focus ring glow.
+ */
+internal fun modernRowsViewportHeight(
+    screenHeight: Dp,
+    defaultFraction: Float,
+    singleRowEnabled: Boolean,
+    rowTitleHeight: Dp,
+    catalogCardHeight: Dp,
+    continueWatchingCardHeight: Dp = 0.dp,
+    hasContinueWatchingRow: Boolean = false,
+    labelHeight: Dp = 0.dp
+): Dp {
+    val defaultHeight = screenHeight * defaultFraction
+    if (!singleRowEnabled) return defaultHeight
+    val effectiveCardHeight = if (hasContinueWatchingRow) {
+        maxOf(catalogCardHeight, continueWatchingCardHeight)
+    } else {
+        catalogCardHeight
+    }
+    val singleRowHeight = rowTitleHeight +
+        MODERN_ROW_TITLE_BOTTOM_SPACING +
+        effectiveCardHeight +
+        labelHeight +
+        (MODERN_ROW_CARD_VERTICAL_PADDING * 2) +
+        MODERN_SINGLE_ROW_BOTTOM_INSET
+    return singleRowHeight.coerceAtMost(screenHeight)
 }
 internal const val MODERN_CONTINUE_WATCHING_ROW_KEY = "continue_watching"
 internal const val MODERN_UPCOMING_ROW_KEY = "upcoming_section"

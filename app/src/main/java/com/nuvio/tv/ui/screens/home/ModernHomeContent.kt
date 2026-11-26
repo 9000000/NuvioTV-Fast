@@ -1015,18 +1015,48 @@ fun ModernHomeContent(
             }
 
             val localDensity = LocalDensity.current
+            val singleRowEnabled = uiState.modernSingleRowEnabled
             val rowsViewportHeightFraction = if (useLandscapePosters) 0.49f else 0.52f
             val activeCatalogHeight: Dp = if (useLandscapePosters) landscapeCatalogCardHeight else portraitCatalogCardHeight
-            val tallestRowCardHeight: Dp = maxOf(activeCatalogHeight, continueWatchingCardHeight)
-            val rowsViewportHeight = remember(screenHeight, rowsViewportHeightFraction) {
-                screenHeight * rowsViewportHeightFraction
-            }
             val rowTitleLineHeight = MaterialTheme.typography.titleMedium.lineHeight
             val rowTitleHeight = remember(rowTitleLineHeight, localDensity) {
                 with(localDensity) {
                     runCatching { rowTitleLineHeight.toDp() }
                         .getOrDefault(NuvioTheme.spacing.xl)
                 }
+            }
+            val rowLabelHeight = remember(uiState.posterLabelsEnabled, localDensity) {
+                if (uiState.posterLabelsEnabled) {
+                    (26f * localDensity.fontScale.coerceIn(1f, 1.4f)).dp
+                } else {
+                    0.dp
+                }
+            }
+            val hasContinueWatchingRow = remember(carouselRows) {
+                carouselRows.list.any {
+                    it.key == MODERN_CONTINUE_WATCHING_ROW_KEY || it.key == MODERN_UPCOMING_ROW_KEY
+                }
+            }
+            val rowsViewportHeight = remember(
+                screenHeight,
+                rowsViewportHeightFraction,
+                singleRowEnabled,
+                rowTitleHeight,
+                activeCatalogHeight,
+                continueWatchingCardHeight,
+                hasContinueWatchingRow,
+                rowLabelHeight
+            ) {
+                modernRowsViewportHeight(
+                    screenHeight = screenHeight,
+                    defaultFraction = rowsViewportHeightFraction,
+                    singleRowEnabled = singleRowEnabled,
+                    rowTitleHeight = rowTitleHeight,
+                    catalogCardHeight = activeCatalogHeight,
+                    continueWatchingCardHeight = continueWatchingCardHeight,
+                    hasContinueWatchingRow = hasContinueWatchingRow,
+                    labelHeight = rowLabelHeight
+                )
             }
             val heroBackdropHeight = remember(screenHeight, rowsViewportHeight, rowTitleHeight) { (screenHeight - rowsViewportHeight + rowTitleHeight + 14.dp).coerceAtMost(screenHeight) }
             val verticalRowBringIntoViewSpec = remember(localDensity, defaultBringIntoViewSpec) {
@@ -1192,6 +1222,7 @@ fun ModernHomeContent(
                 onFastScrollingChanged = onFastScrollingChangedLambda,
                 contentFocusRequester = contentFocusRequester,
                 rowsViewportHeight = rowsViewportHeight,
+                singleRowMode = singleRowEnabled,
                 catalogBottomPadding = NuvioTheme.spacing.none,
                 verticalRowBringIntoViewSpec = verticalRowBringIntoViewSpec,
                 onRowItemFocusedInternal = onRowItemFocusedInternalLambda,

@@ -1203,6 +1203,8 @@
     <string name="layout_modern_sidebar_blur_sub">Toggle blur effect for modern sidebar surfaces.</string>
     <string name="layout_fullscreen_hero_backdrop">Fullscreen Hero Backdrop</string>
     <string name="layout_fullscreen_hero_backdrop_sub">Expand the hero backdrop to fill the entire screen.</string>
+    <string name="layout_modern_single_row">Single Poster Row</string>
+    <string name="layout_modern_single_row_sub">Lower posters to the bottom of the screen to show only one row at a time.</string>
     <string name="layout_classic_focus_gradient">Focused Item Gradient</string>
     <string name="layout_classic_focus_gradient_sub">Blend artwork colors into the right side of Classic home.</string>
     <string name="layout_show_hero">Show Hero Section</string>
