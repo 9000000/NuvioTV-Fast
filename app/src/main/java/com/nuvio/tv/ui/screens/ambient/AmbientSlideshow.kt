@@ -300,7 +300,7 @@ fun AmbientSlideshow(
         modifier = modifier
             .fillMaxSize()
             .clipToBounds()
-            .then(if (activeSession != null) Modifier else Modifier.background(Color.Black))
+            .background(Color.Black)
     ) {
         val loaded = current ?: return@Box
         if (activeSession != null) {
@@ -323,7 +323,7 @@ fun AmbientSlideshow(
                     },
                     // Hardware Overlay zero-copy SurfaceView prevents GPU TextureView frame drops
                     // during full-screen 1080p60/4K playback; fades are driven by the scrim above.
-                    cropToFill = false,
+                    cropToFill = true,
                     autoCropLetterbox = false,
                     detectLetterbox = false,
                     showSubtitles = false,
