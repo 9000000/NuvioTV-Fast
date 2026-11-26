@@ -1074,32 +1074,40 @@ internal fun ModernHomeRowsList(
         if (grid != null && grid.isAttachedToWindow) {
             grid.prepareForIncomingFocus()
             grid.setSelectedPosition(resolvedCardIdx)
-            grid.requestFocus()
             val vh = grid.findViewHolderForAdapterPosition(resolvedCardIdx) as? LeanbackCardViewHolder
             val ring = grid.floatingRingView
-            if (vh != null && ring != null && vh.cardContainer.width > 0 && vh.cardContainer.height > 0) {
+            if (!grid.isComputingLayout && !grid.isInLayout &&
+                vh != null && ring != null && vh.cardContainer.width > 0 && vh.cardContainer.height > 0
+            ) {
+                val wasGlide = isVerticalGlideRef.get()
                 isVerticalGlideRef.set(false)
+                if (!grid.hasFocus()) {
+                    grid.requestFocus()
+                }
                 grid.ensureChildFocusAndRing(targetPos = resolvedCardIdx, animated = false)
-                if (ring.visibility == View.VISIBLE && ring.width > 0 && ring.height > 0) {
+                val ringMargin = (ring.glowMarginPx * 2).toInt()
+                if (grid.hasFocus() && ring.visibility == View.VISIBLE && ring.width > ringMargin && ring.height > ringMargin) {
                     verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
                     triggerLandingRowImageRefresh(grid)
                     return
                 }
+                if (wasGlide) isVerticalGlideRef.set(true)
             }
             if (retryCount < 8) {
-                grid.post {
+                grid.postOnAnimation {
                     handoffOverlayToGrid(resolvedKey, resolvedCardIdx, expectedGen, retryCount + 1)
                 }
                 return
             }
             isVerticalGlideRef.set(false)
+            if (!grid.hasFocus()) grid.requestFocus()
             grid.ensureChildFocusAndRing(targetPos = resolvedCardIdx, animated = false)
             verticalOverlayHostRef.get()?.deactivateGlideFocusAndHideRing()
             triggerLandingRowImageRefresh(grid)
         } else {
             val overlayHost = verticalOverlayHostRef.get()
-            if (retryCount < 4 && overlayHost != null && overlayHost.isAttachedToWindow) {
-                overlayHost.post {
+            if (retryCount < 8 && overlayHost != null && overlayHost.isAttachedToWindow) {
+                overlayHost.postOnAnimation {
                     handoffOverlayToGrid(resolvedKey, resolvedCardIdx, expectedGen, retryCount + 1)
                 }
                 return
