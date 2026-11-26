@@ -1136,10 +1136,26 @@ fun ModernHomeContent(
             )
 
 
-            val heroMetadataModifier = remember(rowHorizontalPadding, rowsViewportHeight) {
+            val heroMetadataBottomPadding = remember(
+                screenHeight,
+                rowsViewportHeightFraction,
+                rowsViewportHeight
+            ) {
+                modernHeroMetadataBottomPadding(
+                    screenHeight = screenHeight,
+                    defaultFraction = rowsViewportHeightFraction,
+                    rowsViewportHeight = rowsViewportHeight,
+                    spacingAboveRows = NuvioTheme.spacing.lg
+                )
+            }
+            val heroMetadataModifier = remember(rowHorizontalPadding, heroMetadataBottomPadding) {
                 Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = rowHorizontalPadding, end = NuvioTheme.spacing.xxxl, bottom = NuvioTheme.spacing.none + rowsViewportHeight + NuvioTheme.spacing.lg)
+                    .padding(
+                        start = rowHorizontalPadding,
+                        end = NuvioTheme.spacing.xxxl,
+                        bottom = heroMetadataBottomPadding
+                    )
                     .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
             }
 

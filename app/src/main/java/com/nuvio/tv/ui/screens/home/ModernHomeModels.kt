@@ -68,6 +68,20 @@ internal fun modernRowsViewportHeight(
         MODERN_SINGLE_ROW_BOTTOM_INSET
     return singleRowHeight.coerceAtMost(screenHeight)
 }
+
+/**
+ * Keeps hero title and description anchored at the upper-left default position even when single-row
+ * mode lowers the poster strip to the bottom of the screen.
+ */
+internal fun modernHeroMetadataBottomPadding(
+    screenHeight: Dp,
+    defaultFraction: Float,
+    rowsViewportHeight: Dp,
+    spacingAboveRows: Dp
+): Dp {
+    val defaultRowsViewportHeight = screenHeight * defaultFraction
+    return maxOf(rowsViewportHeight, defaultRowsViewportHeight) + spacingAboveRows
+}
 internal const val MODERN_CONTINUE_WATCHING_ROW_KEY = "continue_watching"
 internal const val MODERN_UPCOMING_ROW_KEY = "upcoming_section"
 internal val MODERN_LANDSCAPE_LOGO_GRADIENT = Brush.verticalGradient(

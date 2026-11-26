@@ -145,4 +145,25 @@ class ModernHomeSingleRowLayoutTest {
         )
         assertEquals(180f, clamped.value, 0.01f)
     }
+
+    @Test
+    fun `hero metadata stays elevated at default height when single row lowers poster strip`() {
+        val singleRowViewport = modernRowsViewportHeight(
+            screenHeight = 540.dp,
+            defaultFraction = 0.52f,
+            singleRowEnabled = true,
+            rowTitleHeight = 24.dp,
+            catalogCardHeight = 171.5.dp
+        )
+
+        val bottomPadding = modernHeroMetadataBottomPadding(
+            screenHeight = 540.dp,
+            defaultFraction = 0.52f,
+            rowsViewportHeight = singleRowViewport,
+            spacingAboveRows = 16.dp
+        )
+
+        assertEquals(540f * 0.52f + 16f, bottomPadding.value, 0.01f)
+        assertTrue(bottomPadding > singleRowViewport + 16.dp)
+    }
 }
