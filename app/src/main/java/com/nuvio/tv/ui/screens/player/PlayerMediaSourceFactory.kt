@@ -1199,10 +1199,17 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             return false
         }
 
+        internal fun mimeTypeFromDeclaredType(type: String?): String? =
+            when (type?.trim()?.lowercase(Locale.US)) {
+                "hls", "m3u8" -> MimeTypes.APPLICATION_M3U8
+                "dash", "mpd" -> MimeTypes.APPLICATION_MPD
+                else -> null
+            }
         internal fun inferMimeType(
             url: String,
             filename: String?,
-            responseHeaders: Map<String, String>? = null
+            responseHeaders: Map<String, String>? = null,
+            declaredType: String? = null
         ): String? {
             val adaptiveMime = inferAdaptiveMimeTypeFromPath(filename)
                 ?: inferAdaptiveMimeTypeFromPath(url)
@@ -1210,7 +1217,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 return adaptiveMime
             }
 
-            return inferMimeTypeFromResponseHeaders(responseHeaders)
+            return mimeTypeFromDeclaredType(declaredType)
+                ?: inferMimeTypeFromResponseHeaders(responseHeaders)
                 ?: inferMimeTypeFromPath(filename)
                 ?: inferMimeTypeFromPath(url)
         }
@@ -1322,7 +1330,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             } else {
                 sanitizedHeaders
             }
-            val probeClient = PlayerPlaybackNetworking.createHttpClient(effectiveHeaders)
+            val probeClient = PlayerPlaybackNetworking.createHttpClient(defaultHeaders = effectiveHeaders)
             for (method in methods) {
                 runCatching {
                     val requestBuilder = Request.Builder().url(url)

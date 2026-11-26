@@ -1977,7 +1977,8 @@ class StreamScreenViewModel @Inject constructor(
             sources = stream.sources,
             contentLanguage = contentLanguage,
             audioDelayMs = stream.behaviorHints?.audioDelayMs,
-            audioDelayLanguage = stream.behaviorHints?.audioDelayLanguage
+            audioDelayLanguage = stream.behaviorHints?.audioDelayLanguage,
+            streamType = stream.declaredType
         )
         StreamSidecarSubtitles.set(playbackUrlFor(playbackInfo), stream.subtitles)
 
@@ -2819,7 +2820,8 @@ data class StreamPlaybackInfo(
     val audioDelayLanguage: String? = null,
     val isServerStream: Boolean = false,
     /** The link was taken from the reuse-last-link cache, not picked fresh from add-ons. */
-    val fromLinkCache: Boolean = false
+    val fromLinkCache: Boolean = false,
+    val streamType: String? = null
 )
 
 /** A debrid result that could not be played: what to show, and whether the results are stale. */

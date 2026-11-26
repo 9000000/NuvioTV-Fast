@@ -1896,10 +1896,7 @@ private fun ModernSidebarScaffold(
                     val panelShape = RoundedCornerShape(sidebarTokens.panelRadius)
                     val panelCornerRadiusPx = with(LocalDensity.current) { sidebarTokens.panelRadius.toPx() }
                     val delayedBlurProgress = ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
-                    val showRealtimePanelBlur = useRealtimeHazeBlur &&
-                        isSidebarExpanded &&
-                        !sidebarCollapsePending &&
-                        delayedBlurProgress > 0f
+                    val showRealtimePanelBlur = useRealtimeHazeBlur && delayedBlurProgress > 0f
                     val bgElevated = NuvioTheme.colors.BackgroundElevated
                     val borderBase = NuvioTheme.colors.Border
                     val isAmoledBlack = bgElevated == Color.Black
