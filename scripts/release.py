@@ -27,6 +27,7 @@ BUILD_GRADLE = ROOT / "app" / "build.gradle.kts"
 LOCAL_PROPS = ROOT / "local.properties"
 APK_DIR = ROOT / "app" / "build" / "outputs" / "apk" / "full" / "release"
 RELEASE_NOTES_FILE = ROOT / "RELEASE_NOTES.md"
+DEFAULT_KEEP_RELEASES = 10
 
 def read_config_property(key, default=""):
     val = os.environ.get(key)
@@ -478,7 +479,7 @@ def upload_via_api(token, tag, title, notes, apks, is_prerelease=False, is_draft
     print(f"-> {html_url}\n")
     return True
 
-def cleanup_old_releases(token=None, keep_count=5, cleanup_tags=True, dry_run=False):
+def cleanup_old_releases(token=None, keep_count=DEFAULT_KEEP_RELEASES, cleanup_tags=True, dry_run=False):
     """
     Xóa các bản release cũ trên GitHub, chỉ giữ lại `keep_count` bản gần nhất (bao gồm cả bản vừa tải lên).
     Hỗ trợ xóa cả git tag từ xa nếu cleanup_tags=True.
@@ -627,7 +628,7 @@ def cleanup_old_releases(token=None, keep_count=5, cleanup_tags=True, dry_run=Fa
             dry_run=dry_run
         )
 
-def cleanup_remote_tags(token, keep_release_tags, keep_count=5, dry_run=False):
+def cleanup_remote_tags(token, keep_release_tags, keep_count=DEFAULT_KEEP_RELEASES, dry_run=False):
     """
     Quet toan bo Git Tags tren remote GitHub, xoa tat ca cac tags cu mo coi,
     chi giu lai cac tags thuoc top releases va top tags moi nhat.
@@ -822,9 +823,9 @@ def parse_arguments():
     parser.add_argument(
         "--keep-releases",
         type=int,
-        default=5,
+        default=DEFAULT_KEEP_RELEASES,
         metavar="N",
-        help="Số lượng bản Release mới nhất cần giữ lại trên GitHub (gồm cả bản vừa upload, mặc định: 5; đặt 0 để tắt dọn dẹp)."
+        help=f"Số lượng bản Release mới nhất cần giữ lại trên GitHub (gồm cả bản vừa upload, mặc định: {DEFAULT_KEEP_RELEASES}; đặt 0 để tắt dọn dẹp)."
     )
     parser.add_argument(
         "--no-cleanup-tags",
